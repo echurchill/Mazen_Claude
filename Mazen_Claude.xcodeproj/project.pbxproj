@@ -250,6 +250,7 @@
 				DEVELOPMENT_TEAM = DXK68VKUGB;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Mazen_Claude iOS/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Mazen;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
@@ -285,6 +286,7 @@
 				DEVELOPMENT_TEAM = DXK68VKUGB;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Mazen_Claude iOS/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Mazen;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
