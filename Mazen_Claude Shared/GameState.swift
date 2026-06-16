@@ -38,6 +38,19 @@ class GameState {
     var turnFromFacing: SurfaceDirection = .north
     var turnToFacing: SurfaceDirection = .north
 
+    // Slice rotation
+    struct SliceRotation {
+        var isActive = false
+        var axis: Int = 0
+        var index: Int = 0
+        var angle: Float = 0
+        var progress: Float = 0
+        var speed: Float = 2.5
+        var affectedCubies: Set<Int> = []
+        var playerCubieIndex: Int = -1
+    }
+    var sliceRotation = SliceRotation()
+
     struct DiscoveryAnim {
         let cubieIndex: Int
         let faceletIndex: Int
@@ -107,6 +120,16 @@ class GameState {
                 turnProgress = 1.0
                 isTurning = false
                 playerFacing = turnToFacing
+            }
+        }
+
+        // Slice rotation animation
+        if sliceRotation.isActive {
+            sliceRotation.progress += deltaTime * sliceRotation.speed / abs(sliceRotation.angle)
+            if sliceRotation.progress >= 1.0 {
+                sliceRotation.progress = 1.0
+                sliceRotation.isActive = false
+                finalizeSliceRotation()
             }
         }
 
@@ -236,6 +259,91 @@ class GameState {
         activeAnimations.append(DiscoveryAnim(cubieIndex: ci, faceletIndex: fi))
     }
 
+    // MARK: - Slice Rotation
+
+    func startSliceRotation(clockwise: Bool) {
+        guard !sliceRotation.isActive && !isMoving && !isTurning else { return }
+
+        let (axis, index) = cubeModel.sliceAxisAndIndex(for: playerFace)
+        let angle: Float = clockwise ? -.pi / 2 : .pi / 2
+
+        let cubieIndices = cubeModel.cubieIndicesInSlice(axis: axis, index: index)
+        var playerCI = -1
+        if let (ci, _) = cubeModel.faceletAt(face: playerFace, row: playerRow, col: playerCol) {
+            playerCI = ci
+        }
+
+        sliceRotation = SliceRotation(
+            isActive: true,
+            axis: axis,
+            index: index,
+            angle: angle,
+            progress: 0,
+            speed: 2.5,
+            affectedCubies: Set(cubieIndices),
+            playerCubieIndex: playerCI
+        )
+    }
+
+    private func finalizeSliceRotation() {
+        let playerCI = sliceRotation.playerCubieIndex
+        cubeModel.applySliceRotation(axis: sliceRotation.axis, index: sliceRotation.index, angle: sliceRotation.angle)
+
+        // Update player position if they were on the rotating slice
+        if playerCI >= 0 {
+            let cubie = cubeModel.cubies[playerCI]
+            for facelet in cubie.facelets {
+                let worldFace = closestFace(to: cubie.orientation.act(facelet.localFace.normal))
+                if worldFace == playerFace {
+                    let pos = cubie.position
+                    let (newRow, newCol) = gridPositionForFace(pos: pos, face: worldFace)
+                    playerRow = newRow
+                    playerCol = newCol
+
+                    // Rotate facing direction
+                    let rotQ = simd_quatf(angle: sliceRotation.angle, axis: sliceRotation.axis == 0 ? SIMD3(1,0,0) : sliceRotation.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1))
+                    let tangent = playerFace.tangent
+                    let bitangent = playerFace.bitangent
+                    let oldDir = directionToWorld(playerFacing, face: playerFace, tangent: tangent, bitangent: bitangent)
+                    let newDir = rotQ.act(oldDir)
+                    playerFacing = worldToDirection(newDir, face: playerFace, tangent: tangent, bitangent: bitangent)
+                    break
+                }
+            }
+        }
+
+        // Rediscover around player's new position
+        onPlayerArrived()
+    }
+
+    private func closestFace(to direction: SIMD3<Float>) -> CubeFace {
+        var bestFace = CubeFace.positiveX
+        var bestDot: Float = -2
+        for face in CubeFace.allCases {
+            let d = dot(direction, face.normal)
+            if d > bestDot { bestDot = d; bestFace = face }
+        }
+        return bestFace
+    }
+
+    private func gridPositionForFace(pos: SIMD3<Int32>, face: CubeFace) -> (row: Int, col: Int) {
+        switch face {
+        case .positiveX, .negativeX: return (Int(pos.y), Int(pos.z))
+        case .positiveY, .negativeY: return (Int(pos.z), Int(pos.x))
+        case .positiveZ, .negativeZ: return (Int(pos.y), Int(pos.x))
+        }
+    }
+
+    private func worldToDirection(_ dir: SIMD3<Float>, face: CubeFace, tangent: SIMD3<Float>, bitangent: SIMD3<Float>) -> SurfaceDirection {
+        let dotT = dot(dir, tangent)
+        let dotB = dot(dir, bitangent)
+        if abs(dotT) > abs(dotB) {
+            return dotT > 0 ? .east : .west
+        } else {
+            return dotB > 0 ? .south : .north
+        }
+    }
+
     // MARK: - Camera
 
     func viewProjectionMatrix(aspect: Float) -> float4x4 {
@@ -319,7 +427,20 @@ class GameState {
         let pitchAngle: Float = -0.12
         facingWorld = normalize(facingWorld + faceNormal * pitchAngle)
 
-        return (eyePos, facingWorld, faceNormal)
+        var upDir = faceNormal
+
+        // Apply slice rotation to camera if player is on rotating slice
+        if sliceRotation.isActive && sliceRotation.playerCubieIndex >= 0 && sliceRotation.affectedCubies.contains(sliceRotation.playerCubieIndex) {
+            let axisVec: SIMD3<Float> = sliceRotation.axis == 0 ? SIMD3(1,0,0) : sliceRotation.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
+            let t = smoothstep(sliceRotation.progress)
+            let currentAngle = sliceRotation.angle * t
+            let rotQ = simd_quatf(angle: currentAngle, axis: axisVec)
+            eyePos = rotQ.act(eyePos)
+            facingWorld = rotQ.act(facingWorld)
+            upDir = rotQ.act(upDir)
+        }
+
+        return (eyePos, facingWorld, upDir)
     }
 
     private func directionToWorld(_ dir: SurfaceDirection, face: CubeFace, tangent: SIMD3<Float>, bitangent: SIMD3<Float>) -> SIMD3<Float> {

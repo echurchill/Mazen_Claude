@@ -204,13 +204,27 @@ class Renderer: NSObject, MTKViewDelegate {
         var dissolveTiles: [TileEntry] = []
         var mazeTiles: [UInt8: [TileEntry]] = [:]
 
+        // Precompute slice rotation matrix if active
+        var sliceAnimMatrix: float4x4?
+        let sr = gameState.sliceRotation
+        if sr.isActive {
+            let axisVec: SIMD3<Float> = sr.axis == 0 ? SIMD3(1,0,0) : sr.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
+            let t = sr.progress * sr.progress * (3 - 2 * sr.progress) // smoothstep
+            let currentAngle = sr.angle * t
+            sliceAnimMatrix = float4x4.rotation(radians: currentAngle, axis: axisVec)
+        }
+
         for face in CubeFace.allCases {
             for row in 0..<model.size {
                 for col in 0..<model.size {
-                    let matrix = model.worldMatrix(face: face, row: row, col: col)
+                    var matrix = model.worldMatrix(face: face, row: row, col: col)
 
                     guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
                     let facelet = model.cubies[ci].facelets[fi]
+
+                    if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) {
+                        matrix = animMat * matrix
+                    }
 
                     let faceColor: SIMD4<Float> = {
                         switch face {
@@ -282,8 +296,9 @@ class Renderer: NSObject, MTKViewDelegate {
         // Player marker (orbit mode only)
         if gameState.cameraMode == .orbit {
             var pMatrix = model.worldMatrix(face: gameState.playerFace, row: gameState.playerRow, col: gameState.playerCol)
-            // Rotate marker so arrow points in playerFacing direction
-            // Mesh arrow points +Y (north). Rotation angle around local Z (face normal):
+            if let animMat = sliceAnimMatrix, sr.playerCubieIndex >= 0, sr.affectedCubies.contains(sr.playerCubieIndex) {
+                pMatrix = animMat * pMatrix
+            }
             let facingAngle: Float = {
                 switch gameState.playerFacing {
                 case .north: return 0

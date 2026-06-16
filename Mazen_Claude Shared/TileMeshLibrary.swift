@@ -16,7 +16,7 @@ class TileMeshLibrary {
     private var tileMeshes: [UInt8: [TileMesh]] = [:]
 
     static let tileSize: Float = 0.96
-    static let wallHeight: Float = 0.65
+    static let wallHeight: Float = 0.35
     static let wallThickness: Float = 0.08
     static let floorY: Float = 0.001
 

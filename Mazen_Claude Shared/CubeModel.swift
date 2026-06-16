@@ -200,6 +200,74 @@ class CubeModel {
         ))
     }
 
+    // MARK: - Slice Rotation
+
+    func cubieIndicesInSlice(axis: Int, index: Int) -> [Int] {
+        cubies.indices.filter { i in
+            let pos = cubies[i].position
+            switch axis {
+            case 0: return pos.x == Int32(index)
+            case 1: return pos.y == Int32(index)
+            case 2: return pos.z == Int32(index)
+            default: return false
+            }
+        }
+    }
+
+    func applySliceRotation(axis: Int, index: Int, angle: Float) {
+        let axisVec: SIMD3<Float> = axis == 0 ? SIMD3(1,0,0) : axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
+        let rotQ = simd_quatf(angle: angle, axis: axisVec)
+        let center = Float(size - 1) / 2.0
+
+        for i in cubieIndicesInSlice(axis: axis, index: index) {
+            // Rotate maze openings to match the new orientation
+            for fi in cubies[i].facelets.indices {
+                let oldWorldNormal = cubies[i].orientation.act(cubies[i].facelets[fi].localFace.normal)
+                let oldWorldFace = closestFace(to: oldWorldNormal)
+                let oldTangent = oldWorldFace.tangent
+
+                let newWorldNormal = rotQ.act(oldWorldNormal)
+                let newWorldFace = closestFace(to: newWorldNormal)
+                let newTangent = newWorldFace.tangent
+                let newBitangent = newWorldFace.bitangent
+
+                let rotatedOldTangent = rotQ.act(oldTangent)
+                let dotT = dot(rotatedOldTangent, newTangent)
+                let dotB = dot(rotatedOldTangent, newBitangent)
+                let quarterTurns: Int
+                if abs(dotT) > abs(dotB) {
+                    quarterTurns = dotT > 0 ? 0 : 2
+                } else {
+                    quarterTurns = dotB > 0 ? 1 : 3
+                }
+                if quarterTurns != 0 {
+                    cubies[i].facelets[fi].mazeTile.openings = cubies[i].facelets[fi].mazeTile.openings.rotated(quarterTurns: quarterTurns)
+                }
+            }
+
+            cubies[i].orientation = (rotQ * cubies[i].orientation).normalized
+
+            let pos = SIMD3<Float>(Float(cubies[i].position.x), Float(cubies[i].position.y), Float(cubies[i].position.z))
+            let centered = pos - SIMD3(center, center, center)
+            let rotated = rotQ.act(centered)
+            let newPos = rotated + SIMD3(center, center, center)
+            cubies[i].position = SIMD3<Int32>(Int32(round(newPos.x)), Int32(round(newPos.y)), Int32(round(newPos.z)))
+        }
+
+        rebuildProjection()
+    }
+
+    func sliceAxisAndIndex(for face: CubeFace) -> (axis: Int, index: Int) {
+        switch face {
+        case .positiveX: return (0, size - 1)
+        case .negativeX: return (0, 0)
+        case .positiveY: return (1, size - 1)
+        case .negativeY: return (1, 0)
+        case .positiveZ: return (2, size - 1)
+        case .negativeZ: return (2, 0)
+        }
+    }
+
     // MARK: - Helpers
 
     private func effectiveFace(cubie: Cubie, localFace: CubeFace) -> CubeFace {

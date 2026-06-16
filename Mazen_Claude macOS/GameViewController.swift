@@ -59,6 +59,10 @@ class GameViewController: NSViewController {
             gs.tryTurnRight()
         case 49:      // Space — toggle camera mode
             gs.cameraMode = gs.cameraMode == .orbit ? .firstPerson : .orbit
+        case 12:      // Q — rotate face clockwise
+            gs.startSliceRotation(clockwise: true)
+        case 14:      // E — rotate face counterclockwise
+            gs.startSliceRotation(clockwise: false)
         default:
             break
         }
