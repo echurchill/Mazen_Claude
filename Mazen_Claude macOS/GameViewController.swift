@@ -1,14 +1,6 @@
-//
-//  GameViewController.swift
-//  Mazen_Claude macOS
-//
-//  Created by Eddie Churchill on 6/16/26.
-//
-
 import Cocoa
 import MetalKit
 
-// Our macOS specific view controller
 class GameViewController: NSViewController {
 
     var renderer: Renderer!
@@ -22,13 +14,11 @@ class GameViewController: NSViewController {
             return
         }
 
-        // Select the device to render with.  We choose the default device
         guard let defaultDevice = MTLCreateSystemDefaultDevice() else {
             print("Metal is not supported on this device")
             return
         }
-        
-        // Check for Metal 4 support
+
         if !defaultDevice.supportsFamily(.metal4) {
             print("Metal 4 is not supported")
             return
@@ -42,9 +32,35 @@ class GameViewController: NSViewController {
         }
 
         renderer = newRenderer
-
         renderer.mtkView(mtkView, drawableSizeWillChange: mtkView.drawableSize)
-
         mtkView.delegate = renderer
+        self.mtkView = mtkView
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        view.window?.makeFirstResponder(self)
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        guard let renderer = renderer else { return }
+        let gs = renderer.gameState
+
+        switch event.keyCode {
+        case 126, 13: // Up arrow, W
+            gs.tryMoveForward()
+        case 125, 1:  // Down arrow, S
+            gs.tryMoveBackward()
+        case 123, 0:  // Left arrow, A
+            gs.tryTurnLeft()
+        case 124, 2:  // Right arrow, D
+            gs.tryTurnRight()
+        case 49:      // Space — toggle camera mode
+            gs.cameraMode = gs.cameraMode == .orbit ? .firstPerson : .orbit
+        default:
+            break
+        }
     }
 }

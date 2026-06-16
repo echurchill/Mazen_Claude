@@ -16,8 +16,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Assets.xcassets,
-				Renderer.swift,
-				Shaders.metal,
 			);
 			target = 2C9381FF2FE1C1F500059268 /* Mazen_Claude iOS */;
 		};
@@ -32,8 +30,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Assets.xcassets,
-				Renderer.swift,
-				Shaders.metal,
 			);
 			target = 2C9382102FE1C1F500059268 /* Mazen_Claude macOS */;
 		};
@@ -136,6 +132,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				2C9381F72FE1C1F400059268 /* Mazen_Claude Shared */,
 				2C9382022FE1C1F500059268 /* Mazen_Claude iOS */,
 			);
 			name = "Mazen_Claude iOS";
@@ -158,6 +155,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				2C9381F72FE1C1F400059268 /* Mazen_Claude Shared */,
 				2C9382122FE1C1F500059268 /* Mazen_Claude macOS */,
 			);
 			name = "Mazen_Claude macOS";

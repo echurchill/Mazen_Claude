@@ -1,379 +1,512 @@
-//
-//  Renderer.swift
-//  Mazen_Claude Shared
-//
-//  Created by Eddie Churchill on 6/16/26.
-//
-
-// Our platform independent renderer class
-
 import Metal
 import MetalKit
 import simd
 
-// The 256 byte aligned size of our uniform structure
-let alignedUniformsSize = (MemoryLayout<Uniforms>.size + 0xFF) & -0x100
-
 let maxBuffersInFlight = 3
 
 nonisolated enum RendererError: Error {
-    case badVertexDescriptor
+    case badDevice
+    case badPipeline
+}
+
+struct DrawCall {
+    var indexOffset: Int
+    var indexCount: Int
+    var instanceOffset: Int
+    var instanceCount: Int
 }
 
 class Renderer: NSObject, MTKViewDelegate {
-    
+
     public let device: MTLDevice
-    
+
 #if !targetEnvironment(simulator)
     let commandQueue: MTL4CommandQueue
     let commandBuffer: MTL4CommandBuffer
     let commandAllocators: [MTL4CommandAllocator]
-    let commandQueueResidencySet: MTLResidencySet
-    let vertexArgumentTable: MTL4ArgumentTable
-    let fragmentArgumentTable: MTL4ArgumentTable
+    let residencySet: MTLResidencySet
+    let vertexArgTable: MTL4ArgumentTable
+    let fragmentArgTable: MTL4ArgumentTable
 #endif
-    
+
     let endFrameEvent: MTLSharedEvent
     var frameIndex = 0
-    
-    var dynamicUniformBuffer: MTLBuffer
+
     var pipelineState: MTLRenderPipelineState
     var depthState: MTLDepthStencilState
-    var colorMap: MTLTexture
-    
-    var uniformBufferOffset = 0
-    
-    var uniformBufferIndex = 0
-    
-    var uniforms: UnsafeMutablePointer<Uniforms>
-    
-    var projectionMatrix: matrix_float4x4 = matrix_float4x4()
-    
-    var rotation: Float = 0
-    
-    var mesh: MTKMesh
-    
+    var depthStateNoWrite: MTLDepthStencilState
+
+    var tileMeshLib: TileMeshLibrary
+
+    var frameUniformBuffers: [MTLBuffer]
+    var instanceBuffers: [MTLBuffer]
+    var opaqueDrawCalls: [DrawCall] = []
+    var translucentDrawCalls: [DrawCall] = []
+
+    var currentBufferIndex = 0
+    var aspect: Float = 1.0
+
+    var gameState: GameState
+    var lastFrameTime: CFTimeInterval = 0
+    var frameTimeSamples: [Float] = []
+
     @MainActor
     init?(metalKitView: MTKView) {
 #if targetEnvironment(simulator)
         return nil
 #else
-        let device = metalKitView.device!
+        guard let device = metalKitView.device else { return nil }
         self.device = device
-        
+
         self.commandQueue = device.makeMTL4CommandQueue()!
         self.commandBuffer = device.makeCommandBuffer()!
-        self.commandAllocators = (0...maxBuffersInFlight).map { _ in device.makeCommandAllocator()! }
+        self.commandAllocators = (0..<maxBuffersInFlight).map { _ in device.makeCommandAllocator()! }
 
-        let argTableDesc = MTL4ArgumentTableDescriptor()
-        argTableDesc.maxBufferBindCount = 4
-        self.vertexArgumentTable = try! device.makeArgumentTable(descriptor: argTableDesc)
-        argTableDesc.maxTextureBindCount = 1
-        self.fragmentArgumentTable = try! device.makeArgumentTable(descriptor: argTableDesc)
+        let argDesc = MTL4ArgumentTableDescriptor()
+        argDesc.maxBufferBindCount = 4
+        self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
+        argDesc.maxTextureBindCount = 1
+        self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
         self.endFrameEvent = device.makeSharedEvent()!
-        frameIndex = maxBuffersInFlight
+        self.frameIndex = maxBuffersInFlight
         self.endFrameEvent.signaledValue = UInt64(frameIndex - 1)
-        
-        let uniformBufferSize = alignedUniformsSize * maxBuffersInFlight
-        
-        guard let buffer = self.device.makeBuffer(length:uniformBufferSize, options:[MTLResourceOptions.storageModeShared]) else { return nil }
-        dynamicUniformBuffer = buffer
-        
-        self.dynamicUniformBuffer.label = "UniformBuffer"
-        
-        uniforms = UnsafeMutableRawPointer(dynamicUniformBuffer.contents()).bindMemory(to:Uniforms.self, capacity:1)
-        
-        metalKitView.depthStencilPixelFormat = MTLPixelFormat.depth32Float_stencil8
-        metalKitView.colorPixelFormat = MTLPixelFormat.bgra8Unorm_srgb
+
+        metalKitView.depthStencilPixelFormat = .depth32Float_stencil8
+        metalKitView.colorPixelFormat = .bgra8Unorm_srgb
         metalKitView.sampleCount = 1
-        
-        let mtlVertexDescriptor = Renderer.buildMetalVertexDescriptor()
-        
-        do {
-            pipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
-                                                                       metalKitView: metalKitView,
-                                                                       mtlVertexDescriptor: mtlVertexDescriptor)
-        } catch {
-            print("Unable to compile render pipeline state.  Error info: \(error)")
-            return nil
+        metalKitView.clearColor = MTLClearColor(red: 0.15, green: 0.18, blue: 0.28, alpha: 1.0)
+
+        // Pipeline
+        let library = device.makeDefaultLibrary()!
+        let compiler = try! device.makeCompiler(descriptor: MTL4CompilerDescriptor())
+
+        let vertFuncDesc = MTL4LibraryFunctionDescriptor()
+        vertFuncDesc.library = library
+        vertFuncDesc.name = "vertexShader"
+        let fragFuncDesc = MTL4LibraryFunctionDescriptor()
+        fragFuncDesc.library = library
+        fragFuncDesc.name = "fragmentShader"
+
+        let pipeDesc = MTL4RenderPipelineDescriptor()
+        pipeDesc.label = "MazePipeline"
+        pipeDesc.rasterSampleCount = metalKitView.sampleCount
+        pipeDesc.vertexFunctionDescriptor = vertFuncDesc
+        pipeDesc.fragmentFunctionDescriptor = fragFuncDesc
+        pipeDesc.colorAttachments[0].pixelFormat = metalKitView.colorPixelFormat
+        pipeDesc.colorAttachments[0].blendingState = .enabled
+        pipeDesc.colorAttachments[0].rgbBlendOperation = .add
+        pipeDesc.colorAttachments[0].alphaBlendOperation = .add
+        pipeDesc.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        pipeDesc.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        pipeDesc.colorAttachments[0].sourceAlphaBlendFactor = .one
+        pipeDesc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+
+        self.pipelineState = try! compiler.makeRenderPipelineState(descriptor: pipeDesc)
+
+        // Depth states
+        let depthDesc = MTLDepthStencilDescriptor()
+        depthDesc.depthCompareFunction = .less
+        depthDesc.isDepthWriteEnabled = true
+        self.depthState = device.makeDepthStencilState(descriptor: depthDesc)!
+
+        let depthDescNoWrite = MTLDepthStencilDescriptor()
+        depthDescNoWrite.depthCompareFunction = .less
+        depthDescNoWrite.isDepthWriteEnabled = false
+        self.depthStateNoWrite = device.makeDepthStencilState(descriptor: depthDescNoWrite)!
+
+        // Tile mesh library
+        self.tileMeshLib = TileMeshLibrary(device: device)
+
+        // Per-frame buffers
+        let maxInstances = 6 * 25 * 25
+        let instanceSize = MemoryLayout<InstanceDataSwift>.stride * maxInstances
+        let frameSize = MemoryLayout<FrameUniformsSwift>.stride
+
+        var frameBufs: [MTLBuffer] = []
+        var instBufs: [MTLBuffer] = []
+        for _ in 0..<maxBuffersInFlight {
+            frameBufs.append(device.makeBuffer(length: frameSize, options: .storageModeShared)!)
+            instBufs.append(device.makeBuffer(length: instanceSize, options: .storageModeShared)!)
         }
-        
-        let depthStateDescriptor = MTLDepthStencilDescriptor()
-        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.less
-        depthStateDescriptor.isDepthWriteEnabled = true
-        guard let state = device.makeDepthStencilState(descriptor:depthStateDescriptor) else { return nil }
-        depthState = state
-        
-        do {
-            mesh = try Renderer.buildMesh(device: device, mtlVertexDescriptor: mtlVertexDescriptor)
-        } catch {
-            print("Unable to build MetalKit Mesh. Error info: \(error)")
-            return nil
-        }
-        
-        do {
-            colorMap = try Renderer.loadTexture(device: device, textureName: "ColorMap")
-        } catch {
-            print("Unable to load texture. Error info: \(error)")
-            return nil
-        }
-        
-        let residencySetDesc = MTLResidencySetDescriptor()
-        residencySetDesc.initialCapacity = mesh.vertexBuffers.count + mesh.submeshes.count + 2 // color map + uniforms buffer
-        let residencySet = try! self.device.makeResidencySet(descriptor: residencySetDesc)
-        residencySet.addAllocations(mesh.vertexBuffers.map { $0.buffer })
-        residencySet.addAllocations(mesh.submeshes.map { $0.indexBuffer.buffer })
-        residencySet.addAllocations([colorMap, dynamicUniformBuffer])
-        residencySet.commit()
-        commandQueue.addResidencySet(residencySet)
-        commandQueueResidencySet = residencySet
-        
+        self.frameUniformBuffers = frameBufs
+        self.instanceBuffers = instBufs
+
+        // Game state — mark some tiles discovered for visual testing
+        self.gameState = GameState(size: 3)
+        Self.setupInitialDiscovery(gameState: self.gameState)
+
+        // Residency set
+        let resDesc = MTLResidencySetDescriptor()
+        resDesc.initialCapacity = 4 + frameBufs.count + instBufs.count
+        let rs = try! device.makeResidencySet(descriptor: resDesc)
+        rs.addAllocation(tileMeshLib.vertexBuffer)
+        rs.addAllocation(tileMeshLib.indexBuffer)
+        for buf in frameBufs { rs.addAllocation(buf) }
+        for buf in instBufs { rs.addAllocation(buf) }
+        rs.commit()
+        commandQueue.addResidencySet(rs)
+        self.residencySet = rs
+
         super.init()
 #endif
     }
-    
-    class func buildMetalVertexDescriptor() -> MTLVertexDescriptor {
-        // Create a Metal vertex descriptor specifying how vertices will by laid out for input into our render
-        //   pipeline and how we'll layout our Model IO vertices
-        
-        let mtlVertexDescriptor = MTLVertexDescriptor()
-        
-        mtlVertexDescriptor.attributes[VertexAttribute.position.rawValue].format = MTLVertexFormat.float3
-        mtlVertexDescriptor.attributes[VertexAttribute.position.rawValue].offset = 0
-        mtlVertexDescriptor.attributes[VertexAttribute.position.rawValue].bufferIndex = BufferIndex.meshPositions.rawValue
-        
-        mtlVertexDescriptor.attributes[VertexAttribute.texcoord.rawValue].format = MTLVertexFormat.float2
-        mtlVertexDescriptor.attributes[VertexAttribute.texcoord.rawValue].offset = 0
-        mtlVertexDescriptor.attributes[VertexAttribute.texcoord.rawValue].bufferIndex = BufferIndex.meshGenerics.rawValue
-        
-        mtlVertexDescriptor.layouts[BufferIndex.meshPositions.rawValue].stride = 12
-        mtlVertexDescriptor.layouts[BufferIndex.meshPositions.rawValue].stepRate = 1
-        mtlVertexDescriptor.layouts[BufferIndex.meshPositions.rawValue].stepFunction = MTLVertexStepFunction.perVertex
-        
-        mtlVertexDescriptor.layouts[BufferIndex.meshGenerics.rawValue].stride = 8
-        mtlVertexDescriptor.layouts[BufferIndex.meshGenerics.rawValue].stepRate = 1
-        mtlVertexDescriptor.layouts[BufferIndex.meshGenerics.rawValue].stepFunction = MTLVertexStepFunction.perVertex
-        
-        return mtlVertexDescriptor
-    }
-    
-#if !targetEnvironment(simulator)
-    
-    @MainActor
-    class func buildRenderPipelineWithDevice(device: MTLDevice,
-                                             metalKitView: MTKView,
-                                             mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTLRenderPipelineState {
-        /// Build a render state pipeline object
-        
-        let library = device.makeDefaultLibrary()
-        let compiler = try device.makeCompiler(descriptor: MTL4CompilerDescriptor())
-        
-        let vertexFunctionDescriptor = MTL4LibraryFunctionDescriptor()
-        vertexFunctionDescriptor.library = library
-        vertexFunctionDescriptor.name = "vertexShader"
-        let fragmentFunctionDescriptor = MTL4LibraryFunctionDescriptor()
-        fragmentFunctionDescriptor.library = library
-        fragmentFunctionDescriptor.name = "fragmentShader"
-        
-        let pipelineDescriptor = MTL4RenderPipelineDescriptor()
-        pipelineDescriptor.label = "RenderPipeline"
-        pipelineDescriptor.rasterSampleCount = metalKitView.sampleCount
-        pipelineDescriptor.vertexFunctionDescriptor = vertexFunctionDescriptor
-        pipelineDescriptor.fragmentFunctionDescriptor = fragmentFunctionDescriptor
-        pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
-        
-        pipelineDescriptor.colorAttachments[0].pixelFormat = metalKitView.colorPixelFormat
-        
-        return try compiler.makeRenderPipelineState(descriptor: pipelineDescriptor)
-    }
-    
-#endif
-    
-    class func buildMesh(device: MTLDevice,
-                         mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTKMesh {
-        /// Create and condition mesh data to feed into a pipeline using the given vertex descriptor
-        
-        let metalAllocator = MTKMeshBufferAllocator(device: device)
-        
-        let mdlMesh = MDLMesh.newBox(withDimensions: SIMD3<Float>(4, 4, 4),
-                                     segments: SIMD3<UInt32>(2, 2, 2),
-                                     geometryType: MDLGeometryType.triangles,
-                                     inwardNormals:false,
-                                     allocator: metalAllocator)
-        
-        let mdlVertexDescriptor = MTKModelIOVertexDescriptorFromMetal(mtlVertexDescriptor)
-        
-        guard let attributes = mdlVertexDescriptor.attributes as? [MDLVertexAttribute] else {
-            throw RendererError.badVertexDescriptor
+
+    private static func setupInitialDiscovery(gameState: GameState) {
+        let face = gameState.playerFace
+        let row = gameState.playerRow
+        let col = gameState.playerCol
+        let model = gameState.cubeModel
+
+        // Discover starting tile immediately
+        if let (ci, fi) = model.faceletAt(face: face, row: row, col: col) {
+            model.cubies[ci].facelets[fi].tileState = .discovered
+            model.cubies[ci].facelets[fi].discoveryAmount = 1.0
         }
-        attributes[VertexAttribute.position.rawValue].name = MDLVertexAttributePosition
-        attributes[VertexAttribute.texcoord.rawValue].name = MDLVertexAttributeTextureCoordinate
-        
-        mdlMesh.vertexDescriptor = mdlVertexDescriptor
-        
-        return try MTKMesh(mesh:mdlMesh, device:device)
+
+        // Mark adjacent tiles
+        let n = model.size
+        for dir in SurfaceDirection.allCases {
+            let (dr, dc): (Int, Int) = {
+                switch dir {
+                case .north: return (-1, 0)
+                case .south: return (1, 0)
+                case .east:  return (0, 1)
+                case .west:  return (0, -1)
+                }
+            }()
+            let nr = row + dr
+            let nc = col + dc
+            if nr >= 0 && nr < n && nc >= 0 && nc < n {
+                if let (ci, fi) = model.faceletAt(face: face, row: nr, col: nc) {
+                    model.cubies[ci].facelets[fi].tileState = .adjacent
+                    model.cubies[ci].facelets[fi].discoveryAmount = 0.2
+                }
+            }
+        }
     }
-    
-    class func loadTexture(device: MTLDevice,
-                           textureName: String) throws -> MTLTexture {
-        /// Load texture data with optimal parameters for sampling
-        
-        let textureLoader = MTKTextureLoader(device: device)
-        
-        let textureLoaderOptions = [
-            MTKTextureLoader.Option.textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue),
-            MTKTextureLoader.Option.textureStorageMode: NSNumber(value: MTLStorageMode.`private`.rawValue)
-        ]
-        
-        return try textureLoader.newTexture(name: textureName,
-                                            scaleFactor: 1.0,
-                                            bundle: nil,
-                                            options: textureLoaderOptions)
-        
+
+    // MARK: - Per-frame
+
+    private func buildDrawCalls() {
+        let model = gameState.cubeModel
+        let buf = instanceBuffers[currentBufferIndex]
+        let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: 6 * model.size * model.size)
+
+        // Group: discovered tiles (maze geometry) then unknown tiles (fog quads)
+        // Each unique mesh needs its own draw call since they have different index counts
+        struct TileEntry {
+            var instance: InstanceDataSwift
+            var mesh: TileMesh
+        }
+
+        var opaqueFogTiles: [TileEntry] = []
+        var dissolveTiles: [TileEntry] = []
+        var mazeTiles: [UInt8: [TileEntry]] = [:]
+
+        for face in CubeFace.allCases {
+            for row in 0..<model.size {
+                for col in 0..<model.size {
+                    let matrix = model.worldMatrix(face: face, row: row, col: col)
+
+                    guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
+                    let facelet = model.cubies[ci].facelets[fi]
+
+                    let faceColor: SIMD4<Float> = {
+                        switch face {
+                        case .positiveX: return SIMD4(0.85, 0.75, 0.70, 1.0)
+                        case .negativeX: return SIMD4(0.70, 0.80, 0.85, 1.0)
+                        case .positiveY: return SIMD4(0.80, 0.85, 0.70, 1.0)
+                        case .negativeY: return SIMD4(0.85, 0.80, 0.65, 1.0)
+                        case .positiveZ: return SIMD4(0.80, 0.75, 0.85, 1.0)
+                        case .negativeZ: return SIMD4(0.75, 0.85, 0.80, 1.0)
+                        }
+                    }()
+
+                    switch facelet.tileState {
+                    case .unknown:
+                        let inst = InstanceDataSwift(
+                            modelMatrix: matrix,
+                            baseColor: faceColor * 0.9,
+                            materialID: 4,
+                            tileID: UInt32(facelet.id.rawValue),
+                            discoveryAmount: facelet.discoveryAmount,
+                            styleSeed: facelet.mazeTile.styleSeed
+                        )
+                        opaqueFogTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.fogQuad))
+
+                    case .adjacent:
+                        let openings = facelet.mazeTile.openings
+                        let mesh = tileMeshLib.mesh(for: openings)
+                        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
+                        let mazeInst = InstanceDataSwift(
+                            modelMatrix: matrix,
+                            baseColor: pathColor,
+                            materialID: 1,
+                            tileID: UInt32(facelet.id.rawValue),
+                            discoveryAmount: 1.0,
+                            styleSeed: facelet.mazeTile.styleSeed
+                        )
+                        let key = openings.rawValue & 0x0F
+                        mazeTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: mesh))
+
+                        let fogInst = InstanceDataSwift(
+                            modelMatrix: matrix,
+                            baseColor: faceColor * 0.9,
+                            materialID: 5,
+                            tileID: UInt32(facelet.id.rawValue),
+                            discoveryAmount: facelet.discoveryAmount,
+                            styleSeed: facelet.mazeTile.styleSeed
+                        )
+                        dissolveTiles.append(TileEntry(instance: fogInst, mesh: tileMeshLib.fogQuad))
+
+                    case .discovered:
+                        let openings = facelet.mazeTile.openings
+                        let mesh = tileMeshLib.mesh(for: openings)
+                        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
+                        let inst = InstanceDataSwift(
+                            modelMatrix: matrix,
+                            baseColor: pathColor,
+                            materialID: 1,
+                            tileID: UInt32(facelet.id.rawValue),
+                            discoveryAmount: 1.0,
+                            styleSeed: facelet.mazeTile.styleSeed
+                        )
+                        let key = openings.rawValue & 0x0F
+                        mazeTiles[key, default: []].append(TileEntry(instance: inst, mesh: mesh))
+                    }
+                }
+            }
+        }
+
+        // Player marker (orbit mode only)
+        if gameState.cameraMode == .orbit {
+            var pMatrix = model.worldMatrix(face: gameState.playerFace, row: gameState.playerRow, col: gameState.playerCol)
+            // Rotate marker so arrow points in playerFacing direction
+            // Mesh arrow points +Y (north). Rotation angle around local Z (face normal):
+            let facingAngle: Float = {
+                switch gameState.playerFacing {
+                case .north: return 0
+                case .west:  return -.pi / 2
+                case .south: return .pi
+                case .east:  return .pi / 2
+                }
+            }()
+            let localRot = float4x4.rotation(radians: facingAngle, axis: SIMD3(0, 0, 1))
+            pMatrix = pMatrix * localRot
+            let markerInst = InstanceDataSwift(
+                modelMatrix: pMatrix,
+                baseColor: SIMD4(1.0, 0.2, 0.1, 1.0),
+                materialID: 6,
+                tileID: 0,
+                discoveryAmount: 1.0,
+                styleSeed: 0
+            )
+            opaqueFogTiles.append(TileEntry(instance: markerInst, mesh: tileMeshLib.playerMarker))
+        }
+
+        // Pack instances — opaque first, then translucent
+        var idx = 0
+        opaqueDrawCalls.removeAll()
+        translucentDrawCalls.removeAll()
+
+        // Opaque maze tiles grouped by mesh type
+        for (_, entries) in mazeTiles {
+            guard !entries.isEmpty else { continue }
+            let mesh = entries[0].mesh
+            let startIdx = idx
+            for entry in entries {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: entries.count
+            ))
+        }
+
+        // Opaque fog tiles
+        if !opaqueFogTiles.isEmpty {
+            // Group by mesh (fog quads vs player marker)
+            var byMesh: [Int: [TileEntry]] = [:]
+            for entry in opaqueFogTiles {
+                byMesh[entry.mesh.indexOffset, default: []].append(entry)
+            }
+            for (_, entries) in byMesh {
+                let mesh = entries[0].mesh
+                let startIdx = idx
+                for entry in entries {
+                    ptr[idx] = entry.instance
+                    idx += 1
+                }
+                opaqueDrawCalls.append(DrawCall(
+                    indexOffset: mesh.indexOffset,
+                    indexCount: mesh.indexCount,
+                    instanceOffset: startIdx,
+                    instanceCount: entries.count
+                ))
+            }
+        }
+
+        // Translucent dissolve overlays (drawn after all opaque, no depth write)
+        if !dissolveTiles.isEmpty {
+            let mesh = dissolveTiles[0].mesh
+            let startIdx = idx
+            for entry in dissolveTiles {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            translucentDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: dissolveTiles.count
+            ))
+        }
     }
-    
-    private func updateDynamicBufferState() {
-        /// Update the state of our uniform buffers before rendering
-        
-        uniformBufferIndex = (uniformBufferIndex + 1) % maxBuffersInFlight
-        
-        uniformBufferOffset = alignedUniformsSize * uniformBufferIndex
-        
-        uniforms = UnsafeMutableRawPointer(dynamicUniformBuffer.contents() + uniformBufferOffset).bindMemory(to:Uniforms.self, capacity:1)
+
+    private func updateFrameUniforms() {
+        let buf = frameUniformBuffers[currentBufferIndex]
+        let ptr = buf.contents().bindMemory(to: FrameUniformsSwift.self, capacity: 1)
+        ptr.pointee = FrameUniformsSwift(
+            viewProjectionMatrix: gameState.viewProjectionMatrix(aspect: aspect),
+            cameraPosition: gameState.cameraPosition(),
+            time: gameState.time
+        )
     }
-    
-    private func updateGameState() {
-        /// Update any game state before rendering
-        
-        uniforms[0].projectionMatrix = projectionMatrix
-        
-        let rotationAxis = SIMD3<Float>(1, 1, 0)
-        let modelMatrix = matrix4x4_rotation(radians: rotation, axis: rotationAxis)
-        let viewMatrix = matrix4x4_translation(0.0, 0.0, -8.0)
-        uniforms[0].modelViewMatrix = simd_mul(viewMatrix, modelMatrix)
-        rotation += 0.01
-    }
-    
+
+    // MARK: - MTKViewDelegate
+
     func draw(in view: MTKView) {
-        /// Per frame updates hare
-        
 #if !targetEnvironment(simulator)
+        let now = CACurrentMediaTime()
+        let dt = lastFrameTime == 0 ? Float(1.0/60.0) : Float(now - lastFrameTime)
+        lastFrameTime = now
 
-        guard let drawable = view.currentDrawable else { return }
-        
-        /// Delay getting the currentRenderPassDescriptor until we absolutely need it to avoid
-        ///   holding onto the drawable and blocking the display pipeline any longer than necessary
-        guard let renderPassDescriptor = view.currentMTL4RenderPassDescriptor else { return }
-                    
-        let previousValueToWaitFor = self.frameIndex - maxBuffersInFlight
-        self.endFrameEvent.wait(untilSignaledValue: UInt64(previousValueToWaitFor), timeoutMS: 10)
-        let commandAllocator = self.commandAllocators[uniformBufferIndex]
-        commandAllocator.reset()
-        commandBuffer.beginCommandBuffer(allocator: commandAllocator)
-        
-        self.updateDynamicBufferState()
-        
-        self.updateGameState()
-        
-        guard let renderEncoder = self.commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            fatalError("Failed to create render command encoder")
+        gameState.frameTimeMs = dt * 1000.0
+        frameTimeSamples.append(gameState.frameTimeMs)
+        if frameTimeSamples.count >= 60 {
+            let avg = frameTimeSamples.reduce(0, +) / Float(frameTimeSamples.count)
+            print(String(format: "Frame: %.2f ms (%.0f fps)", avg, 1000.0 / avg))
+            frameTimeSamples.removeAll()
         }
-        
-        /// Final pass rendering code here
-        renderEncoder.label = "Primary Render Encoder"
-        
-        renderEncoder.pushDebugGroup("Draw Box")
-        
-        renderEncoder.setCullMode(.back)
-        
-        renderEncoder.setFrontFacing(.counterClockwise)
-        
-        renderEncoder.setRenderPipelineState(pipelineState)
-        
-        renderEncoder.setDepthStencilState(depthState)
-        
-        renderEncoder.setArgumentTable(self.vertexArgumentTable, stages:.vertex)
-        renderEncoder.setArgumentTable(self.fragmentArgumentTable, stages:.fragment)
-        
-        self.vertexArgumentTable.setAddress(dynamicUniformBuffer.gpuAddress + UInt64(uniformBufferOffset), index: BufferIndex.uniforms.rawValue)
-        self.fragmentArgumentTable.setAddress(dynamicUniformBuffer.gpuAddress + UInt64(uniformBufferOffset), index: BufferIndex.uniforms.rawValue)
-        
-        for (index, element) in mesh.vertexDescriptor.layouts.enumerated() {
-            guard let layout = element as? MDLVertexBufferLayout else {
-                return
-            }
-            
-            if layout.stride != 0 {
-                let buffer = mesh.vertexBuffers[index]
-                self.vertexArgumentTable.setAddress(buffer.buffer.gpuAddress + UInt64(buffer.offset), index: index)
-            }
+
+        gameState.update(deltaTime: dt)
+
+        guard let drawable = view.currentDrawable,
+              let renderPassDesc = view.currentMTL4RenderPassDescriptor else { return }
+
+        let waitValue = UInt64(frameIndex - maxBuffersInFlight)
+        endFrameEvent.wait(untilSignaledValue: waitValue, timeoutMS: 10)
+
+        currentBufferIndex = frameIndex % maxBuffersInFlight
+        let allocator = commandAllocators[currentBufferIndex]
+        allocator.reset()
+        commandBuffer.beginCommandBuffer(allocator: allocator)
+
+        updateFrameUniforms()
+        buildDrawCalls()
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDesc) else {
+            fatalError("Failed to create render encoder")
         }
-        
-        self.fragmentArgumentTable.setTexture(colorMap.gpuResourceID, index: TextureIndex.color.rawValue)
-        
-        for submesh in mesh.submeshes {
-            renderEncoder.drawIndexedPrimitives(primitiveType: submesh.primitiveType,
-                                                indexCount: submesh.indexCount,
-                                                indexType: submesh.indexType,
-                                                indexBuffer: submesh.indexBuffer.buffer.gpuAddress + UInt64(submesh.indexBuffer.offset),
-                                                indexBufferLength: submesh.indexBuffer.buffer.length)
+
+        encoder.label = "Maze Render"
+        encoder.setCullMode(.back)
+        encoder.setFrontFacing(.counterClockwise)
+        encoder.setRenderPipelineState(pipelineState)
+
+        encoder.setArgumentTable(vertexArgTable, stages: .vertex)
+        encoder.setArgumentTable(fragmentArgTable, stages: .fragment)
+
+        vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+        vertexArgTable.setAddress(
+            frameUniformBuffers[currentBufferIndex].gpuAddress,
+            index: BufferIndex.frameUniforms.rawValue
+        )
+        vertexArgTable.setAddress(
+            instanceBuffers[currentBufferIndex].gpuAddress,
+            index: BufferIndex.instances.rawValue
+        )
+        fragmentArgTable.setAddress(
+            frameUniformBuffers[currentBufferIndex].gpuAddress,
+            index: BufferIndex.frameUniforms.rawValue
+        )
+        fragmentArgTable.setAddress(
+            instanceBuffers[currentBufferIndex].gpuAddress,
+            index: BufferIndex.instances.rawValue
+        )
+
+        // Pass 1: opaque geometry (depth write ON)
+        encoder.setDepthStencilState(depthState)
+        for dc in opaqueDrawCalls {
+            encoder.drawIndexedPrimitives(
+                primitiveType: .triangle,
+                indexCount: dc.indexCount,
+                indexType: .uint16,
+                indexBuffer: tileMeshLib.indexBuffer.gpuAddress + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
+                indexBufferLength: dc.indexCount * MemoryLayout<UInt16>.stride,
+                instanceCount: dc.instanceCount,
+                baseVertex: 0,
+                baseInstance: dc.instanceOffset
+            )
         }
-        
-        renderEncoder.popDebugGroup()
-        
-        renderEncoder.endEncoding()
-        
-        commandBuffer.useResidencySet((view.layer as! CAMetalLayer).residencySet);
+
+        // Pass 2: translucent overlays (depth write OFF)
+        encoder.setDepthStencilState(depthStateNoWrite)
+        for dc in translucentDrawCalls {
+            encoder.drawIndexedPrimitives(
+                primitiveType: .triangle,
+                indexCount: dc.indexCount,
+                indexType: .uint16,
+                indexBuffer: tileMeshLib.indexBuffer.gpuAddress + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
+                indexBufferLength: dc.indexCount * MemoryLayout<UInt16>.stride,
+                instanceCount: dc.instanceCount,
+                baseVertex: 0,
+                baseInstance: dc.instanceOffset
+            )
+        }
+
+        encoder.endEncoding()
+
+        commandBuffer.useResidencySet((view.layer as! CAMetalLayer).residencySet)
         commandBuffer.endCommandBuffer()
-        
-        commandQueue.waitForDrawable(drawable);
+
+        commandQueue.waitForDrawable(drawable)
         commandQueue.commit([commandBuffer])
-        commandQueue.signalDrawable(drawable);
-        commandQueue.signalEvent(self.endFrameEvent, value: UInt64(self.frameIndex))
-        self.frameIndex += 1
-        drawable.present();
+        commandQueue.signalDrawable(drawable)
+        commandQueue.signalEvent(endFrameEvent, value: UInt64(frameIndex))
+        frameIndex += 1
+        drawable.present()
 #endif
     }
-    
+
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        /// Respond to drawable size or orientation changes here
-        
-        let aspect = Float(size.width) / Float(size.height)
-        projectionMatrix = matrix_perspective_right_hand(fovyRadians: radians_from_degrees(65), aspectRatio:aspect, nearZ: 0.1, farZ: 100.0)
+        aspect = Float(size.width) / Float(size.height)
     }
 }
 
-// Generic matrix math utility functions
-func matrix4x4_rotation(radians: Float, axis: SIMD3<Float>) -> matrix_float4x4 {
-    let unitAxis = normalize(axis)
-    let ct = cosf(radians)
-    let st = sinf(radians)
-    let ci = 1 - ct
-    let x = unitAxis.x, y = unitAxis.y, z = unitAxis.z
-    return matrix_float4x4.init(columns:(vector_float4(    ct + x * x * ci, y * x * ci + z * st, z * x * ci - y * st, 0),
-                                         vector_float4(x * y * ci - z * st,     ct + y * y * ci, z * y * ci + x * st, 0),
-                                         vector_float4(x * z * ci + y * st, y * z * ci - x * st,     ct + z * z * ci, 0),
-                                         vector_float4(                  0,                   0,                   0, 1)))
+// MARK: - Swift-side mirror structs
+
+struct MazeVertexSwift {
+    var position: SIMD3<Float>
+    var normal: SIMD3<Float>
+    var texCoord: SIMD2<Float>
 }
 
-func matrix4x4_translation(_ translationX: Float, _ translationY: Float, _ translationZ: Float) -> matrix_float4x4 {
-    return matrix_float4x4.init(columns:(vector_float4(1, 0, 0, 0),
-                                         vector_float4(0, 1, 0, 0),
-                                         vector_float4(0, 0, 1, 0),
-                                         vector_float4(translationX, translationY, translationZ, 1)))
+struct FrameUniformsSwift {
+    var viewProjectionMatrix: float4x4
+    var cameraPosition: SIMD3<Float>
+    var time: Float
 }
 
-func matrix_perspective_right_hand(fovyRadians fovy: Float, aspectRatio: Float, nearZ: Float, farZ: Float) -> matrix_float4x4 {
-    let ys = 1 / tanf(fovy * 0.5)
-    let xs = ys / aspectRatio
-    let zs = farZ / (nearZ - farZ)
-    return matrix_float4x4.init(columns:(vector_float4(xs,  0, 0,   0),
-                                         vector_float4( 0, ys, 0,   0),
-                                         vector_float4( 0,  0, zs, -1),
-                                         vector_float4( 0,  0, zs * nearZ, 0)))
-}
-
-func radians_from_degrees(_ degrees: Float) -> Float {
-    return (degrees / 180) * .pi
+struct InstanceDataSwift {
+    var modelMatrix: float4x4
+    var baseColor: SIMD4<Float>
+    var materialID: UInt32
+    var tileID: UInt32
+    var discoveryAmount: Float
+    var styleSeed: UInt32
 }
