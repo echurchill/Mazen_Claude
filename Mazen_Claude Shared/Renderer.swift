@@ -41,6 +41,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var frameUniformBuffers: [MTLBuffer]
     var instanceBuffers: [MTLBuffer]
     var opaqueDrawCalls: [DrawCall] = []
+    var wallDrawCallRange: Range<Int> = 0..<0
     var translucentDrawCalls: [DrawCall] = []
 
     var currentBufferIndex = 0
@@ -49,6 +50,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var gameState: GameState
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
+    var debugSingleTile = false
 
     @MainActor
     init?(metalKitView: MTKView) {
@@ -153,9 +155,9 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     private static func setupInitialDiscovery(gameState: GameState) {
-        let face = gameState.playerFace
-        let row = gameState.playerRow
-        let col = gameState.playerCol
+        let face = gameState.player.face
+        let row = gameState.player.row
+        let col = gameState.player.col
         let model = gameState.cubeModel
 
         // Discover starting tile immediately
@@ -189,6 +191,10 @@ class Renderer: NSObject, MTKViewDelegate {
     // MARK: - Per-frame
 
     private func buildDrawCalls() {
+        if debugSingleTile {
+            buildSingleTileDrawCalls()
+            return
+        }
         let model = gameState.cubeModel
         let buf = instanceBuffers[currentBufferIndex]
         let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: 6 * model.size * model.size)
@@ -202,7 +208,8 @@ class Renderer: NSObject, MTKViewDelegate {
 
         var opaqueFogTiles: [TileEntry] = []
         var dissolveTiles: [TileEntry] = []
-        var mazeTiles: [UInt8: [TileEntry]] = [:]
+        var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
+        var mazeWallTiles: [UInt8: [TileEntry]] = [:]
 
         // Precompute slice rotation matrix if active
         var sliceAnimMatrix: float4x4?
@@ -251,7 +258,6 @@ class Renderer: NSObject, MTKViewDelegate {
 
                     case .adjacent:
                         let openings = facelet.mazeTile.openings
-                        let mesh = tileMeshLib.mesh(for: openings)
                         let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
                         let mazeInst = InstanceDataSwift(
                             modelMatrix: matrix,
@@ -262,7 +268,10 @@ class Renderer: NSObject, MTKViewDelegate {
                             styleSeed: facelet.mazeTile.styleSeed
                         )
                         let key = openings.rawValue & 0x0F
-                        mazeTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: mesh))
+                        mazeFloorTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: tileMeshLib.floorMesh(for: openings)))
+                        if let wm = tileMeshLib.wallMesh(for: openings) {
+                            mazeWallTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: wm))
+                        }
 
                         let fogInst = InstanceDataSwift(
                             modelMatrix: matrix,
@@ -276,7 +285,6 @@ class Renderer: NSObject, MTKViewDelegate {
 
                     case .discovered:
                         let openings = facelet.mazeTile.openings
-                        let mesh = tileMeshLib.mesh(for: openings)
                         let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
                         let inst = InstanceDataSwift(
                             modelMatrix: matrix,
@@ -287,24 +295,27 @@ class Renderer: NSObject, MTKViewDelegate {
                             styleSeed: facelet.mazeTile.styleSeed
                         )
                         let key = openings.rawValue & 0x0F
-                        mazeTiles[key, default: []].append(TileEntry(instance: inst, mesh: mesh))
+                        mazeFloorTiles[key, default: []].append(TileEntry(instance: inst, mesh: tileMeshLib.floorMesh(for: openings)))
+                        if let wm = tileMeshLib.wallMesh(for: openings) {
+                            mazeWallTiles[key, default: []].append(TileEntry(instance: inst, mesh: wm))
+                        }
                     }
                 }
             }
         }
 
         // Player marker (orbit mode only)
-        if gameState.cameraMode == .orbit {
-            var pMatrix = model.worldMatrix(face: gameState.playerFace, row: gameState.playerRow, col: gameState.playerCol)
+        if gameState.camera.mode == .orbit {
+            var pMatrix = model.worldMatrix(face: gameState.player.face, row: gameState.player.row, col: gameState.player.col)
             if let animMat = sliceAnimMatrix, sr.playerCubieIndex >= 0, sr.affectedCubies.contains(sr.playerCubieIndex) {
                 pMatrix = animMat * pMatrix
             }
             let facingAngle: Float = {
-                switch gameState.playerFacing {
-                case .north: return 0
-                case .west:  return -.pi / 2
-                case .south: return .pi
-                case .east:  return .pi / 2
+                switch gameState.player.facing {
+                case .north: return .pi
+                case .west:  return .pi / 2
+                case .south: return 0
+                case .east:  return -.pi / 2
                 }
             }()
             let localRot = float4x4.rotation(radians: facingAngle, axis: SIMD3(0, 0, 1))
@@ -325,8 +336,8 @@ class Renderer: NSObject, MTKViewDelegate {
         opaqueDrawCalls.removeAll()
         translucentDrawCalls.removeAll()
 
-        // Opaque maze tiles grouped by mesh type
-        for (_, entries) in mazeTiles {
+        // Opaque maze floor tiles (no depth bias)
+        for (_, entries) in mazeFloorTiles {
             guard !entries.isEmpty else { continue }
             let mesh = entries[0].mesh
             let startIdx = idx
@@ -341,6 +352,25 @@ class Renderer: NSObject, MTKViewDelegate {
                 instanceCount: entries.count
             ))
         }
+
+        // Opaque maze wall tiles (rendered with depth bias)
+        let wallDrawCallStart = opaqueDrawCalls.count
+        for (_, entries) in mazeWallTiles {
+            guard !entries.isEmpty else { continue }
+            let mesh = entries[0].mesh
+            let startIdx = idx
+            for entry in entries {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: entries.count
+            ))
+        }
+        wallDrawCallRange = wallDrawCallStart..<opaqueDrawCalls.count
 
         // Opaque fog tiles
         if !opaqueFogTiles.isEmpty {
@@ -378,6 +408,53 @@ class Renderer: NSObject, MTKViewDelegate {
                 indexCount: mesh.indexCount,
                 instanceOffset: startIdx,
                 instanceCount: dissolveTiles.count
+            ))
+        }
+    }
+
+    private func buildSingleTileDrawCalls() {
+        let buf = instanceBuffers[currentBufferIndex]
+        let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: 4)
+
+        opaqueDrawCalls.removeAll()
+        translucentDrawCalls.removeAll()
+
+        let identity = matrix_identity_float4x4
+        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
+        // Single north wall only (openings = east+south+west, so north is closed)
+        let openings = DirectionMask([.east, .south, .west])
+
+        let inst = InstanceDataSwift(
+            modelMatrix: identity,
+            baseColor: pathColor,
+            materialID: 1,
+            tileID: 0,
+            discoveryAmount: 1.0,
+            styleSeed: 42
+        )
+
+        var idx = 0
+
+        // Floor
+        let floorMesh = tileMeshLib.floorMesh(for: openings)
+        ptr[idx] = inst
+        idx += 1
+        opaqueDrawCalls.append(DrawCall(
+            indexOffset: floorMesh.indexOffset,
+            indexCount: floorMesh.indexCount,
+            instanceOffset: 0,
+            instanceCount: 1
+        ))
+
+        // Walls
+        if let wallMesh = tileMeshLib.wallMesh(for: openings) {
+            ptr[idx] = inst
+            idx += 1
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: wallMesh.indexOffset,
+                indexCount: wallMesh.indexCount,
+                instanceOffset: 1,
+                instanceCount: 1
             ))
         }
     }
@@ -456,13 +533,15 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // Pass 1: opaque geometry (depth write ON)
         encoder.setDepthStencilState(depthState)
+        let idxBufBase = tileMeshLib.indexBuffer.gpuAddress
+        let idxBufLen = tileMeshLib.indexBuffer.length
         for dc in opaqueDrawCalls {
             encoder.drawIndexedPrimitives(
                 primitiveType: .triangle,
                 indexCount: dc.indexCount,
                 indexType: .uint16,
-                indexBuffer: tileMeshLib.indexBuffer.gpuAddress + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
-                indexBufferLength: dc.indexCount * MemoryLayout<UInt16>.stride,
+                indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
+                indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt16>.stride,
                 instanceCount: dc.instanceCount,
                 baseVertex: 0,
                 baseInstance: dc.instanceOffset
@@ -476,8 +555,8 @@ class Renderer: NSObject, MTKViewDelegate {
                 primitiveType: .triangle,
                 indexCount: dc.indexCount,
                 indexType: .uint16,
-                indexBuffer: tileMeshLib.indexBuffer.gpuAddress + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
-                indexBufferLength: dc.indexCount * MemoryLayout<UInt16>.stride,
+                indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
+                indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt16>.stride,
                 instanceCount: dc.instanceCount,
                 baseVertex: 0,
                 baseInstance: dc.instanceOffset

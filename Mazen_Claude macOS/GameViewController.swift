@@ -50,21 +50,41 @@ class GameViewController: NSViewController {
 
         switch event.keyCode {
         case 126, 13: // Up arrow, W
-            gs.tryMoveForward()
+            gs.player.tryMoveForward(cubeModel: gs.cubeModel)
         case 125, 1:  // Down arrow, S
-            gs.tryMoveBackward()
+            gs.player.tryMoveBackward(cubeModel: gs.cubeModel)
         case 123, 0:  // Left arrow, A
-            gs.tryTurnLeft()
+            gs.player.tryTurnLeft()
         case 124, 2:  // Right arrow, D
-            gs.tryTurnRight()
+            gs.player.tryTurnRight()
         case 49:      // Space — toggle camera mode
-            gs.cameraMode = gs.cameraMode == .orbit ? .firstPerson : .orbit
+            gs.camera.mode = gs.camera.mode == .orbit ? .firstPerson : .orbit
         case 12:      // Q — rotate face clockwise
             gs.startSliceRotation(clockwise: true)
         case 14:      // E — rotate face counterclockwise
             gs.startSliceRotation(clockwise: false)
+        case 35:      // P — toggle auto-rotation
+            gs.camera.orbitAutoRotate.toggle()
         default:
             break
         }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let renderer = renderer else { return }
+        let gs = renderer.gameState
+        guard gs.camera.mode == .orbit else { return }
+        gs.camera.orbitAutoRotate = false
+        gs.camera.orbitRotation.x += Float(event.deltaX) * 0.005
+        gs.camera.orbitRotation.y += Float(event.deltaY) * 0.005
+        gs.camera.orbitRotation.y = max(-Float.pi / 2 + 0.01, min(Float.pi / 2 - 0.01, gs.camera.orbitRotation.y))
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let renderer = renderer else { return }
+        let gs = renderer.gameState
+        guard gs.camera.mode == .orbit else { return }
+        gs.camera.orbitDistance -= Float(event.deltaY) * 0.1
+        gs.camera.orbitDistance = max(3.0, min(15.0, gs.camera.orbitDistance))
     }
 }

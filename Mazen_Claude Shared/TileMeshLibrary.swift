@@ -13,7 +13,8 @@ class TileMeshLibrary {
 
     let fogQuad: TileMesh
     let playerMarker: TileMesh
-    private var tileMeshes: [UInt8: [TileMesh]] = [:]
+    private var floorMeshes: [UInt8: TileMesh] = [:]
+    private var wallMeshes: [UInt8: TileMesh] = [:]
 
     static let tileSize: Float = 0.96
     static let wallHeight: Float = 0.35
@@ -29,15 +30,16 @@ class TileMeshLibrary {
             TileMesh(vertexOffset: 0, indexOffset: 0, indexCount: 0)
         }
 
-        // Fog quad — flat quad lying on the surface
+        // Fog quad — slightly smaller than floor to prevent cross-face occlusion at cube corners
         let fogStart = allVerts.count
         let fogIdxStart = allIndices.count
-        let hs = Self.tileSize / 2.0
+        let fogHs: Float = 0.46
+        let fogZ: Float = 0.002
         allVerts.append(contentsOf: [
-            MazeVertexSwift(position: SIMD3(-hs, -hs, 0.02), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0)),
-            MazeVertexSwift(position: SIMD3( hs, -hs, 0.02), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 0)),
-            MazeVertexSwift(position: SIMD3( hs,  hs, 0.02), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 1)),
-            MazeVertexSwift(position: SIMD3(-hs,  hs, 0.02), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 1)),
+            MazeVertexSwift(position: SIMD3(-fogHs, -fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0)),
+            MazeVertexSwift(position: SIMD3( fogHs, -fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 0)),
+            MazeVertexSwift(position: SIMD3( fogHs,  fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 1)),
+            MazeVertexSwift(position: SIMD3(-fogHs,  fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 1)),
         ])
         let fBase = UInt16(fogStart)
         allIndices.append(contentsOf: [fBase+0, fBase+1, fBase+2, fBase+0, fBase+2, fBase+3])
@@ -48,7 +50,6 @@ class TileMeshLibrary {
         let pmIStart = allIndices.count
         let pmH: Float = 0.45
         let pmR: Float = 0.12
-        let pmUp = SIMD3<Float>(0, 0, 1)
         // Diamond body: 4 triangles from base to tip
         let pmDirs: [SIMD3<Float>] = [
             SIMD3( pmR, 0, 0), SIMD3(0,  pmR, 0),
@@ -76,18 +77,24 @@ class TileMeshLibrary {
         let pmIdxCount = allIndices.count - pmIStart
         playerMarker = TileMesh(vertexOffset: pmVStart, indexOffset: pmIStart, indexCount: pmIdxCount)
 
+        // Pad index buffer to 4-byte alignment (UInt16 pairs) so all subsequent
+        // drawIndexedPrimitives calls get a 4-byte-aligned GPU address
+        if allIndices.count % 2 != 0 {
+            allIndices.append(0)
+        }
+
         // Generate all 16 possible connection masks (4 bits = NESW)
         for mask: UInt8 in 0..<16 {
             let openings = DirectionMask(rawValue: mask)
 
-            // For each mask, generate 1 rotation variant (mask already encodes orientation)
-            let vStart = allVerts.count
-            let iStart = allIndices.count
-
-            // Floor
+            // Floor mesh (separate from walls for depth bias)
+            let fStart = allIndices.count
             Self.addFloor(to: &allVerts, indices: &allIndices)
+            let fCount = allIndices.count - fStart
+            floorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: fStart, indexCount: fCount)
 
-            // Walls on closed edges
+            // Wall mesh
+            let wStart = allIndices.count
             if !openings.contains(.north) {
                 Self.addWall(edge: .north, to: &allVerts, indices: &allIndices)
             }
@@ -100,10 +107,10 @@ class TileMeshLibrary {
             if !openings.contains(.west) {
                 Self.addWall(edge: .west, to: &allVerts, indices: &allIndices)
             }
-
-            let idxCount = allIndices.count - iStart
-            let mesh = TileMesh(vertexOffset: vStart, indexOffset: iStart, indexCount: idxCount)
-            tileMeshes[mask] = [mesh]
+            let wCount = allIndices.count - wStart
+            if wCount > 0 {
+                wallMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: wStart, indexCount: wCount)
+            }
         }
 
         vertexBuffer = device.makeBuffer(
@@ -121,17 +128,18 @@ class TileMeshLibrary {
         indexBuffer.label = "TileMeshIndices"
     }
 
-    func mesh(for openings: DirectionMask) -> TileMesh {
-        if let meshes = tileMeshes[openings.rawValue & 0x0F] {
-            return meshes[0]
-        }
-        return fogQuad
+    func floorMesh(for openings: DirectionMask) -> TileMesh {
+        return floorMeshes[openings.rawValue & 0x0F] ?? fogQuad
+    }
+
+    func wallMesh(for openings: DirectionMask) -> TileMesh? {
+        return wallMeshes[openings.rawValue & 0x0F]
     }
 
     // MARK: - Geometry builders
 
     private static func addFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt16]) {
-        let hs = tileSize / 2.0
+        let hs: Float = 0.46 // smaller than wall extent (0.48) to prevent cube-edge overhang
         let z = floorY
         let base = UInt16(verts.count)
 
@@ -147,63 +155,72 @@ class TileMeshLibrary {
 
     private static func addWall(edge: SurfaceDirection, to verts: inout [MazeVertexSwift], indices: inout [UInt16]) {
         let hs = tileSize / 2.0
-        let wt = wallThickness / 2.0
-        let wh = wallHeight
+        let wt = wallThickness
         let z0 = floorY
-        let z1 = wh
+        let z1 = wallHeight
 
-        // Wall is an extruded box along one edge
-        // In tile-local space: X = tangent (east), Y = bitangent (north), Z = normal (outward)
-        // Walls extrude along Z from floor to wallHeight
-
-        var p0: SIMD3<Float>, p1: SIMD3<Float>  // wall edge endpoints in XY
-        var inwardNormal: SIMD3<Float>  // normal pointing into the corridor
-        var wallOffset: Float  // how far from center to place the wall
+        // inner0/inner1 = inner edge (corridor side), outer0/outer1 = outer edge (tile boundary)
+        var inner0: SIMD2<Float>, inner1: SIMD2<Float>
+        var outer0: SIMD2<Float>, outer1: SIMD2<Float>
+        var inN: SIMD3<Float>
 
         switch edge {
-        case .north:  // -Y edge (toward row-1)
-            p0 = SIMD3( hs, -hs + wt, 0)
-            p1 = SIMD3(-hs, -hs + wt, 0)
-            inwardNormal = SIMD3(0, 1, 0)
-            wallOffset = hs
-        case .south:  // +Y edge (toward row+1)
-            p0 = SIMD3(-hs, hs - wt, 0)
-            p1 = SIMD3( hs, hs - wt, 0)
-            inwardNormal = SIMD3(0, -1, 0)
-            wallOffset = hs
-        case .east:  // right edge: X = +hs
-            p0 = SIMD3(hs - wt,  hs, 0)
-            p1 = SIMD3(hs - wt, -hs, 0)
-            inwardNormal = SIMD3(-1, 0, 0)
-            wallOffset = hs
-        case .west:  // left edge: X = -hs
-            p0 = SIMD3(-hs + wt, -hs, 0)
-            p1 = SIMD3(-hs + wt,  hs, 0)
-            inwardNormal = SIMD3(1, 0, 0)
-            wallOffset = hs
+        case .north:
+            inner0 = SIMD2( hs, -hs + wt)
+            inner1 = SIMD2(-hs, -hs + wt)
+            outer0 = SIMD2( hs, -hs)
+            outer1 = SIMD2(-hs, -hs)
+            inN = SIMD3(0, 1, 0)
+        case .south:
+            inner0 = SIMD2(-hs, hs - wt)
+            inner1 = SIMD2( hs, hs - wt)
+            outer0 = SIMD2(-hs, hs)
+            outer1 = SIMD2( hs, hs)
+            inN = SIMD3(0, -1, 0)
+        case .east:
+            inner0 = SIMD2(hs - wt,  hs)
+            inner1 = SIMD2(hs - wt, -hs)
+            outer0 = SIMD2(hs,  hs)
+            outer1 = SIMD2(hs, -hs)
+            inN = SIMD3(-1, 0, 0)
+        case .west:
+            inner0 = SIMD2(-hs + wt, -hs)
+            inner1 = SIMD2(-hs + wt,  hs)
+            outer0 = SIMD2(-hs, -hs)
+            outer1 = SIMD2(-hs,  hs)
+            inN = SIMD3(1, 0, 0)
         }
 
-        // Inner face of the wall (facing the corridor)
-        let base = UInt16(verts.count)
-        verts.append(contentsOf: [
-            MazeVertexSwift(position: SIMD3(p0.x, p0.y, z0), normal: inwardNormal, texCoord: SIMD2(0, 0)),
-            MazeVertexSwift(position: SIMD3(p1.x, p1.y, z0), normal: inwardNormal, texCoord: SIMD2(1, 0)),
-            MazeVertexSwift(position: SIMD3(p1.x, p1.y, z1), normal: inwardNormal, texCoord: SIMD2(1, 1)),
-            MazeVertexSwift(position: SIMD3(p0.x, p0.y, z1), normal: inwardNormal, texCoord: SIMD2(0, 1)),
-        ])
-        indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        let outN = -inN
+        let topN = SIMD3<Float>(0, 0, 1)
 
-        // Top face of the wall
-        let topNorm = SIMD3<Float>(0, 0, 1)
-        let base2 = UInt16(verts.count)
-        // Extend top cap from inner edge to outer edge
-        let outerOffset = inwardNormal * (-wallThickness)
-        verts.append(contentsOf: [
-            MazeVertexSwift(position: SIMD3(p0.x, p0.y, z1), normal: topNorm, texCoord: SIMD2(0, 0)),
-            MazeVertexSwift(position: SIMD3(p1.x, p1.y, z1), normal: topNorm, texCoord: SIMD2(1, 0)),
-            MazeVertexSwift(position: SIMD3(p1.x + outerOffset.x, p1.y + outerOffset.y, z1), normal: topNorm, texCoord: SIMD2(1, 1)),
-            MazeVertexSwift(position: SIMD3(p0.x + outerOffset.x, p0.y + outerOffset.y, z1), normal: topNorm, texCoord: SIMD2(0, 1)),
-        ])
-        indices.append(contentsOf: [base2+0, base2+1, base2+2, base2+0, base2+2, base2+3])
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>, _ n: SIMD3<Float>) {
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [
+                MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0)),
+                MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(1, 0)),
+                MazeVertexSwift(position: c, normal: n, texCoord: SIMD2(1, 1)),
+                MazeVertexSwift(position: d, normal: n, texCoord: SIMD2(0, 1)),
+            ])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+
+        // Inner face
+        quad(SIMD3(inner0.x, inner0.y, z0), SIMD3(inner1.x, inner1.y, z0),
+             SIMD3(inner1.x, inner1.y, z1), SIMD3(inner0.x, inner0.y, z1), inN)
+        // Outer face
+        quad(SIMD3(outer1.x, outer1.y, z0), SIMD3(outer0.x, outer0.y, z0),
+             SIMD3(outer0.x, outer0.y, z1), SIMD3(outer1.x, outer1.y, z1), outN)
+        // Top face
+        quad(SIMD3(inner0.x, inner0.y, z1), SIMD3(inner1.x, inner1.y, z1),
+             SIMD3(outer1.x, outer1.y, z1), SIMD3(outer0.x, outer0.y, z1), topN)
+        // End cap at p0 side
+        let capN0 = SIMD3<Float>(normalize(SIMD2(inner0.x - inner1.x, inner0.y - inner1.y)), 0)
+        quad(SIMD3(outer0.x, outer0.y, z0), SIMD3(inner0.x, inner0.y, z0),
+             SIMD3(inner0.x, inner0.y, z1), SIMD3(outer0.x, outer0.y, z1), capN0)
+        // End cap at p1 side
+        let capN1 = -capN0
+        quad(SIMD3(inner1.x, inner1.y, z0), SIMD3(outer1.x, outer1.y, z0),
+             SIMD3(outer1.x, outer1.y, z1), SIMD3(inner1.x, inner1.y, z1), capN1)
     }
 }
