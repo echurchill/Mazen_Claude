@@ -12,6 +12,7 @@ class CubeModel {
         self.cubies = []
         buildCubies()
         generateMaze()
+        addEdgeBridges()
         rebuildProjection()
     }
 
@@ -265,6 +266,85 @@ class CubeModel {
         case .negativeY: return (1, 0)
         case .positiveZ: return (2, size - 1)
         case .negativeZ: return (2, 0)
+        }
+    }
+
+    // MARK: - Edge Crossing
+
+    func edgeCrossing(face: CubeFace, direction: SurfaceDirection, row: Int, col: Int) -> (face: CubeFace, row: Int, col: Int, facing: SurfaceDirection) {
+        let n = size - 1
+        switch (face, direction) {
+        case (.positiveZ, .north): return (.negativeY, n, col, .north)
+        case (.positiveZ, .south): return (.positiveY,  n, col, .north)
+        case (.positiveZ, .east):  return (.positiveX, row, n, .west)
+        case (.positiveZ, .west):  return (.negativeX, row, n, .west)
+
+        case (.negativeZ, .north): return (.negativeY, 0, col, .south)
+        case (.negativeZ, .south): return (.positiveY,  0, col, .south)
+        case (.negativeZ, .east):  return (.positiveX, row, 0, .east)
+        case (.negativeZ, .west):  return (.negativeX, row, 0, .east)
+
+        case (.positiveX, .north): return (.negativeY, col, n, .west)
+        case (.positiveX, .south): return (.positiveY,  col, n, .west)
+        case (.positiveX, .east):  return (.positiveZ, row, n, .west)
+        case (.positiveX, .west):  return (.negativeZ, row, n, .west)
+
+        case (.negativeX, .north): return (.negativeY, col, 0, .east)
+        case (.negativeX, .south): return (.positiveY,  col, 0, .east)
+        case (.negativeX, .east):  return (.positiveZ, row, 0, .east)
+        case (.negativeX, .west):  return (.negativeZ, row, 0, .east)
+
+        case (.positiveY, .north): return (.negativeZ, n, col, .north)
+        case (.positiveY, .south): return (.positiveZ, n, col, .north)
+        case (.positiveY, .east):  return (.positiveX, n, row, .north)
+        case (.positiveY, .west):  return (.negativeX, n, row, .north)
+
+        case (.negativeY, .north): return (.negativeZ, 0, col, .south)
+        case (.negativeY, .south): return (.positiveZ, 0, col, .south)
+        case (.negativeY, .east):  return (.positiveX, 0, row, .south)
+        case (.negativeY, .west):  return (.negativeX, 0, row, .south)
+        }
+    }
+
+    private func addEdgeBridges() {
+        var rng = FaceSeededRNG(seed: 99)
+        let n = size
+
+        func mask(for dir: SurfaceDirection) -> DirectionMask {
+            switch dir {
+            case .north: return .north
+            case .east:  return .east
+            case .south: return .south
+            case .west:  return .west
+            }
+        }
+
+        let edges: [(CubeFace, SurfaceDirection)] = [
+            (.positiveZ, .north), (.positiveZ, .south), (.positiveZ, .east), (.positiveZ, .west),
+            (.negativeZ, .north), (.negativeZ, .south), (.negativeZ, .east), (.negativeZ, .west),
+            (.positiveY, .east),  (.positiveY, .west),
+            (.negativeY, .east),  (.negativeY, .west),
+        ]
+
+        for (face, dir) in edges {
+            let pos = Int(rng.next() % UInt64(n))
+            let departRow: Int, departCol: Int
+            switch dir {
+            case .north: departRow = 0;     departCol = pos
+            case .south: departRow = n - 1; departCol = pos
+            case .east:  departRow = pos;   departCol = n - 1
+            case .west:  departRow = pos;   departCol = 0
+            }
+
+            let crossing = edgeCrossing(face: face, direction: dir, row: departRow, col: departCol)
+            let arrivalDir = crossing.facing.opposite
+
+            if let (ci, fi) = findFaceletIndices(face: face, row: departRow, col: departCol) {
+                cubies[ci].facelets[fi].mazeTile.openings.insert(mask(for: dir))
+            }
+            if let (ci, fi) = findFaceletIndices(face: crossing.face, row: crossing.row, col: crossing.col) {
+                cubies[ci].facelets[fi].mazeTile.openings.insert(mask(for: arrivalDir))
+            }
         }
     }
 

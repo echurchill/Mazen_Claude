@@ -1,0 +1,262 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2870
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww28020\viewh15720\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 Good \'97 macOS 26.5 / iOS 26.5, Swift 5, Metal 4. Here is the consolidated plan built from scratch against the actual `Mazen_Claude` scaffold.\
+\
+---\
+\
+## Rubik's Maze \'97 Initial Working Visual Prototype Plan\
+\
+### What exists today\
+\
+The `Mazen_Claude` Xcode project is a fresh **Metal 4** scaffold (created 2026-06-16) with:\
+\
+- **`Mazen_Claude Shared/`** \'97 `Renderer.swift` (379 lines), `Shaders.metal` (53 lines), `ShaderTypes.h`, `Assets.xcassets` with a `ColorMap` texture\
+- **`Mazen_Claude macOS/`** \'97 thin `NSViewController` host, checks `supportsFamily(.metal4)`\
+- **`Mazen_Claude iOS/`** \'97 thin `UIViewController` host, returns early on simulator\
+\
+The renderer uses the Metal 4 API surface: `MTL4CommandQueue`, `MTL4CommandBuffer`, `MTL4CommandAllocator`, `MTL4ArgumentTable`, `MTLResidencySet`, `MTL4RenderPipelineDescriptor` with `MTL4CompilerDescriptor`. It currently draws a spinning textured box using `MTKMesh` (ModelIO) with triple-buffered uniforms and a `MTLSharedEvent` fence.\
+\
+Both targets deploy to **macOS 26.5 / iOS 26.5**, Swift 5. Simulator is dead (`Renderer.init` returns `nil`).\
+\
+### Prototype goal\
+\
+Answer one question: **standing in the maze, rotating a slice, and watching the walls rearrange around you \'97 with fog tiles visible at the periphery \'97 does this feel right?**\
+\
+Success is demonstrated on a physical Mac **and** a physical iPhone/iPad, both at 60 fps. No game rules, no menus, no audio.\
+\
+### Locked decisions\
+\
+| Decision | Choice | Rationale |\
+|---|---|---|\
+| Graphics API | Metal 4 (keep scaffold) | Future-proof; scaffold already works. iOS requires physical device \'97 no simulator. |\
+| Data model source of truth | **Cubie/facelet** | Cubies own facelets. A turn = permute cubies + quarter-turn facelet orientation. `(face,row,col)` is a derived index rebuilt when dirty. |\
+| Perf target | 16.67 ms on **both** Mac + recent iOS device | Frame-time HUD from Milestone 1. |\
+| Camera during slice rotation | Tile-relative | Player inherits the rotating tile's transform. The world rotates around them. |\
+| Fog rendering | Layered billboards | NOT ground-parallel only \'97 must also read as corridor-filling in first-person. Camera-facing / cross-stacked approach needed. |\
+| Movement gating | Both tiles' shared edges must be open | A passage exists only when tile A's edge AND tile B's edge are both open. Post-rotation mismatches are correct gameplay, not bugs. |\
+\
+### Coordinate conventions (lock before writing any code)\
+\
+| Convention | Value |\
+|---|---|\
+| Handedness | Right-handed (Metal standard) |\
+| World axes | +X right, +Y up, +Z toward camera |\
+| Face normals | +X, -X, +Y, -Y, +Z, -Z (outward from cube center) |\
+| Face-local "north" | The direction toward +Y pole when projected onto the face. Top/bottom faces: north = toward -Z / +Z respectively. |\
+| Tile-local origin | Center of tile, on the surface plane |\
+| Winding | Counter-clockwise front-facing (scaffold already sets `.counterClockwise`) |\
+\
+### Architecture\
+\
+```\
+Mazen_Claude Shared/\
+  Model/\
+    GameState.swift         \'97 owns all mutable prototype state\
+    CubeModel.swift         \'97 cubies + facelets, the source of truth\
+    MazeTile.swift          \'97 per-facelet maze pattern + tile state\
+    PlayerState.swift       \'97 facelet ID, facing direction, eye height\
+    LayerTurn.swift         \'97 rotation description + animation state\
+\
+  Topology/\
+    FaceAdjacency.swift     \'97 precomputed 6\'d74 edge-crossing table\
+    CubeProjection.swift    \'97 derives (face,row,col) index from cubie/facelet state\
+\
+  Geometry/\
+    TileMeshLibrary.swift   \'97 5 canonical tile meshes in tile-local space\
+    MeshBuilder.swift       \'97 procedural vertex/index generation\
+    FogVolume.swift         \'97 billboard geometry for unknown tiles\
+\
+  Render/\
+    Renderer.swift          \'97 MTL4 draw loop (replaces current scaffold)\
+    InstanceBuilder.swift   \'97 packs per-instance data into GPU buffers\
+    PipelineCache.swift     \'97 manages opaque + transparent pipeline states\
+\
+  Camera/\
+    CameraSystem.swift      \'97 orbit + first-person modes\
+    EdgeCrossing.swift      \'97 slerp logic for face transitions\
+\
+  Input/\
+    PrototypeInput.swift    \'97 keyboard (macOS) / placeholder touch (iOS)\
+\
+  ShaderTypes.h             \'97 shared C/Metal/Swift types\
+  Shaders.metal             \'97 vertex/fragment for opaque + fog passes\
+```\
+\
+### Shared types (ShaderTypes.h expansion)\
+\
+```c\
+// Per-frame, set once per draw call\
+typedef struct \{\
+    matrix_float4x4 viewProjectionMatrix;\
+    vector_float3   cameraPosition;\
+    float           time;\
+    vector_float3   sunDirection;\
+    float           padding;\
+\} FrameUniforms;\
+\
+// Per-instance, one per visible mesh piece\
+typedef struct \{\
+    matrix_float4x4 modelMatrix;\
+    vector_float4   baseColor;\
+    uint            materialID;    // 0=gap, 1=path, 2=hedge, 3=stone, 4=fog, 5=dissolve\
+    uint            tileID;\
+    float           discoveryAmount;\
+    uint            styleSeed;\
+\} InstanceData;\
+```\
+\
+### Data model detail\
+\
+**Cubie** \'97 the 3D sub-cube at integer position `(x,y,z)` in `[0..N-1]^3`. Only surface cubies (those with at least one face on the cube's outer shell) carry facelets. A 3\'d73\'d73 cube has 26 surface cubies, 54 facelets.\
+\
+**MazeFacelet** \'97 attached to a cubie, describes one outward face. Carries:\
+- `id: FaceletID` (stable through rotations)\
+- `cubieID: CubieID`\
+- `localFace: CubeFace` (which face of the cubie this facelet is on)\
+- `mazeTile: MazeTile` (connection bitmask, wall style, path style, seed)\
+- `tileState: TileState` (.unknown / .adjacent / .discovered)\
+- `discoveryAmount: Float` (0\uc0\u8594 1 animation progress)\
+\
+**Slice rotation flow:**\
+1. Identify all cubies in the slice (those whose coordinate on the rotation axis == slice index).\
+2. For each, permute its `position` by the 90\'b0 rotation and rotate its `orientation` quaternion.\
+3. For each facelet on a moved cubie, rotate its `localFace` to the new outward direction and rotate its `mazeTile.openings` bitmask by the corresponding quarter-turns.\
+4. Mark the `(face,row,col)` projection as dirty \uc0\u8594  rebuild on next query.\
+5. All `tileState` / `discoveryAmount` travels with the facelet automatically (it's on the same struct).\
+\
+**Face-edge adjacency table:** a static `[CubeFace: [SurfaceDirection: FaceAdjacency]]` dictionary built once at init. Each entry maps `(fromFace, edgeDirection)` \uc0\u8594  `(toFace, directionRotationQuarterTurns)`. The quarter-turn value tells the player/camera system how to remap facing direction when crossing. **12 round-trip unit tests** (one per cube edge) must pass before any geometry code is written.\
+\
+### Milestones\
+\
+#### M1: Metal 4 multi-pipeline + cube grid (Days 1\'963)\
+\
+Replace the sample spinning box with a grid of facelet quads in orbit view.\
+\
+- Rework `Renderer` to support multiple `MTLRenderPipelineState`s (opaque + transparent) through `PipelineCache`.\
+- Replace `MTKMesh` with procedurally generated vertex/index buffers for facelet planes.\
+- Build `CubeModel` (cubies + facelets for N=3), `CubeProjection` (derives world matrices).\
+- Render all 54 facelets as flat colored quads with dark gaps between them.\
+- Add frame-time HUD (text overlay or console print each second).\
+- **Exit criteria:** app launches on Mac + physical iOS device, shows a cube made of 54 tiled squares with gaps, 60 fps on both.\
+\
+#### M2: Maze tile geometry (Days 3\'965)\
+\
+Replace flat quads with 3D maze cells on "discovered" tiles.\
+\
+- Build `TileMeshLibrary` \'97 5 canonical meshes (dead end, straight, corner, T-junction, crossroads) in tile-local space.\
+- `MeshBuilder` generates vertex/index data for floor + extruded wall quads per tile type.\
+- Wall height = 1.3\'d7 tile width. Eye height = 0.5 units.\
+- Select mesh by masking `MazeTile.openings` bitmask, rotate 0/90/180/270\'b0 to correct orientation.\
+- Combine with facelet `worldMatrix` for final placement.\
+- Use materialID to color-code path (sand/dirt) vs. walls (green for hedge, gray for stone).\
+- Generate a simple per-face maze using recursive backtracker (edges forced open at face boundaries for now).\
+- **Exit criteria:** orbit view shows a mix of maze cells that tile correctly; paths align across shared open edges.\
+\
+#### M3: Fog + discovery (Days 5\'968)\
+\
+Render unknown tiles as fog, adjacent tiles as dissolving fog.\
+\
+- `FogVolume` generates billboard geometry per unknown tile. **Two orientations:** ground-parallel layers for orbit readability AND camera-facing / cross-stacked layers for first-person corridor occlusion. Both generated; shader selects based on `viewMode` or always renders both.\
+- Cloud noise texture (tileable Perlin/Worley, baked PNG). Per-layer UV scroll at different speeds.\
+- Alpha blending: additive-over-premultiplied. Drawn after opaque pass.\
+- `TileRevealAnimator` drives `discoveryAmount` 0\uc0\u8594 1 with noise-masked dissolve (not linear crossfade).\
+- Tile state transitions: entering a tile \uc0\u8594  `.discovered`; tiles in all open passage directions \u8594  `.adjacent`.\
+- Debug key `F` to reveal all; `R` to reset.\
+- **Sub-checkpoint:** verify fog reads correctly in **both** orbit view (soft cloud cap per tile) and first-person (opaque corridor-filling volume ahead of player). This is a core "does it feel right?" gate.\
+- **Exit criteria:** orbit view clearly shows known maze, unknown fog, and dissolving transitions. First-person fog blocks the corridor ahead convincingly.\
+\
+#### M4: First-person camera + movement (Days 8\'9611)\
+\
+Walk through the maze in first person.\
+\
+- `CameraSystem` supports orbit mode (existing orbit around cube center) and surface FP mode.\
+- FP camera: position = tile center + 0.5 \'d7 outward normal; up = outward normal; forward = facing direction along surface.\
+- 65\'b0 vertical FOV, 0.05 near clip, 12.0 far clip.\
+- WASD movement: W = forward through open passage, A/D = turn left/right, S = reverse/turn around.\
+- Movement is gated by **both** tiles' shared-edge openings.\
+- Successful move triggers discovery cascade (destination \uc0\u8594  discovered, open neighbors \u8594  adjacent).\
+- Same-face movement only for the first pass.\
+- Tab toggles orbit \uc0\u8596  first-person.\
+- **Exit criteria:** player walks through maze corridors on one face; walls feel taller than the player but not canyon-like; fog reveals with each step; orbit/FP toggle preserves state.\
+\
+#### M5: Slice rotation (Days 11\'9614)\
+\
+The defining mechanic.\
+\
+- `LayerTurn` value type: axis, slice index, direction.\
+- `RotationAnimator`: smooth-step interpolation over 350\'96450 ms. Applies intermediate rotation matrix to each affected cubie's facelets.\
+- On completion: `CubeModel` commits \'97 cubies permuted, facelets reoriented, connection masks rotated, projection marked dirty.\
+- Matrices snapped to exact integer-derived values (no floating-point drift).\
+- Camera behavior: if the player is on a rotating facelet, the camera inherits the rotating tile's transform (world rotates around player).\
+- Arrow keys trigger debug rotations (up/down = Y-axis, left/right = X-axis, with modifier = Z-axis).\
+- **Exit criteria:** slice rotation animates smoothly; discovered tiles travel with facelets; no duplicates or gaps after rotation; movement still works post-rotation; the path-mismatch at newly-adjacent tile edges is visible and correct.\
+\
+#### M6: Face-edge crossing (Days 14\'9616)\
+\
+Navigate across cube faces.\
+\
+- Uses the precomputed face-edge adjacency table.\
+- On crossing: player facing direction remapped by the table's `directionRotationQuarterTurns`.\
+- Camera up-vector slerp over ~200 ms to the new face normal.\
+- Discovery cascade works correctly across face boundaries.\
+- **Exit criteria:** player crosses at least one cube edge through an open passage; camera orientation transitions smoothly; facing direction is correct on arrival; fog reveal works post-crossing.\
+\
+#### M7: Integration + polish pass (Days 16\'9618)\
+\
+- Simple directional sunlight + ambient fill.\
+- Tune colors: path (warm sand), hedge walls (green), stone walls (gray), fog (white/blue-tinted), gaps (near-black).\
+- Procedural variation via `styleSeed` in fragment shader.\
+- Verify 60 fps on Mac + iOS at 3\'d73\'d73.\
+- Quick test at 4\'d74\'d74 to confirm N is not hardcoded anywhere.\
+- Debug orbit overlay: per-tile `(face,row,col)` labels + facing arrows (invaluable for adjacency debugging; keep behind debug flag).\
+- End-to-end run: walk \uc0\u8594  rotate \u8594  see walls rearrange \u8594  fog tiles at periphery \u8594  cross a face edge.\
+\
+### Known hard problems (ranked by risk)\
+\
+1. **Face-edge adjacency orientation (24 configurations).** The #1 time sink. Precompute the 6\'d74 table, write 12 round-trip unit tests, AND build the debug orbit overlay (labels + arrows). Numbers + visuals together; neither alone is sufficient.\
+\
+2. **Camera orientation at face-edge crossing.** Same underlying math as adjacency but manifests as a broken first-person illusion. The adjacency table's `directionRotationQuarterTurns` must be applied to the player's facing vector. Test all 12 edges manually by walking across them.\
+\
+3. **Connection-mask rotation after slice turns.** When a facelet rotates, its north/south/east/west openings must rotate too. A 90\'b0 clockwise turn around the Y-axis on the top face rotates the mask differently than the same turn on the front face. The rotation amount depends on how the facelet's `localFace` maps to the turn axis.\
+\
+4. **Fog readability in first-person.** Ground-parallel billboards collapse edge-on in the corridor view. This must be solved in M3 \'97 it's a core experience question, not polish.\
+\
+5. **Metal 4 argument-table setup for multi-pipeline.** The scaffold has one pipeline with one vertex + one fragment argument table. The prototype needs at least two (opaque + transparent/fog). Each pipeline may need its own argument table configuration. Budget time for this in M1.\
+\
+### Prototype controls (macOS primary)\
+\
+| Key | Action |\
+|---|---|\
+| Tab | Toggle orbit \uc0\u8596  first-person |\
+| W | Move forward (if passage open on both sides) |\
+| A / D | Turn left / right |\
+| S | Turn around |\
+| Arrow keys | Debug slice rotation (\uc0\u8593 \u8595  = Y-axis, \u8592 \u8594  = X-axis) |\
+| Shift+Arrow | Debug slice rotation (Z-axis) |\
+| F | Toggle reveal-all debug mode |\
+| R | Reset cube, player, and discovery state |\
+\
+iOS touch: placeholder only until the visual prototype is proven.\
+\
+### Explicitly deferred\
+\
+Audio, save/load, menus/UI, particle effects, PBR materials, dynamic lighting, cross-face maze generation (guaranteed solvability), game rules/win conditions, multiple cube sizes in one session, runtime N resizing, final iOS touch controls.\
+\
+### Success criteria\
+\
+All five must be demonstrated on **both** a physical Mac and a physical iOS device, without code changes:\
+\
+1. Player navigates tile-to-tile through a 3\'d73\'d73 maze in first-person, passing through open passages and blocked by walls.\
+2. Unknown tiles show animated fog. Stepping onto a tile triggers a fog dissolve revealing maze geometry. Revealed tiles stay revealed.\
+3. Player triggers a slice rotation. It animates smoothly at 60 fps. The player's tile (if in the rotating slice) carries the camera. After animation, topology has changed and navigation works on the new layout.\
+4. Crossing from one face to another transitions camera orientation smoothly with no facing-direction discontinuity.\
+5. Frame time is consistently under 16.67 ms on both devices at 3\'d73\'d73.\
+\
+---\
+\
+That's the complete plan. Ready to start building when you are.}

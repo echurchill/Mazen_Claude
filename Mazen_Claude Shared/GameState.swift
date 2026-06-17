@@ -30,6 +30,7 @@ class GameState {
     var moveToFace: CubeFace = .positiveZ
     var moveToRow: Int = 0
     var moveToCol: Int = 0
+    var moveNewFacing: SurfaceDirection = .north
 
     // Turn interpolation
     var isTurning = false
@@ -106,9 +107,12 @@ class GameState {
             if moveProgress >= 1.0 {
                 moveProgress = 1.0
                 isMoving = false
+                let crossedFace = moveFromFace != moveToFace
                 playerFace = moveToFace
                 playerRow = moveToRow
                 playerCol = moveToCol
+                playerFacing = moveNewFacing
+                print("Arrived: \(playerFace) (\(playerRow),\(playerCol)) facing \(playerFacing)\(crossedFace ? " [CROSSED EDGE]" : "")")
                 onPlayerArrived()
             }
         }
@@ -156,14 +160,14 @@ class GameState {
     func tryMoveForward() {
         guard !isMoving && !isTurning else { return }
         guard let (ci, fi) = cubeModel.faceletAt(face: playerFace, row: playerRow, col: playerCol) else {
-            NSLog("No facelet at %@ (%d,%d)", "\(playerFace)", playerRow, playerCol)
+            print("No facelet at \(playerFace) (\(playerRow),\(playerCol))")
             return
         }
         let tile = cubeModel.cubies[ci].facelets[fi]
-        NSLog("Move: at %@ (%d,%d) facing %@, openings=%d", "\(playerFace)", playerRow, playerCol, "\(playerFacing)", Int(tile.mazeTile.openings.rawValue))
+        print("Move: at \(playerFace) (\(playerRow),\(playerCol)) facing \(playerFacing), openings=\(tile.mazeTile.openings.rawValue)")
 
         guard tile.mazeTile.openings.contains(direction: playerFacing) else {
-            NSLog("  Blocked — no opening %@", "\(playerFacing)")
+            print("  Blocked — no opening \(playerFacing)")
             return
         }
 
@@ -171,21 +175,42 @@ class GameState {
         let newRow = playerRow + dr
         let newCol = playerCol + dc
 
-        guard newRow >= 0 && newRow < cubeModel.size && newCol >= 0 && newCol < cubeModel.size else { return }
+        if newRow >= 0 && newRow < cubeModel.size && newCol >= 0 && newCol < cubeModel.size {
+            if let (tci, tfi) = cubeModel.faceletAt(face: playerFace, row: newRow, col: newCol) {
+                let targetTile = cubeModel.cubies[tci].facelets[tfi]
+                guard targetTile.mazeTile.openings.contains(direction: playerFacing.opposite) else { return }
+            }
 
-        if let (tci, tfi) = cubeModel.faceletAt(face: playerFace, row: newRow, col: newCol) {
-            let targetTile = cubeModel.cubies[tci].facelets[tfi]
-            guard targetTile.mazeTile.openings.contains(direction: playerFacing.opposite) else { return }
+            moveFromFace = playerFace
+            moveFromRow = playerRow
+            moveFromCol = playerCol
+            moveToFace = playerFace
+            moveToRow = newRow
+            moveToCol = newCol
+            moveNewFacing = playerFacing
+            moveProgress = 0
+            isMoving = true
+        } else {
+            let crossing = cubeModel.edgeCrossing(face: playerFace, direction: playerFacing, row: playerRow, col: playerCol)
+            let arrivalDir = crossing.facing.opposite
+            if let (tci, tfi) = cubeModel.faceletAt(face: crossing.face, row: crossing.row, col: crossing.col) {
+                let targetTile = cubeModel.cubies[tci].facelets[tfi]
+                guard targetTile.mazeTile.openings.contains(direction: arrivalDir) else { return }
+            } else {
+                return
+            }
+
+            moveFromFace = playerFace
+            moveFromRow = playerRow
+            moveFromCol = playerCol
+            moveToFace = crossing.face
+            moveToRow = crossing.row
+            moveToCol = crossing.col
+            moveNewFacing = crossing.facing
+            moveProgress = 0
+            isMoving = true
+            print("Edge crossing: \(playerFace) (\(playerRow),\(playerCol)) -> \(crossing.face) (\(crossing.row),\(crossing.col)) facing \(crossing.facing)")
         }
-
-        moveFromFace = playerFace
-        moveFromRow = playerRow
-        moveFromCol = playerCol
-        moveToFace = playerFace
-        moveToRow = newRow
-        moveToCol = newCol
-        moveProgress = 0
-        isMoving = true
     }
 
     func tryTurnLeft() {
@@ -214,37 +239,68 @@ class GameState {
         let (dr, dc) = deltaForDirection(backDir)
         let newRow = playerRow + dr
         let newCol = playerCol + dc
-        guard newRow >= 0 && newRow < cubeModel.size && newCol >= 0 && newCol < cubeModel.size else { return }
 
-        if let (tci, tfi) = cubeModel.faceletAt(face: playerFace, row: newRow, col: newCol) {
-            let targetTile = cubeModel.cubies[tci].facelets[tfi]
-            guard targetTile.mazeTile.openings.contains(direction: backDir.opposite) else { return }
+        if newRow >= 0 && newRow < cubeModel.size && newCol >= 0 && newCol < cubeModel.size {
+            if let (tci, tfi) = cubeModel.faceletAt(face: playerFace, row: newRow, col: newCol) {
+                let targetTile = cubeModel.cubies[tci].facelets[tfi]
+                guard targetTile.mazeTile.openings.contains(direction: backDir.opposite) else { return }
+            }
+
+            moveFromFace = playerFace
+            moveFromRow = playerRow
+            moveFromCol = playerCol
+            moveToFace = playerFace
+            moveToRow = newRow
+            moveToCol = newCol
+            moveNewFacing = playerFacing
+            moveProgress = 0
+            isMoving = true
+        } else {
+            let crossing = cubeModel.edgeCrossing(face: playerFace, direction: backDir, row: playerRow, col: playerCol)
+            let arrivalDir = crossing.facing.opposite
+            if let (tci, tfi) = cubeModel.faceletAt(face: crossing.face, row: crossing.row, col: crossing.col) {
+                let targetTile = cubeModel.cubies[tci].facelets[tfi]
+                guard targetTile.mazeTile.openings.contains(direction: arrivalDir) else { return }
+            } else {
+                return
+            }
+
+            moveFromFace = playerFace
+            moveFromRow = playerRow
+            moveFromCol = playerCol
+            moveToFace = crossing.face
+            moveToRow = crossing.row
+            moveToCol = crossing.col
+            moveNewFacing = crossing.facing.opposite
+            moveProgress = 0
+            isMoving = true
         }
-
-        moveFromFace = playerFace
-        moveFromRow = playerRow
-        moveFromCol = playerCol
-        moveToFace = playerFace
-        moveToRow = newRow
-        moveToCol = newCol
-        moveProgress = 0
-        isMoving = true
     }
 
     private func onPlayerArrived() {
         discoverTile(face: playerFace, row: playerRow, col: playerCol)
-        // Mark neighbors as adjacent
         let n = cubeModel.size
         for dir in SurfaceDirection.allCases {
             let (dr, dc) = deltaForDirection(dir)
             let nr = playerRow + dr
             let nc = playerCol + dc
+            let neighborFace: CubeFace
+            let neighborRow: Int
+            let neighborCol: Int
             if nr >= 0 && nr < n && nc >= 0 && nc < n {
-                if let (ci, fi) = cubeModel.faceletAt(face: playerFace, row: nr, col: nc) {
-                    if cubeModel.cubies[ci].facelets[fi].tileState == .unknown {
-                        cubeModel.cubies[ci].facelets[fi].tileState = .adjacent
-                        cubeModel.cubies[ci].facelets[fi].discoveryAmount = 0.2
-                    }
+                neighborFace = playerFace
+                neighborRow = nr
+                neighborCol = nc
+            } else {
+                let crossing = cubeModel.edgeCrossing(face: playerFace, direction: dir, row: playerRow, col: playerCol)
+                neighborFace = crossing.face
+                neighborRow = crossing.row
+                neighborCol = crossing.col
+            }
+            if let (ci, fi) = cubeModel.faceletAt(face: neighborFace, row: neighborRow, col: neighborCol) {
+                if cubeModel.cubies[ci].facelets[fi].tileState == .unknown {
+                    cubeModel.cubies[ci].facelets[fi].tileState = .adjacent
+                    cubeModel.cubies[ci].facelets[fi].discoveryAmount = 0.2
                 }
             }
         }
@@ -402,6 +458,7 @@ class GameState {
         let faceBitangent = face.bitangent
 
         var eyePos = tileCenter + faceNormal * eyeHeight
+        var upDir = faceNormal
 
         // Interpolate position during movement
         if isMoving {
@@ -409,11 +466,26 @@ class GameState {
             let toCenter = SIMD3<Float>(toMatrix.columns.3.x, toMatrix.columns.3.y, toMatrix.columns.3.z)
             let toEye = toCenter + moveToFace.normal * eyeHeight
             let t = smoothstep(moveProgress)
-            eyePos = mix(eyePos, toEye, t: t)
+            if moveFromFace != moveToFace {
+                eyePos = normalize(mix(eyePos, toEye, t: t)) * length(eyePos) * (1 - t) + normalize(mix(eyePos, toEye, t: t)) * length(toEye) * t
+                upDir = normalize(mix(faceNormal, moveToFace.normal, t: t))
+            } else {
+                eyePos = mix(eyePos, toEye, t: t)
+            }
         }
 
         // Facing direction in world space
-        var facingWorld = directionToWorld(playerFacing, face: face, tangent: faceTangent, bitangent: faceBitangent)
+        var facingWorld: SIMD3<Float>
+        if isMoving && moveFromFace != moveToFace {
+            let fromDir = directionToWorld(playerFacing, face: face, tangent: faceTangent, bitangent: faceBitangent)
+            let toTangent = moveToFace.tangent
+            let toBitangent = moveToFace.bitangent
+            let toDir = directionToWorld(moveNewFacing, face: moveToFace, tangent: toTangent, bitangent: toBitangent)
+            let t = smoothstep(moveProgress)
+            facingWorld = normalize(mix(fromDir, toDir, t: t))
+        } else {
+            facingWorld = directionToWorld(playerFacing, face: face, tangent: faceTangent, bitangent: faceBitangent)
+        }
 
         // Interpolate facing during turns
         if isTurning {
@@ -425,9 +497,7 @@ class GameState {
 
         // Slight downward pitch to see the floor
         let pitchAngle: Float = -0.12
-        facingWorld = normalize(facingWorld + faceNormal * pitchAngle)
-
-        var upDir = faceNormal
+        facingWorld = normalize(facingWorld + upDir * pitchAngle)
 
         // Apply slice rotation to camera if player is on rotating slice
         if sliceRotation.isActive && sliceRotation.playerCubieIndex >= 0 && sliceRotation.affectedCubies.contains(sliceRotation.playerCubieIndex) {
