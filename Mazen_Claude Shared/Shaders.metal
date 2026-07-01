@@ -94,19 +94,26 @@ fragment float4 fragmentShader(
     float alpha = 1.0;
     float lighting;
 
+    float seedF = float(in.styleSeed) * 0.0073;
+
     if (in.materialID == 1) {
         float height = in.localPosition.z;
         if (height > 0.1) {
-            // Hedge wall — domain-warped 3-color palette
-            float warp = valueNoise(in.worldPosition.xy * 3.0);
+            // Hedge wall — domain-warped 3-color palette with per-tile variation
+            float warp = valueNoise(in.worldPosition.xy * 3.0 + seedF);
             float2 warped = in.worldPosition.xy + warp * 0.3;
 
             float3 dark    = float3(0.20, 0.32, 0.14);
             float3 mid     = float3(0.30, 0.48, 0.22);
             float3 bright  = float3(0.42, 0.58, 0.32);
 
+            float tileHue = fract(seedF * 1.618);
+            dark  += float3(-0.02, 0.03, -0.01) * tileHue;
+            mid   += float3(-0.01, 0.04, -0.02) * tileHue;
+            bright += float3(-0.02, 0.05, -0.01) * tileHue;
+
             float n1 = valueNoise(warped * 6.0);
-            float n2 = valueNoise(in.worldPosition.yz * 10.0 + 5.0);
+            float n2 = valueNoise(in.worldPosition.yz * 10.0 + 5.0 + seedF);
             float blend = n1 * 0.6 + n2 * 0.4;
 
             if (blend < 0.5) {
@@ -128,14 +135,16 @@ fragment float4 fragmentShader(
             float heightFade = smoothstep(0.1, 0.25, height);
             color *= 0.65 + 0.35 * heightFade;
         } else {
-            // Sand/path floor — warm sand with fine sparkle
+            // Sand/path floor — warm sand with fine sparkle, per-tile tint
             float3 sandBase = float3(0.72, 0.62, 0.45);
             float3 sandDark = float3(0.60, 0.50, 0.35);
-            float n = valueNoise(in.worldPosition.xz * 6.0 + 100.0);
+            float tileWarm = fract(seedF * 2.317) * 0.06 - 0.03;
+            sandBase += float3(tileWarm, tileWarm * 0.5, -tileWarm);
+            float n = valueNoise(in.worldPosition.xz * 6.0 + 100.0 + seedF);
             color = mix(sandDark, sandBase, n);
 
             // Fine-grain sparkle
-            float sparkle = valueNoise(in.worldPosition.xz * 30.0 + 200.0);
+            float sparkle = valueNoise(in.worldPosition.xz * 30.0 + 200.0 + seedF);
             color += float3(0.04) * smoothstep(0.7, 0.95, sparkle);
 
             // Contact darkening near tile edges

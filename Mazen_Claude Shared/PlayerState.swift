@@ -1,4 +1,5 @@
 import simd
+import Foundation
 
 struct PlayerState {
     var face: CubeFace = .positiveZ
@@ -41,7 +42,7 @@ struct PlayerState {
             row = moveToRow
             col = moveToCol
             facing = moveNewFacing
-            print("Arrived: \(face) (\(row),\(col)) facing \(facing)\(crossedFace ? " [CROSSED EDGE]" : "")")
+            NSLog("Arrived: %@ (%d,%d) facing %@ %@", "\(face)", row, col, "\(facing)", crossedFace ? "[CROSSED EDGE]" : "")
             return true
         }
         return false
@@ -61,17 +62,9 @@ struct PlayerState {
 
     mutating func tryMoveForward(cubeModel: CubeModel) {
         guard !isMoving && !isTurning else { return }
-        guard let (ci, fi) = cubeModel.faceletAt(face: face, row: row, col: col) else {
-            print("No facelet at \(face) (\(row),\(col))")
-            return
-        }
+        guard let (ci, fi) = cubeModel.faceletAt(face: face, row: row, col: col) else { return }
         let tile = cubeModel.cubies[ci].facelets[fi]
-        print("Move: at \(face) (\(row),\(col)) facing \(facing), openings=\(tile.mazeTile.openings.rawValue)")
-
-        guard tile.mazeTile.openings.contains(direction: facing) else {
-            print("  Blocked — no opening \(facing)")
-            return
-        }
+        guard tile.mazeTile.openings.contains(direction: facing) else { return }
 
         let (dr, dc) = Self.deltaForDirection(facing)
         let newRow = row + dr
@@ -111,7 +104,7 @@ struct PlayerState {
             moveNewFacing = crossing.facing
             moveProgress = 0
             isMoving = true
-            print("Edge crossing: \(face) (\(row),\(col)) -> \(crossing.face) (\(crossing.row),\(crossing.col)) facing \(crossing.facing)")
+            NSLog("Edge crossing: %@ (%d,%d) -> %@ (%d,%d)", "\(face)", row, col, "\(crossing.face)", crossing.row, crossing.col)
         }
     }
 

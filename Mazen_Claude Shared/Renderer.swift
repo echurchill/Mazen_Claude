@@ -168,6 +168,11 @@ class Renderer: NSObject, MTKViewDelegate {
 #endif
     }
 
+    func resetGame(size: Int) {
+        gameState = GameState(size: size)
+        Self.setupInitialDiscovery(gameState: gameState)
+    }
+
     private static func setupInitialDiscovery(gameState: GameState) {
         let face = gameState.player.face
         let row = gameState.player.row
@@ -478,9 +483,9 @@ class Renderer: NSObject, MTKViewDelegate {
 
         gameState.frameTimeMs = dt * 1000.0
         frameTimeSamples.append(gameState.frameTimeMs)
-        if frameTimeSamples.count >= 60 {
+        if frameTimeSamples.count >= 120 {
             let avg = frameTimeSamples.reduce(0, +) / Float(frameTimeSamples.count)
-            print(String(format: "Frame: %.2f ms (%.0f fps)", avg, 1000.0 / avg))
+            gameState.avgFrameTimeMs = avg
             frameTimeSamples.removeAll()
         }
 

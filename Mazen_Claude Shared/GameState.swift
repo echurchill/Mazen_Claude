@@ -7,6 +7,7 @@ class GameState {
     var camera = CameraState()
     var time: Float = 0
     var frameTimeMs: Float = 0
+    var avgFrameTimeMs: Float = 0
 
     struct SliceRotation {
         var isActive = false
