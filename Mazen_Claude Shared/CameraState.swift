@@ -8,7 +8,7 @@ enum CameraMode {
 struct CameraState {
     var mode: CameraMode = .orbit
     var orbitRotation: SIMD2<Float> = SIMD2(0.45, 0.5)
-    var orbitDistance: Float = 3.0
+    var orbitDistance: Float = 5.0
     var orbitAutoRotate: Bool = true
 
     mutating func updateOrbit(deltaTime: Float) {
@@ -19,7 +19,7 @@ struct CameraState {
 
     func viewProjectionMatrix(aspect: Float, player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> float4x4 {
         let projection = float4x4.perspective(
-            fovYRadians: (80.0 / 180.0) * .pi,
+            fovYRadians: (70.0 / 180.0) * .pi,
             aspect: aspect,
             nearZ: 0.01,
             farZ: 100.0
@@ -50,7 +50,7 @@ struct CameraState {
     }
 
     private func firstPersonCamera(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> (eye: SIMD3<Float>, forward: SIMD3<Float>, up: SIMD3<Float>) {
-        let eyeHeight: Float = 0.55
+        let eyeHeight: Float = 0.45
 
         let face: CubeFace
         let row: Int
@@ -107,7 +107,7 @@ struct CameraState {
             facingWorld = normalize(mix(fromWorld, toWorld, t: t))
         }
 
-        let pitchAngle: Float = -0.12
+        let pitchAngle: Float = -0.05
         facingWorld = normalize(facingWorld + upDir * pitchAngle)
 
         if sliceRotation.isActive && sliceRotation.playerCubieIndex >= 0 && sliceRotation.affectedCubies.contains(sliceRotation.playerCubieIndex) {
@@ -121,6 +121,16 @@ struct CameraState {
         }
 
         return (eyePos, facingWorld, upDir)
+    }
+
+    func cameraUp(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> SIMD3<Float> {
+        switch mode {
+        case .orbit:
+            return SIMD3(0, 1, 0)
+        case .firstPerson:
+            let (_, _, up) = firstPersonCamera(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
+            return up
+        }
     }
 
     // MARK: - Helpers

@@ -1,6 +1,7 @@
 import Metal
 import MetalKit
 import simd
+import ImageIO
 
 let maxBuffersInFlight = 3
 
@@ -33,10 +34,18 @@ class Renderer: NSObject, MTKViewDelegate {
     var frameIndex = 0
 
     var pipelineState: MTLRenderPipelineState
+    var skyPipelineState: MTLRenderPipelineState
+    var shadowPipelineState: MTLRenderPipelineState
     var depthState: MTLDepthStencilState
     var depthStateNoWrite: MTLDepthStencilState
+    var depthStateAlways: MTLDepthStencilState
 
     var tileMeshLib: TileMeshLibrary
+    var diffuseArray: MTLTexture!
+    var normalArray: MTLTexture!
+    var skyboxTexture: MTLTexture!
+    var shadowMapTexture: MTLTexture!
+    var texSampler: MTLSamplerState!
 
     var frameUniformBuffers: [MTLBuffer]
     var instanceBuffers: [MTLBuffer]
@@ -54,6 +63,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     private var opaqueFogTiles: [TileEntry] = []
     private var dissolveTiles: [TileEntry] = []
+    private var frameTiles: [TileEntry] = []
     private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
     private var mazeWallTiles: [UInt8: [TileEntry]] = [:]
 
@@ -81,7 +91,8 @@ class Renderer: NSObject, MTKViewDelegate {
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.maxBufferBindCount = 4
         self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
-        argDesc.maxTextureBindCount = 1
+        argDesc.maxTextureBindCount = 4
+        argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
         self.endFrameEvent = device.makeSharedEvent()!
@@ -90,8 +101,8 @@ class Renderer: NSObject, MTKViewDelegate {
 
         metalKitView.depthStencilPixelFormat = .depth32Float_stencil8
         metalKitView.colorPixelFormat = .bgra8Unorm_srgb
-        metalKitView.sampleCount = 1
-        metalKitView.clearColor = MTLClearColor(red: 0.15, green: 0.18, blue: 0.28, alpha: 1.0)
+        metalKitView.sampleCount = 4
+        metalKitView.clearColor = MTLClearColor(red: 0.04, green: 0.05, blue: 0.08, alpha: 1.0)
 
         // Pipeline
         let library = device.makeDefaultLibrary()!
@@ -120,6 +131,43 @@ class Renderer: NSObject, MTKViewDelegate {
 
         self.pipelineState = try! compiler.makeRenderPipelineState(descriptor: pipeDesc)
 
+        // Sky pipeline
+        let skyVertDesc = MTL4LibraryFunctionDescriptor()
+        skyVertDesc.library = library
+        skyVertDesc.name = "skyVertexShader"
+        let skyFragDesc = MTL4LibraryFunctionDescriptor()
+        skyFragDesc.library = library
+        skyFragDesc.name = "skyFragmentShader"
+
+        let skyPipeDesc = MTL4RenderPipelineDescriptor()
+        skyPipeDesc.label = "SkyPipeline"
+        skyPipeDesc.rasterSampleCount = metalKitView.sampleCount
+        skyPipeDesc.vertexFunctionDescriptor = skyVertDesc
+        skyPipeDesc.fragmentFunctionDescriptor = skyFragDesc
+        skyPipeDesc.colorAttachments[0].pixelFormat = metalKitView.colorPixelFormat
+
+        self.skyPipelineState = try! compiler.makeRenderPipelineState(descriptor: skyPipeDesc)
+
+        // Shadow pipeline (depth-only, no fragment)
+        let shadowVertDesc = MTL4LibraryFunctionDescriptor()
+        shadowVertDesc.library = library
+        shadowVertDesc.name = "shadowVertexShader"
+
+        let shadowPipeDesc = MTL4RenderPipelineDescriptor()
+        shadowPipeDesc.label = "ShadowPipeline"
+        shadowPipeDesc.rasterSampleCount = 1
+        shadowPipeDesc.vertexFunctionDescriptor = shadowVertDesc
+
+        self.shadowPipelineState = try! compiler.makeRenderPipelineState(descriptor: shadowPipeDesc)
+
+        // Shadow map texture (1024x1024)
+        let shadowDesc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .depth32Float, width: 1024, height: 1024, mipmapped: false)
+        shadowDesc.storageMode = .private
+        shadowDesc.usage = [.renderTarget, .shaderRead]
+        self.shadowMapTexture = device.makeTexture(descriptor: shadowDesc)!
+        self.shadowMapTexture.label = "ShadowMap"
+
         // Depth states
         let depthDesc = MTLDepthStencilDescriptor()
         depthDesc.depthCompareFunction = .less
@@ -131,8 +179,27 @@ class Renderer: NSObject, MTKViewDelegate {
         depthDescNoWrite.isDepthWriteEnabled = false
         self.depthStateNoWrite = device.makeDepthStencilState(descriptor: depthDescNoWrite)!
 
+        let depthDescAlways = MTLDepthStencilDescriptor()
+        depthDescAlways.depthCompareFunction = .always
+        depthDescAlways.isDepthWriteEnabled = false
+        self.depthStateAlways = device.makeDepthStencilState(descriptor: depthDescAlways)!
+
         // Tile mesh library
         self.tileMeshLib = TileMeshLibrary(device: device)
+
+        // Textures
+        self.diffuseArray = Self.loadTextureArray(device: device,
+            names: ["hedge_diff", "gravel_diff", "stone_diff"], srgb: true)
+        self.normalArray = Self.loadTextureArray(device: device,
+            names: ["hedge_nor", "gravel_nor", "stone_nor"], srgb: false)
+        self.skyboxTexture = Self.loadTexture2D(device: device, name: "skybox", srgb: true)
+
+        let samplerDesc = MTLSamplerDescriptor()
+        samplerDesc.minFilter = .linear
+        samplerDesc.magFilter = .linear
+        samplerDesc.sAddressMode = .repeat
+        samplerDesc.tAddressMode = .repeat
+        self.texSampler = device.makeSamplerState(descriptor: samplerDesc)!
 
         // Per-frame buffers
         let maxInstances = 6 * 25 * 25
@@ -154,10 +221,14 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // Residency set
         let resDesc = MTLResidencySetDescriptor()
-        resDesc.initialCapacity = 4 + frameBufs.count + instBufs.count
+        resDesc.initialCapacity = 7 + frameBufs.count + instBufs.count
         let rs = try! device.makeResidencySet(descriptor: resDesc)
         rs.addAllocation(tileMeshLib.vertexBuffer)
         rs.addAllocation(tileMeshLib.indexBuffer)
+        if let d = self.diffuseArray { rs.addAllocation(d) }
+        if let n = self.normalArray { rs.addAllocation(n) }
+        if let s = self.skyboxTexture { rs.addAllocation(s) }
+        rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
         rs.commit()
@@ -207,6 +278,96 @@ class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
+    private static func loadTextureArray(device: MTLDevice, names: [String], srgb: Bool) -> MTLTexture? {
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type2DArray
+        desc.pixelFormat = srgb ? .rgba8Unorm_srgb : .rgba8Unorm
+        desc.width = 512
+        desc.height = 512
+        desc.arrayLength = names.count
+        desc.storageMode = .shared
+        desc.usage = .shaderRead
+
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        texture.label = srgb ? "DiffuseArray" : "NormalArray"
+
+        let bytesPerRow = 512 * 4
+        let bytesPerImage = bytesPerRow * 512
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        for (i, name) in names.enumerated() {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "png") else {
+                NSLog("Texture not found: %@.png", name)
+                continue
+            }
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                NSLog("Failed to decode: %@.png", name)
+                continue
+            }
+
+            var pixels = [UInt8](repeating: 255, count: bytesPerImage)
+            guard let ctx = CGContext(data: &pixels,
+                                     width: 512, height: 512,
+                                     bitsPerComponent: 8,
+                                     bytesPerRow: bytesPerRow,
+                                     space: colorSpace,
+                                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+                continue
+            }
+            ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: 512, height: 512))
+
+            let region = MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                   size: MTLSize(width: 512, height: 512, depth: 1))
+            texture.replace(region: region, mipmapLevel: 0, slice: i,
+                           withBytes: pixels, bytesPerRow: bytesPerRow, bytesPerImage: bytesPerImage)
+        }
+
+        return texture
+    }
+
+    private static func loadTexture2D(device: MTLDevice, name: String, srgb: Bool) -> MTLTexture? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "png"),
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            NSLog("Texture not found: %@.png", name)
+            return nil
+        }
+
+        let w = cgImage.width
+        let h = cgImage.height
+        let bytesPerRow = w * 4
+        let bytesPerImage = bytesPerRow * h
+
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: srgb ? .rgba8Unorm_srgb : .rgba8Unorm,
+            width: w, height: h, mipmapped: false)
+        desc.storageMode = .shared
+        desc.usage = .shaderRead
+
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        texture.label = name
+
+        var pixels = [UInt8](repeating: 255, count: bytesPerImage)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(data: &pixels,
+                                 width: w, height: h,
+                                 bitsPerComponent: 8,
+                                 bytesPerRow: bytesPerRow,
+                                 space: colorSpace,
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return nil
+        }
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+
+        let region = MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                               size: MTLSize(width: w, height: h, depth: 1))
+        texture.replace(region: region, mipmapLevel: 0,
+                       withBytes: pixels, bytesPerRow: bytesPerRow)
+
+        return texture
+    }
+
     // MARK: - Per-frame
 
     private func buildDrawCalls() {
@@ -220,6 +381,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
         opaqueFogTiles.removeAll(keepingCapacity: true)
         dissolveTiles.removeAll(keepingCapacity: true)
+        frameTiles.removeAll(keepingCapacity: true)
         for key in mazeFloorTiles.keys { mazeFloorTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazeWallTiles.keys { mazeWallTiles[key]?.removeAll(keepingCapacity: true) }
 
@@ -247,6 +409,17 @@ class Renderer: NSObject, MTKViewDelegate {
 
                     let faceColor = Self.faceColors[face]!
 
+                    // Frame rail for every tile
+                    let frameInst = InstanceDataSwift(
+                        modelMatrix: matrix,
+                        baseColor: SIMD4(0.06, 0.06, 0.08, 1.0),
+                        materialID: 7,
+                        tileID: 0,
+                        discoveryAmount: 1.0,
+                        styleSeed: 0
+                    )
+                    frameTiles.append(TileEntry(instance: frameInst, mesh: tileMeshLib.frameMesh))
+
                     switch facelet.tileState {
                     case .unknown:
                         let inst = InstanceDataSwift(
@@ -257,7 +430,7 @@ class Renderer: NSObject, MTKViewDelegate {
                             discoveryAmount: facelet.discoveryAmount,
                             styleSeed: facelet.mazeTile.styleSeed
                         )
-                        opaqueFogTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.fogQuad))
+                        opaqueFogTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.fogLayers[0]))
 
                     case .adjacent:
                         let openings = facelet.mazeTile.openings
@@ -284,7 +457,9 @@ class Renderer: NSObject, MTKViewDelegate {
                             discoveryAmount: facelet.discoveryAmount,
                             styleSeed: facelet.mazeTile.styleSeed
                         )
-                        dissolveTiles.append(TileEntry(instance: fogInst, mesh: tileMeshLib.fogQuad))
+                        for layer in tileMeshLib.fogLayers {
+                            dissolveTiles.append(TileEntry(instance: fogInst, mesh: layer))
+                        }
 
                     case .discovered:
                         let openings = facelet.mazeTile.openings
@@ -339,6 +514,22 @@ class Renderer: NSObject, MTKViewDelegate {
         opaqueDrawCalls.removeAll()
         translucentDrawCalls.removeAll()
 
+        // Cubie frame rails
+        if !frameTiles.isEmpty {
+            let mesh = frameTiles[0].mesh
+            let startIdx = idx
+            for entry in frameTiles {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: frameTiles.count
+            ))
+        }
+
         // Opaque maze floor tiles (no depth bias)
         for (_, entries) in mazeFloorTiles {
             guard !entries.isEmpty else { continue }
@@ -375,9 +566,8 @@ class Renderer: NSObject, MTKViewDelegate {
         }
         wallDrawCallRange = wallDrawCallStart..<opaqueDrawCalls.count
 
-        // Opaque fog tiles
+        // Opaque fog base layer + player marker
         if !opaqueFogTiles.isEmpty {
-            // Group by mesh (fog quads vs player marker)
             var byMesh: [Int: [TileEntry]] = [:]
             for entry in opaqueFogTiles {
                 byMesh[entry.mesh.indexOffset, default: []].append(entry)
@@ -398,20 +588,26 @@ class Renderer: NSObject, MTKViewDelegate {
             }
         }
 
-        // Translucent dissolve overlays (drawn after all opaque, no depth write)
+        // Translucent fog upper layers + dissolve fog
         if !dissolveTiles.isEmpty {
-            let mesh = dissolveTiles[0].mesh
-            let startIdx = idx
+            var byMesh: [Int: [TileEntry]] = [:]
             for entry in dissolveTiles {
-                ptr[idx] = entry.instance
-                idx += 1
+                byMesh[entry.mesh.indexOffset, default: []].append(entry)
             }
-            translucentDrawCalls.append(DrawCall(
-                indexOffset: mesh.indexOffset,
-                indexCount: mesh.indexCount,
-                instanceOffset: startIdx,
-                instanceCount: dissolveTiles.count
-            ))
+            for (_, entries) in byMesh {
+                let mesh = entries[0].mesh
+                let startIdx = idx
+                for entry in entries {
+                    ptr[idx] = entry.instance
+                    idx += 1
+                }
+                translucentDrawCalls.append(DrawCall(
+                    indexOffset: mesh.indexOffset,
+                    indexCount: mesh.indexCount,
+                    instanceOffset: startIdx,
+                    instanceCount: entries.count
+                ))
+            }
         }
     }
 
@@ -465,11 +661,20 @@ class Renderer: NSObject, MTKViewDelegate {
     private func updateFrameUniforms() {
         let buf = frameUniformBuffers[currentBufferIndex]
         let ptr = buf.contents().bindMemory(to: FrameUniformsSwift.self, capacity: 1)
+        let vp = gameState.viewProjectionMatrix(aspect: aspect)
+        let lightDir = normalize(SIMD3<Float>(0.4, 0.8, 0.6))
+        let lightPos = lightDir * 15.0
+        let lightView = float4x4.lookAt(eye: lightPos, target: SIMD3(0,0,0), up: SIMD3(0,1,0))
+        let lightProj = float4x4.orthographic(left: -8, right: 8, bottom: -8, top: 8, nearZ: 5, farZ: 25)
+        let lightVP = lightProj * lightView
         ptr.pointee = FrameUniformsSwift(
-            viewProjectionMatrix: gameState.viewProjectionMatrix(aspect: aspect),
+            viewProjectionMatrix: vp,
             cameraPosition: gameState.cameraPosition(),
             time: gameState.time,
-            lightDirection: normalize(SIMD3(0.4, 0.8, 0.6))
+            lightDirection: lightDir,
+            inverseViewProjectionMatrix: vp.inverse,
+            cameraUp: gameState.cameraUp(),
+            lightViewProjectionMatrix: lightVP
         )
     }
 
@@ -505,6 +710,49 @@ class Renderer: NSObject, MTKViewDelegate {
         updateFrameUniforms()
         buildDrawCalls()
 
+        // ── Shadow pass ──────────────────────────────────────────
+        vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+        vertexArgTable.setAddress(
+            frameUniformBuffers[currentBufferIndex].gpuAddress,
+            index: BufferIndex.frameUniforms.rawValue
+        )
+        vertexArgTable.setAddress(
+            instanceBuffers[currentBufferIndex].gpuAddress,
+            index: BufferIndex.instances.rawValue
+        )
+
+        let shadowPassDesc = MTL4RenderPassDescriptor()
+        shadowPassDesc.depthAttachment.texture = shadowMapTexture
+        shadowPassDesc.depthAttachment.loadAction = .clear
+        shadowPassDesc.depthAttachment.storeAction = .store
+        shadowPassDesc.depthAttachment.clearDepth = 1.0
+
+        if let shadowEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: shadowPassDesc) {
+            shadowEncoder.label = "Shadow Pass"
+            shadowEncoder.setRenderPipelineState(shadowPipelineState)
+            shadowEncoder.setDepthStencilState(depthState)
+            shadowEncoder.setCullMode(.front)
+            shadowEncoder.setFrontFacing(.counterClockwise)
+            shadowEncoder.setArgumentTable(vertexArgTable, stages: .vertex)
+
+            let idxBase = tileMeshLib.indexBuffer.gpuAddress
+            let idxLen = tileMeshLib.indexBuffer.length
+            for dc in opaqueDrawCalls {
+                shadowEncoder.drawIndexedPrimitives(
+                    primitiveType: .triangle,
+                    indexCount: dc.indexCount,
+                    indexType: .uint16,
+                    indexBuffer: idxBase + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
+                    indexBufferLength: idxLen - dc.indexOffset * MemoryLayout<UInt16>.stride,
+                    instanceCount: dc.instanceCount,
+                    baseVertex: 0,
+                    baseInstance: dc.instanceOffset
+                )
+            }
+            shadowEncoder.endEncoding()
+        }
+
+        // ── Main pass ──────────────────────────────────────────
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDesc) else {
             fatalError("Failed to create render encoder")
         }
@@ -517,15 +765,6 @@ class Renderer: NSObject, MTKViewDelegate {
         encoder.setArgumentTable(vertexArgTable, stages: .vertex)
         encoder.setArgumentTable(fragmentArgTable, stages: .fragment)
 
-        vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
-        vertexArgTable.setAddress(
-            frameUniformBuffers[currentBufferIndex].gpuAddress,
-            index: BufferIndex.frameUniforms.rawValue
-        )
-        vertexArgTable.setAddress(
-            instanceBuffers[currentBufferIndex].gpuAddress,
-            index: BufferIndex.instances.rawValue
-        )
         fragmentArgTable.setAddress(
             frameUniformBuffers[currentBufferIndex].gpuAddress,
             index: BufferIndex.frameUniforms.rawValue
@@ -534,6 +773,22 @@ class Renderer: NSObject, MTKViewDelegate {
             instanceBuffers[currentBufferIndex].gpuAddress,
             index: BufferIndex.instances.rawValue
         )
+        if let d = diffuseArray { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.diffuseArray.rawValue) }
+        if let n = normalArray { fragmentArgTable.setTexture(n.gpuResourceID, index: TextureIndex.normalArray.rawValue) }
+        if let sb = skyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
+        fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
+        if let s = texSampler { fragmentArgTable.setSamplerState(s.gpuResourceID, index: 0) }
+
+        // Sky pass: fullscreen triangle, no depth test/write
+        encoder.setRenderPipelineState(skyPipelineState)
+        encoder.setDepthStencilState(depthStateAlways)
+        encoder.setCullMode(.none)
+        encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
+
+        // Restore scene state
+        encoder.setRenderPipelineState(pipelineState)
+        encoder.setCullMode(.back)
+        encoder.setFrontFacing(.counterClockwise)
 
         // Pass 1: opaque geometry (depth write ON)
         encoder.setDepthStencilState(depthState)
@@ -605,6 +860,9 @@ struct FrameUniformsSwift {
     var cameraPosition: SIMD3<Float>
     var time: Float
     var lightDirection: SIMD3<Float>
+    var inverseViewProjectionMatrix: float4x4
+    var cameraUp: SIMD3<Float>
+    var lightViewProjectionMatrix: float4x4
 }
 
 struct InstanceDataSwift {

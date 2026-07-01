@@ -215,3 +215,4 @@ The single highest-impact change is **M8.3 (wall height)** — even with procedu
 - LOD system — geometry count is low enough at 5x5x5
 - Deferred rendering — forward rendering is fine for this scene complexity
 - Real-time GI — baked AO + half-Lambert is sufficient
+

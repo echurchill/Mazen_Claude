@@ -110,6 +110,10 @@ class GameState {
         camera.cameraPosition(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
     }
 
+    func cameraUp() -> SIMD3<Float> {
+        camera.cameraUp(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
+    }
+
     // MARK: - Discovery
 
     private func onPlayerArrived() {
@@ -270,6 +274,21 @@ extension float4x4 {
             SIMD4(0, 1, 0, 0),
             SIMD4(0, 0, 1, 0),
             SIMD4(x, y, z, 1)
+        ))
+    }
+
+    static func orthographic(left: Float, right: Float, bottom: Float, top: Float, nearZ: Float, farZ: Float) -> float4x4 {
+        let sx = 2.0 / (right - left)
+        let sy = 2.0 / (top - bottom)
+        let sz = 1.0 / (nearZ - farZ)
+        let tx = -(right + left) / (right - left)
+        let ty = -(top + bottom) / (top - bottom)
+        let tz = nearZ / (nearZ - farZ)
+        return float4x4(columns: (
+            SIMD4(sx,  0,  0, 0),
+            SIMD4( 0, sy,  0, 0),
+            SIMD4( 0,  0, sz, 0),
+            SIMD4(tx, ty, tz, 1)
         ))
     }
 

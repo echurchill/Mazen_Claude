@@ -135,6 +135,6 @@ class GameViewController: NSViewController {
         let gs = renderer.gameState
         guard gs.camera.mode == .orbit else { return }
         gs.camera.orbitDistance -= Float(event.deltaY) * 0.1
-        gs.camera.orbitDistance = max(3.0, min(15.0, gs.camera.orbitDistance))
+        gs.camera.orbitDistance = max(5.0, min(15.0, gs.camera.orbitDistance))
     }
 }

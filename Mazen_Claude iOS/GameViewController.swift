@@ -69,6 +69,11 @@ class GameViewController: UIViewController {
 
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
         mtkView.addGestureRecognizer(pinch)
+
+        let twoFingerSwipe = UIPanGestureRecognizer(target: self, action: #selector(handleTwoFingerSwipe(_:)))
+        twoFingerSwipe.minimumNumberOfTouches = 2
+        twoFingerSwipe.maximumNumberOfTouches = 2
+        mtkView.addGestureRecognizer(twoFingerSwipe)
     }
 
     // MARK: - First-Person Gestures
@@ -138,21 +143,33 @@ class GameViewController: UIViewController {
 
     @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
         guard let gs = renderer?.gameState else { return }
+        guard gs.camera.mode == .orbit else { return }
+        if gesture.state == .changed {
+            gs.camera.orbitDistance /= Float(gesture.scale)
+            gs.camera.orbitDistance = max(3.0, min(15.0, gs.camera.orbitDistance))
+            gesture.scale = 1.0
+        }
+    }
 
-        if gs.camera.mode == .orbit {
-            if gesture.state == .changed {
-                gs.camera.orbitDistance /= Float(gesture.scale)
-                gs.camera.orbitDistance = max(3.0, min(15.0, gs.camera.orbitDistance))
-                gesture.scale = 1.0
+    private var twoFingerSwipeHandled = false
+
+    @objc private func handleTwoFingerSwipe(_ gesture: UIPanGestureRecognizer) {
+        guard let gs = renderer?.gameState else { return }
+        guard gs.camera.mode == .firstPerson else { return }
+
+        switch gesture.state {
+        case .began:
+            twoFingerSwipeHandled = false
+        case .changed:
+            guard !twoFingerSwipeHandled else { return }
+            let translation = gesture.translation(in: mtkView)
+            let threshold: CGFloat = 40
+            if abs(translation.x) > threshold {
+                gs.startSliceRotation(clockwise: translation.x > 0)
+                twoFingerSwipeHandled = true
             }
-        } else {
-            if gesture.state == .ended && gesture.scale != 1.0 {
-                if gesture.scale > 1.0 {
-                    gs.startSliceRotation(clockwise: true)
-                } else {
-                    gs.startSliceRotation(clockwise: false)
-                }
-            }
+        default:
+            break
         }
     }
 }

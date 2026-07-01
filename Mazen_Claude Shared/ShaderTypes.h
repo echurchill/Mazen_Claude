@@ -20,7 +20,10 @@ typedef NS_ENUM(EnumBackingType, BufferIndex)
 
 typedef NS_ENUM(EnumBackingType, TextureIndex)
 {
-    TextureIndexColor = 0,
+    TextureIndexDiffuseArray = 0,
+    TextureIndexNormalArray  = 1,
+    TextureIndexSkybox       = 2,
+    TextureIndexShadowMap    = 3,
 };
 
 typedef struct
@@ -29,6 +32,9 @@ typedef struct
     vector_float3 cameraPosition;
     float time;
     vector_float3 lightDirection;
+    matrix_float4x4 inverseViewProjectionMatrix;
+    vector_float3 cameraUp;
+    matrix_float4x4 lightViewProjectionMatrix;
 } FrameUniforms;
 
 typedef struct
