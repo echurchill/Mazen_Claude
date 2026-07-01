@@ -16,7 +16,7 @@ class TileMeshLibrary {
     private var floorMeshes: [UInt8: TileMesh] = [:]
     private var wallMeshes: [UInt8: TileMesh] = [:]
 
-    static let tileSize: Float = 0.96
+    static let tileSize: Float = 0.98
     static let wallHeight: Float = 0.35
     static let wallThickness: Float = 0.08
     static let floorY: Float = 0.001
@@ -26,20 +26,19 @@ class TileMeshLibrary {
         var allIndices: [UInt16] = []
 
         func recordMesh() -> TileMesh {
-            // placeholder, actual meshes added below
             TileMesh(vertexOffset: 0, indexOffset: 0, indexCount: 0)
         }
 
         // Fog quad — slightly smaller than floor to prevent cross-face occlusion at cube corners
         let fogStart = allVerts.count
         let fogIdxStart = allIndices.count
-        let fogHs: Float = 0.46
+        let fogHs: Float = 0.47
         let fogZ: Float = 0.002
         allVerts.append(contentsOf: [
-            MazeVertexSwift(position: SIMD3(-fogHs, -fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0)),
-            MazeVertexSwift(position: SIMD3( fogHs, -fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 0)),
-            MazeVertexSwift(position: SIMD3( fogHs,  fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 1)),
-            MazeVertexSwift(position: SIMD3(-fogHs,  fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 1)),
+            MazeVertexSwift(position: SIMD3(-fogHs, -fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0), aoFactor: 1.0),
+            MazeVertexSwift(position: SIMD3( fogHs, -fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 0), aoFactor: 1.0),
+            MazeVertexSwift(position: SIMD3( fogHs,  fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 1), aoFactor: 1.0),
+            MazeVertexSwift(position: SIMD3(-fogHs,  fogHs, fogZ), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 1), aoFactor: 1.0),
         ])
         let fBase = UInt16(fogStart)
         allIndices.append(contentsOf: [fBase+0, fBase+1, fBase+2, fBase+0, fBase+2, fBase+3])
@@ -50,7 +49,6 @@ class TileMeshLibrary {
         let pmIStart = allIndices.count
         let pmH: Float = 0.45
         let pmR: Float = 0.12
-        // Diamond body: 4 triangles from base to tip
         let pmDirs: [SIMD3<Float>] = [
             SIMD3( pmR, 0, 0), SIMD3(0,  pmR, 0),
             SIMD3(-pmR, 0, 0), SIMD3(0, -pmR, 0)
@@ -61,18 +59,17 @@ class TileMeshLibrary {
             let b = pmDirs[(i + 1) % 4]
             let n = normalize(cross(b - a, pmTip - a))
             let bi = UInt16(allVerts.count)
-            allVerts.append(MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0)))
-            allVerts.append(MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(1, 0)))
-            allVerts.append(MazeVertexSwift(position: pmTip, normal: n, texCoord: SIMD2(0.5, 1)))
+            allVerts.append(MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0), aoFactor: 1.0))
+            allVerts.append(MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(1, 0), aoFactor: 1.0))
+            allVerts.append(MazeVertexSwift(position: pmTip, normal: n, texCoord: SIMD2(0.5, 1), aoFactor: 1.0))
             allIndices.append(contentsOf: [bi, bi+1, bi+2])
         }
-        // Arrow: flat triangle on the floor pointing +Y (north)
         let arrowN = SIMD3<Float>(0, 0, 1)
         let arrowZ: Float = 0.03
         let ai = UInt16(allVerts.count)
-        allVerts.append(MazeVertexSwift(position: SIMD3(0, pmR + 0.22, arrowZ), normal: arrowN, texCoord: SIMD2(0.5, 1)))
-        allVerts.append(MazeVertexSwift(position: SIMD3(-0.08, pmR + 0.04, arrowZ), normal: arrowN, texCoord: SIMD2(0, 0)))
-        allVerts.append(MazeVertexSwift(position: SIMD3( 0.08, pmR + 0.04, arrowZ), normal: arrowN, texCoord: SIMD2(1, 0)))
+        allVerts.append(MazeVertexSwift(position: SIMD3(0, pmR + 0.22, arrowZ), normal: arrowN, texCoord: SIMD2(0.5, 1), aoFactor: 1.0))
+        allVerts.append(MazeVertexSwift(position: SIMD3(-0.08, pmR + 0.04, arrowZ), normal: arrowN, texCoord: SIMD2(0, 0), aoFactor: 1.0))
+        allVerts.append(MazeVertexSwift(position: SIMD3( 0.08, pmR + 0.04, arrowZ), normal: arrowN, texCoord: SIMD2(1, 0), aoFactor: 1.0))
         allIndices.append(contentsOf: [ai, ai+1, ai+2])
         let pmIdxCount = allIndices.count - pmIStart
         playerMarker = TileMesh(vertexOffset: pmVStart, indexOffset: pmIStart, indexCount: pmIdxCount)
@@ -87,13 +84,11 @@ class TileMeshLibrary {
         for mask: UInt8 in 0..<16 {
             let openings = DirectionMask(rawValue: mask)
 
-            // Floor mesh (separate from walls for depth bias)
             let fStart = allIndices.count
-            Self.addFloor(to: &allVerts, indices: &allIndices)
+            Self.addFloor(to: &allVerts, indices: &allIndices, openings: openings)
             let fCount = allIndices.count - fStart
             floorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: fStart, indexCount: fCount)
 
-            // Wall mesh
             let wStart = allIndices.count
             if !openings.contains(.north) {
                 Self.addWall(edge: .north, to: &allVerts, indices: &allIndices)
@@ -138,17 +133,27 @@ class TileMeshLibrary {
 
     // MARK: - Geometry builders
 
-    private static func addFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt16]) {
-        let hs: Float = 0.46 // smaller than wall extent (0.48) to prevent cube-edge overhang
+    private static func addFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask) {
+        let hs: Float = 0.48
         let z = floorY
         let base = UInt16(verts.count)
 
-        // Floor quad in XY plane, normal along +Z (outward from cube surface)
+        let n = !openings.contains(.north)
+        let s = !openings.contains(.south)
+        let e = !openings.contains(.east)
+        let w = !openings.contains(.west)
+
+        func cornerAO(_ wall1: Bool, _ wall2: Bool) -> Float {
+            if wall1 && wall2 { return 0.5 }
+            if wall1 || wall2 { return 0.7 }
+            return 1.0
+        }
+
         verts.append(contentsOf: [
-            MazeVertexSwift(position: SIMD3(-hs, -hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0)),
-            MazeVertexSwift(position: SIMD3( hs, -hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 0)),
-            MazeVertexSwift(position: SIMD3( hs,  hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 1)),
-            MazeVertexSwift(position: SIMD3(-hs,  hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 1)),
+            MazeVertexSwift(position: SIMD3(-hs, -hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0), aoFactor: cornerAO(n, w)),
+            MazeVertexSwift(position: SIMD3( hs, -hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 0), aoFactor: cornerAO(n, e)),
+            MazeVertexSwift(position: SIMD3( hs,  hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(1, 1), aoFactor: cornerAO(s, e)),
+            MazeVertexSwift(position: SIMD3(-hs,  hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 1), aoFactor: cornerAO(s, w)),
         ])
         indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
     }
@@ -159,7 +164,6 @@ class TileMeshLibrary {
         let z0 = floorY
         let z1 = wallHeight
 
-        // inner0/inner1 = inner edge (corridor side), outer0/outer1 = outer edge (tile boundary)
         var inner0: SIMD2<Float>, inner1: SIMD2<Float>
         var outer0: SIMD2<Float>, outer1: SIMD2<Float>
         var inN: SIMD3<Float>
@@ -193,14 +197,17 @@ class TileMeshLibrary {
 
         let outN = -inN
         let topN = SIMD3<Float>(0, 0, 1)
+        let aoBottom: Float = 0.55
+        let aoTop: Float = 1.0
 
         func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>, _ n: SIMD3<Float>) {
             let base = UInt16(verts.count)
+            func ao(_ p: SIMD3<Float>) -> Float { p.z > z0 + 0.01 ? aoTop : aoBottom }
             verts.append(contentsOf: [
-                MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0)),
-                MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(1, 0)),
-                MazeVertexSwift(position: c, normal: n, texCoord: SIMD2(1, 1)),
-                MazeVertexSwift(position: d, normal: n, texCoord: SIMD2(0, 1)),
+                MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao(a)),
+                MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(1, 0), aoFactor: ao(b)),
+                MazeVertexSwift(position: c, normal: n, texCoord: SIMD2(1, 1), aoFactor: ao(c)),
+                MazeVertexSwift(position: d, normal: n, texCoord: SIMD2(0, 1), aoFactor: ao(d)),
             ])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }

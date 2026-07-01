@@ -25,6 +25,7 @@ class GameViewController: NSViewController {
         }
 
         mtkView.device = defaultDevice
+        mtkView.preferredFramesPerSecond = 120
 
         guard let newRenderer = Renderer(metalKitView: mtkView) else {
             print("Renderer cannot be initialized")

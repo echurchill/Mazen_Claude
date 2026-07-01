@@ -28,6 +28,7 @@ typedef struct
     matrix_float4x4 viewProjectionMatrix;
     vector_float3 cameraPosition;
     float time;
+    vector_float3 lightDirection;
 } FrameUniforms;
 
 typedef struct
@@ -45,6 +46,7 @@ typedef struct
     vector_float3 position;
     vector_float3 normal;
     vector_float2 texCoord;
+    float aoFactor;
 } MazeVertex;
 
 #endif

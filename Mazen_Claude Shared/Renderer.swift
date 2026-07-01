@@ -52,6 +52,20 @@ class Renderer: NSObject, MTKViewDelegate {
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
 
+    private var opaqueFogTiles: [TileEntry] = []
+    private var dissolveTiles: [TileEntry] = []
+    private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
+    private var mazeWallTiles: [UInt8: [TileEntry]] = [:]
+
+    private static let faceColors: [CubeFace: SIMD4<Float>] = [
+        .positiveX: SIMD4(0.85, 0.75, 0.70, 1.0),
+        .negativeX: SIMD4(0.70, 0.80, 0.85, 1.0),
+        .positiveY: SIMD4(0.80, 0.85, 0.70, 1.0),
+        .negativeY: SIMD4(0.85, 0.80, 0.65, 1.0),
+        .positiveZ: SIMD4(0.80, 0.75, 0.85, 1.0),
+        .negativeZ: SIMD4(0.75, 0.85, 0.80, 1.0),
+    ]
+
     @MainActor
     init?(metalKitView: MTKView) {
 #if targetEnvironment(simulator)
@@ -199,17 +213,10 @@ class Renderer: NSObject, MTKViewDelegate {
         let buf = instanceBuffers[currentBufferIndex]
         let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: 6 * model.size * model.size)
 
-        // Group: discovered tiles (maze geometry) then unknown tiles (fog quads)
-        // Each unique mesh needs its own draw call since they have different index counts
-        struct TileEntry {
-            var instance: InstanceDataSwift
-            var mesh: TileMesh
-        }
-
-        var opaqueFogTiles: [TileEntry] = []
-        var dissolveTiles: [TileEntry] = []
-        var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
-        var mazeWallTiles: [UInt8: [TileEntry]] = [:]
+        opaqueFogTiles.removeAll(keepingCapacity: true)
+        dissolveTiles.removeAll(keepingCapacity: true)
+        for key in mazeFloorTiles.keys { mazeFloorTiles[key]?.removeAll(keepingCapacity: true) }
+        for key in mazeWallTiles.keys { mazeWallTiles[key]?.removeAll(keepingCapacity: true) }
 
         // Precompute slice rotation matrix if active
         var sliceAnimMatrix: float4x4?
@@ -233,16 +240,7 @@ class Renderer: NSObject, MTKViewDelegate {
                         matrix = animMat * matrix
                     }
 
-                    let faceColor: SIMD4<Float> = {
-                        switch face {
-                        case .positiveX: return SIMD4(0.85, 0.75, 0.70, 1.0)
-                        case .negativeX: return SIMD4(0.70, 0.80, 0.85, 1.0)
-                        case .positiveY: return SIMD4(0.80, 0.85, 0.70, 1.0)
-                        case .negativeY: return SIMD4(0.85, 0.80, 0.65, 1.0)
-                        case .positiveZ: return SIMD4(0.80, 0.75, 0.85, 1.0)
-                        case .negativeZ: return SIMD4(0.75, 0.85, 0.80, 1.0)
-                        }
-                    }()
+                    let faceColor = Self.faceColors[face]!
 
                     switch facelet.tileState {
                     case .unknown:
@@ -465,7 +463,8 @@ class Renderer: NSObject, MTKViewDelegate {
         ptr.pointee = FrameUniformsSwift(
             viewProjectionMatrix: gameState.viewProjectionMatrix(aspect: aspect),
             cameraPosition: gameState.cameraPosition(),
-            time: gameState.time
+            time: gameState.time,
+            lightDirection: normalize(SIMD3(0.4, 0.8, 0.6))
         )
     }
 
@@ -582,18 +581,25 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 }
 
+struct TileEntry {
+    var instance: InstanceDataSwift
+    var mesh: TileMesh
+}
+
 // MARK: - Swift-side mirror structs
 
 struct MazeVertexSwift {
     var position: SIMD3<Float>
     var normal: SIMD3<Float>
     var texCoord: SIMD2<Float>
+    var aoFactor: Float
 }
 
 struct FrameUniformsSwift {
     var viewProjectionMatrix: float4x4
     var cameraPosition: SIMD3<Float>
     var time: Float
+    var lightDirection: SIMD3<Float>
 }
 
 struct InstanceDataSwift {
