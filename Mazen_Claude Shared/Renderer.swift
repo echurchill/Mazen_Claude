@@ -403,7 +403,7 @@ class Renderer: NSObject, MTKViewDelegate {
                     guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
                     let facelet = model.cubies[ci].facelets[fi]
 
-                    if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) {
+                    if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci), face == gameState.player.face {
                         matrix = animMat * matrix
                     }
 
