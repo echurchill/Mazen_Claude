@@ -235,3 +235,50 @@ All in `CelestialSystem`:
 - **Far plane for sun/moon:** Current `farZ = 100.0`. The sun at 80 units will be within range. If orbit radius increases, bump `farZ`.
 - **Performance:** Two extra cube draws (12 triangles each) and unchanged shadow pass count = negligible cost. Day/night is a few extra ALU ops in the fragment shader.
 - **Metal 4 compatibility:** No new API surface needed. Existing pipeline descriptor patterns work for the new shaders.
+
+---
+
+## M9/M10 Compatibility & Sequencing
+
+*(This section is duplicated verbatim in both the M9 and M10 plan documents. If you update it, update both.)*
+
+### Known friction points
+
+1. **Shadow tuning vs. 5x smaller features (the trap).** The current shadow bias (`0.003`–`0.008` over the light's 20-unit depth range, near 5 → far 25) equals **0.06–0.16 world units** of offset. Invisible against today's 1.2-high walls, but 25–67% of M10's 0.24 wall height — shadows will detach ("peter-pan") or vanish on low walls and 0.07-thick posts, worst at M9's low sun angles. Also: at 1024x1024 over the 16-unit ortho span, a jamb post is ~4.5 shadow texels wide and the 3x3 PCF blur is comparable to the feature size. **Fix once, after M10 Phase B geometry exists:** tighten light near/far around the cube, cut bias ~4x, consider a 2048 shadow map.
+2. **Same-file churn.** Both milestones edit `Shaders.metal`, `ShaderTypes.h`, and `Renderer.swift`. Run phases strictly serially; never interleave M9 and M10 work.
+3. **Night legibility at the new scale.** M9's night ambient / `moonIntensity` must be tuned at M10's 0.09 eye height inside gateway-enclosed corridors — a much darker experience than the old over-the-walls view. The fog/translucent pass colors also need day-factor modulation, or fog will glow at night.
+4. **Aesthetic constants assume the old perceived scale.** After M10 Phase A, revisit `moonOrbitRadius` (the moon subtends ~4.3°; at 5x perceived scale a 20-unit orbit reads as "a barn 400m away") and `sunPeriod` (a 300s day may feel short once traversal takes ~3x longer).
+
+### Non-issues (verified)
+
+- Props, gateways, and corner posts flow through the existing instanced opaque + shadow passes, so they are automatically lit and shadowed by the sun/moon — no extra integration work.
+- Sun at 80 units sits inside `farZ = 100`; orbit camera distance 12 unaffected.
+- Material additions don't collide: M9 adds `FrameUniforms` fields and dedicated sun/moon shaders; M10 adds materialIDs (corner post, path floor, props) in `InstanceData` space.
+
+### Phase 0 — pre-flight refactor (before any M9/M10 work)
+
+Small, surgical, each step independently verifiable (build + run + compare screenshot). Phase 0 also **bakes in cube-size independence** (see R1/R4/R5) — but the actual size flip is deliberately *not* part of Phase 0, since changing the world mid-refactor would destroy the screenshot-identical baseline; it runs as its own experiment right after (step 0.5 below):
+
+- **R1 — Single source of scale truth.** A `WorldScale` constants type (tile spacing, tile mesh size, gap, wallHeight, wallThickness, eyeHeight, per-mode FOV) that also takes **cube size as a first-class input**, deriving the world-extent values from it: camera `orbitDistance` (today hardcoded 12, tuned to a 5-wide cube), shadow ortho bounds (`-8..8` — a 9³ cube's half-diagonal of ~7.8 barely fits), light near/far and eye distance, and M9 orbit radii. M10 Phase A, the gap-removal decision, and any future cube-size change become one-file changes.
+- **R2 — De-duplicate the uniforms struct.** `FrameUniformsSwift` (Renderer.swift) manually mirrors `FrameUniforms` (ShaderTypes.h); the layouts must match by hand. M9 adds three fields — an easy skew. Either bridge the C struct into Swift and delete the mirror, or add a compile-time size assertion.
+- **R3 — Extract scene/instance building from Renderer.** Renderer.swift (~855 lines) mixes pipeline setup, texture loading, per-frame instance building, and animation-matrix logic. Pull instance building into its own file so M9 (celestial draws) and M10 (sub-cell floors, props) land in focused code instead of weaving through the monolith.
+- **R4 — Coordinate-math test target.** Unit tests for `gridPosition`/`worldMatrix` consistency, `EdgeCrossing` round-trips, and rotation math — **parameterized across cube sizes {3, 5, 7, 9}**, turning "the coordinate math is probably size-generic" into "verified". This exact class of bug cost us the entire M8 debugging session; M10 Phases D–E multiply the coordinate math by sub-grids and 8 headings. Cheapest insurance in the plan.
+- **R5 — Facelet lookup dictionary.** `CubeModel.findFaceletIndices` is an O(n²) scan — fine at 5³ today, but M10 sub-grid movement and prop occupancy query it more often, and larger cubes (7³/9³) grow it ~4x. Promoted from optional now that Phase 0 targets size-independence.
+
+**M11 guardrails (free now, expensive to retrofit):** the planned moon-as-a-world milestone (see *M11 Lunar Excursion Seed.md*) requires that R1's `WorldScale` be **per-world** (not a singleton) and that R3's scene builder take the `CubeModel` **as a parameter** — never assume a single global world.
+
+**Do NOT pre-refactor** (M9/M10 rewrite these anyway): `PlayerState` movement duplication (Phase D rewrites movement), `TileMeshLibrary` wall-mask caching (Phase B replaces it with per-edge composition), maze generation (Phase F changes it for rooms).
+
+### Recommended sequence
+
+| Step | Work | Why this position |
+|---|---|---|
+| 0 | Pre-flight refactor R1–R5 | Both milestones touch these seams; cheapest before either starts. Bakes in size-independence (R1 derives world-extent values from cube size; R4 tests sizes 3/5/7/9) |
+| 0.5 | *(Optional)* Cube-size experiment — flip to 7³ or 9³ | ~1 hour once Phase 0 lands: one-line change + visual tuning pass (edge-bridge density, shadow map 2048). Done here so the baseline is stable before M10 geometry work; keep odd sizes — even sizes break the center-tile player start |
+| 1 | M10 Phase A — perception scale-up | Instant payoff; sets the perceived scale that later aesthetic tuning depends on |
+| 2 | M10 Phase B — edge model, gateways, corner posts | Finalizes wall geometry *before* shadow tuning |
+| 3 | M9 Phases 1–4 — celestial system, sun, moon, day/night + **shadow retune** | Shadows tuned once against final wall geometry; night ambient tuned at new eye height |
+| 4 | M10 Phases C–E — sub-grid, movement, crossings/rotations | Pure gameplay/data-model work; shaders stay stable |
+| 5 | M10 Phases F–G — rooms, props | Props enter already-tuned lighting; verify prop self-shadowing |
+| 6 | M9 Phases 5–7 — moon light, moon shadows, eclipses | Night polish tuned against real scenes with props |
+| 7 | M10 Phase H+ — gates, 3D avatar | Future milestones |
