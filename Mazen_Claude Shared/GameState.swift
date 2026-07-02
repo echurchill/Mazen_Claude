@@ -221,10 +221,14 @@ class GameState {
     }
 
     private func gridPositionForFace(pos: SIMD3<Int32>, face: CubeFace) -> (row: Int, col: Int) {
+        let n = Int32(cubeModel.size - 1)
         switch face {
-        case .positiveX, .negativeX: return (Int(pos.y), Int(pos.z))
-        case .positiveY, .negativeY: return (Int(pos.z), Int(pos.x))
-        case .positiveZ, .negativeZ: return (Int(pos.y), Int(pos.x))
+        case .positiveX: return (Int(pos.y), Int(n - pos.z))
+        case .negativeX: return (Int(pos.y), Int(pos.z))
+        case .positiveY: return (Int(n - pos.z), Int(pos.x))
+        case .negativeY: return (Int(pos.z), Int(pos.x))
+        case .positiveZ: return (Int(pos.y), Int(pos.x))
+        case .negativeZ: return (Int(pos.y), Int(n - pos.x))
         }
     }
 

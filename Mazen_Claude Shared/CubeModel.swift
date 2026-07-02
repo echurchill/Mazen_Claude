@@ -339,13 +339,14 @@ class CubeModel {
 
     private func gridPosition(cubie: Cubie, face: CubeFace) -> (row: Int, col: Int) {
         let pos = cubie.position
+        let n = Int32(size - 1)
         switch face {
-        case .positiveX, .negativeX:
-            return (row: Int(pos.y), col: Int(pos.z))
-        case .positiveY, .negativeY:
-            return (row: Int(pos.z), col: Int(pos.x))
-        case .positiveZ, .negativeZ:
-            return (row: Int(pos.y), col: Int(pos.x))
+        case .positiveX: return (row: Int(pos.y), col: Int(n - pos.z))
+        case .negativeX: return (row: Int(pos.y), col: Int(pos.z))
+        case .positiveY: return (row: Int(n - pos.z), col: Int(pos.x))
+        case .negativeY: return (row: Int(pos.z), col: Int(pos.x))
+        case .positiveZ: return (row: Int(pos.y), col: Int(pos.x))
+        case .negativeZ: return (row: Int(pos.y), col: Int(n - pos.x))
         }
     }
 

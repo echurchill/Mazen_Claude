@@ -216,3 +216,20 @@ The single highest-impact change is **M8.3 (wall height)** — even with procedu
 - Deferred rendering — forward rendering is fine for this scene complexity
 - Real-time GI — baked AO + half-Lambert is sufficient
 
+## Potential future milestone work
+- Rescale everything so that the surfaces are about 5 times larger but my POV stays the same. The expectation is that instead of the surfaces being about 3 meters to a side (and high) they are about 15 meters a side but still 3 meters high.
+- Ideally I want to have a surface's edge that look like CWWWWCGGGGCWWWWC where C = corner, W = a wall of some sort, G = could be nothing, a openable gate or a wall of some sort
+Retexture
+
+Outer surface
+Moons
+Sun
+
+Inward surface 
+Library 
+Cave
+House
+Building 
+
+Portals between planets 
+Polar Mineways

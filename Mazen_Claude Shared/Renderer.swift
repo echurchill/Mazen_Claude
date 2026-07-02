@@ -216,7 +216,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.instanceBuffers = instBufs
 
         // Game state — mark some tiles discovered for visual testing
-        self.gameState = GameState(size: 3)
+        self.gameState = GameState(size: 5)
         Self.setupInitialDiscovery(gameState: self.gameState)
 
         // Residency set
@@ -245,34 +245,15 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     private static func setupInitialDiscovery(gameState: GameState) {
-        let face = gameState.player.face
-        let row = gameState.player.row
-        let col = gameState.player.col
         let model = gameState.cubeModel
-
-        // Discover starting tile immediately
-        if let (ci, fi) = model.faceletAt(face: face, row: row, col: col) {
-            model.cubies[ci].facelets[fi].tileState = .discovered
-            model.cubies[ci].facelets[fi].discoveryAmount = 1.0
-        }
-
-        // Mark adjacent tiles
         let n = model.size
-        for dir in SurfaceDirection.allCases {
-            let (dr, dc): (Int, Int) = {
-                switch dir {
-                case .north: return (-1, 0)
-                case .south: return (1, 0)
-                case .east:  return (0, 1)
-                case .west:  return (0, -1)
-                }
-            }()
-            let nr = row + dr
-            let nc = col + dc
-            if nr >= 0 && nr < n && nc >= 0 && nc < n {
-                if let (ci, fi) = model.faceletAt(face: face, row: nr, col: nc) {
-                    model.cubies[ci].facelets[fi].tileState = .adjacent
-                    model.cubies[ci].facelets[fi].discoveryAmount = 0.2
+        for face in CubeFace.allCases {
+            for row in 0..<n {
+                for col in 0..<n {
+                    if let (ci, fi) = model.faceletAt(face: face, row: row, col: col) {
+                        model.cubies[ci].facelets[fi].tileState = .discovered
+                        model.cubies[ci].facelets[fi].discoveryAmount = 1.0
+                    }
                 }
             }
         }
@@ -390,7 +371,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let sr = gameState.sliceRotation
         if sr.isActive {
             let axisVec: SIMD3<Float> = sr.axis == 0 ? SIMD3(1,0,0) : sr.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
-            let t = sr.progress * sr.progress * (3 - 2 * sr.progress) // smoothstep
+            let t = sr.progress * sr.progress * (3 - 2 * sr.progress)
             let currentAngle = sr.angle * t
             sliceAnimMatrix = float4x4.rotation(radians: currentAngle, axis: axisVec)
         }
@@ -403,7 +384,7 @@ class Renderer: NSObject, MTKViewDelegate {
                     guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
                     let facelet = model.cubies[ci].facelets[fi]
 
-                    if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci), face == gameState.player.face {
+                    if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) {
                         matrix = animMat * matrix
                     }
 
