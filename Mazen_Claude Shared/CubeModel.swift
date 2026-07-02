@@ -2,18 +2,41 @@ import simd
 
 class CubeModel {
     let size: Int
+    let worldScale: WorldScale
     var cubies: [Cubie]
 
     private var projectionDirty = true
     private var cachedProjection: [CubeFace: [[FaceletID?]]] = [:]
 
-    init(size: Int) {
-        self.size = size
+    // Static map: facelet id → its fixed location in the cubies array. Assigned once
+    // in buildCubies and never invalidated — slice rotations mutate cubie position /
+    // orientation in place but never reorder the array or reassign facelet ids. This
+    // turns findFaceletIndices(id:) (hit once per faceletAt, ~6·n² times per frame)
+    // from an O(n²) scan into an O(1) lookup.
+    private var faceletLocation: [FaceletID: (cubieIndex: Int, faceletIndex: Int)] = [:]
+
+    init(worldScale: WorldScale) {
+        self.worldScale = worldScale
+        self.size = worldScale.cubeSize
         self.cubies = []
         buildCubies()
+        buildFaceletLocationMap()
         generateMaze()
         addEdgeBridges()
         rebuildProjection()
+    }
+
+    convenience init(size: Int) {
+        self.init(worldScale: WorldScale(cubeSize: size))
+    }
+
+    private func buildFaceletLocationMap() {
+        faceletLocation.removeAll(keepingCapacity: true)
+        for (ci, cubie) in cubies.enumerated() {
+            for (fi, facelet) in cubie.facelets.enumerated() {
+                faceletLocation[facelet.id] = (ci, fi)
+            }
+        }
     }
 
     // MARK: - Initialization
@@ -175,17 +198,15 @@ class CubeModel {
     // MARK: - World matrices
 
     func worldMatrix(face: CubeFace, row: Int, col: Int) -> float4x4 {
-        let n = Float(size)
-        let halfN = n / 2.0
-        let tileSize: Float = 1.0
-        let gap: Float = 0.01
+        let halfN = Float(size) / 2.0
+        let spacing = worldScale.cellSpacing
 
         let normal = face.normal
         let tangent = face.tangent
         let bitangent = face.bitangent
 
-        let colF = (Float(col) + 0.5 - halfN) * (tileSize + gap)
-        let rowF = (Float(row) + 0.5 - halfN) * (tileSize + gap)
+        let colF = (Float(col) + 0.5 - halfN) * spacing
+        let rowF = (Float(row) + 0.5 - halfN) * spacing
 
         let center = normal * halfN + tangent * colF + bitangent * rowF
 
@@ -365,12 +386,7 @@ class CubeModel {
     }
 
     private func findFaceletIndices(id: FaceletID) -> (cubieIndex: Int, faceletIndex: Int)? {
-        for (ci, cubie) in cubies.enumerated() {
-            for (fi, facelet) in cubie.facelets.enumerated() {
-                if facelet.id == id { return (ci, fi) }
-            }
-        }
-        return nil
+        return faceletLocation[id]
     }
 }
 

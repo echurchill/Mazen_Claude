@@ -17,13 +17,7 @@ class TileMeshLibrary {
     private var floorMeshes: [UInt8: TileMesh] = [:]
     private var wallMeshes: [UInt8: TileMesh] = [:]
 
-    static let tileSize: Float = 0.98
-    static let wallHeight: Float = 1.2
-    static let wallThickness: Float = 0.12
-    static let floorY: Float = 0.001
-    static let uvScale: Float = 2.0
-
-    init(device: MTLDevice) {
+    init(device: MTLDevice, worldScale ws: WorldScale) {
         var allVerts: [MazeVertexSwift] = []
         var allIndices: [UInt16] = []
 
@@ -131,22 +125,22 @@ class TileMeshLibrary {
             let openings = DirectionMask(rawValue: mask)
 
             let fStart = allIndices.count
-            Self.addFloor(to: &allVerts, indices: &allIndices, openings: openings)
+            Self.addFloor(to: &allVerts, indices: &allIndices, openings: openings, ws: ws)
             let fCount = allIndices.count - fStart
             floorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: fStart, indexCount: fCount)
 
             let wStart = allIndices.count
             if !openings.contains(.north) {
-                Self.addWall(edge: .north, to: &allVerts, indices: &allIndices)
+                Self.addWall(edge: .north, to: &allVerts, indices: &allIndices, ws: ws)
             }
             if !openings.contains(.east) {
-                Self.addWall(edge: .east, to: &allVerts, indices: &allIndices)
+                Self.addWall(edge: .east, to: &allVerts, indices: &allIndices, ws: ws)
             }
             if !openings.contains(.south) {
-                Self.addWall(edge: .south, to: &allVerts, indices: &allIndices)
+                Self.addWall(edge: .south, to: &allVerts, indices: &allIndices, ws: ws)
             }
             if !openings.contains(.west) {
-                Self.addWall(edge: .west, to: &allVerts, indices: &allIndices)
+                Self.addWall(edge: .west, to: &allVerts, indices: &allIndices, ws: ws)
             }
             let wCount = allIndices.count - wStart
             if wCount > 0 {
@@ -179,9 +173,9 @@ class TileMeshLibrary {
 
     // MARK: - Geometry builders
 
-    private static func addFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask) {
+    private static func addFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask, ws: WorldScale) {
         let hs: Float = 0.48
-        let z = floorY
+        let z = ws.floorY
         let base = UInt16(verts.count)
 
         let n = !openings.contains(.north)
@@ -195,7 +189,7 @@ class TileMeshLibrary {
             return 1.0
         }
 
-        let fuv = hs * 2.0 * uvScale
+        let fuv = hs * 2.0 * ws.uvScale
         verts.append(contentsOf: [
             MazeVertexSwift(position: SIMD3(-hs, -hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0), aoFactor: cornerAO(n, w)),
             MazeVertexSwift(position: SIMD3( hs, -hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(fuv, 0), aoFactor: cornerAO(n, e)),
@@ -205,11 +199,11 @@ class TileMeshLibrary {
         indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
     }
 
-    private static func addWall(edge: SurfaceDirection, to verts: inout [MazeVertexSwift], indices: inout [UInt16]) {
-        let hs = tileSize / 2.0
-        let wt = wallThickness
-        let z0 = floorY
-        let z1 = wallHeight
+    private static func addWall(edge: SurfaceDirection, to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        let hs = ws.tileMeshSize / 2.0
+        let wt = ws.wallThickness
+        let z0 = ws.floorY
+        let z1 = ws.wallHeight
 
         var inner0: SIMD2<Float>, inner1: SIMD2<Float>
         var outer0: SIMD2<Float>, outer1: SIMD2<Float>
@@ -260,9 +254,9 @@ class TileMeshLibrary {
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
 
-        let wallU = tileSize * uvScale
-        let wallV = (z1 - z0) * uvScale
-        let capU = wt * uvScale
+        let wallU = ws.tileMeshSize * ws.uvScale
+        let wallV = (z1 - z0) * ws.uvScale
+        let capU = wt * ws.uvScale
 
         // Inner face
         quad(SIMD3(inner0.x, inner0.y, z0), SIMD3(inner1.x, inner1.y, z0),
@@ -299,8 +293,8 @@ class TileMeshLibrary {
             let arcNormal = SIMD3<Float>(thickDir.x * cosf(midTheta),
                                          thickDir.y * cosf(midTheta),
                                          sinf(midTheta))
-            let arcV0 = wallV + sin0 * arcRadius * uvScale
-            let arcV1 = wallV + sin1 * arcRadius * uvScale
+            let arcV0 = wallV + sin0 * arcRadius * ws.uvScale
+            let arcV1 = wallV + sin1 * arcRadius * ws.uvScale
             quad(a, b, c, d, arcNormal,
                  SIMD2(0, arcV0), SIMD2(wallU, arcV0), SIMD2(wallU, arcV1), SIMD2(0, arcV1))
         }

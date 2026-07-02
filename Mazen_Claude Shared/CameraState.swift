@@ -8,8 +8,11 @@ enum CameraMode {
 struct CameraState {
     var mode: CameraMode = .orbit
     var orbitRotation: SIMD2<Float> = SIMD2(0.45, 0.5)
-    var orbitDistance: Float = 12.0
     var orbitAutoRotate: Bool = true
+
+    /// User zoom override on the orbit camera. `nil` = use the world's default framing
+    /// distance (`WorldScale.orbitDistance`). Set/clamped by the platform zoom handlers.
+    var orbitDistanceOverride: Float? = nil
 
     mutating func updateOrbit(deltaTime: Float) {
         if mode == .orbit && orbitAutoRotate {
@@ -18,18 +21,20 @@ struct CameraState {
     }
 
     func viewProjectionMatrix(aspect: Float, player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> float4x4 {
+        let ws = cubeModel.worldScale
+        let fov = mode == .orbit ? ws.orbitFOVRadians : ws.firstPersonFOVRadians
         let projection = float4x4.perspective(
-            fovYRadians: (70.0 / 180.0) * .pi,
+            fovYRadians: fov,
             aspect: aspect,
-            nearZ: 0.01,
-            farZ: 100.0
+            nearZ: ws.cameraNearZ,
+            farZ: ws.cameraFarZ
         )
 
         switch mode {
         case .orbit:
             let rotX = float4x4.rotation(radians: orbitRotation.y, axis: SIMD3(1, 0, 0))
             let rotY = float4x4.rotation(radians: orbitRotation.x, axis: SIMD3(0, 1, 0))
-            let translate = float4x4.translation(0, 0, -orbitDistance)
+            let translate = float4x4.translation(0, 0, -(orbitDistanceOverride ?? ws.orbitDistance))
             return projection * translate * rotX * rotY
 
         case .firstPerson:
@@ -42,7 +47,7 @@ struct CameraState {
     func cameraPosition(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> SIMD3<Float> {
         switch mode {
         case .orbit:
-            return SIMD3(0, 0, orbitDistance)
+            return SIMD3(0, 0, orbitDistanceOverride ?? cubeModel.worldScale.orbitDistance)
         case .firstPerson:
             let (eye, _, _) = firstPersonCamera(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
             return eye
@@ -50,7 +55,7 @@ struct CameraState {
     }
 
     private func firstPersonCamera(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> (eye: SIMD3<Float>, forward: SIMD3<Float>, up: SIMD3<Float>) {
-        let eyeHeight: Float = 0.45
+        let eyeHeight = cubeModel.worldScale.eyeHeight
 
         let face: CubeFace
         let row: Int

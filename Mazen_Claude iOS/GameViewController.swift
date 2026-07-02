@@ -145,8 +145,9 @@ class GameViewController: UIViewController {
         guard let gs = renderer?.gameState else { return }
         guard gs.camera.mode == .orbit else { return }
         if gesture.state == .changed {
-            gs.camera.orbitDistance /= Float(gesture.scale)
-            gs.camera.orbitDistance = max(3.0, min(15.0, gs.camera.orbitDistance))
+            let ws = gs.worldScale
+            let current = gs.camera.orbitDistanceOverride ?? ws.orbitDistance
+            gs.camera.orbitDistanceOverride = max(ws.orbitDistanceMin, min(ws.orbitDistanceMax, current / Float(gesture.scale)))
             gesture.scale = 1.0
         }
     }

@@ -2,6 +2,7 @@ import simd
 import Foundation
 
 class GameState {
+    let worldScale: WorldScale
     let cubeModel: CubeModel
     var player: PlayerState
     var camera = CameraState()
@@ -30,7 +31,9 @@ class GameState {
     var activeAnimations: [DiscoveryAnim] = []
 
     init(size: Int = 3) {
-        cubeModel = CubeModel(size: size)
+        let ws = WorldScale(cubeSize: size)
+        worldScale = ws
+        cubeModel = CubeModel(worldScale: ws)
         player = PlayerState(size: size)
         printMazeDebug(face: player.face)
     }

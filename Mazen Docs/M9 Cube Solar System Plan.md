@@ -257,6 +257,8 @@ All in `CelestialSystem`:
 
 ### Phase 0 — pre-flight refactor (before any M9/M10 work)
 
+> **STATUS: ✅ COMPLETE (2026-07-02).** All of R1–R5 landed as behavior-neutral refactors, each verified (tests + build + screenshot-identical render). Coordinate math is now proven size-generic across {3,5,7,9} by `Tests/run-tests.sh` (6592 checks). New files: `WorldScale.swift` (single scale source, per-world), `SceneBuilder.swift` (instance building extracted from Renderer, which dropped 857→546 lines), `Tests/` (standalone runner). One intentional behavior tweak: the iOS pinch zoom-in limit went from 3 to 5 units to unify with macOS via `WorldScale.orbitDistanceMin`. Ready for step 0.5 (size experiment) or step 1 (M10 Phase A).
+
 Small, surgical, each step independently verifiable (build + run + compare screenshot). Phase 0 also **bakes in cube-size independence** (see R1/R4/R5) — but the actual size flip is deliberately *not* part of Phase 0, since changing the world mid-refactor would destroy the screenshot-identical baseline; it runs as its own experiment right after (step 0.5 below):
 
 - **R1 — Single source of scale truth.** A `WorldScale` constants type (tile spacing, tile mesh size, gap, wallHeight, wallThickness, eyeHeight, per-mode FOV) that also takes **cube size as a first-class input**, deriving the world-extent values from it: camera `orbitDistance` (today hardcoded 12, tuned to a 5-wide cube), shadow ortho bounds (`-8..8` — a 9³ cube's half-diagonal of ~7.8 barely fits), light near/far and eye distance, and M9 orbit radii. M10 Phase A, the gap-removal decision, and any future cube-size change become one-file changes.

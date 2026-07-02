@@ -61,20 +61,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
 
-    private var opaqueFogTiles: [TileEntry] = []
-    private var dissolveTiles: [TileEntry] = []
-    private var frameTiles: [TileEntry] = []
-    private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
-    private var mazeWallTiles: [UInt8: [TileEntry]] = [:]
-
-    private static let faceColors: [CubeFace: SIMD4<Float>] = [
-        .positiveX: SIMD4(0.85, 0.75, 0.70, 1.0),
-        .negativeX: SIMD4(0.70, 0.80, 0.85, 1.0),
-        .positiveY: SIMD4(0.80, 0.85, 0.70, 1.0),
-        .negativeY: SIMD4(0.85, 0.80, 0.65, 1.0),
-        .positiveZ: SIMD4(0.80, 0.75, 0.85, 1.0),
-        .negativeZ: SIMD4(0.75, 0.85, 0.80, 1.0),
-    ]
+    let sceneBuilder = SceneBuilder()
 
     @MainActor
     init?(metalKitView: MTKView) {
@@ -184,8 +171,12 @@ class Renderer: NSObject, MTKViewDelegate {
         depthDescAlways.isDepthWriteEnabled = false
         self.depthStateAlways = device.makeDepthStencilState(descriptor: depthDescAlways)!
 
-        // Tile mesh library
-        self.tileMeshLib = TileMeshLibrary(device: device)
+        // Game state (owns the per-world scale) — mark some tiles discovered for visual testing
+        self.gameState = GameState(size: 5)
+        Self.setupInitialDiscovery(gameState: self.gameState)
+
+        // Tile mesh library (geometry baked from the world scale)
+        self.tileMeshLib = TileMeshLibrary(device: device, worldScale: gameState.worldScale)
 
         // Textures
         self.diffuseArray = Self.loadTextureArray(device: device,
@@ -202,7 +193,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.texSampler = device.makeSamplerState(descriptor: samplerDesc)!
 
         // Per-frame buffers
-        let maxInstances = 6 * 25 * 25
+        let maxInstances = 6 * WorldScale.maxSupportedSize * WorldScale.maxSupportedSize
         let instanceSize = MemoryLayout<InstanceDataSwift>.stride * maxInstances
         let frameSize = MemoryLayout<FrameUniformsSwift>.stride
 
@@ -214,10 +205,6 @@ class Renderer: NSObject, MTKViewDelegate {
         }
         self.frameUniformBuffers = frameBufs
         self.instanceBuffers = instBufs
-
-        // Game state — mark some tiles discovered for visual testing
-        self.gameState = GameState(size: 5)
-        Self.setupInitialDiscovery(gameState: self.gameState)
 
         // Residency set
         let resDesc = MTLResidencySetDescriptor()
@@ -352,301 +339,25 @@ class Renderer: NSObject, MTKViewDelegate {
     // MARK: - Per-frame
 
     private func buildDrawCalls() {
-        if debugSingleTile {
-            buildSingleTileDrawCalls()
-            return
-        }
-        let model = gameState.cubeModel
-        let buf = instanceBuffers[currentBufferIndex]
-        let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: 6 * model.size * model.size)
-
-        opaqueFogTiles.removeAll(keepingCapacity: true)
-        dissolveTiles.removeAll(keepingCapacity: true)
-        frameTiles.removeAll(keepingCapacity: true)
-        for key in mazeFloorTiles.keys { mazeFloorTiles[key]?.removeAll(keepingCapacity: true) }
-        for key in mazeWallTiles.keys { mazeWallTiles[key]?.removeAll(keepingCapacity: true) }
-
-        // Precompute slice rotation matrix if active
-        var sliceAnimMatrix: float4x4?
-        let sr = gameState.sliceRotation
-        if sr.isActive {
-            let axisVec: SIMD3<Float> = sr.axis == 0 ? SIMD3(1,0,0) : sr.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
-            let t = sr.progress * sr.progress * (3 - 2 * sr.progress)
-            let currentAngle = sr.angle * t
-            sliceAnimMatrix = float4x4.rotation(radians: currentAngle, axis: axisVec)
-        }
-
-        for face in CubeFace.allCases {
-            for row in 0..<model.size {
-                for col in 0..<model.size {
-                    var matrix = model.worldMatrix(face: face, row: row, col: col)
-
-                    guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
-                    let facelet = model.cubies[ci].facelets[fi]
-
-                    if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) {
-                        matrix = animMat * matrix
-                    }
-
-                    let faceColor = Self.faceColors[face]!
-
-                    // Frame rail for every tile
-                    let frameInst = InstanceDataSwift(
-                        modelMatrix: matrix,
-                        baseColor: SIMD4(0.06, 0.06, 0.08, 1.0),
-                        materialID: 7,
-                        tileID: 0,
-                        discoveryAmount: 1.0,
-                        styleSeed: 0
-                    )
-                    frameTiles.append(TileEntry(instance: frameInst, mesh: tileMeshLib.frameMesh))
-
-                    switch facelet.tileState {
-                    case .unknown:
-                        let inst = InstanceDataSwift(
-                            modelMatrix: matrix,
-                            baseColor: faceColor * 0.9,
-                            materialID: 4,
-                            tileID: UInt32(facelet.id.rawValue),
-                            discoveryAmount: facelet.discoveryAmount,
-                            styleSeed: facelet.mazeTile.styleSeed
-                        )
-                        opaqueFogTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.fogLayers[0]))
-
-                    case .adjacent:
-                        let openings = facelet.mazeTile.openings
-                        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
-                        let mazeInst = InstanceDataSwift(
-                            modelMatrix: matrix,
-                            baseColor: pathColor,
-                            materialID: 1,
-                            tileID: UInt32(facelet.id.rawValue),
-                            discoveryAmount: 1.0,
-                            styleSeed: facelet.mazeTile.styleSeed
-                        )
-                        let key = openings.rawValue & 0x0F
-                        mazeFloorTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: tileMeshLib.floorMesh(for: openings)))
-                        if let wm = tileMeshLib.wallMesh(for: openings) {
-                            mazeWallTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: wm))
-                        }
-
-                        let fogInst = InstanceDataSwift(
-                            modelMatrix: matrix,
-                            baseColor: faceColor * 0.9,
-                            materialID: 5,
-                            tileID: UInt32(facelet.id.rawValue),
-                            discoveryAmount: facelet.discoveryAmount,
-                            styleSeed: facelet.mazeTile.styleSeed
-                        )
-                        for layer in tileMeshLib.fogLayers {
-                            dissolveTiles.append(TileEntry(instance: fogInst, mesh: layer))
-                        }
-
-                    case .discovered:
-                        let openings = facelet.mazeTile.openings
-                        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
-                        let inst = InstanceDataSwift(
-                            modelMatrix: matrix,
-                            baseColor: pathColor,
-                            materialID: 1,
-                            tileID: UInt32(facelet.id.rawValue),
-                            discoveryAmount: 1.0,
-                            styleSeed: facelet.mazeTile.styleSeed
-                        )
-                        let key = openings.rawValue & 0x0F
-                        mazeFloorTiles[key, default: []].append(TileEntry(instance: inst, mesh: tileMeshLib.floorMesh(for: openings)))
-                        if let wm = tileMeshLib.wallMesh(for: openings) {
-                            mazeWallTiles[key, default: []].append(TileEntry(instance: inst, mesh: wm))
-                        }
-                    }
-                }
-            }
-        }
-
-        // Player marker (orbit mode only)
-        if gameState.camera.mode == .orbit {
-            var pMatrix = model.worldMatrix(face: gameState.player.face, row: gameState.player.row, col: gameState.player.col)
-            if let animMat = sliceAnimMatrix, sr.playerCubieIndex >= 0, sr.affectedCubies.contains(sr.playerCubieIndex) {
-                pMatrix = animMat * pMatrix
-            }
-            let facingAngle: Float = {
-                switch gameState.player.facing {
-                case .north: return .pi
-                case .west:  return .pi / 2
-                case .south: return 0
-                case .east:  return -.pi / 2
-                }
-            }()
-            let localRot = float4x4.rotation(radians: facingAngle, axis: SIMD3(0, 0, 1))
-            pMatrix = pMatrix * localRot
-            let markerInst = InstanceDataSwift(
-                modelMatrix: pMatrix,
-                baseColor: SIMD4(1.0, 0.2, 0.1, 1.0),
-                materialID: 6,
-                tileID: 0,
-                discoveryAmount: 1.0,
-                styleSeed: 0
-            )
-            opaqueFogTiles.append(TileEntry(instance: markerInst, mesh: tileMeshLib.playerMarker))
-        }
-
-        // Pack instances — opaque first, then translucent
-        var idx = 0
-        opaqueDrawCalls.removeAll()
-        translucentDrawCalls.removeAll()
-
-        // Cubie frame rails
-        if !frameTiles.isEmpty {
-            let mesh = frameTiles[0].mesh
-            let startIdx = idx
-            for entry in frameTiles {
-                ptr[idx] = entry.instance
-                idx += 1
-            }
-            opaqueDrawCalls.append(DrawCall(
-                indexOffset: mesh.indexOffset,
-                indexCount: mesh.indexCount,
-                instanceOffset: startIdx,
-                instanceCount: frameTiles.count
-            ))
-        }
-
-        // Opaque maze floor tiles (no depth bias)
-        for (_, entries) in mazeFloorTiles {
-            guard !entries.isEmpty else { continue }
-            let mesh = entries[0].mesh
-            let startIdx = idx
-            for entry in entries {
-                ptr[idx] = entry.instance
-                idx += 1
-            }
-            opaqueDrawCalls.append(DrawCall(
-                indexOffset: mesh.indexOffset,
-                indexCount: mesh.indexCount,
-                instanceOffset: startIdx,
-                instanceCount: entries.count
-            ))
-        }
-
-        // Opaque maze wall tiles (rendered with depth bias)
-        let wallDrawCallStart = opaqueDrawCalls.count
-        for (_, entries) in mazeWallTiles {
-            guard !entries.isEmpty else { continue }
-            let mesh = entries[0].mesh
-            let startIdx = idx
-            for entry in entries {
-                ptr[idx] = entry.instance
-                idx += 1
-            }
-            opaqueDrawCalls.append(DrawCall(
-                indexOffset: mesh.indexOffset,
-                indexCount: mesh.indexCount,
-                instanceOffset: startIdx,
-                instanceCount: entries.count
-            ))
-        }
-        wallDrawCallRange = wallDrawCallStart..<opaqueDrawCalls.count
-
-        // Opaque fog base layer + player marker
-        if !opaqueFogTiles.isEmpty {
-            var byMesh: [Int: [TileEntry]] = [:]
-            for entry in opaqueFogTiles {
-                byMesh[entry.mesh.indexOffset, default: []].append(entry)
-            }
-            for (_, entries) in byMesh {
-                let mesh = entries[0].mesh
-                let startIdx = idx
-                for entry in entries {
-                    ptr[idx] = entry.instance
-                    idx += 1
-                }
-                opaqueDrawCalls.append(DrawCall(
-                    indexOffset: mesh.indexOffset,
-                    indexCount: mesh.indexCount,
-                    instanceOffset: startIdx,
-                    instanceCount: entries.count
-                ))
-            }
-        }
-
-        // Translucent fog upper layers + dissolve fog
-        if !dissolveTiles.isEmpty {
-            var byMesh: [Int: [TileEntry]] = [:]
-            for entry in dissolveTiles {
-                byMesh[entry.mesh.indexOffset, default: []].append(entry)
-            }
-            for (_, entries) in byMesh {
-                let mesh = entries[0].mesh
-                let startIdx = idx
-                for entry in entries {
-                    ptr[idx] = entry.instance
-                    idx += 1
-                }
-                translucentDrawCalls.append(DrawCall(
-                    indexOffset: mesh.indexOffset,
-                    indexCount: mesh.indexCount,
-                    instanceOffset: startIdx,
-                    instanceCount: entries.count
-                ))
-            }
-        }
-    }
-
-    private func buildSingleTileDrawCalls() {
-        let buf = instanceBuffers[currentBufferIndex]
-        let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: 4)
-
-        opaqueDrawCalls.removeAll()
-        translucentDrawCalls.removeAll()
-
-        let identity = matrix_identity_float4x4
-        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
-        // Single north wall only (openings = east+south+west, so north is closed)
-        let openings = DirectionMask([.east, .south, .west])
-
-        let inst = InstanceDataSwift(
-            modelMatrix: identity,
-            baseColor: pathColor,
-            materialID: 1,
-            tileID: 0,
-            discoveryAmount: 1.0,
-            styleSeed: 42
-        )
-
-        var idx = 0
-
-        // Floor
-        let floorMesh = tileMeshLib.floorMesh(for: openings)
-        ptr[idx] = inst
-        idx += 1
-        opaqueDrawCalls.append(DrawCall(
-            indexOffset: floorMesh.indexOffset,
-            indexCount: floorMesh.indexCount,
-            instanceOffset: 0,
-            instanceCount: 1
-        ))
-
-        // Walls
-        if let wallMesh = tileMeshLib.wallMesh(for: openings) {
-            ptr[idx] = inst
-            idx += 1
-            opaqueDrawCalls.append(DrawCall(
-                indexOffset: wallMesh.indexOffset,
-                indexCount: wallMesh.indexCount,
-                instanceOffset: 1,
-                instanceCount: 1
-            ))
-        }
+        let buffer = instanceBuffers[currentBufferIndex]
+        let result = debugSingleTile
+            ? sceneBuilder.buildSingleTile(tileMeshLib: tileMeshLib, instanceBuffer: buffer)
+            : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer)
+        opaqueDrawCalls = result.opaque
+        translucentDrawCalls = result.translucent
+        wallDrawCallRange = result.wallRange
     }
 
     private func updateFrameUniforms() {
         let buf = frameUniformBuffers[currentBufferIndex]
         let ptr = buf.contents().bindMemory(to: FrameUniformsSwift.self, capacity: 1)
+        let ws = gameState.worldScale
         let vp = gameState.viewProjectionMatrix(aspect: aspect)
         let lightDir = normalize(SIMD3<Float>(0.4, 0.8, 0.6))
-        let lightPos = lightDir * 15.0
+        let lightPos = lightDir * ws.lightDistance
         let lightView = float4x4.lookAt(eye: lightPos, target: SIMD3(0,0,0), up: SIMD3(0,1,0))
-        let lightProj = float4x4.orthographic(left: -8, right: 8, bottom: -8, top: 8, nearZ: 5, farZ: 25)
+        let r = ws.shadowOrthoRadius
+        let lightProj = float4x4.orthographic(left: -r, right: r, bottom: -r, top: r, nearZ: ws.shadowNearZ, farZ: ws.shadowFarZ)
         let lightVP = lightProj * lightView
         ptr.pointee = FrameUniformsSwift(
             viewProjectionMatrix: vp,
@@ -822,35 +533,14 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 }
 
-struct TileEntry {
-    var instance: InstanceDataSwift
-    var mesh: TileMesh
-}
+// MARK: - Shader struct bridging
+//
+// The Swift code uses the C structs from the ShaderTypes.h bridging header directly.
+// These aliases keep call sites stable while guaranteeing a single source of layout
+// truth: add a field to FrameUniforms / InstanceData / MazeVertex in ShaderTypes.h
+// and the Swift side sees it automatically — there is no hand-maintained mirror to
+// fall out of sync (which is exactly the skew M9's new uniform fields would risk).
 
-// MARK: - Swift-side mirror structs
-
-struct MazeVertexSwift {
-    var position: SIMD3<Float>
-    var normal: SIMD3<Float>
-    var texCoord: SIMD2<Float>
-    var aoFactor: Float
-}
-
-struct FrameUniformsSwift {
-    var viewProjectionMatrix: float4x4
-    var cameraPosition: SIMD3<Float>
-    var time: Float
-    var lightDirection: SIMD3<Float>
-    var inverseViewProjectionMatrix: float4x4
-    var cameraUp: SIMD3<Float>
-    var lightViewProjectionMatrix: float4x4
-}
-
-struct InstanceDataSwift {
-    var modelMatrix: float4x4
-    var baseColor: SIMD4<Float>
-    var materialID: UInt32
-    var tileID: UInt32
-    var discoveryAmount: Float
-    var styleSeed: UInt32
-}
+typealias MazeVertexSwift = MazeVertex
+typealias FrameUniformsSwift = FrameUniforms
+typealias InstanceDataSwift = InstanceData
