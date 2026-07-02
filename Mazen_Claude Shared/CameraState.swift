@@ -8,7 +8,7 @@ enum CameraMode {
 struct CameraState {
     var mode: CameraMode = .orbit
     var orbitRotation: SIMD2<Float> = SIMD2(0.45, 0.5)
-    var orbitDistance: Float = 5.0
+    var orbitDistance: Float = 12.0
     var orbitAutoRotate: Bool = true
 
     mutating func updateOrbit(deltaTime: Float) {
