@@ -122,7 +122,8 @@ class TileMeshLibrary {
         frameMesh = TileMesh(vertexOffset: frameVStart, indexOffset: frameIStart,
                              indexCount: allIndices.count - frameIStart)
 
-        // Generate all 16 possible connection masks (4 bits = NESW)
+        // Floors — keyed by the 16 openings masks (the path/prop split depends only on
+        // which edges are passable, so gateway vs open doesn't matter here).
         for mask: UInt8 in 0..<16 {
             let openings = DirectionMask(rawValue: mask)
 
@@ -136,22 +137,29 @@ class TileMeshLibrary {
             if pathCount > 0 {
                 pathFloorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: pathStart, indexCount: pathCount)
             }
+        }
 
-            let tile = MazeTile(openings: openings, styleSeed: 0)
+        // Walls + posts — keyed by the 81 three-state edge configs (each edge wall /
+        // gateway / open). Open edges emit no geometry; a corner interior to a merged
+        // room (both adjoining edges open) drops its post.
+        for key: UInt8 in 0..<81 {
+            let (openings, openEdges) = Self.decodeEdgeConfig(key)
+            let tile = MazeTile(openings: openings, styleSeed: 0, openEdges: openEdges)
+
             let wStart = allIndices.count
             for dir in SurfaceDirection.allCases {
                 Self.addEdgeWall(edge: dir, type: tile.edgeType(dir), to: &allVerts, indices: &allIndices, ws: ws)
             }
             let wCount = allIndices.count - wStart
             if wCount > 0 {
-                wallMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: wStart, indexCount: wCount)
+                wallMeshes[key] = TileMesh(vertexOffset: 0, indexOffset: wStart, indexCount: wCount)
             }
 
             let pStart = allIndices.count
-            Self.addPosts(openings: openings, to: &allVerts, indices: &allIndices, ws: ws)
+            Self.addPosts(tile: tile, to: &allVerts, indices: &allIndices, ws: ws)
             let pCount = allIndices.count - pStart
             if pCount > 0 {
-                postMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: pStart, indexCount: pCount)
+                postMeshes[key] = TileMesh(vertexOffset: 0, indexOffset: pStart, indexCount: pCount)
             }
         }
 
@@ -174,17 +182,30 @@ class TileMeshLibrary {
         return floorMeshes[openings.rawValue & 0x0F] ?? fogLayers[0]
     }
 
-    func wallMesh(for openings: DirectionMask) -> TileMesh? {
-        return wallMeshes[openings.rawValue & 0x0F]
+    func wallMesh(configKey: UInt8) -> TileMesh? {
+        return wallMeshes[configKey]
     }
 
-    func postMesh(for openings: DirectionMask) -> TileMesh? {
-        return postMeshes[openings.rawValue & 0x0F]
+    func postMesh(configKey: UInt8) -> TileMesh? {
+        return postMeshes[configKey]
     }
 
     /// The path-cross sub-cells (paved). `floorMesh` returns the propSpace remainder.
     func pathFloorMesh(for openings: DirectionMask) -> TileMesh? {
         return pathFloorMeshes[openings.rawValue & 0x0F]
+    }
+
+    /// Decode a base-3 edge-config key (N,E,S,W) into the openings + open-edge masks.
+    static func decodeEdgeConfig(_ key: UInt8) -> (openings: DirectionMask, openEdges: DirectionMask) {
+        let k = Int(key)
+        let states = [(k / 27) % 3, (k / 9) % 3, (k / 3) % 3, k % 3]  // N, E, S, W
+        let dirs: [DirectionMask] = [.north, .east, .south, .west]
+        var openings = DirectionMask(), openEdges = DirectionMask()
+        for d in 0..<4 {
+            if states[d] >= 1 { openings.insert(dirs[d]) }
+            if states[d] == 2 { openEdges.insert(dirs[d]) }
+        }
+        return (openings, openEdges)
     }
 
     // MARK: - Geometry builders
@@ -353,18 +374,22 @@ class TileMeshLibrary {
 
     /// Corner posts at all four tile corners plus jamb posts flanking each gateway gap.
     /// These are emitted with a distinct material (light green) by the scene builder.
-    private static func addPosts(openings: DirectionMask, to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addPosts(tile: MazeTile, to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
         let hs = ws.tileMeshSize / 2.0
         let wt = ws.wallThickness
         let z0 = ws.floorY
 
         // Corner posts: slim (wall thickness) and capped level with the hedge — subtle
-        // light-green markers at the corner joints rather than towering pillars.
+        // light-green markers at the corner joints. Skipped where a corner is interior
+        // to a merged room (both adjoining edges open).
         let cornerH = wt / 2.0
         let cornerTop = ws.wallHeight
         let cornerInset = hs - cornerH
         for sx: Float in [-1, 1] {
             for sy: Float in [-1, 1] {
+                let horiz: SurfaceDirection = sx > 0 ? .east : .west
+                let vert: SurfaceDirection = sy > 0 ? .south : .north
+                if tile.edgeType(horiz) == .open && tile.edgeType(vert) == .open { continue }
                 addPost(center: SIMD2(sx * cornerInset, sy * cornerInset), halfSize: cornerH, z0: z0, zTop: cornerTop, to: &verts, indices: &indices)
             }
         }
@@ -373,7 +398,6 @@ class TileMeshLibrary {
         // frame each gateway prominently.
         let jambH = wt * 1.5 / 2.0
         let jambTop = ws.wallHeight * 1.15
-        let tile = MazeTile(openings: openings, styleSeed: 0)
         let stub = (1.0 - ws.gatewayGapFraction) / 2.0
         for dir in SurfaceDirection.allCases where tile.edgeType(dir) == .gateway {
             let (c0, c1) = wallCenterline(edge: dir, hs: hs, wt: wt)

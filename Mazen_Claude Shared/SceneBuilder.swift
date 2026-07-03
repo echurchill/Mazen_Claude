@@ -126,14 +126,15 @@ final class SceneBuilder {
                                 discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
                             mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
                         }
-                        if let wm = tileMeshLib.wallMesh(for: openings) {
-                            mazeWallTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: wm))
+                        let cfg = facelet.mazeTile.edgeConfigKey
+                        if let wm = tileMeshLib.wallMesh(configKey: cfg) {
+                            mazeWallTiles[cfg, default: []].append(TileEntry(instance: mazeInst, mesh: wm))
                         }
-                        if let pm = tileMeshLib.postMesh(for: openings) {
+                        if let pm = tileMeshLib.postMesh(configKey: cfg) {
                             let postInst = InstanceDataSwift(modelMatrix: matrix, baseColor: Self.postColor,
                                 materialID: 8, tileID: UInt32(facelet.id.rawValue),
                                 discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
-                            mazePostTiles[key, default: []].append(TileEntry(instance: postInst, mesh: pm))
+                            mazePostTiles[cfg, default: []].append(TileEntry(instance: postInst, mesh: pm))
                         }
 
                         let fogInst = InstanceDataSwift(
@@ -167,14 +168,15 @@ final class SceneBuilder {
                                 discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
                             mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
                         }
-                        if let wm = tileMeshLib.wallMesh(for: openings) {
-                            mazeWallTiles[key, default: []].append(TileEntry(instance: inst, mesh: wm))
+                        let cfg = facelet.mazeTile.edgeConfigKey
+                        if let wm = tileMeshLib.wallMesh(configKey: cfg) {
+                            mazeWallTiles[cfg, default: []].append(TileEntry(instance: inst, mesh: wm))
                         }
-                        if let pm = tileMeshLib.postMesh(for: openings) {
+                        if let pm = tileMeshLib.postMesh(configKey: cfg) {
                             let postInst = InstanceDataSwift(modelMatrix: matrix, baseColor: Self.postColor,
                                 materialID: 8, tileID: UInt32(facelet.id.rawValue),
                                 discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
-                            mazePostTiles[key, default: []].append(TileEntry(instance: postInst, mesh: pm))
+                            mazePostTiles[cfg, default: []].append(TileEntry(instance: postInst, mesh: pm))
                         }
                     }
                 }
@@ -382,7 +384,7 @@ final class SceneBuilder {
         ))
 
         // Walls
-        if let wallMesh = tileMeshLib.wallMesh(for: openings) {
+        if let wallMesh = tileMeshLib.wallMesh(configKey: MazeTile(openings: openings, styleSeed: 0).edgeConfigKey) {
             ptr[idx] = inst
             idx += 1
             opaqueDrawCalls.append(DrawCall(

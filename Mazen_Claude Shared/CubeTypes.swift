@@ -180,10 +180,26 @@ enum EdgeType: UInt8 {
 struct MazeTile {
     var openings: DirectionMask
     var styleSeed: UInt32
+    /// Passable edges that are *fully open* (no geometry) rather than gateways — the
+    /// interior edges of a merged multi-tile room (M10 Phase F). Always a subset of
+    /// `openings`; empty for ordinary tiles, so behavior is unchanged by default.
+    var openEdges: DirectionMask = []
 
-    /// Geometric type of one edge, derived from connectivity (Phase B).
+    /// Geometric type of one edge (Phase B/F): wall if closed, open if a room interior,
+    /// otherwise a gateway.
     func edgeType(_ dir: SurfaceDirection) -> EdgeType {
-        openings.contains(direction: dir) ? .gateway : .wall
+        guard openings.contains(direction: dir) else { return .wall }
+        return openEdges.contains(direction: dir) ? .open : .gateway
+    }
+
+    /// Base-3 encoding of the four edge types (N,E,S,W), 0…80 — the cache key for the
+    /// wall/post meshes now that an edge has three states.
+    var edgeConfigKey: UInt8 {
+        let n = Int(edgeType(.north).rawValue)
+        let e = Int(edgeType(.east).rawValue)
+        let s = Int(edgeType(.south).rawValue)
+        let w = Int(edgeType(.west).rawValue)
+        return UInt8(n * 27 + e * 9 + s * 3 + w)
     }
 
     /// Whether sub-cell (subRow, subCol) of the 3×3 grid is a path cell (M10 Phase C).

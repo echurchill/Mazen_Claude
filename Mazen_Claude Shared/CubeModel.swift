@@ -24,6 +24,43 @@ class CubeModel {
         generateMaze()
         addEdgeBridges()
         rebuildProjection()
+        stampDemoRoom()
+    }
+
+    // MARK: - Rooms (M10 Phase F)
+
+    /// Prototype: merge a 3×3 block of tiles centered on the player's start face into
+    /// one open plaza. Interior shared edges become `open` (passable, no geometry).
+    private func stampDemoRoom() {
+        let h = min(3, size), w = min(3, size)
+        let top = max(0, size / 2 - h / 2)
+        let left = max(0, size / 2 - w / 2)
+        stampRoom(face: .positiveZ, top: top, left: left, height: h, width: w)
+    }
+
+    /// Open the interior shared edges of a rectangular tile block so it reads as one room.
+    func stampRoom(face: CubeFace, top: Int, left: Int, height: Int, width: Int) {
+        func open(_ r: Int, _ c: Int, _ dir: SurfaceDirection) {
+            guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { return }
+            let m = Self.directionMask(dir)
+            cubies[ci].facelets[fi].mazeTile.openings.insert(m)
+            cubies[ci].facelets[fi].mazeTile.openEdges.insert(m)
+        }
+        for r in top..<(top + height) {
+            for c in left..<(left + width) {
+                if c + 1 < left + width { open(r, c, .east);  open(r, c + 1, .west) }
+                if r + 1 < top + height { open(r, c, .south); open(r + 1, c, .north) }
+            }
+        }
+    }
+
+    private static func directionMask(_ dir: SurfaceDirection) -> DirectionMask {
+        switch dir {
+        case .north: return .north
+        case .east:  return .east
+        case .south: return .south
+        case .west:  return .west
+        }
     }
 
     convenience init(size: Int) {
@@ -264,6 +301,7 @@ class CubeModel {
                 }
                 if quarterTurns != 0 {
                     cubies[i].facelets[fi].mazeTile.openings = cubies[i].facelets[fi].mazeTile.openings.rotated(quarterTurns: quarterTurns)
+                    cubies[i].facelets[fi].mazeTile.openEdges = cubies[i].facelets[fi].mazeTile.openEdges.rotated(quarterTurns: quarterTurns)
                 }
             }
 
