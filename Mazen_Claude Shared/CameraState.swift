@@ -56,60 +56,47 @@ struct CameraState {
 
     private func firstPersonCamera(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> (eye: SIMD3<Float>, forward: SIMD3<Float>, up: SIMD3<Float>) {
         let eyeHeight = cubeModel.worldScale.eyeHeight
+        let step = cubeModel.worldScale.subCellStep
 
-        let face: CubeFace
-        let row: Int
-        let col: Int
-
-        if player.isMoving {
-            face = player.moveFromFace
-            row = player.moveFromRow
-            col = player.moveFromCol
-        } else {
-            face = player.face
-            row = player.row
-            col = player.col
+        // World position of a standing spot's eye (tile center + sub-cell offset + height).
+        func eye(_ f: CubeFace, _ r: Int, _ c: Int, _ sr: Int, _ sc: Int) -> SIMD3<Float> {
+            let m = cubeModel.worldMatrix(face: f, row: r, col: c)
+            let center = SIMD3<Float>(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+            let spot = center + f.tangent * (Float(sc - 1) * step) + f.bitangent * (Float(sr - 1) * step)
+            return spot + f.normal * eyeHeight
         }
 
-        let tileMatrix = cubeModel.worldMatrix(face: face, row: row, col: col)
-        let tileCenter = SIMD3<Float>(tileMatrix.columns.3.x, tileMatrix.columns.3.y, tileMatrix.columns.3.z)
-        let faceNormal = face.normal
-        let faceTangent = face.tangent
-        let faceBitangent = face.bitangent
-
-        var eyePos = tileCenter + faceNormal * eyeHeight
-        var upDir = faceNormal
+        let fromFace = player.isMoving ? player.moveFromFace : player.face
+        var eyePos = player.isMoving
+            ? eye(player.moveFromFace, player.moveFromRow, player.moveFromCol, player.moveFromSubRow, player.moveFromSubCol)
+            : eye(player.face, player.row, player.col, player.subRow, player.subCol)
+        var upDir = fromFace.normal
 
         if player.isMoving {
-            let toMatrix = cubeModel.worldMatrix(face: player.moveToFace, row: player.moveToRow, col: player.moveToCol)
-            let toCenter = SIMD3<Float>(toMatrix.columns.3.x, toMatrix.columns.3.y, toMatrix.columns.3.z)
-            let toEye = toCenter + player.moveToFace.normal * eyeHeight
+            let toEye = eye(player.moveToFace, player.moveToRow, player.moveToCol, player.moveToSubRow, player.moveToSubCol)
             let t = Self.smoothstep(player.moveProgress)
             if player.moveFromFace != player.moveToFace {
-                eyePos = normalize(mix(eyePos, toEye, t: t)) * length(eyePos) * (1 - t) + normalize(mix(eyePos, toEye, t: t)) * length(toEye) * t
-                upDir = normalize(mix(faceNormal, player.moveToFace.normal, t: t))
+                let blended = normalize(mix(eyePos, toEye, t: t))
+                eyePos = blended * (length(eyePos) * (1 - t) + length(toEye) * t)
+                upDir = normalize(mix(fromFace.normal, player.moveToFace.normal, t: t))
             } else {
                 eyePos = mix(eyePos, toEye, t: t)
             }
         }
 
         var facingWorld: SIMD3<Float>
-        if player.isMoving && player.moveFromFace != player.moveToFace {
-            let fromDir = Self.directionToWorld(player.facing, face: face, tangent: faceTangent, bitangent: faceBitangent)
-            let toTangent = player.moveToFace.tangent
-            let toBitangent = player.moveToFace.bitangent
-            let toDir = Self.directionToWorld(player.moveNewFacing, face: player.moveToFace, tangent: toTangent, bitangent: toBitangent)
+        if player.isMoving {
+            let fromDir = Self.headingToWorld(player.facing, face: player.moveFromFace)
+            let toDir = Self.headingToWorld(player.moveNewFacing, face: player.moveToFace)
             let t = Self.smoothstep(player.moveProgress)
             facingWorld = normalize(mix(fromDir, toDir, t: t))
-        } else {
-            facingWorld = Self.directionToWorld(player.facing, face: face, tangent: faceTangent, bitangent: faceBitangent)
-        }
-
-        if player.isTurning {
-            let fromWorld = Self.directionToWorld(player.turnFromFacing, face: face, tangent: faceTangent, bitangent: faceBitangent)
-            let toWorld = Self.directionToWorld(player.turnToFacing, face: face, tangent: faceTangent, bitangent: faceBitangent)
+        } else if player.isTurning {
+            let fromDir = Self.headingToWorld(player.turnFromFacing, face: player.face)
+            let toDir = Self.headingToWorld(player.turnToFacing, face: player.face)
             let t = Self.smoothstep(player.turnProgress)
-            facingWorld = normalize(mix(fromWorld, toWorld, t: t))
+            facingWorld = normalize(mix(fromDir, toDir, t: t))
+        } else {
+            facingWorld = Self.headingToWorld(player.facing, face: player.face)
         }
 
         let pitchAngle: Float = -0.05
@@ -140,13 +127,20 @@ struct CameraState {
 
     // MARK: - Helpers
 
-    static func directionToWorld(_ dir: SurfaceDirection, face: CubeFace, tangent: SIMD3<Float>, bitangent: SIMD3<Float>) -> SIMD3<Float> {
-        switch dir {
-        case .north: return -bitangent
-        case .south: return bitangent
-        case .east:  return tangent
-        case .west:  return -tangent
-        }
+    /// World-space direction a heading points, in a face's local (tangent, bitangent) plane.
+    static func headingToWorld(_ h: Heading8, face: CubeFace) -> SIMD3<Float> {
+        let tb = h.tangentBitangent
+        return normalize(face.tangent * tb.t + face.bitangent * tb.b)
+    }
+
+    /// Nearest 8-way heading for a world-space direction on a face (inverse of the above).
+    static func worldToHeading8(_ dir: SIMD3<Float>, face: CubeFace) -> Heading8 {
+        let t = dot(dir, face.tangent)
+        let b = dot(dir, face.bitangent)
+        let angle = atan2f(t, -b)  // 0 = north (−bitangent)
+        var idx = Int((angle / (.pi / 4)).rounded())
+        idx = ((idx % 8) + 8) % 8
+        return Heading8(rawValue: idx)!
     }
 
     static func smoothstep(_ t: Float) -> Float {

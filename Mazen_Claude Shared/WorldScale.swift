@@ -27,7 +27,12 @@ struct WorldScale {
     var cellSpacing: Float = 1.01
     /// Full width of a tile's wall footprint.
     var tileMeshSize: Float = 0.98
+    /// Half-width of the floor quad (slightly inset from the walls).
+    var floorHalfSize: Float = 0.48
     var floorY: Float = 0.001
+
+    /// Distance between adjacent 3×3 sub-cell centers, in a tile's local frame.
+    var subCellStep: Float { 2.0 * floorHalfSize / 3.0 }
     var uvScale: Float = 2.0
     // M10 Phase A perceptual scale-up: the player is shrunk ~5x relative to a tile,
     // so a tile reads as a ~19m plaza instead of a ~3.7m corridor. Walls keep their

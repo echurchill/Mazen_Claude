@@ -183,20 +183,21 @@ final class SceneBuilder {
 
         // Player marker (orbit mode only)
         if gameState.camera.mode == .orbit {
-            var pMatrix = model.worldMatrix(face: gameState.player.face, row: gameState.player.row, col: gameState.player.col)
+            let player = gameState.player
+            var pMatrix = model.worldMatrix(face: player.face, row: player.row, col: player.col)
             if let animMat = sliceAnimMatrix, sr.playerCubieIndex >= 0, sr.affectedCubies.contains(sr.playerCubieIndex) {
                 pMatrix = animMat * pMatrix
             }
-            let facingAngle: Float = {
-                switch gameState.player.facing {
-                case .north: return .pi
-                case .west:  return .pi / 2
-                case .south: return 0
-                case .east:  return -.pi / 2
-                }
-            }()
-            let localRot = float4x4.rotation(radians: facingAngle, axis: SIMD3(0, 0, 1))
-            pMatrix = pMatrix * localRot
+            // Offset to the standing sub-cell, rotate to the 8-way heading, shrink to fit.
+            let step = model.worldScale.subCellStep
+            let localX = Float(player.subCol - 1) * step
+            let localY = Float(player.subRow - 1) * step
+            let tb = player.facing.tangentBitangent
+            let facingAngle = atan2f(-tb.t, tb.b)
+            pMatrix = pMatrix
+                * float4x4.translation(localX, localY, 0)
+                * float4x4.rotation(radians: facingAngle, axis: SIMD3(0, 0, 1))
+                * float4x4.scale(0.6)
             let markerInst = InstanceDataSwift(
                 modelMatrix: pMatrix,
                 baseColor: SIMD4(1.0, 0.2, 0.1, 1.0),

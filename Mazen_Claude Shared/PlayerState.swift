@@ -5,28 +5,34 @@ struct PlayerState {
     var face: CubeFace = .positiveZ
     var row: Int
     var col: Int
-    var facing: SurfaceDirection = .north
+    // Sub-cell standing spot within the tile's 3×3 grid (M10 Phase D). Path cells only.
+    var subRow: Int = 1
+    var subCol: Int = 1
+    var facing: Heading8 = .n
 
     var isMoving = false
     var moveProgress: Float = 0
-    // Progress-per-second across one tile → time per tile = 1/moveSpeed. Slowed from
-    // 2.5 (0.4s/tile) to 0.8 (1.25s/tile) for M10 Phase A: at the new perceived scale
-    // a tile is a ~19m plaza, so the old speed felt like sprinting at ~47 m/s. Tune to
-    // taste; sub-tile moves in Phase D will change the per-move distance again.
-    var moveSpeed: Float = 0.8
+    // Progress-per-second across one hop → time per hop = 1/moveSpeed. A hop is one
+    // sub-cell (a third of a tile) since M10 Phase D, so ~2.5 (0.4s/hop) keeps roughly
+    // the ~1.2s-per-tile pace Phase A dialed in. Tune to taste.
+    var moveSpeed: Float = 2.5
     var moveFromFace: CubeFace = .positiveZ
     var moveFromRow: Int = 0
     var moveFromCol: Int = 0
+    var moveFromSubRow: Int = 1
+    var moveFromSubCol: Int = 1
     var moveToFace: CubeFace = .positiveZ
     var moveToRow: Int = 0
     var moveToCol: Int = 0
-    var moveNewFacing: SurfaceDirection = .north
+    var moveToSubRow: Int = 1
+    var moveToSubCol: Int = 1
+    var moveNewFacing: Heading8 = .n
 
     var isTurning = false
     var turnProgress: Float = 0
-    var turnSpeed: Float = 5.0
-    var turnFromFacing: SurfaceDirection = .north
-    var turnToFacing: SurfaceDirection = .north
+    var turnSpeed: Float = 6.0
+    var turnFromFacing: Heading8 = .n
+    var turnToFacing: Heading8 = .n
 
     init(size: Int) {
         row = size / 2
@@ -41,13 +47,17 @@ struct PlayerState {
         if moveProgress >= 1.0 {
             moveProgress = 1.0
             isMoving = false
-            let crossedFace = moveFromFace != moveToFace
+            let crossedTile = moveFromFace != moveToFace || moveFromRow != moveToRow || moveFromCol != moveToCol
             face = moveToFace
             row = moveToRow
             col = moveToCol
+            subRow = moveToSubRow
+            subCol = moveToSubCol
             facing = moveNewFacing
-            NSLog("Arrived: %@ (%d,%d) facing %@ %@", "\(face)", row, col, "\(facing)", crossedFace ? "[CROSSED EDGE]" : "")
-            return true
+            if crossedTile {
+                NSLog("Arrived tile: %@ (%d,%d) sub(%d,%d) facing %@", "\(face)", row, col, subRow, subCol, "\(facing)")
+            }
+            return crossedTile
         }
         return false
     }
@@ -65,57 +75,17 @@ struct PlayerState {
     // MARK: - Movement commands
 
     mutating func tryMoveForward(cubeModel: CubeModel) {
-        guard !isMoving && !isTurning else { return }
-        guard let (ci, fi) = cubeModel.faceletAt(face: face, row: row, col: col) else { return }
-        let tile = cubeModel.cubies[ci].facelets[fi]
-        guard tile.mazeTile.openings.contains(direction: facing) else { return }
+        startMove(travel: facing, arrivalFacing: { $0 }, cubeModel: cubeModel)
+    }
 
-        let (dr, dc) = Self.deltaForDirection(facing)
-        let newRow = row + dr
-        let newCol = col + dc
-
-        if newRow >= 0 && newRow < cubeModel.size && newCol >= 0 && newCol < cubeModel.size {
-            if let (tci, tfi) = cubeModel.faceletAt(face: face, row: newRow, col: newCol) {
-                let targetTile = cubeModel.cubies[tci].facelets[tfi]
-                guard targetTile.mazeTile.openings.contains(direction: facing.opposite) else { return }
-            }
-
-            moveFromFace = face
-            moveFromRow = row
-            moveFromCol = col
-            moveToFace = face
-            moveToRow = newRow
-            moveToCol = newCol
-            moveNewFacing = facing
-            moveProgress = 0
-            isMoving = true
-        } else {
-            let crossing = cubeModel.edgeCrossing(face: face, direction: facing, row: row, col: col)
-            let arrivalDir = crossing.facing.opposite
-            if let (tci, tfi) = cubeModel.faceletAt(face: crossing.face, row: crossing.row, col: crossing.col) {
-                let targetTile = cubeModel.cubies[tci].facelets[tfi]
-                guard targetTile.mazeTile.openings.contains(direction: arrivalDir) else { return }
-            } else {
-                return
-            }
-
-            moveFromFace = face
-            moveFromRow = row
-            moveFromCol = col
-            moveToFace = crossing.face
-            moveToRow = crossing.row
-            moveToCol = crossing.col
-            moveNewFacing = crossing.facing
-            moveProgress = 0
-            isMoving = true
-            NSLog("Edge crossing: %@ (%d,%d) -> %@ (%d,%d)", "\(face)", row, col, "\(crossing.face)", crossing.row, crossing.col)
-        }
+    mutating func tryMoveBackward(cubeModel: CubeModel) {
+        startMove(travel: facing.opposite, arrivalFacing: { $0.opposite }, cubeModel: cubeModel)
     }
 
     mutating func tryTurnLeft() {
         guard !isMoving && !isTurning else { return }
         turnFromFacing = facing
-        turnToFacing = Self.turnLeft(facing)
+        turnToFacing = facing.turned(steps: 1)
         turnProgress = 0
         isTurning = true
     }
@@ -123,85 +93,90 @@ struct PlayerState {
     mutating func tryTurnRight() {
         guard !isMoving && !isTurning else { return }
         turnFromFacing = facing
-        turnToFacing = Self.turnRight(facing)
+        turnToFacing = facing.turned(steps: -1)
         turnProgress = 0
         isTurning = true
     }
 
-    mutating func tryMoveBackward(cubeModel: CubeModel) {
+    // MARK: - Movement core
+
+    /// Attempt a one-hop move in `travel` direction. Within a tile the hop is between
+    /// path cells; off a tile edge it crosses a gateway to the neighbor's opposite
+    /// edge-middle cell. `arrivalFacing` maps the post-crossing travel heading to the
+    /// facing the player ends up with (identity for forward, opposite for backward).
+    private mutating func startMove(travel: Heading8, arrivalFacing: (Heading8) -> Heading8, cubeModel: CubeModel) {
         guard !isMoving && !isTurning else { return }
-        let backDir = facing.opposite
         guard let (ci, fi) = cubeModel.faceletAt(face: face, row: row, col: col) else { return }
-        let tile = cubeModel.cubies[ci].facelets[fi]
-        guard tile.mazeTile.openings.contains(direction: backDir) else { return }
+        let tile = cubeModel.cubies[ci].facelets[fi].mazeTile
 
-        let (dr, dc) = Self.deltaForDirection(backDir)
-        let newRow = row + dr
-        let newCol = col + dc
+        let (dr, dc) = travel.subDelta
+        let tr = subRow + dr, tc = subCol + dc
 
-        if newRow >= 0 && newRow < cubeModel.size && newCol >= 0 && newCol < cubeModel.size {
-            if let (tci, tfi) = cubeModel.faceletAt(face: face, row: newRow, col: newCol) {
-                let targetTile = cubeModel.cubies[tci].facelets[tfi]
-                guard targetTile.mazeTile.openings.contains(direction: backDir.opposite) else { return }
-            }
-
-            moveFromFace = face
-            moveFromRow = row
-            moveFromCol = col
-            moveToFace = face
-            moveToRow = newRow
-            moveToCol = newCol
-            moveNewFacing = facing
-            moveProgress = 0
-            isMoving = true
-        } else {
-            let crossing = cubeModel.edgeCrossing(face: face, direction: backDir, row: row, col: col)
-            let arrivalDir = crossing.facing.opposite
-            if let (tci, tfi) = cubeModel.faceletAt(face: crossing.face, row: crossing.row, col: crossing.col) {
-                let targetTile = cubeModel.cubies[tci].facelets[tfi]
-                guard targetTile.mazeTile.openings.contains(direction: arrivalDir) else { return }
-            } else {
-                return
-            }
-
-            moveFromFace = face
-            moveFromRow = row
-            moveFromCol = col
-            moveToFace = crossing.face
-            moveToRow = crossing.row
-            moveToCol = crossing.col
-            moveNewFacing = crossing.facing.opposite
-            moveProgress = 0
-            isMoving = true
+        if (0...2).contains(tr) && (0...2).contains(tc) {
+            // Within-tile hop — target must be a path cell. (Phase G will also reject a
+            // diagonal whose flanking cell is occupied by a prop.)
+            guard tile.isPathCell(tr, tc) else { return }
+            beginMove(toFace: face, toRow: row, toCol: col, toSub: (tr, tc), newFacing: facing)
+            return
         }
+
+        // Exiting the tile: only a cardinal move from that edge's middle cell, through
+        // an open gateway, may cross.
+        guard let dir = travel.cardinal else { return }
+        guard (subRow, subCol) == Self.edgeMiddle(dir) else { return }
+        guard tile.openings.contains(direction: dir) else { return }
+
+        let n = cubeModel.size
+        let (tdr, tdc) = Self.deltaForDirection(dir)
+        let nRow = row + tdr, nCol = col + tdc
+
+        let arrFace: CubeFace, arrRow: Int, arrCol: Int, arrDir: SurfaceDirection
+        if (0..<n).contains(nRow) && (0..<n).contains(nCol) {
+            arrFace = face; arrRow = nRow; arrCol = nCol; arrDir = dir
+        } else {
+            let cr = cubeModel.edgeCrossing(face: face, direction: dir, row: row, col: col)
+            arrFace = cr.face; arrRow = cr.row; arrCol = cr.col; arrDir = cr.facing
+        }
+
+        guard let (nci, nfi) = cubeModel.faceletAt(face: arrFace, row: arrRow, col: arrCol) else { return }
+        let arrTile = cubeModel.cubies[nci].facelets[nfi].mazeTile
+        let entryDir = arrDir.opposite
+        guard arrTile.openings.contains(direction: entryDir) else { return }
+
+        let crossHeading = Heading8.from(surfaceDirection: arrDir)
+        beginMove(toFace: arrFace, toRow: arrRow, toCol: arrCol,
+                  toSub: Self.edgeMiddle(entryDir), newFacing: arrivalFacing(crossHeading))
+    }
+
+    private mutating func beginMove(toFace: CubeFace, toRow: Int, toCol: Int, toSub: (Int, Int), newFacing: Heading8) {
+        moveFromFace = face; moveFromRow = row; moveFromCol = col
+        moveFromSubRow = subRow; moveFromSubCol = subCol
+        moveToFace = toFace; moveToRow = toRow; moveToCol = toCol
+        moveToSubRow = toSub.0; moveToSubCol = toSub.1
+        moveNewFacing = newFacing
+        moveProgress = 0
+        isMoving = true
     }
 
     // MARK: - Direction helpers
 
+    /// The middle sub-cell of an edge (the sub-cell a gateway opens through).
+    static func edgeMiddle(_ dir: SurfaceDirection) -> (Int, Int) {
+        switch dir {
+        case .north: return (0, 1)
+        case .south: return (2, 1)
+        case .east:  return (1, 2)
+        case .west:  return (1, 0)
+        }
+    }
+
+    /// Tile-grid step (row, col) for a surface direction.
     static func deltaForDirection(_ dir: SurfaceDirection) -> (Int, Int) {
         switch dir {
         case .north: return (-1, 0)
         case .south: return (1, 0)
         case .east:  return (0, 1)
         case .west:  return (0, -1)
-        }
-    }
-
-    static func turnLeft(_ dir: SurfaceDirection) -> SurfaceDirection {
-        switch dir {
-        case .north: return .east
-        case .east:  return .south
-        case .south: return .west
-        case .west:  return .north
-        }
-    }
-
-    static func turnRight(_ dir: SurfaceDirection) -> SurfaceDirection {
-        switch dir {
-        case .north: return .west
-        case .west:  return .south
-        case .south: return .east
-        case .east:  return .north
         }
     }
 }

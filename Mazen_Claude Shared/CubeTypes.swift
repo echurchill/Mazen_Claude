@@ -69,6 +69,71 @@ enum TileState: Int {
     case discovered
 }
 
+/// Eight-way facing within a tile (M10 Phase D). Ordered clockwise from north so a
+/// ±1 step is a 45° turn. subRow 0 = north, 2 = south; subCol 0 = west, 2 = east.
+enum Heading8: Int, CaseIterable {
+    case n = 0, ne, e, se, s, sw, w, nw
+
+    /// Sub-cell step in this direction, as (deltaSubRow, deltaSubCol).
+    var subDelta: (dr: Int, dc: Int) {
+        switch self {
+        case .n:  return (-1,  0)
+        case .ne: return (-1,  1)
+        case .e:  return ( 0,  1)
+        case .se: return ( 1,  1)
+        case .s:  return ( 1,  0)
+        case .sw: return ( 1, -1)
+        case .w:  return ( 0, -1)
+        case .nw: return (-1, -1)
+        }
+    }
+
+    var isCardinal: Bool { rawValue % 2 == 0 }
+
+    /// The 4-way SurfaceDirection for a cardinal heading (used for edge crossings);
+    /// nil for diagonals, which never cross a tile boundary.
+    var cardinal: SurfaceDirection? {
+        switch self {
+        case .n: return .north
+        case .e: return .east
+        case .s: return .south
+        case .w: return .west
+        default: return nil
+        }
+    }
+
+    /// Direction in the tile's local (tangent, bitangent) plane. North = -bitangent,
+    /// east = +tangent; diagonals are unit-length.
+    var tangentBitangent: (t: Float, b: Float) {
+        let s: Float = 0.7071068
+        switch self {
+        case .n:  return ( 0, -1)
+        case .ne: return ( s, -s)
+        case .e:  return ( 1,  0)
+        case .se: return ( s,  s)
+        case .s:  return ( 0,  1)
+        case .sw: return (-s,  s)
+        case .w:  return (-1,  0)
+        case .nw: return (-s, -s)
+        }
+    }
+
+    func turned(steps: Int) -> Heading8 {
+        Heading8(rawValue: (((rawValue + steps) % 8) + 8) % 8)!
+    }
+
+    var opposite: Heading8 { turned(steps: 4) }
+
+    static func from(surfaceDirection dir: SurfaceDirection) -> Heading8 {
+        switch dir {
+        case .north: return .n
+        case .east:  return .e
+        case .south: return .s
+        case .west:  return .w
+        }
+    }
+}
+
 struct DirectionMask: OptionSet {
     let rawValue: UInt8
 

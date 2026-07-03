@@ -198,11 +198,9 @@ class GameState {
                     player.col = newCol
 
                     let rotQ = simd_quatf(angle: sliceRotation.angle, axis: sliceRotation.axis == 0 ? SIMD3(1,0,0) : sliceRotation.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1))
-                    let tangent = player.face.tangent
-                    let bitangent = player.face.bitangent
-                    let oldDir = CameraState.directionToWorld(player.facing, face: player.face, tangent: tangent, bitangent: bitangent)
+                    let oldDir = CameraState.headingToWorld(player.facing, face: player.face)
                     let newDir = rotQ.act(oldDir)
-                    player.facing = worldToDirection(newDir, face: player.face, tangent: tangent, bitangent: bitangent)
+                    player.facing = CameraState.worldToHeading8(newDir, face: player.face)
                     break
                 }
             }
@@ -232,16 +230,6 @@ class GameState {
         case .negativeY: return (Int(pos.z), Int(pos.x))
         case .positiveZ: return (Int(pos.y), Int(pos.x))
         case .negativeZ: return (Int(pos.y), Int(n - pos.x))
-        }
-    }
-
-    private func worldToDirection(_ dir: SIMD3<Float>, face: CubeFace, tangent: SIMD3<Float>, bitangent: SIMD3<Float>) -> SurfaceDirection {
-        let dotT = dot(dir, tangent)
-        let dotB = dot(dir, bitangent)
-        if abs(dotT) > abs(dotB) {
-            return dotT > 0 ? .east : .west
-        } else {
-            return dotB > 0 ? .south : .north
         }
     }
 }
@@ -281,6 +269,15 @@ extension float4x4 {
             SIMD4(0, 1, 0, 0),
             SIMD4(0, 0, 1, 0),
             SIMD4(x, y, z, 1)
+        ))
+    }
+
+    static func scale(_ s: Float) -> float4x4 {
+        return float4x4(columns: (
+            SIMD4(s, 0, 0, 0),
+            SIMD4(0, s, 0, 0),
+            SIMD4(0, 0, s, 0),
+            SIMD4(0, 0, 0, 1)
         ))
     }
 

@@ -194,7 +194,7 @@ class TileMeshLibrary {
     /// drawn with its own material. UVs are continuous across the tile so textures
     /// tile seamlessly regardless of the split (M10 Phase C).
     private static func addFloorCells(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask, ws: WorldScale, path: Bool) {
-        let hs: Float = 0.48
+        let hs = ws.floorHalfSize
         let z = ws.floorY
         let cell = 2.0 * hs / 3.0
         let tile = MazeTile(openings: openings, styleSeed: 0)
