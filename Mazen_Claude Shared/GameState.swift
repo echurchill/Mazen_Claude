@@ -219,6 +219,19 @@ class GameState {
         onPlayerArrived()
     }
 
+    // MARK: - Interaction (M10 Phase G)
+
+    /// The interaction hook: act on any interactive props on the player's current tile.
+    /// For now only chests respond (toggle open ↔ closed). This is the dispatch point where
+    /// a lever would later trigger a slice rotation, a portal would load the M11 moon, etc.
+    func interact() {
+        guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
+        for pi in cubeModel.cubies[ci].facelets[fi].props.indices
+        where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .chest {
+            cubeModel.cubies[ci].facelets[fi].props[pi].state = 1 - cubeModel.cubies[ci].facelets[fi].props[pi].state
+        }
+    }
+
     // MARK: - Helpers
 
     private func closestFace(to direction: SIMD3<Float>) -> CubeFace {

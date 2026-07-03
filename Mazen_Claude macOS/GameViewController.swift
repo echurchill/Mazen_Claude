@@ -106,6 +106,8 @@ class GameViewController: NSViewController {
             gs.startSliceRotation(clockwise: true)
         case 14:      // E — rotate face counterclockwise
             gs.startSliceRotation(clockwise: false)
+        case 3:       // F — interact with a prop on the current tile
+            gs.interact()
         case 35:      // P — toggle auto-rotation
             gs.camera.orbitAutoRotate.toggle()
         case 4:       // H — toggle debug HUD

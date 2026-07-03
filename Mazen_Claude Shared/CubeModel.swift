@@ -68,6 +68,12 @@ class CubeModel {
                 cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 0, subCol: 0))
             }
         }
+        // On the plaza-centre tile: a landmark obelisk (SE corner, rises over the hedges)
+        // and an interactive chest (NE corner) — stand on the tile and press F to toggle it.
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: size / 2, col: size / 2) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 2, subCol: 2))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .chest, subRow: 0, subCol: 2))
+        }
     }
 
     private static func directionMask(_ dir: SurfaceDirection) -> DirectionMask {

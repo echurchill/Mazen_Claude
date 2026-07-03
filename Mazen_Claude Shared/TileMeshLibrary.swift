@@ -175,6 +175,14 @@ class TileMeshLibrary {
         Self.addTopiary(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.topiary.rawValue] = TileMesh(vertexOffset: 0, indexOffset: topiaryStart, indexCount: allIndices.count - topiaryStart)
 
+        let obeliskStart = allIndices.count
+        Self.addObelisk(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.obelisk.rawValue] = TileMesh(vertexOffset: 0, indexOffset: obeliskStart, indexCount: allIndices.count - obeliskStart)
+
+        let chestStart = allIndices.count
+        Self.addChest(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.chest.rawValue] = TileMesh(vertexOffset: 0, indexOffset: chestStart, indexCount: allIndices.count - chestStart)
+
         vertexBuffer = device.makeBuffer(
             bytes: allVerts,
             length: MemoryLayout<MazeVertexSwift>.stride * allVerts.count,
@@ -439,6 +447,79 @@ class TileMeshLibrary {
                 indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
             }
         }
+    }
+
+    /// A tall obelisk landmark — a slightly tapered square shaft capped with a pyramidion,
+    /// rising well above the hedges (~1.16 vs wall 0.24) so it reads across the maze. Thin
+    /// enough (~0.12 wide) to sit in a sub-cell. Wound CCW-outward with true face normals. (G3)
+    private static func addObelisk(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        let z0 = ws.floorY
+        let shaftTop: Float = 0.92
+        let tip: Float = 1.16
+        let baseH: Float = 0.062
+        let topH: Float = 0.044
+
+        func ring(_ h: Float, _ z: Float) -> [SIMD3<Float>] {
+            [SIMD3(-h, -h, z), SIMD3(h, -h, z), SIMD3(h, h, z), SIMD3(-h, h, z)]
+        }
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            let ao = 0.5 + 0.5 * max(0, min(1, (p.z - z0) / tip))
+            return MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
+        }
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            let n = normalize(cross(b - a, d - a))
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        func tri(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
+            let n = normalize(cross(b - a, c - a))
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n)])
+            indices.append(contentsOf: [base+0, base+1, base+2])
+        }
+
+        let b = ring(baseH, z0)
+        let t = ring(topH, shaftTop)
+        let apex = SIMD3<Float>(0, 0, tip)
+        for i in 0..<4 {
+            let j = (i + 1) % 4
+            quad(b[i], b[j], t[j], t[i])   // shaft side
+            tri(t[i], t[j], apex)          // pyramidion face
+        }
+    }
+
+    /// A chest — a simple box (4 sides + top) sitting on the floor. The open/closed look is
+    /// conveyed by the instance colour (SceneBuilder), so one mesh is enough. Placeholder for
+    /// the eventual imported model (e.g. a fire pit that lights). Wound CCW-outward. (G4)
+    private static func addChest(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        let z0 = ws.floorY
+        let hx: Float = 0.085, hy: Float = 0.06
+        let zt = z0 + 0.10
+
+        func vtx(_ p: SIMD3<Float>) -> MazeVertexSwift {
+            let ao = 0.55 + 0.45 * max(0, min(1, (p.z - z0) / (zt - z0)))
+            return MazeVertexSwift(position: p, normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0), aoFactor: ao)
+        }
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            let n = normalize(cross(b - a, d - a))
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [
+                MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0), aoFactor: vtx(a).aoFactor),
+                MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(0, 0), aoFactor: vtx(b).aoFactor),
+                MazeVertexSwift(position: c, normal: n, texCoord: SIMD2(0, 0), aoFactor: vtx(c).aoFactor),
+                MazeVertexSwift(position: d, normal: n, texCoord: SIMD2(0, 0), aoFactor: vtx(d).aoFactor),
+            ])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+
+        let b = [SIMD3<Float>(-hx, -hy, z0), SIMD3(hx, -hy, z0), SIMD3(hx, hy, z0), SIMD3(-hx, hy, z0)]
+        let t = [SIMD3<Float>(-hx, -hy, zt), SIMD3(hx, -hy, zt), SIMD3(hx, hy, zt), SIMD3(-hx, hy, zt)]
+        for i in 0..<4 {
+            let j = (i + 1) % 4
+            quad(b[i], b[j], t[j], t[i])   // sides
+        }
+        quad(t[0], t[1], t[2], t[3])       // top
     }
 
     // MARK: - Posts (M10 Phase B)

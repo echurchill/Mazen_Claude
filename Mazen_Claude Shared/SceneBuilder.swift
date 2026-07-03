@@ -200,7 +200,8 @@ final class SceneBuilder {
                             guard let mesh = tileMeshLib.propMesh(kind: prop.kind) else { continue }
                             let pm = matrix
                                 * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
-                            let color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
+                            var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
+                            if prop.kind == .chest && prop.state == 1 { color = SIMD4(0.98, 0.80, 0.30, 1.0) }  // opened / "lit"
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
                                 materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
