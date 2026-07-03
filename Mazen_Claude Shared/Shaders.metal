@@ -157,9 +157,11 @@ fragment float4 fragmentShader(
     float3 sunColor = float3(1.0, 0.95, 0.85);
     float3 skyAmbient = float3(0.35, 0.45, 0.65);
 
-    // Shadow mapping — only for solid geometry, not fog
+    // Shadow mapping — skip fog (4/5) and posts (8). Posts are thin markers embedded
+    // where walls meet, so receiving shadows makes their surface fight the wall depth
+    // in the shadow map (hatching); they still cast shadows via the shadow pass.
     float shadowFactor = 1.0;
-    if (in.materialID != 4 && in.materialID != 5) {
+    if (in.materialID != 4 && in.materialID != 5 && in.materialID != 8) {
         float4 lightClip = frame.lightViewProjectionMatrix * float4(in.worldPosition, 1.0);
         float3 lightNDC = lightClip.xyz;
         float2 shadowUV = lightNDC.xy * float2(0.5, -0.5) + 0.5;
