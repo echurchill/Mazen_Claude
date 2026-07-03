@@ -22,13 +22,15 @@ struct WorldScale {
     let cubeSize: Int
 
     // MARK: - Tile geometry & spacing
-    /// Distance between adjacent tile centers (historically tileSize 1.0 + gap 0.01).
-    /// The M10 gap-removal decision sets this to 1.0 here, in one place.
-    var cellSpacing: Float = 1.01
-    /// Full width of a tile's wall footprint.
+    /// Distance between adjacent tile centers. 1.0 (M10 decision #5 gap removal) so
+    /// adjacent floors meet seamlessly instead of showing a dark trench across plazas.
+    var cellSpacing: Float = 1.0
+    /// Full width of a tile's wall footprint (kept just under cellSpacing so adjacent
+    /// walls don't z-fight back-to-back; the small wall gap is internal/invisible).
     var tileMeshSize: Float = 0.98
-    /// Half-width of the floor quad (slightly inset from the walls).
-    var floorHalfSize: Float = 0.48
+    /// Half-width of the floor quad — fills the whole cell (cellSpacing/2) so adjacent
+    /// floors abut edge-to-edge with no seam.
+    var floorHalfSize: Float = 0.5
     var floorY: Float = 0.001
 
     /// Distance between adjacent 3×3 sub-cell centers, in a tile's local frame.
@@ -68,14 +70,16 @@ struct WorldScale {
     /// Closest / farthest the user may zoom the orbit camera. 5 / 15 at size 5.
     var orbitDistanceMin: Float { 1.0 * sizeF }
     var orbitDistanceMax: Float { 3.0 * sizeF }
-    /// Half-extent of the shadow map's orthographic frustum. 8 at size 5.
-    var shadowOrthoRadius: Float { 1.6 * sizeF }
-    /// Distance of the shadow-casting light from the cube center. 15 at size 5.
+    /// Half-extent of the shadow map's orthographic frustum. Covers the cube's
+    /// projected half-diagonal (~0.87·size) with margin.
+    var shadowOrthoRadius: Float { 1.1 * sizeF }
+    /// Distance of the shadow-casting light from the cube center.
     var lightDistance: Float { 3.0 * sizeF }
-    /// Shadow frustum near plane. 5 at size 5.
-    var shadowNearZ: Float { 1.0 * sizeF }
-    /// Shadow frustum far plane. 25 at size 5.
-    var shadowFarZ: Float { 5.0 * sizeF }
+    /// Shadow frustum near/far — hug the cube (center at lightDistance = 3·size, cube
+    /// half-diagonal ~0.87·size) so the depth range stays tight and the bias small in
+    /// world units. Loose ranges were the source of the M10-scale shadow acne.
+    var shadowNearZ: Float { 1.8 * sizeF }
+    var shadowFarZ: Float { 4.2 * sizeF }
 
     var orbitFOVRadians: Float { orbitFOVDegrees / 180.0 * .pi }
     var firstPersonFOVRadians: Float { firstPersonFOVDegrees / 180.0 * .pi }

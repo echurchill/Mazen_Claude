@@ -167,10 +167,10 @@ fragment float4 fragmentShader(
 
         if (shadowUV.x > 0.001 && shadowUV.x < 0.999 &&
             shadowUV.y > 0.001 && shadowUV.y < 0.999) {
-            float bias = max(0.003, 0.008 * (1.0 - dot(normal, lightDir)));
+            float bias = max(0.0008, 0.0025 * (1.0 - dot(normal, lightDir)));
 
             float shadow = 0.0;
-            float2 texelSize = float2(1.0 / 1024.0);
+            float2 texelSize = float2(1.0 / 2048.0);
             for (int x = -1; x <= 1; x++) {
                 for (int y = -1; y <= 1; y++) {
                     float2 offset = float2(float(x), float(y)) * texelSize;
