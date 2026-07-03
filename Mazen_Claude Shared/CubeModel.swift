@@ -316,24 +316,31 @@ class CubeModel {
             (.negativeY, .east),  (.negativeY, .west),
         ]
 
+        // Scale the number of face-to-face bridges with edge length so larger cubes
+        // stay comparably connected. max(1, n/3) keeps n<=5 at the historical single
+        // bridge per edge (and the identical RNG sequence) while a 7- or 9-face gets
+        // 2-3. Duplicate positions just collapse via the idempotent openings.insert.
+        let bridgesPerEdge = max(1, n / 3)
         for (face, dir) in edges {
-            let pos = Int(rng.next() % UInt64(n))
-            let departRow: Int, departCol: Int
-            switch dir {
-            case .north: departRow = 0;     departCol = pos
-            case .south: departRow = n - 1; departCol = pos
-            case .east:  departRow = pos;   departCol = n - 1
-            case .west:  departRow = pos;   departCol = 0
-            }
+            for _ in 0..<bridgesPerEdge {
+                let pos = Int(rng.next() % UInt64(n))
+                let departRow: Int, departCol: Int
+                switch dir {
+                case .north: departRow = 0;     departCol = pos
+                case .south: departRow = n - 1; departCol = pos
+                case .east:  departRow = pos;   departCol = n - 1
+                case .west:  departRow = pos;   departCol = 0
+                }
 
-            let crossing = edgeCrossing(face: face, direction: dir, row: departRow, col: departCol)
-            let arrivalDir = crossing.facing.opposite
+                let crossing = edgeCrossing(face: face, direction: dir, row: departRow, col: departCol)
+                let arrivalDir = crossing.facing.opposite
 
-            if let (ci, fi) = findFaceletIndices(face: face, row: departRow, col: departCol) {
-                cubies[ci].facelets[fi].mazeTile.openings.insert(mask(for: dir))
-            }
-            if let (ci, fi) = findFaceletIndices(face: crossing.face, row: crossing.row, col: crossing.col) {
-                cubies[ci].facelets[fi].mazeTile.openings.insert(mask(for: arrivalDir))
+                if let (ci, fi) = findFaceletIndices(face: face, row: departRow, col: departCol) {
+                    cubies[ci].facelets[fi].mazeTile.openings.insert(mask(for: dir))
+                }
+                if let (ci, fi) = findFaceletIndices(face: crossing.face, row: crossing.row, col: crossing.col) {
+                    cubies[ci].facelets[fi].mazeTile.openings.insert(mask(for: arrivalDir))
+                }
             }
         }
     }

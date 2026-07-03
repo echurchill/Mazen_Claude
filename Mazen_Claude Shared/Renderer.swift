@@ -19,6 +19,9 @@ struct DrawCall {
 
 class Renderer: NSObject, MTKViewDelegate {
 
+    /// Cube size the app launches with. The N key cycles odd sizes (3→5→7→9) live.
+    static let initialCubeSize = 7
+
     public let device: MTLDevice
 
 #if !targetEnvironment(simulator)
@@ -147,9 +150,10 @@ class Renderer: NSObject, MTKViewDelegate {
 
         self.shadowPipelineState = try! compiler.makeRenderPipelineState(descriptor: shadowPipeDesc)
 
-        // Shadow map texture (1024x1024)
+        // Shadow map texture (2048x2048 — keeps texel density up as the ortho volume
+        // grows with cube size; a 9-face jamb/wall is only a few texels at 1024)
         let shadowDesc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .depth32Float, width: 1024, height: 1024, mipmapped: false)
+            pixelFormat: .depth32Float, width: 2048, height: 2048, mipmapped: false)
         shadowDesc.storageMode = .private
         shadowDesc.usage = [.renderTarget, .shaderRead]
         self.shadowMapTexture = device.makeTexture(descriptor: shadowDesc)!
@@ -172,7 +176,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.depthStateAlways = device.makeDepthStencilState(descriptor: depthDescAlways)!
 
         // Game state (owns the per-world scale) — mark some tiles discovered for visual testing
-        self.gameState = GameState(size: 5)
+        self.gameState = GameState(size: Self.initialCubeSize)
         Self.setupInitialDiscovery(gameState: self.gameState)
 
         // Tile mesh library (geometry baked from the world scale)

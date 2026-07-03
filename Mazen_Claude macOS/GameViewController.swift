@@ -111,10 +111,10 @@ class GameViewController: NSViewController {
         case 4:       // H — toggle debug HUD
             showDebugHUD.toggle()
             debugLabel?.isHidden = !showDebugHUD
-        case 45:      // N — cycle cube size (3→4→5→3)
-            let current = gs.cubeModel.size
-            let next = current >= 5 ? 3 : current + 1
-            renderer.resetGame(size: next)
+        case 45:      // N — cycle cube size, odd only (3→5→7→9→3)
+            let sizes = [3, 5, 7, 9]
+            let idx = sizes.firstIndex(of: gs.cubeModel.size) ?? 0
+            renderer.resetGame(size: sizes[(idx + 1) % sizes.count])
         default:
             break
         }
