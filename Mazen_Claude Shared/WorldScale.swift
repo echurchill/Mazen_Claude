@@ -25,9 +25,11 @@ struct WorldScale {
     /// Distance between adjacent tile centers. 1.0 (M10 decision #5 gap removal) so
     /// adjacent floors meet seamlessly instead of showing a dark trench across plazas.
     var cellSpacing: Float = 1.0
-    /// Full width of a tile's wall footprint (kept just under cellSpacing so adjacent
-    /// walls don't z-fight back-to-back; the small wall gap is internal/invisible).
-    var tileMeshSize: Float = 0.98
+    /// Full width of a tile's wall footprint. Equal to cellSpacing so collinear wall
+    /// segments meet edge-to-edge (continuous hedge, no joint crack). They don't
+    /// z-fight: outer faces are adjacent (not overlapping) and the end caps at the
+    /// shared boundary sit back-to-back with opposite normals (one is always culled).
+    var tileMeshSize: Float = 1.0
     /// Half-width of the floor quad — fills the whole cell (cellSpacing/2) so adjacent
     /// floors abut edge-to-edge with no seam.
     var floorHalfSize: Float = 0.5

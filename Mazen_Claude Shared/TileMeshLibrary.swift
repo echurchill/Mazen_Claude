@@ -379,22 +379,10 @@ class TileMeshLibrary {
         let wt = ws.wallThickness
         let z0 = ws.floorY
 
-        // Corner posts: a slim light-green cap at each corner joint. Kept *narrower*
-        // than the wall and centered within its thickness so no vertical face is
-        // coplanar with a wall face (that coplanarity caused 45°-grazing z-fighting at
-        // wall joints); it pokes above the hedge so the cap still reads. Skipped where a
-        // corner is interior to a merged room (both adjoining edges open).
-        let cornerH = wt * 0.4
-        let cornerTop = ws.wallHeight + wt   // above the hedge crown
-        let cornerCenter = hs - wt / 2.0     // centered in the wall thickness
-        for sx: Float in [-1, 1] {
-            for sy: Float in [-1, 1] {
-                let horiz: SurfaceDirection = sx > 0 ? .east : .west
-                let vert: SurfaceDirection = sy > 0 ? .south : .north
-                if tile.edgeType(horiz) == .open && tile.edgeType(vert) == .open { continue }
-                addPost(center: SIMD2(sx * cornerCenter, sy * cornerCenter), halfSize: cornerH, z0: z0, zTop: cornerTop, to: &verts, indices: &indices)
-            }
-        }
+        // No corner posts: with walls now filling the cell (tileMeshSize == cellSpacing)
+        // the hedge is continuous at corners, so there is no joint crack to cover. The
+        // old corner posts only masked that crack and, once recessed to avoid coplanar
+        // z-fighting, were invisible geometry — dropped entirely.
 
         // Jamb posts: bold (1.5× wall thickness) and rising above the hedges — they
         // frame each gateway prominently.
