@@ -38,6 +38,14 @@ final class SceneBuilder {
     /// Light green for corner / jamb posts (M10 Phase B), rendered via materialID 8.
     static let postColor = SIMD4<Float>(0.55, 0.82, 0.42, 1.0)
 
+    /// Per-kind prop colours (M10 Phase G). Props render via materialID 10 — the shader's
+    /// generic lit + shadow-receiving branch — so the look is entirely this base colour.
+    static let propColors: [PropKind: SIMD4<Float>] = [
+        .topiary: SIMD4(0.28, 0.52, 0.26, 1.0),  // deep hedge green
+        .obelisk: SIMD4(0.62, 0.60, 0.55, 1.0),  // pale stone
+        .chest:   SIMD4(0.55, 0.36, 0.18, 1.0),  // wood
+    ]
+
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
     private var opaqueFogTiles: [TileEntry] = []
     private var dissolveTiles: [TileEntry] = []
@@ -46,6 +54,7 @@ final class SceneBuilder {
     private var mazePathFloorTiles: [UInt8: [TileEntry]] = [:]
     private var mazeWallTiles: [UInt8: [TileEntry]] = [:]
     private var mazePostTiles: [UInt8: [TileEntry]] = [:]
+    private var mazePropTiles: [UInt8: [TileEntry]] = [:]
 
     func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer) -> SceneDrawData {
         let model = gameState.cubeModel
@@ -59,6 +68,7 @@ final class SceneBuilder {
         for key in mazePathFloorTiles.keys { mazePathFloorTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazeWallTiles.keys { mazeWallTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazePostTiles.keys { mazePostTiles[key]?.removeAll(keepingCapacity: true) }
+        for key in mazePropTiles.keys { mazePropTiles[key]?.removeAll(keepingCapacity: true) }
 
         // Precompute slice rotation matrix if active
         var sliceAnimMatrix: float4x4?
@@ -181,6 +191,21 @@ final class SceneBuilder {
                             mazePostTiles[cfg, default: []].append(TileEntry(instance: postInst, mesh: pm))
                         }
                     }
+
+                    // Props (M10 Phase G) — on revealed tiles only. `matrix` already
+                    // carries the slice animation, so props ride rotations for free.
+                    if facelet.tileState == .discovered {
+                        let step = model.worldScale.subCellStep
+                        for prop in facelet.props {
+                            guard let mesh = tileMeshLib.propMesh(kind: prop.kind) else { continue }
+                            let pm = matrix
+                                * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
+                            let color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
+                            let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
+                                materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                            mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
+                        }
+                    }
                 }
             }
         }
@@ -290,6 +315,23 @@ final class SceneBuilder {
 
         // Opaque corner / jamb posts (light-green material)
         for (_, entries) in mazePostTiles {
+            guard !entries.isEmpty else { continue }
+            let mesh = entries[0].mesh
+            let startIdx = idx
+            for entry in entries {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: entries.count
+            ))
+        }
+
+        // Opaque props (M10 Phase G) — solid-colour, cast + receive shadows
+        for (_, entries) in mazePropTiles {
             guard !entries.isEmpty else { continue }
             let mesh = entries[0].mesh
             let startIdx = idx

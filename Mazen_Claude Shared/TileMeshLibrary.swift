@@ -18,6 +18,7 @@ class TileMeshLibrary {
     private var pathFloorMeshes: [UInt8: TileMesh] = [:]  // path-cross sub-cells (paved)
     private var wallMeshes: [UInt8: TileMesh] = [:]
     private var postMeshes: [UInt8: TileMesh] = [:]
+    private var propMeshes: [UInt8: TileMesh] = [:]  // keyed by PropKind.rawValue (M10 Phase G)
 
     init(device: MTLDevice, worldScale ws: WorldScale) {
         var allVerts: [MazeVertexSwift] = []
@@ -168,6 +169,12 @@ class TileMeshLibrary {
             }
         }
 
+        // Props (M10 Phase G) — solid-colour meshes; SceneBuilder tints each via the
+        // instance base colour, so one mesh per kind is enough.
+        let topiaryStart = allIndices.count
+        Self.addTopiary(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.topiary.rawValue] = TileMesh(vertexOffset: 0, indexOffset: topiaryStart, indexCount: allIndices.count - topiaryStart)
+
         vertexBuffer = device.makeBuffer(
             bytes: allVerts,
             length: MemoryLayout<MazeVertexSwift>.stride * allVerts.count,
@@ -198,6 +205,10 @@ class TileMeshLibrary {
 
     func postMesh(configKey: UInt8) -> TileMesh? {
         return postMeshes[configKey]
+    }
+
+    func propMesh(kind: PropKind) -> TileMesh? {
+        return propMeshes[kind.rawValue]
     }
 
     /// The path-cross sub-cells (paved). `floorMesh` returns the propSpace remainder.
@@ -392,6 +403,42 @@ class TileMeshLibrary {
         quad(SIMD3(inner1.x, inner1.y, z0), SIMD3(outer1.x, outer1.y, z0),
              SIMD3(outer1.x, outer1.y, z1), SIMD3(inner1.x, inner1.y, z1), capN1,
              SIMD2(0, 0), SIMD2(capU, 0), SIMD2(capU, wallV), SIMD2(0, wallV))
+    }
+
+    // MARK: - Props (M10 Phase G)
+
+    /// A hedge-sculpture topiary: a slightly squashed ball resting on the floor, sized to
+    /// sit inside one 3×3 sub-cell (~0.33 wide) with margin. Wound CCW-outward (front-face
+    /// culled) like the walls/posts; single-colour, tinted per-instance by SceneBuilder.
+    private static func addTopiary(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        let rXY: Float = 0.11
+        let rZ: Float = 0.12
+        let cz = ws.floorY + rZ          // rest the ball on the floor
+        let nLon = 8, nLat = 6
+
+        func sph(_ theta: Float, _ phi: Float) -> SIMD3<Float> {
+            SIMD3(rXY * sinf(theta) * cosf(phi), rXY * sinf(theta) * sinf(phi), cz + rZ * cosf(theta))
+        }
+        func vtx(_ p: SIMD3<Float>) -> MazeVertexSwift {
+            // Ellipsoid gradient → outward normal.
+            let n = normalize(SIMD3(p.x / (rXY * rXY), p.y / (rXY * rXY), (p.z - cz) / (rZ * rZ)))
+            let ao = 0.55 + 0.45 * max(0, min(1, (p.z - ws.floorY) / (2 * rZ)))  // darker at the base
+            return MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
+        }
+
+        for lat in 0..<nLat {
+            let t0 = Float.pi * Float(lat) / Float(nLat)
+            let t1 = Float.pi * Float(lat + 1) / Float(nLat)
+            for lon in 0..<nLon {
+                let p0 = 2 * Float.pi * Float(lon) / Float(nLon)
+                let p1 = 2 * Float.pi * Float(lon + 1) / Float(nLon)
+                // CCW from outside: lower-left → lower-right → upper-right → upper-left.
+                let a = sph(t1, p0), b = sph(t1, p1), c = sph(t0, p1), d = sph(t0, p0)
+                let base = UInt16(verts.count)
+                verts.append(contentsOf: [vtx(a), vtx(b), vtx(c), vtx(d)])
+                indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            }
+        }
     }
 
     // MARK: - Posts (M10 Phase B)

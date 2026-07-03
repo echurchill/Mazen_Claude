@@ -226,6 +226,42 @@ struct MazeTile {
     }
 }
 
+/// A placed object living on a tile's propSpace (M10 Phase G). Anchored to its facelet,
+/// so slice rotations carry it exactly like the tile.
+enum PropKind: UInt8 {
+    case topiary   // sub-cell decorative hedge sculpture
+    case obelisk   // tall landmark, visible over the hedges (G3)
+    case chest     // interactive (G4)
+}
+
+/// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.
+/// Sub-cell corner props need no collision — the player only walks the path cross.
+struct Prop {
+    var kind: PropKind
+    /// Sub-cell it stands on (subRow 0 = north … 2 = south, subCol 0 = west … 2 = east).
+    var subRow: Int
+    var subCol: Int
+    /// Facing within the tile — matters only for asymmetric props (a chest's front).
+    var facing: Heading8 = .n
+    /// Free-form per-prop state (e.g. chest open = 1 / closed = 0).
+    var state: Int = 0
+
+    /// Rotate the prop's placement to match a slice rotation, in the same sense as
+    /// `DirectionMask.rotated` (one quarter-turn = local +90°, N→E). Keeps the prop glued
+    /// to the tile through finalization — the same treatment `openings` and the player
+    /// sub-cell get.
+    mutating func rotate(quarterTurns: Int) {
+        let turns = ((quarterTurns % 4) + 4) % 4
+        for _ in 0..<turns {
+            // R(+90°) on the offset-from-center: (dc, dr) → (−dr, dc).
+            let dc = subCol - 1, dr = subRow - 1
+            subCol = -dr + 1
+            subRow = dc + 1
+        }
+        facing = facing.turned(steps: 2 * turns)  // 90° = two 45° Heading8 steps
+    }
+}
+
 struct MazeFacelet {
     var id: FaceletID
     var cubieID: CubieID
@@ -233,6 +269,8 @@ struct MazeFacelet {
     var mazeTile: MazeTile
     var tileState: TileState
     var discoveryAmount: Float
+    /// Props standing on this tile (M10 Phase G). Empty for most tiles.
+    var props: [Prop] = []
 }
 
 struct Cubie {

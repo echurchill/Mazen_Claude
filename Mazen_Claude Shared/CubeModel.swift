@@ -25,6 +25,7 @@ class CubeModel {
         addEdgeBridges()
         rebuildProjection()
         stampDemoRoom()
+        stampDemoProps()
     }
 
     // MARK: - Rooms (M10 Phase F)
@@ -50,6 +51,21 @@ class CubeModel {
             for c in left..<(left + width) {
                 if c + 1 < left + width { open(r, c, .east);  open(r, c + 1, .west) }
                 if r + 1 < top + height { open(r, c, .south); open(r + 1, c, .north) }
+            }
+        }
+    }
+
+    /// Place a hedge-sculpture topiary in the NW corner sub-cell of each start-plaza tile
+    /// so Phase G's prop pipeline is visible — and rides slice rotations (the plaza is on
+    /// the start face, so Q/E carries the topiaries around). (M10 Phase G)
+    private func stampDemoProps() {
+        let h = min(3, size), w = min(3, size)
+        let top = max(0, size / 2 - h / 2)
+        let left = max(0, size / 2 - w / 2)
+        for r in top..<(top + h) {
+            for c in left..<(left + w) {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 0, subCol: 0))
             }
         }
     }
@@ -304,6 +320,10 @@ class CubeModel {
                     cubies[i].facelets[fi].mazeTile.openEdges = cubies[i].facelets[fi].mazeTile.openEdges.rotated(quarterTurns: quarterTurns)
                     // Keep the floor texture glued to the tile through finalization.
                     cubies[i].facelets[fi].mazeTile.uvTurns = (cubies[i].facelets[fi].mazeTile.uvTurns + quarterTurns) % 4
+                    // Carry any props around with the tile.
+                    for pi in cubies[i].facelets[fi].props.indices {
+                        cubies[i].facelets[fi].props[pi].rotate(quarterTurns: quarterTurns)
+                    }
                 }
             }
 
