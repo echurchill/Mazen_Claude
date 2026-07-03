@@ -99,9 +99,27 @@ struct DirectionMask: OptionSet {
 
 // MARK: - Data structures
 
+/// How a tile edge is realized geometrically (M10 Phase B).
+///  - `wall`: a full-height solid wall slab.
+///  - `gateway`: a wall with a centered gap (two stubs) — a passable opening framed
+///     by jamb posts. Every ordinary maze passage is a gateway.
+///  - `open`: no geometry at all — reserved for merged multi-tile rooms (Phase F).
+///
+/// Through Phase B, an edge's type is derived from `MazeTile.openings` (gateway where
+/// the passage is open, wall where closed); `open` is not produced until rooms arrive,
+/// at which point `edges` becomes stored state and `openings` a computed shim.
+enum EdgeType: UInt8 {
+    case wall, gateway, open
+}
+
 struct MazeTile {
     var openings: DirectionMask
     var styleSeed: UInt32
+
+    /// Geometric type of one edge, derived from connectivity (Phase B).
+    func edgeType(_ dir: SurfaceDirection) -> EdgeType {
+        openings.contains(direction: dir) ? .gateway : .wall
+    }
 }
 
 struct MazeFacelet {

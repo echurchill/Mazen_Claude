@@ -35,12 +35,16 @@ final class SceneBuilder {
         .negativeZ: SIMD4(0.75, 0.85, 0.80, 1.0),
     ]
 
+    /// Light green for corner / jamb posts (M10 Phase B), rendered via materialID 8.
+    static let postColor = SIMD4<Float>(0.55, 0.82, 0.42, 1.0)
+
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
     private var opaqueFogTiles: [TileEntry] = []
     private var dissolveTiles: [TileEntry] = []
     private var frameTiles: [TileEntry] = []
     private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
     private var mazeWallTiles: [UInt8: [TileEntry]] = [:]
+    private var mazePostTiles: [UInt8: [TileEntry]] = [:]
 
     func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer) -> SceneDrawData {
         let model = gameState.cubeModel
@@ -51,6 +55,7 @@ final class SceneBuilder {
         frameTiles.removeAll(keepingCapacity: true)
         for key in mazeFloorTiles.keys { mazeFloorTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazeWallTiles.keys { mazeWallTiles[key]?.removeAll(keepingCapacity: true) }
+        for key in mazePostTiles.keys { mazePostTiles[key]?.removeAll(keepingCapacity: true) }
 
         // Precompute slice rotation matrix if active
         var sliceAnimMatrix: float4x4?
@@ -115,6 +120,12 @@ final class SceneBuilder {
                         if let wm = tileMeshLib.wallMesh(for: openings) {
                             mazeWallTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: wm))
                         }
+                        if let pm = tileMeshLib.postMesh(for: openings) {
+                            let postInst = InstanceDataSwift(modelMatrix: matrix, baseColor: Self.postColor,
+                                materialID: 8, tileID: UInt32(facelet.id.rawValue),
+                                discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
+                            mazePostTiles[key, default: []].append(TileEntry(instance: postInst, mesh: pm))
+                        }
 
                         let fogInst = InstanceDataSwift(
                             modelMatrix: matrix,
@@ -143,6 +154,12 @@ final class SceneBuilder {
                         mazeFloorTiles[key, default: []].append(TileEntry(instance: inst, mesh: tileMeshLib.floorMesh(for: openings)))
                         if let wm = tileMeshLib.wallMesh(for: openings) {
                             mazeWallTiles[key, default: []].append(TileEntry(instance: inst, mesh: wm))
+                        }
+                        if let pm = tileMeshLib.postMesh(for: openings) {
+                            let postInst = InstanceDataSwift(modelMatrix: matrix, baseColor: Self.postColor,
+                                materialID: 8, tileID: UInt32(facelet.id.rawValue),
+                                discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
+                            mazePostTiles[key, default: []].append(TileEntry(instance: postInst, mesh: pm))
                         }
                     }
                 }
@@ -232,6 +249,23 @@ final class SceneBuilder {
             ))
         }
         let wallRange = wallDrawCallStart..<opaqueDrawCalls.count
+
+        // Opaque corner / jamb posts (light-green material)
+        for (_, entries) in mazePostTiles {
+            guard !entries.isEmpty else { continue }
+            let mesh = entries[0].mesh
+            let startIdx = idx
+            for entry in entries {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: entries.count
+            ))
+        }
 
         // Opaque fog base layer + player marker
         if !opaqueFogTiles.isEmpty {

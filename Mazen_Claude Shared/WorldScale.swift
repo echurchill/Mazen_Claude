@@ -35,6 +35,9 @@ struct WorldScale {
     // as tall hedges around a much larger floor. (Anchored to eyeHeight ≈ 1.7m.)
     var wallHeight: Float = 0.24
     var wallThickness: Float = 0.07
+    /// Width of a gateway's centered gap as a fraction of the edge (M10 Phase B).
+    /// One-third aligns the gap with the middle sub-cell of the Phase C 3×3 grid.
+    var gatewayGapFraction: Float = 1.0 / 3.0
 
     // MARK: - Camera
     var orbitFOVDegrees: Float = 70.0

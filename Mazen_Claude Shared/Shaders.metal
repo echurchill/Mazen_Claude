@@ -295,6 +295,10 @@ fragment float4 fragmentShader(
         float3 halfVec = normalize(lightDir + viewDir);
         float spec = pow(max(dot(normal, halfVec), 0.0), 48.0);
         lighting = skyAmbient * 0.2 + sunColor * 0.3 * halfLambert * shadowFactor + float3(spec * 0.25);
+    } else if (in.materialID == 8) {
+        // Corner / jamb posts — flat light green, lit and shadowed (M10 Phase B)
+        color = in.color.rgb;
+        lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;

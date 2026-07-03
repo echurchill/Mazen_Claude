@@ -16,6 +16,7 @@ class TileMeshLibrary {
     let frameMesh: TileMesh
     private var floorMeshes: [UInt8: TileMesh] = [:]
     private var wallMeshes: [UInt8: TileMesh] = [:]
+    private var postMeshes: [UInt8: TileMesh] = [:]
 
     init(device: MTLDevice, worldScale ws: WorldScale) {
         var allVerts: [MazeVertexSwift] = []
@@ -129,22 +130,21 @@ class TileMeshLibrary {
             let fCount = allIndices.count - fStart
             floorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: fStart, indexCount: fCount)
 
+            let tile = MazeTile(openings: openings, styleSeed: 0)
             let wStart = allIndices.count
-            if !openings.contains(.north) {
-                Self.addWall(edge: .north, to: &allVerts, indices: &allIndices, ws: ws)
-            }
-            if !openings.contains(.east) {
-                Self.addWall(edge: .east, to: &allVerts, indices: &allIndices, ws: ws)
-            }
-            if !openings.contains(.south) {
-                Self.addWall(edge: .south, to: &allVerts, indices: &allIndices, ws: ws)
-            }
-            if !openings.contains(.west) {
-                Self.addWall(edge: .west, to: &allVerts, indices: &allIndices, ws: ws)
+            for dir in SurfaceDirection.allCases {
+                Self.addEdgeWall(edge: dir, type: tile.edgeType(dir), to: &allVerts, indices: &allIndices, ws: ws)
             }
             let wCount = allIndices.count - wStart
             if wCount > 0 {
                 wallMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: wStart, indexCount: wCount)
+            }
+
+            let pStart = allIndices.count
+            Self.addPosts(openings: openings, to: &allVerts, indices: &allIndices, ws: ws)
+            let pCount = allIndices.count - pStart
+            if pCount > 0 {
+                postMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: pStart, indexCount: pCount)
             }
         }
 
@@ -169,6 +169,10 @@ class TileMeshLibrary {
 
     func wallMesh(for openings: DirectionMask) -> TileMesh? {
         return wallMeshes[openings.rawValue & 0x0F]
+    }
+
+    func postMesh(for openings: DirectionMask) -> TileMesh? {
+        return postMeshes[openings.rawValue & 0x0F]
     }
 
     // MARK: - Geometry builders
@@ -199,7 +203,22 @@ class TileMeshLibrary {
         indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
     }
 
-    private static func addWall(edge: SurfaceDirection, to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    /// Build one tile edge as a wall, a gateway (two stubs framing a centered gap), or
+    /// nothing (`open`). Dispatches to `addWall` with the appropriate sub-span(s).
+    private static func addEdgeWall(edge: SurfaceDirection, type: EdgeType, to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        switch type {
+        case .wall:
+            addWall(edge: edge, span: (0, 1), to: &verts, indices: &indices, ws: ws)
+        case .gateway:
+            let stub = (1.0 - ws.gatewayGapFraction) / 2.0
+            addWall(edge: edge, span: (0, stub), to: &verts, indices: &indices, ws: ws)
+            addWall(edge: edge, span: (1 - stub, 1), to: &verts, indices: &indices, ws: ws)
+        case .open:
+            break
+        }
+    }
+
+    private static func addWall(edge: SurfaceDirection, span: (Float, Float), to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
         let hs = ws.tileMeshSize / 2.0
         let wt = ws.wallThickness
         let z0 = ws.floorY
@@ -236,6 +255,11 @@ class TileMeshLibrary {
             inN = SIMD3(1, 0, 0)
         }
 
+        // Restrict the wall to a sub-span of the edge (gateway stubs use two of these).
+        let lerp: (SIMD2<Float>, SIMD2<Float>, Float) -> SIMD2<Float> = { a, b, t in a + (b - a) * t }
+        (inner0, inner1) = (lerp(inner0, inner1, span.0), lerp(inner0, inner1, span.1))
+        (outer0, outer1) = (lerp(outer0, outer1, span.0), lerp(outer0, outer1, span.1))
+
         let outN = -inN
         let aoBottom: Float = 0.55
         let aoTop: Float = 1.0
@@ -254,7 +278,7 @@ class TileMeshLibrary {
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
 
-        let wallU = ws.tileMeshSize * ws.uvScale
+        let wallU = ws.tileMeshSize * ws.uvScale * (span.1 - span.0)
         let wallV = (z1 - z0) * ws.uvScale
         let capU = wt * ws.uvScale
 
@@ -308,5 +332,72 @@ class TileMeshLibrary {
         quad(SIMD3(inner1.x, inner1.y, z0), SIMD3(outer1.x, outer1.y, z0),
              SIMD3(outer1.x, outer1.y, z1), SIMD3(inner1.x, inner1.y, z1), capN1,
              SIMD2(0, 0), SIMD2(capU, 0), SIMD2(capU, wallV), SIMD2(0, wallV))
+    }
+
+    // MARK: - Posts (M10 Phase B)
+
+    /// Corner posts at all four tile corners plus jamb posts flanking each gateway gap.
+    /// These are emitted with a distinct material (light green) by the scene builder.
+    private static func addPosts(openings: DirectionMask, to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        let hs = ws.tileMeshSize / 2.0
+        let wt = ws.wallThickness
+        let z0 = ws.floorY
+
+        // Corner posts: slim (wall thickness) and capped level with the hedge — subtle
+        // light-green markers at the corner joints rather than towering pillars.
+        let cornerH = wt / 2.0
+        let cornerTop = ws.wallHeight
+        let cornerInset = hs - cornerH
+        for sx: Float in [-1, 1] {
+            for sy: Float in [-1, 1] {
+                addPost(center: SIMD2(sx * cornerInset, sy * cornerInset), halfSize: cornerH, z0: z0, zTop: cornerTop, to: &verts, indices: &indices)
+            }
+        }
+
+        // Jamb posts: bold (1.5× wall thickness) and rising above the hedges — they
+        // frame each gateway prominently.
+        let jambH = wt * 1.5 / 2.0
+        let jambTop = ws.wallHeight * 1.15
+        let tile = MazeTile(openings: openings, styleSeed: 0)
+        let stub = (1.0 - ws.gatewayGapFraction) / 2.0
+        for dir in SurfaceDirection.allCases where tile.edgeType(dir) == .gateway {
+            let (c0, c1) = wallCenterline(edge: dir, hs: hs, wt: wt)
+            for t in [stub, 1 - stub] {
+                addPost(center: c0 + (c1 - c0) * t, halfSize: jambH, z0: z0, zTop: jambTop, to: &verts, indices: &indices)
+            }
+        }
+    }
+
+    /// Endpoints of an edge's wall centerline (t=0 → t=1), used to place jamb posts.
+    private static func wallCenterline(edge: SurfaceDirection, hs: Float, wt: Float) -> (SIMD2<Float>, SIMD2<Float>) {
+        switch edge {
+        case .north: return (SIMD2( hs, -hs + wt / 2), SIMD2(-hs, -hs + wt / 2))
+        case .south: return (SIMD2(-hs,  hs - wt / 2), SIMD2( hs,  hs - wt / 2))
+        case .east:  return (SIMD2( hs - wt / 2,  hs), SIMD2( hs - wt / 2, -hs))
+        case .west:  return (SIMD2(-hs + wt / 2, -hs), SIMD2(-hs + wt / 2,  hs))
+        }
+    }
+
+    /// A vertical box post (4 sides + top), wound CCW-outward for back-face culling.
+    private static func addPost(center c: SIMD2<Float>, halfSize h: Float, z0: Float, zTop: Float,
+                                to verts: inout [MazeVertexSwift], indices: inout [UInt16]) {
+        let x0 = c.x - h, x1 = c.x + h, y0 = c.y - h, y1 = c.y + h
+
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ cc: SIMD3<Float>, _ d: SIMD3<Float>, _ n: SIMD3<Float>) {
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [
+                MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0), aoFactor: 0.85),
+                MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(1, 0), aoFactor: 0.85),
+                MazeVertexSwift(position: cc, normal: n, texCoord: SIMD2(1, 1), aoFactor: 1.0),
+                MazeVertexSwift(position: d, normal: n, texCoord: SIMD2(0, 1), aoFactor: 1.0),
+            ])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+
+        quad(SIMD3(x1, y0, z0), SIMD3(x1, y1, z0), SIMD3(x1, y1, zTop), SIMD3(x1, y0, zTop), SIMD3( 1, 0, 0)) // +X
+        quad(SIMD3(x0, y1, z0), SIMD3(x0, y0, z0), SIMD3(x0, y0, zTop), SIMD3(x0, y1, zTop), SIMD3(-1, 0, 0)) // -X
+        quad(SIMD3(x1, y1, z0), SIMD3(x0, y1, z0), SIMD3(x0, y1, zTop), SIMD3(x1, y1, zTop), SIMD3( 0, 1, 0)) // +Y
+        quad(SIMD3(x0, y0, z0), SIMD3(x1, y0, z0), SIMD3(x1, y0, zTop), SIMD3(x0, y0, zTop), SIMD3( 0,-1, 0)) // -Y
+        quad(SIMD3(x0, y0, zTop), SIMD3(x1, y0, zTop), SIMD3(x1, y1, zTop), SIMD3(x0, y1, zTop), SIMD3(0, 0, 1)) // top
     }
 }
