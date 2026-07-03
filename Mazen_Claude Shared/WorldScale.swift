@@ -29,13 +29,19 @@ struct WorldScale {
     var tileMeshSize: Float = 0.98
     var floorY: Float = 0.001
     var uvScale: Float = 2.0
-    var wallHeight: Float = 1.2
-    var wallThickness: Float = 0.12
+    // M10 Phase A perceptual scale-up: the player is shrunk ~5x relative to a tile,
+    // so a tile reads as a ~19m plaza instead of a ~3.7m corridor. Walls keep their
+    // real-world height (~4.5m) — 0.24 units against a 0.09 eye — so they still read
+    // as tall hedges around a much larger floor. (Anchored to eyeHeight ≈ 1.7m.)
+    var wallHeight: Float = 0.24
+    var wallThickness: Float = 0.07
 
     // MARK: - Camera
     var orbitFOVDegrees: Float = 70.0
-    var firstPersonFOVDegrees: Float = 70.0
-    var eyeHeight: Float = 0.45
+    /// Narrower than orbit to tame the wide-angle "miniature" look that a very low
+    /// first-person eye otherwise produces (M10 Phase A).
+    var firstPersonFOVDegrees: Float = 58.0
+    var eyeHeight: Float = 0.09
     var cameraNearZ: Float = 0.01
     var cameraFarZ: Float = 100.0
 

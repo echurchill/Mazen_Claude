@@ -9,7 +9,11 @@ struct PlayerState {
 
     var isMoving = false
     var moveProgress: Float = 0
-    var moveSpeed: Float = 2.5
+    // Progress-per-second across one tile → time per tile = 1/moveSpeed. Slowed from
+    // 2.5 (0.4s/tile) to 0.8 (1.25s/tile) for M10 Phase A: at the new perceived scale
+    // a tile is a ~19m plaza, so the old speed felt like sprinting at ~47 m/s. Tune to
+    // taste; sub-tile moves in Phase D will change the per-move distance again.
+    var moveSpeed: Float = 0.8
     var moveFromFace: CubeFace = .positiveZ
     var moveFromRow: Int = 0
     var moveFromCol: Int = 0

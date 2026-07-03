@@ -231,6 +231,14 @@ A → B → C → D → E → F → G. A is shippable alone; B+C are shippable w
 
 ---
 
+## Polish backlog (deferred)
+
+Non-blocking issues noted during implementation, to clean up later:
+
+- **First-person corner-cut at face crossings (found in Phase A).** Crossing from one cube face to another, the first-person eye takes a shortcut near the cube edge/corner instead of smoothly rounding it. Cause: `CameraState.firstPersonCamera` lerps `eyePos` linearly between the two face positions and renormalizes — the straight line between two points on adjacent faces passes inside the corner. Fix: slerp the eye *direction* around the shared edge (spherical interp) and interpolate radius separately, rather than `mix()` + renormalize. Minor; more noticeable now at the low eye height.
+
+---
+
 ## Technical Notes
 
 - **Inter-tile gap (decided: remove):** `CubeModel.worldMatrix` spaces tiles with a 0.01 gap; at 5x perceived scale that seam reads as a ~19cm trench. Set gap to 0 — coplanar edge-to-edge quads don't z-fight, and the sub-cell floor pattern keeps the tiling readable. If seams shimmer during slice animations (MSAA/depth precision), fall back to a 0.001 hairline.
@@ -264,7 +272,9 @@ A → B → C → D → E → F → G. A is shippable alone; B+C are shippable w
 
 > **STATUS: ✅ COMPLETE (2026-07-02).** All of R1–R5 landed as behavior-neutral refactors, each verified (tests + build + screenshot-identical render). Coordinate math is now proven size-generic across {3,5,7,9} by `Tests/run-tests.sh` (6592 checks). New files: `WorldScale.swift` (single scale source, per-world — Phase A knobs `eyeHeight`/`wallHeight`/`wallThickness`/`cellSpacing`/per-mode FOV now live here as one-file changes), `SceneBuilder.swift` (instance building extracted from Renderer, which dropped 857→546 lines), `Tests/` (standalone runner). One intentional behavior tweak: iOS pinch zoom-in limit 3→5 to unify with macOS via `WorldScale.orbitDistanceMin`.
 >
-> **Step 0.5 ✅ done (2026-07-03).** Default cube flipped to **7³** (`Renderer.initialCubeSize`); the N key now cycles odd sizes 3→5→7→9 live; shadow map bumped to 2048; edge-bridge density scales with cube size (`max(1, n/3)`). Verified at 7³ and 9³ — framing and shadows auto-adjusted with **no other changes needed**. Next: step 1 (M10 Phase A — now a single-file edit in WorldScale, at the new 7³ default).
+> **Step 0.5 ✅ done (2026-07-03).** Default cube flipped to **7³** (`Renderer.initialCubeSize`); the N key now cycles odd sizes 3→5→7→9 live; shadow map bumped to 2048; edge-bridge density scales with cube size (`max(1, n/3)`). Verified at 7³ and 9³ — framing and shadows auto-adjusted with **no other changes needed**.
+>
+> **M10 Phase A ✅ done (2026-07-03).** Perceptual scale-up: eyeHeight 0.45→0.09, wallHeight 1.2→0.24, wallThickness 0.12→0.07, first-person FOV 70°→58° (all in WorldScale), moveSpeed 2.5→0.8 (PlayerState). First-person now reads as a large plaza with distant hedges instead of a tight corridor; orbit view is correspondingly flatter (shared wall geometry). Approved as feels-good. One deferred polish item logged (first-person corner-cut at face crossings). Next: Phase B (edge model + gateways + corner posts).
 
 Small, surgical, each step independently verifiable (build + run + compare screenshot). Phase 0 also **bakes in cube-size independence** (see R1/R4/R5) — but the actual size flip is deliberately *not* part of Phase 0, since changing the world mid-refactor would destroy the screenshot-identical baseline; it runs as its own experiment right after (step 0.5 below):
 
