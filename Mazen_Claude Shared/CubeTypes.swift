@@ -185,6 +185,14 @@ struct MazeTile {
     /// `openings`; empty for ordinary tiles, so behavior is unchanged by default.
     var openEdges: DirectionMask = []
 
+    /// Accumulated quarter-turns (mod 4) this tile's contents have rotated through slice
+    /// rotations, in the same sense as `openings.rotated`. The floor texture is glued to
+    /// the tile's local frame, so after a rotation finalizes — the mesh snaps back to
+    /// face-aligned while `openings` rotate to compensate the geometry — the UVs would
+    /// otherwise jump 90°. Rotating the floor UVs by `uvTurns` keeps the ground texture
+    /// glued to the tile across finalization (no pop). 0 for tiles that never rotated.
+    var uvTurns: Int = 0
+
     /// Geometric type of one edge (Phase B/F): wall if closed, open if a room interior,
     /// otherwise a gateway.
     func edgeType(_ dir: SurfaceDirection) -> EdgeType {

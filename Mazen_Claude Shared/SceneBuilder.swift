@@ -118,9 +118,10 @@ final class SceneBuilder {
                             discoveryAmount: 1.0,
                             styleSeed: facelet.mazeTile.styleSeed
                         )
-                        let key = openings.rawValue & 0x0F
-                        mazeFloorTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: tileMeshLib.floorMesh(for: openings)))
-                        if let pfm = tileMeshLib.pathFloorMesh(for: openings) {
+                        let uvT = facelet.mazeTile.uvTurns
+                        let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)
+                        mazeFloorTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
+                        if let pfm = tileMeshLib.pathFloorMesh(for: openings, uvTurns: uvT) {
                             let pathInst = InstanceDataSwift(modelMatrix: matrix, baseColor: SIMD4(1, 1, 1, 1),
                                 materialID: 9, tileID: UInt32(facelet.id.rawValue),
                                 discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
@@ -160,9 +161,10 @@ final class SceneBuilder {
                             discoveryAmount: 1.0,
                             styleSeed: facelet.mazeTile.styleSeed
                         )
-                        let key = openings.rawValue & 0x0F
-                        mazeFloorTiles[key, default: []].append(TileEntry(instance: inst, mesh: tileMeshLib.floorMesh(for: openings)))
-                        if let pfm = tileMeshLib.pathFloorMesh(for: openings) {
+                        let uvT = facelet.mazeTile.uvTurns
+                        let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)
+                        mazeFloorTiles[key, default: []].append(TileEntry(instance: inst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
+                        if let pfm = tileMeshLib.pathFloorMesh(for: openings, uvTurns: uvT) {
                             let pathInst = InstanceDataSwift(modelMatrix: matrix, baseColor: SIMD4(1, 1, 1, 1),
                                 materialID: 9, tileID: UInt32(facelet.id.rawValue),
                                 discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
@@ -373,7 +375,7 @@ final class SceneBuilder {
         var idx = 0
 
         // Floor
-        let floorMesh = tileMeshLib.floorMesh(for: openings)
+        let floorMesh = tileMeshLib.floorMesh(for: openings, uvTurns: 0)
         ptr[idx] = inst
         idx += 1
         opaqueDrawCalls.append(DrawCall(

@@ -122,20 +122,25 @@ class TileMeshLibrary {
         frameMesh = TileMesh(vertexOffset: frameVStart, indexOffset: frameIStart,
                              indexCount: allIndices.count - frameIStart)
 
-        // Floors — keyed by the 16 openings masks (the path/prop split depends only on
-        // which edges are passable, so gateway vs open doesn't matter here).
+        // Floors — keyed by openings mask (low 4 bits) plus accumulated quarter-turns
+        // (high 2 bits). The path/prop split depends only on the openings; the turns
+        // rotate the UVs so the ground texture stays glued to the tile across slice
+        // rotations (see MazeTile.uvTurns). Key = mask | (turns << 4), a 6-bit UInt8.
         for mask: UInt8 in 0..<16 {
             let openings = DirectionMask(rawValue: mask)
+            for turns in 0..<4 {
+                let key = mask | (UInt8(turns) << 4)
 
-            let propStart = allIndices.count
-            Self.addFloorCells(to: &allVerts, indices: &allIndices, openings: openings, ws: ws, path: false)
-            floorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: propStart, indexCount: allIndices.count - propStart)
+                let propStart = allIndices.count
+                Self.addFloorCells(to: &allVerts, indices: &allIndices, openings: openings, uvTurns: turns, ws: ws, path: false)
+                floorMeshes[key] = TileMesh(vertexOffset: 0, indexOffset: propStart, indexCount: allIndices.count - propStart)
 
-            let pathStart = allIndices.count
-            Self.addFloorCells(to: &allVerts, indices: &allIndices, openings: openings, ws: ws, path: true)
-            let pathCount = allIndices.count - pathStart
-            if pathCount > 0 {
-                pathFloorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: pathStart, indexCount: pathCount)
+                let pathStart = allIndices.count
+                Self.addFloorCells(to: &allVerts, indices: &allIndices, openings: openings, uvTurns: turns, ws: ws, path: true)
+                let pathCount = allIndices.count - pathStart
+                if pathCount > 0 {
+                    pathFloorMeshes[key] = TileMesh(vertexOffset: 0, indexOffset: pathStart, indexCount: pathCount)
+                }
             }
         }
 
@@ -178,8 +183,13 @@ class TileMeshLibrary {
         indexBuffer.label = "TileMeshIndices"
     }
 
-    func floorMesh(for openings: DirectionMask) -> TileMesh {
-        return floorMeshes[openings.rawValue & 0x0F] ?? fogLayers[0]
+    func floorMesh(for openings: DirectionMask, uvTurns: Int) -> TileMesh {
+        return floorMeshes[Self.floorKey(openings, uvTurns)] ?? fogLayers[0]
+    }
+
+    /// Composite floor-mesh key: openings mask (low 4 bits) | quarter-turns (high 2 bits).
+    private static func floorKey(_ openings: DirectionMask, _ uvTurns: Int) -> UInt8 {
+        (openings.rawValue & 0x0F) | (UInt8(((uvTurns % 4) + 4) % 4) << 4)
     }
 
     func wallMesh(configKey: UInt8) -> TileMesh? {
@@ -191,8 +201,8 @@ class TileMeshLibrary {
     }
 
     /// The path-cross sub-cells (paved). `floorMesh` returns the propSpace remainder.
-    func pathFloorMesh(for openings: DirectionMask) -> TileMesh? {
-        return pathFloorMeshes[openings.rawValue & 0x0F]
+    func pathFloorMesh(for openings: DirectionMask, uvTurns: Int) -> TileMesh? {
+        return pathFloorMeshes[Self.floorKey(openings, uvTurns)]
     }
 
     /// Decode a base-3 edge-config key (N,E,S,W) into the openings + open-edge masks.
@@ -214,13 +224,27 @@ class TileMeshLibrary {
     /// (`path: true`) or the propSpace remainder (`path: false`) so each set can be
     /// drawn with its own material. UVs are continuous across the tile so textures
     /// tile seamlessly regardless of the split (M10 Phase C).
-    private static func addFloorCells(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask, ws: WorldScale, path: Bool) {
+    private static func addFloorCells(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask, uvTurns: Int, ws: WorldScale, path: Bool) {
         let hs = ws.floorHalfSize
         let z = ws.floorY
         let cell = 2.0 * hs / 3.0
         let tile = MazeTile(openings: openings, styleSeed: 0)
 
-        func uv(_ x: Float, _ y: Float) -> SIMD2<Float> { SIMD2((x + hs) * ws.uvScale, (y + hs) * ws.uvScale) }
+        // Rotate the UV sample point by −uvTurns quarter-turns about the tile center.
+        // `openings.rotated(1)` is a local +90° turn (N→E→S→W); the ground texture must
+        // counter-rotate by the same amount so it stays fixed to the tile's material as
+        // the tile turns, cancelling the 90° UV jump at slice-rotation finalization.
+        let turns = ((uvTurns % 4) + 4) % 4
+        func uv(_ x: Float, _ y: Float) -> SIMD2<Float> {
+            var rx = x, ry = y
+            switch turns {
+            case 1: rx =  y; ry = -x
+            case 2: rx = -x; ry = -y
+            case 3: rx = -y; ry =  x
+            default: break
+            }
+            return SIMD2((rx + hs) * ws.uvScale, (ry + hs) * ws.uvScale)
+        }
 
         for r in 0..<3 {
             for c in 0..<3 {

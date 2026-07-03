@@ -76,9 +76,13 @@ struct CameraState {
             let toEye = eye(player.moveToFace, player.moveToRow, player.moveToCol, player.moveToSubRow, player.moveToSubCol)
             let t = Self.smoothstep(player.moveProgress)
             if player.moveFromFace != player.moveToFace {
-                let blended = normalize(mix(eyePos, toEye, t: t))
-                eyePos = blended * (length(eyePos) * (1 - t) + length(toEye) * t)
-                upDir = normalize(mix(fromFace.normal, player.moveToFace.normal, t: t))
+                // Round the corner along the sphere instead of chording straight
+                // through it: slerp the eye *direction* around the shared cube edge and
+                // interpolate the radius separately. A plain mix()+renormalize cuts
+                // inside the corner — very visible at the low first-person eye height.
+                let radius = length(eyePos) * (1 - t) + length(toEye) * t
+                eyePos = Self.slerp(normalize(eyePos), normalize(toEye), t: t) * radius
+                upDir = Self.slerp(fromFace.normal, player.moveToFace.normal, t: t)
             } else {
                 eyePos = mix(eyePos, toEye, t: t)
             }
@@ -141,6 +145,17 @@ struct CameraState {
         var idx = Int((angle / (.pi / 4)).rounded())
         idx = ((idx % 8) + 8) % 8
         return Heading8(rawValue: idx)!
+    }
+
+    /// Spherical interpolation of two unit vectors — constant-angular-velocity travel
+    /// along the great-circle arc between them (unlike `mix`, which cuts the chord).
+    /// Falls back to a plain lerp when the vectors are nearly parallel.
+    static func slerp(_ a: SIMD3<Float>, _ b: SIMD3<Float>, t: Float) -> SIMD3<Float> {
+        let d = max(-1, min(1, dot(a, b)))
+        let theta = acosf(d)
+        if theta < 1e-4 { return normalize(mix(a, b, t: t)) }
+        let s = sinf(theta)
+        return a * (sinf((1 - t) * theta) / s) + b * (sinf(t * theta) / s)
     }
 
     static func smoothstep(_ t: Float) -> Float {
