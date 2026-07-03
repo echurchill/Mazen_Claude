@@ -41,9 +41,10 @@ final class SceneBuilder {
     /// Per-kind prop colours (M10 Phase G). Props render via materialID 10 — the shader's
     /// generic lit + shadow-receiving branch — so the look is entirely this base colour.
     static let propColors: [PropKind: SIMD4<Float>] = [
-        .topiary: SIMD4(0.28, 0.52, 0.26, 1.0),  // deep hedge green
-        .obelisk: SIMD4(0.62, 0.60, 0.55, 1.0),  // pale stone
-        .chest:   SIMD4(0.55, 0.36, 0.18, 1.0),  // wood
+        .topiary:     SIMD4(0.28, 0.52, 0.26, 1.0),  // deep hedge green
+        .obelisk:     SIMD4(0.62, 0.60, 0.55, 1.0),  // pale stone
+        .chest:       SIMD4(0.55, 0.36, 0.18, 1.0),  // wood
+        .houseCorner: SIMD4(0.72, 0.66, 0.52, 1.0),  // warm plaster
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
@@ -200,6 +201,7 @@ final class SceneBuilder {
                             guard let mesh = tileMeshLib.propMesh(kind: prop.kind) else { continue }
                             let pm = matrix
                                 * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
+                                * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             if prop.kind == .chest && prop.state == 1 { color = SIMD4(0.98, 0.80, 0.30, 1.0) }  // opened / "lit"
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,

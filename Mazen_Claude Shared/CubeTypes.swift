@@ -229,9 +229,10 @@ struct MazeTile {
 /// A placed object living on a tile's propSpace (M10 Phase G). Anchored to its facelet,
 /// so slice rotations carry it exactly like the tile.
 enum PropKind: UInt8 {
-    case topiary   // sub-cell decorative hedge sculpture
-    case obelisk   // tall landmark, visible over the hedges (G3)
-    case chest     // interactive (G4)
+    case topiary      // sub-cell decorative hedge sculpture
+    case obelisk      // tall landmark, visible over the hedges (G3)
+    case chest        // interactive (G4)
+    case houseCorner  // one quarter of a 2×2 modular house (G5)
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.

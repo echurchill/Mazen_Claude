@@ -183,6 +183,10 @@ class TileMeshLibrary {
         Self.addChest(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.chest.rawValue] = TileMesh(vertexOffset: 0, indexOffset: chestStart, indexCount: allIndices.count - chestStart)
 
+        let houseStart = allIndices.count
+        Self.addHouseQuarter(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.houseCorner.rawValue] = TileMesh(vertexOffset: 0, indexOffset: houseStart, indexCount: allIndices.count - houseStart)
+
         vertexBuffer = device.makeBuffer(
             bytes: allVerts,
             length: MemoryLayout<MazeVertexSwift>.stride * allVerts.count,
@@ -520,6 +524,49 @@ class TileMeshLibrary {
             quad(b[i], b[j], t[j], t[i])   // sides
         }
         quad(t[0], t[1], t[2], t[3])       // top
+    }
+
+    /// One quarter of a 2×2 modular house (G5). The quarter occupies only its tile's **inner
+    /// corner cell** (toward the shared 2×2 centre), so the assembled house is a compact
+    /// building at the centre with the surrounding path left walkable. It is an L of two outer
+    /// walls (z0…eave) + a hip-roof slope peaking exactly at the tile corner `(hw,hw)` — the
+    /// shared 2×2 centre — so the four quarters meet there with no gap. Placed at tile centre
+    /// and rotated by the prop's `facing` so each peak lands on that shared point; because each
+    /// quarter rides its own tile, a slice cutting the block splits the house Rubik's-style.
+    /// Single-colour placeholder, wound CCW-outward. (G5)
+    private static func addHouseQuarter(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        let hw = ws.floorHalfSize          // 0.5 — inner corner sits exactly on the tile corner
+        let inner = hw - ws.subCellStep    // ~0.167 — quarter fills just the inner-corner cell
+        let z0 = ws.floorY
+        let eave = z0 + 0.24               // wall top ≈ hedge height
+        let peak = z0 + 0.40               // roof peak, above the hedges
+
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            let ao = 0.55 + 0.45 * max(0, min(1, (p.z - z0) / (peak - z0)))
+            return MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
+        }
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            let n = normalize(cross(b - a, d - a))
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        func tri(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
+            let n = normalize(cross(b - a, c - a))
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n)])
+            indices.append(contentsOf: [base+0, base+1, base+2])
+        }
+
+        // Two outer walls (the L facing away from the 2×2 centre), z0…eave.
+        quad(SIMD3(inner, hw, z0), SIMD3(inner, inner, z0), SIMD3(inner, inner, eave), SIMD3(inner, hw, eave))   // x=inner, outward −x
+        quad(SIMD3(inner, inner, z0), SIMD3(hw, inner, z0), SIMD3(hw, inner, eave), SIMD3(inner, inner, eave))   // y=inner, outward −y
+
+        // Hip-roof quarter: peak at the inner corner (hw,hw) = shared 2×2 centre; eave at the
+        // other three corners of the inner-corner cell.
+        let apex = SIMD3<Float>(hw, hw, peak)
+        tri(SIMD3(inner, inner, eave), SIMD3(hw, inner, eave), apex)
+        tri(SIMD3(inner, inner, eave), apex, SIMD3(inner, hw, eave))
     }
 
     // MARK: - Posts (M10 Phase B)

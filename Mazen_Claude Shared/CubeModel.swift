@@ -74,6 +74,19 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 2, subCol: 2))
             cubies[ci].facelets[fi].props.append(Prop(kind: .chest, subRow: 0, subCol: 2))
         }
+        // A 2×2 modular house at the face's NW corner (rows/cols 0–1). Placed at the face
+        // edge so a slice rotation from an adjacent face cuts through and splits it. Each
+        // quarter's facing aims its roof-peak at the shared 2×2 centre. Merge the four tiles
+        // into a room (interior hedges removed, so nothing tangles the building) but keep the
+        // perimeter hedges + their gateways, so the courtyard still has proper doors to
+        // travel through — same treatment as the start plaza.
+        stampRoom(face: .positiveZ, top: 0, left: 0, height: 2, width: 2)
+        let house: [(Int, Int, Heading8)] = [(0, 0, .n), (0, 1, .e), (1, 0, .w), (1, 1, .s)]
+        for (r, c, f) in house {
+            if let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) {
+                cubies[ci].facelets[fi].props.append(Prop(kind: .houseCorner, subRow: 1, subCol: 1, facing: f))
+            }
+        }
     }
 
     private static func directionMask(_ dir: SurfaceDirection) -> DirectionMask {
