@@ -14,7 +14,8 @@ class TileMeshLibrary {
     let fogLayers: [TileMesh]
     let playerMarker: TileMesh
     let frameMesh: TileMesh
-    private var floorMeshes: [UInt8: TileMesh] = [:]
+    private var floorMeshes: [UInt8: TileMesh] = [:]      // propSpace sub-cells (base ground)
+    private var pathFloorMeshes: [UInt8: TileMesh] = [:]  // path-cross sub-cells (paved)
     private var wallMeshes: [UInt8: TileMesh] = [:]
     private var postMeshes: [UInt8: TileMesh] = [:]
 
@@ -125,10 +126,16 @@ class TileMeshLibrary {
         for mask: UInt8 in 0..<16 {
             let openings = DirectionMask(rawValue: mask)
 
-            let fStart = allIndices.count
-            Self.addFloor(to: &allVerts, indices: &allIndices, openings: openings, ws: ws)
-            let fCount = allIndices.count - fStart
-            floorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: fStart, indexCount: fCount)
+            let propStart = allIndices.count
+            Self.addFloorCells(to: &allVerts, indices: &allIndices, openings: openings, ws: ws, path: false)
+            floorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: propStart, indexCount: allIndices.count - propStart)
+
+            let pathStart = allIndices.count
+            Self.addFloorCells(to: &allVerts, indices: &allIndices, openings: openings, ws: ws, path: true)
+            let pathCount = allIndices.count - pathStart
+            if pathCount > 0 {
+                pathFloorMeshes[mask] = TileMesh(vertexOffset: 0, indexOffset: pathStart, indexCount: pathCount)
+            }
 
             let tile = MazeTile(openings: openings, styleSeed: 0)
             let wStart = allIndices.count
@@ -175,32 +182,40 @@ class TileMeshLibrary {
         return postMeshes[openings.rawValue & 0x0F]
     }
 
+    /// The path-cross sub-cells (paved). `floorMesh` returns the propSpace remainder.
+    func pathFloorMesh(for openings: DirectionMask) -> TileMesh? {
+        return pathFloorMeshes[openings.rawValue & 0x0F]
+    }
+
     // MARK: - Geometry builders
 
-    private static func addFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask, ws: WorldScale) {
+    /// Emit the floor as 3×3 sub-cell quads, selecting either the path-cross cells
+    /// (`path: true`) or the propSpace remainder (`path: false`) so each set can be
+    /// drawn with its own material. UVs are continuous across the tile so textures
+    /// tile seamlessly regardless of the split (M10 Phase C).
+    private static func addFloorCells(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask, ws: WorldScale, path: Bool) {
         let hs: Float = 0.48
         let z = ws.floorY
-        let base = UInt16(verts.count)
+        let cell = 2.0 * hs / 3.0
+        let tile = MazeTile(openings: openings, styleSeed: 0)
 
-        let n = !openings.contains(.north)
-        let s = !openings.contains(.south)
-        let e = !openings.contains(.east)
-        let w = !openings.contains(.west)
+        func uv(_ x: Float, _ y: Float) -> SIMD2<Float> { SIMD2((x + hs) * ws.uvScale, (y + hs) * ws.uvScale) }
 
-        func cornerAO(_ wall1: Bool, _ wall2: Bool) -> Float {
-            if wall1 && wall2 { return 0.5 }
-            if wall1 || wall2 { return 0.7 }
-            return 1.0
+        for r in 0..<3 {
+            for c in 0..<3 {
+                guard tile.isPathCell(r, c) == path else { continue }
+                let x0 = -hs + Float(c) * cell, x1 = x0 + cell
+                let y0 = -hs + Float(r) * cell, y1 = y0 + cell
+                let base = UInt16(verts.count)
+                verts.append(contentsOf: [
+                    MazeVertexSwift(position: SIMD3(x0, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y0), aoFactor: 1.0),
+                    MazeVertexSwift(position: SIMD3(x1, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x1, y0), aoFactor: 1.0),
+                    MazeVertexSwift(position: SIMD3(x1, y1, z), normal: SIMD3(0, 0, 1), texCoord: uv(x1, y1), aoFactor: 1.0),
+                    MazeVertexSwift(position: SIMD3(x0, y1, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y1), aoFactor: 1.0),
+                ])
+                indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            }
         }
-
-        let fuv = hs * 2.0 * ws.uvScale
-        verts.append(contentsOf: [
-            MazeVertexSwift(position: SIMD3(-hs, -hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, 0), aoFactor: cornerAO(n, w)),
-            MazeVertexSwift(position: SIMD3( hs, -hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(fuv, 0), aoFactor: cornerAO(n, e)),
-            MazeVertexSwift(position: SIMD3( hs,  hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(fuv, fuv), aoFactor: cornerAO(s, e)),
-            MazeVertexSwift(position: SIMD3(-hs,  hs, z), normal: SIMD3(0, 0, 1), texCoord: SIMD2(0, fuv), aoFactor: cornerAO(s, w)),
-        ])
-        indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
     }
 
     /// Build one tile edge as a wall, a gateway (two stubs framing a centered gap), or

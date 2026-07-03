@@ -120,6 +120,21 @@ struct MazeTile {
     func edgeType(_ dir: SurfaceDirection) -> EdgeType {
         openings.contains(direction: dir) ? .gateway : .wall
     }
+
+    /// Whether sub-cell (subRow, subCol) of the 3×3 grid is a path cell (M10 Phase C).
+    /// The path is a cross: the center, plus the middle cell of each open (gateway)
+    /// edge. subRow 0 = north, 2 = south; subCol 0 = west, 2 = east. Corners are never
+    /// path — they are propSpace, reserved for props.
+    func isPathCell(_ subRow: Int, _ subCol: Int) -> Bool {
+        switch (subRow, subCol) {
+        case (1, 1): return true
+        case (0, 1): return openings.contains(.north)
+        case (2, 1): return openings.contains(.south)
+        case (1, 0): return openings.contains(.west)
+        case (1, 2): return openings.contains(.east)
+        default:     return false
+        }
+    }
 }
 
 struct MazeFacelet {

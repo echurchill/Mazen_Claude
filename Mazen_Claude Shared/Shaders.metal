@@ -299,6 +299,11 @@ fragment float4 fragmentShader(
         // Corner / jamb posts — flat light green, lit and shadowed (M10 Phase B)
         color = in.color.rgb;
         lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
+    } else if (in.materialID == 9) {
+        // Path-cross floor — warm paved stone, distinct from the surrounding ground (M10 Phase C)
+        float3 stone = diffuseArray.sample(texSampler, in.texCoord, 2).rgb;
+        color = stone * float3(1.25, 1.12, 0.9);
+        lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;

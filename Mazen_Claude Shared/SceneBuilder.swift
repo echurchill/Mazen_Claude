@@ -43,17 +43,20 @@ final class SceneBuilder {
     private var dissolveTiles: [TileEntry] = []
     private var frameTiles: [TileEntry] = []
     private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
+    private var mazePathFloorTiles: [UInt8: [TileEntry]] = [:]
     private var mazeWallTiles: [UInt8: [TileEntry]] = [:]
     private var mazePostTiles: [UInt8: [TileEntry]] = [:]
 
     func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer) -> SceneDrawData {
         let model = gameState.cubeModel
-        let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: 6 * model.size * model.size)
+        let capacity = buf.length / MemoryLayout<InstanceDataSwift>.stride
+        let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: capacity)
 
         opaqueFogTiles.removeAll(keepingCapacity: true)
         dissolveTiles.removeAll(keepingCapacity: true)
         frameTiles.removeAll(keepingCapacity: true)
         for key in mazeFloorTiles.keys { mazeFloorTiles[key]?.removeAll(keepingCapacity: true) }
+        for key in mazePathFloorTiles.keys { mazePathFloorTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazeWallTiles.keys { mazeWallTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazePostTiles.keys { mazePostTiles[key]?.removeAll(keepingCapacity: true) }
 
@@ -117,6 +120,12 @@ final class SceneBuilder {
                         )
                         let key = openings.rawValue & 0x0F
                         mazeFloorTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: tileMeshLib.floorMesh(for: openings)))
+                        if let pfm = tileMeshLib.pathFloorMesh(for: openings) {
+                            let pathInst = InstanceDataSwift(modelMatrix: matrix, baseColor: SIMD4(1, 1, 1, 1),
+                                materialID: 9, tileID: UInt32(facelet.id.rawValue),
+                                discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
+                            mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
+                        }
                         if let wm = tileMeshLib.wallMesh(for: openings) {
                             mazeWallTiles[key, default: []].append(TileEntry(instance: mazeInst, mesh: wm))
                         }
@@ -152,6 +161,12 @@ final class SceneBuilder {
                         )
                         let key = openings.rawValue & 0x0F
                         mazeFloorTiles[key, default: []].append(TileEntry(instance: inst, mesh: tileMeshLib.floorMesh(for: openings)))
+                        if let pfm = tileMeshLib.pathFloorMesh(for: openings) {
+                            let pathInst = InstanceDataSwift(modelMatrix: matrix, baseColor: SIMD4(1, 1, 1, 1),
+                                materialID: 9, tileID: UInt32(facelet.id.rawValue),
+                                discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed)
+                            mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
+                        }
                         if let wm = tileMeshLib.wallMesh(for: openings) {
                             mazeWallTiles[key, default: []].append(TileEntry(instance: inst, mesh: wm))
                         }
@@ -216,6 +231,24 @@ final class SceneBuilder {
 
         // Opaque maze floor tiles (no depth bias)
         for (_, entries) in mazeFloorTiles {
+            guard !entries.isEmpty else { continue }
+            let mesh = entries[0].mesh
+            let startIdx = idx
+            for entry in entries {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: entries.count
+            ))
+        }
+
+        // Opaque path-cross floor tiles (paved material) — coplanar with, but disjoint
+        // from, the propSpace floor cells, so no depth conflict.
+        for (_, entries) in mazePathFloorTiles {
             guard !entries.isEmpty else { continue }
             let mesh = entries[0].mesh
             let startIdx = idx
