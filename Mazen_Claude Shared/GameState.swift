@@ -201,6 +201,16 @@ class GameState {
                     let oldDir = CameraState.headingToWorld(player.facing, face: player.face)
                     let newDir = rotQ.act(oldDir)
                     player.facing = CameraState.worldToHeading8(newDir, face: player.face)
+
+                    // Rotate the standing sub-cell the same way the tile's contents rotate:
+                    // rotate its offset-from-center by the slice quaternion, then re-read it
+                    // in the face frame. Consistent with the openings rotation (same rotQ),
+                    // so the player stays on the rotated path cross.
+                    let t = player.face.tangent, b = player.face.bitangent
+                    let oldOffset = t * Float(player.subCol - 1) + b * Float(player.subRow - 1)
+                    let newOffset = rotQ.act(oldOffset)
+                    player.subCol = min(2, max(0, Int(dot(newOffset, t).rounded()) + 1))
+                    player.subRow = min(2, max(0, Int(dot(newOffset, b).rounded()) + 1))
                     break
                 }
             }
