@@ -6,7 +6,11 @@ Replace the M10 Phase G procedural placeholder props (topiary, obelisk, chest, m
 
 **Sequencing: after M9 (solar system).** M12 is largely orthogonal to the maze / navigation systems: it plugs into the M10 prop system, which was deliberately built **mesh-agnostic** (props anchor to facelets, ride slice rotations, cast/receive shadows, and are colored/scaled per-instance — none of that cares whether the mesh is procedural or imported). So M10 → M12 is a swap of *what mesh fills the slot*, not a rework.
 
-> **Status: planned.** Not started. Do after M9 lands (so imported meshes are lit by the real sun/moon from day one).
+> **Status: M12-A + M12-C ✅ (2026-07-04) — core pipeline proven.** `AssetMesh.swift` loads a USD via ModelIO (plain-load, then per-mesh re-layout to the shader's `MazeVertex` packing — *forcing a vertexDescriptor at load time silently drops the geometry*) into a **32-bit index buffer**, drawn through the existing pipeline (bind the asset's vertex + `uint32` index buffers, one instance) — lit, shadowed, riding the world spin. Its **diffuse JPG** binds at a new texture slot (materialID 11; `maxTextureBindCount` 4→5). Guinea pig: `stone_fire_pit` (11.6k verts) renders with its real stone texture.
+>
+> **Findings / gotchas:** USD is **Z-up** (no re-orientation needed — the tile's local Z is already out-of-face); a forced load-time `vertexDescriptor` yields 0 meshes (re-lay-out per mesh instead); the macOS app is **sandboxed** (`ENABLE_APP_SANDBOX=YES`) so it can't read the external `Mazen_Models` folder — **dev shortcut in place: sandbox disabled + absolute paths.** Textures came as JPG diffuse + **EXR** normals (unreadable by ImageIO/`sips`; ImageMagick installed to convert EXR→PNG when we add normal maps).
+>
+> **Remaining:** bundle the models properly (folder reference) + re-enable the sandbox before shipping; generalize the one hardcoded fire pit into an **asset registry** and load the statue/stumps/crate (M12-D); **normal maps** (EXR→PNG + tangent extraction for the asset material); scale/placement polish.
 
 ## Why this is a real pipeline, not a mesh swap
 

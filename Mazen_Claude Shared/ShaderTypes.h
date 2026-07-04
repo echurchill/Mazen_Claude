@@ -24,6 +24,7 @@ typedef NS_ENUM(EnumBackingType, TextureIndex)
     TextureIndexNormalArray  = 1,
     TextureIndexSkybox       = 2,
     TextureIndexShadowMap    = 3,
+    TextureIndexAssetDiffuse = 4,   // M12: imported prop's diffuse texture
 };
 
 typedef struct

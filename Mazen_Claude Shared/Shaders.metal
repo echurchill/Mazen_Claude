@@ -163,6 +163,7 @@ fragment float4 fragmentShader(
     texture2d_array<float> diffuseArray [[texture(TextureIndexDiffuseArray)]],
     texture2d_array<float> normalArray [[texture(TextureIndexNormalArray)]],
     depth2d<float> shadowMap [[texture(TextureIndexShadowMap)]],
+    texture2d<float> assetDiffuse [[texture(TextureIndexAssetDiffuse)]],
     sampler texSampler [[sampler(0)]]
 ) {
     float3 lightDir = normalize(frame.lightDirection);
@@ -348,6 +349,10 @@ fragment float4 fragmentShader(
         // Path-cross floor — warm paved stone, distinct from the surrounding ground (M10 Phase C)
         float3 stone = diffuseArray.sample(texSampler, in.texCoord, 2).rgb;
         color = stone * float3(1.25, 1.12, 0.9);
+        lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
+    } else if (in.materialID == 11) {
+        // M12-C: imported prop with its own diffuse texture, lit + shadowed like the maze.
+        color = assetDiffuse.sample(texSampler, in.texCoord).rgb;
         lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
     } else if (in.materialID == 12) {
         // Sun — emissive, unlit (M9). Kept out of the fog below so it stays bright.

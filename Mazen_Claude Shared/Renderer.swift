@@ -52,6 +52,10 @@ class Renderer: NSObject, MTKViewDelegate {
 
     var frameUniformBuffers: [MTLBuffer]
     var instanceBuffers: [MTLBuffer]
+    // M12: imported prop model, its diffuse texture, + per-frame instance buffer.
+    var firePit: AssetMesh?
+    var firePitDiffuse: MTLTexture?
+    var assetInstanceBuffers: [MTLBuffer] = []
     var opaqueDrawCalls: [DrawCall] = []
     var wallDrawCallRange: Range<Int> = 0..<0
     var translucentDrawCalls: [DrawCall] = []
@@ -81,7 +85,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.maxBufferBindCount = 4
         self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
-        argDesc.maxTextureBindCount = 4
+        argDesc.maxTextureBindCount = 5   // 0..3 maze/shadow + 4 = M12 asset diffuse
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
@@ -210,9 +214,26 @@ class Renderer: NSObject, MTKViewDelegate {
         self.frameUniformBuffers = frameBufs
         self.instanceBuffers = instBufs
 
+        // M12: load an imported prop (dev absolute path — these get bundled for shipping later)
+        // plus a small per-frame instance buffer for its transform/material.
+        let modelsRoot = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models"
+        let firePitURL = URL(fileURLWithPath: "\(modelsRoot)/stone_fire_pit_2k/stone_fire_pit_2k.usdc")
+        let loadedFirePit = AssetMesh(url: firePitURL, device: device)
+        self.firePit = loadedFirePit
+        if loadedFirePit == nil { print("[Renderer] fire pit FAILED to load from \(firePitURL.path)") }
+        let loadedFirePitDiffuse = Self.loadTextureFromFile(
+            url: URL(fileURLWithPath: "\(modelsRoot)/stone_fire_pit_2k/textures/stone_fire_pit_diff_2k.jpg"),
+            device: device, srgb: true)
+        self.firePitDiffuse = loadedFirePitDiffuse
+        var assetBufs: [MTLBuffer] = []
+        for _ in 0..<maxBuffersInFlight {
+            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 16, options: .storageModeShared)!)
+        }
+        self.assetInstanceBuffers = assetBufs
+
         // Residency set
         let resDesc = MTLResidencySetDescriptor()
-        resDesc.initialCapacity = 7 + frameBufs.count + instBufs.count
+        resDesc.initialCapacity = 9 + frameBufs.count + instBufs.count + assetBufs.count
         let rs = try! device.makeResidencySet(descriptor: resDesc)
         rs.addAllocation(tileMeshLib.vertexBuffer)
         rs.addAllocation(tileMeshLib.indexBuffer)
@@ -222,6 +243,9 @@ class Renderer: NSObject, MTKViewDelegate {
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
+        if let fp = loadedFirePit { rs.addAllocation(fp.vertexBuffer); rs.addAllocation(fp.indexBuffer) }
+        if let d = loadedFirePitDiffuse { rs.addAllocation(d) }
+        for buf in assetBufs { rs.addAllocation(buf) }
         rs.commit()
         commandQueue.addResidencySet(rs)
         self.residencySet = rs
@@ -340,6 +364,32 @@ class Renderer: NSObject, MTKViewDelegate {
         return texture
     }
 
+    /// M12: load a texture from an arbitrary file URL (imported model textures live outside
+    /// the bundle). CGImageSource decodes JPG/PNG all the same.
+    private static func loadTextureFromFile(url: URL, device: MTLDevice, srgb: Bool) -> MTLTexture? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            NSLog("Asset texture not found/decodable: %@", url.path)
+            return nil
+        }
+        let w = cgImage.width, h = cgImage.height
+        let bytesPerRow = w * 4
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: srgb ? .rgba8Unorm_srgb : .rgba8Unorm, width: w, height: h, mipmapped: false)
+        desc.storageMode = .shared
+        desc.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        texture.label = url.lastPathComponent
+        var pixels = [UInt8](repeating: 255, count: bytesPerRow * h)
+        guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8,
+                                  bytesPerRow: bytesPerRow, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+        texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: w, height: h, depth: 1)),
+                        mipmapLevel: 0, withBytes: pixels, bytesPerRow: bytesPerRow)
+        return texture
+    }
+
     // MARK: - Per-frame
 
     private func buildDrawCalls() {
@@ -390,6 +440,30 @@ class Renderer: NSObject, MTKViewDelegate {
         )
     }
 
+    /// M12: place the imported prop each frame — fit to ~0.7 units, stand it up (model Y-up →
+    /// tile Z-up), rest its base on the floor, centre it on the plaza-centre tile, and ride the
+    /// world spin like any other prop. Rendered flat-coloured for now (texture is M12-C).
+    private func updateAssetInstances() {
+        guard let fp = firePit else { return }
+        let ptr = assetInstanceBuffers[currentBufferIndex].contents().bindMemory(to: InstanceDataSwift.self, capacity: 16)
+        let ws = gameState.worldScale
+        let n = gameState.cubeModel.size
+        let dim = fp.size
+        let maxDim = max(dim.x, max(dim.y, dim.z))
+        let fs: Float = maxDim > 0 ? 0.35 / maxDim : 1   // fit widest dimension to ~0.35 units
+        // USD is Z-up (matches the tile's local Z = out-of-face), so no re-orientation is
+        // needed: centre the footprint on the tile and rest the base (min-Z) on the floor.
+        let c = fp.center
+        let placement =
+            gameState.cubeModel.worldMatrix(face: .positiveZ, row: n / 2, col: n / 2)
+            * float4x4.translation(-c.x * fs, -c.y * fs, ws.floorY - fp.boundsMin.z * fs)
+            * float4x4.scale(fs)
+        ptr[0] = InstanceDataSwift(
+            modelMatrix: gameState.worldSpinMatrix() * placement,
+            baseColor: SIMD4(1, 1, 1, 1),
+            materialID: 11, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+    }
+
     // MARK: - MTKViewDelegate
 
     func draw(in view: MTKView) {
@@ -420,6 +494,7 @@ class Renderer: NSObject, MTKViewDelegate {
         commandBuffer.beginCommandBuffer(allocator: allocator)
 
         updateFrameUniforms()
+        updateAssetInstances()
         buildDrawCalls()
 
         // ── Shadow pass ──────────────────────────────────────────
@@ -461,6 +536,17 @@ class Renderer: NSObject, MTKViewDelegate {
                     baseInstance: dc.instanceOffset
                 )
             }
+            // M12: the imported prop casts a shadow too (its own vertex + uint32 index buffer).
+            if let fp = firePit {
+                vertexArgTable.setAddress(fp.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+                vertexArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+                shadowEncoder.drawIndexedPrimitives(
+                    primitiveType: .triangle, indexCount: fp.indexCount, indexType: .uint32,
+                    indexBuffer: fp.indexBuffer.gpuAddress, indexBufferLength: fp.indexBuffer.length,
+                    instanceCount: 1, baseVertex: 0, baseInstance: 0)
+                vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+                vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            }
             shadowEncoder.endEncoding()
         }
 
@@ -489,6 +575,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let n = normalArray { fragmentArgTable.setTexture(n.gpuResourceID, index: TextureIndex.normalArray.rawValue) }
         if let sb = skyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
+        if let ad = firePitDiffuse { fragmentArgTable.setTexture(ad.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
         if let s = texSampler { fragmentArgTable.setSamplerState(s.gpuResourceID, index: 0) }
 
         // Sky pass: fullscreen triangle, no depth test/write
@@ -517,6 +604,21 @@ class Renderer: NSObject, MTKViewDelegate {
                 baseVertex: 0,
                 baseInstance: dc.instanceOffset
             )
+        }
+
+        // M12: the imported prop, drawn with the opaque geometry (own buffers + uint32 indices).
+        if let fp = firePit {
+            vertexArgTable.setAddress(fp.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+            vertexArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            fragmentArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            encoder.drawIndexedPrimitives(
+                primitiveType: .triangle, indexCount: fp.indexCount, indexType: .uint32,
+                indexBuffer: fp.indexBuffer.gpuAddress, indexBufferLength: fp.indexBuffer.length,
+                instanceCount: 1, baseVertex: 0, baseInstance: 0)
+            // restore maze buffers for the translucent pass
+            vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+            vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            fragmentArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
         }
 
         // Pass 2: translucent overlays (depth write OFF)
