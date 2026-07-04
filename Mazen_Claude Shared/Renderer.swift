@@ -367,6 +367,12 @@ class Renderer: NSObject, MTKViewDelegate {
         let lightProj = float4x4.orthographic(left: -r, right: r, bottom: -r, top: r, nearZ: ws.shadowNearZ, farZ: ws.shadowFarZ)
         let lightVP = lightProj * lightView
         let cs = gameState.celestialSystem
+        let moonDir = cs.moonDirection(time: gameState.time)
+        // M9-7 eclipse: the nearer moon covers the sun when their directions align. Equal
+        // apparent sizes (~1.8° radius each), so ramp across the ~2-radius overlap (cos of it).
+        let align = dot(lightDir, moonDir)
+        let et = max(0, min(1, (align - 0.9981) / (0.99999 - 0.9981)))
+        let eclipse = et * et * (3 - 2 * et)
         ptr.pointee = FrameUniformsSwift(
             viewProjectionMatrix: vp,
             cameraPosition: gameState.cameraPosition(),
@@ -376,8 +382,9 @@ class Renderer: NSObject, MTKViewDelegate {
             cameraUp: gameState.cameraUp(),
             lightViewProjectionMatrix: lightVP,
             sunElevation: lightDir.y,
-            moonDirection: cs.moonDirection(time: gameState.time),
-            moonIntensity: 0.15
+            moonDirection: moonDir,
+            moonIntensity: 0.30,
+            eclipseFactor: eclipse
         )
     }
 

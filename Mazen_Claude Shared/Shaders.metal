@@ -184,12 +184,18 @@ fragment float4 fragmentShader(
                   :                                    float3(0.0, 0.0, sign(in.worldPosition.z));
     float dayFactor = smoothstep(-0.15, 0.15, dot(faceUp, lightDir));
     float moonUp = smoothstep(-0.05, 0.15, dot(faceUp, frame.moonDirection));
-    float3 sunColor = float3(1.0, 0.95, 0.85) * dayFactor;
+    // M9-7 eclipse: when the (nearer) moon aligns with the sun it blocks the sunlight, so the
+    // lit faces suddenly darken — dramatic because the moon and sun share an apparent size.
+    float3 sunColor = float3(1.0, 0.95, 0.85) * dayFactor * (1.0 - frame.eclipseFactor);
     float3 dayAmbient = float3(0.35, 0.45, 0.65);
     float3 nightAmbient = float3(0.06, 0.08, 0.16);
-    float moonNdotL = max(dot(normal, frame.moonDirection), 0.0);
-    float3 moonFill = float3(0.45, 0.52, 0.72) * (frame.moonIntensity * moonNdotL * (1.0 - dayFactor) * moonUp);
-    float3 skyAmbient = mix(nightAmbient, dayAmbient, dayFactor) + moonFill;
+    // M9-5 moonlight: a soft, cool, half-Lambert-wrapped directional light on the night side.
+    float moonHL = dot(normal, frame.moonDirection) * 0.5 + 0.5;
+    moonHL = moonHL * moonHL;
+    float3 moonLight = float3(0.5, 0.58, 0.82) * (frame.moonIntensity * moonHL * (1.0 - dayFactor) * moonUp);
+    // Eerie reddish twilight lingering on the day side during an eclipse.
+    float3 eclipseGlow = float3(0.16, 0.05, 0.03) * (frame.eclipseFactor * dayFactor);
+    float3 skyAmbient = mix(nightAmbient, dayAmbient, dayFactor) + moonLight + eclipseGlow;
 
     // Shadow mapping — skip fog (4/5) and posts (8). Posts are thin markers embedded
     // where walls meet, so receiving shadows makes their surface fight the wall depth

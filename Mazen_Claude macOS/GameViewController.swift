@@ -83,9 +83,27 @@ class GameViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         view.window?.makeFirstResponder(self)
+        view.window?.acceptsMouseMovedEvents = true
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        setPointerLock(false)   // never leave the cursor captured/hidden
     }
 
     override var acceptsFirstResponder: Bool { true }
+
+    private var pointerLocked = false
+
+    /// Capture (hide + free) the cursor for first-person mouse-look; release it in orbit.
+    /// Guarded so repeated calls don't unbalance NSCursor's hide/show stack.
+    private func setPointerLock(_ locked: Bool) {
+        guard locked != pointerLocked else { return }
+        pointerLocked = locked
+        CGAssociateMouseAndMouseCursorPosition(locked ? 0 : 1)
+        if locked { NSCursor.hide() } else { NSCursor.unhide() }
+    }
+
 
     override func keyDown(with event: NSEvent) {
         guard let renderer = renderer else { return }
@@ -93,6 +111,7 @@ class GameViewController: NSViewController {
 
         switch event.keyCode {
         case 126, 13: // Up arrow, W
+            if gs.camera.mode == .firstPerson { gs.steerToLook() }
             gs.player.tryMoveForward(cubeModel: gs.cubeModel)
         case 125, 1:  // Down arrow, S
             gs.player.tryMoveBackward(cubeModel: gs.cubeModel)
@@ -102,12 +121,17 @@ class GameViewController: NSViewController {
             gs.player.tryTurnRight()
         case 49:      // Space — toggle camera mode
             gs.camera.mode = gs.camera.mode == .orbit ? .firstPerson : .orbit
+            setPointerLock(gs.camera.mode == .firstPerson)
         case 12:      // Q — rotate face clockwise
             gs.startSliceRotation(clockwise: true)
         case 14:      // E — rotate face counterclockwise
             gs.startSliceRotation(clockwise: false)
         case 3:       // F — interact with a prop on the current tile
             gs.interact()
+        case 17:      // T — cycle world time-scale (fast-forward the sky): 1x → 8x → 60x
+            let scales: [Float] = [1, 8, 60]
+            let idx = scales.firstIndex(of: gs.timeScale) ?? 0
+            gs.timeScale = scales[(idx + 1) % scales.count]
         case 35:      // P — toggle auto-rotation
             gs.camera.orbitAutoRotate.toggle()
         case 4:       // H — toggle debug HUD
@@ -125,11 +149,23 @@ class GameViewController: NSViewController {
     override func mouseDragged(with event: NSEvent) {
         guard let renderer = renderer else { return }
         let gs = renderer.gameState
-        guard gs.camera.mode == .orbit else { return }
+        if gs.camera.mode == .firstPerson { handleLook(event); return }
         gs.camera.orbitAutoRotate = false
         gs.camera.orbitRotation.x += Float(event.deltaX) * 0.005
         gs.camera.orbitRotation.y += Float(event.deltaY) * 0.005
         gs.camera.orbitRotation.y = max(-Float.pi / 2 + 0.01, min(Float.pi / 2 - 0.01, gs.camera.orbitRotation.y))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        handleLook(event)
+    }
+
+    /// First-person mouse look: yaw from horizontal motion, pitch (clamped) from vertical.
+    private func handleLook(_ event: NSEvent) {
+        guard let gs = renderer?.gameState, gs.camera.mode == .firstPerson else { return }
+        let sens: Float = 0.0022
+        gs.camera.lookYaw -= Float(event.deltaX) * sens
+        gs.camera.lookPitch = max(-1.4, min(1.4, gs.camera.lookPitch - Float(event.deltaY) * sens))
     }
 
     override func scrollWheel(with event: NSEvent) {

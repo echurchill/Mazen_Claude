@@ -10,6 +10,9 @@ class GameState {
     // M9.5-3: slow idle spin of the whole game cube (a planet turning under its sun).
     var spinEnabled = true
     var spinPeriod: Float = 120   // seconds per full rotation
+    /// Multiplier on world time (sun/moon/spin/fog) only — player controls stay real-time.
+    /// A debug fast-forward to reach night / catch an eclipse without waiting (M9 Phases 5–7).
+    var timeScale: Float = 1
     var time: Float = 0
     var frameTimeMs: Float = 0
     var avgFrameTimeMs: Float = 0
@@ -73,7 +76,7 @@ class GameState {
     // MARK: - Update
 
     func update(deltaTime: Float) {
-        time += deltaTime
+        time += deltaTime * timeScale
         camera.updateOrbit(deltaTime: deltaTime)
 
         if player.updateMovement(deltaTime: deltaTime) {
@@ -128,6 +131,21 @@ class GameState {
 
     func cameraUp() -> SIMD3<Float> {
         camera.cameraUp(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpinMatrix())
+    }
+
+    /// Mouselook (Caps-Lock) steering: snap the discrete `facing` to the 8-way nearest the
+    /// current mouse look, then set `lookYaw` to the leftover angle so the view doesn't jump.
+    /// Geometry-based (via `worldToHeading8`), so it stays consistent with however the camera
+    /// renders the look — no separate sign convention to keep straight.
+    func steerToLook() {
+        let up = player.face.normal
+        let base = CameraState.headingToWorld(player.facing, face: player.face)
+        let look = simd_quatf(angle: camera.lookYaw, axis: up).act(base)
+        let newFacing = CameraState.worldToHeading8(look, face: player.face)
+        let snapped = CameraState.headingToWorld(newFacing, face: player.face)
+        // signed residual angle from the snapped facing to the actual look, about `up`
+        camera.lookYaw = atan2f(dot(cross(snapped, look), up), dot(snapped, look))
+        player.facing = newFacing
     }
 
     // MARK: - Discovery

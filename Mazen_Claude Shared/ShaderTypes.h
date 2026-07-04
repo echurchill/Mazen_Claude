@@ -39,6 +39,7 @@ typedef struct
     float sunElevation;          // dot(sunDir, up): >0 day, <0 night
     vector_float3 moonDirection; // normalized, toward the moon
     float moonIntensity;         // base strength of the moon's fill light
+    float eclipseFactor;         // M9-7: 0 normally, →1 as the moon covers the sun
 } FrameUniforms;
 
 typedef struct

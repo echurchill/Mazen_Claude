@@ -14,6 +14,12 @@ struct CameraState {
     /// distance (`WorldScale.orbitDistance`). Set/clamped by the platform zoom handlers.
     var orbitDistanceOverride: Float? = nil
 
+    /// First-person mouse look (radians). `lookYaw` is an offset from the discrete `facing`;
+    /// `lookPitch` is absolute and clamped. A forward move snaps `facing` to the look direction
+    /// (aim-to-steer, via `GameState.steerToLook`).
+    var lookYaw: Float = 0
+    var lookPitch: Float = 0
+
     mutating func updateOrbit(deltaTime: Float) {
         if mode == .orbit && orbitAutoRotate {
             orbitRotation.x += deltaTime * 0.15
@@ -103,8 +109,12 @@ struct CameraState {
             facingWorld = Self.headingToWorld(player.facing, face: player.face)
         }
 
-        let pitchAngle: Float = -0.05
-        facingWorld = normalize(facingWorld + upDir * pitchAngle)
+        // Mouse look: yaw about the face up, then pitch about the view's right axis. Free-look
+        // and mouselook render identically here; they differ only in whether a forward move
+        // snaps `facing` to the look (handled in GameState.steerToLook).
+        facingWorld = simd_quatf(angle: lookYaw, axis: upDir).act(facingWorld)
+        let rightAxis = normalize(cross(facingWorld, upDir))
+        facingWorld = normalize(simd_quatf(angle: lookPitch, axis: rightAxis).act(facingWorld))
 
         if sliceRotation.isActive && sliceRotation.playerCubieIndex >= 0 && sliceRotation.affectedCubies.contains(sliceRotation.playerCubieIndex) {
             let axisVec: SIMD3<Float> = sliceRotation.axis == 0 ? SIMD3(1,0,0) : sliceRotation.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
