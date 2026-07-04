@@ -310,6 +310,12 @@ fragment float4 fragmentShader(
         // Sun — emissive, unlit (M9). Kept out of the fog below so it stays bright.
         color = in.color.rgb;
         lighting = float3(1.0);
+    } else if (in.materialID == 13) {
+        // Moon — diffuse grey lit by the sun direction; the cube faces give clean phases
+        // (sun-facing side bright, opposite dark). Faint ambient keeps the dark side visible. (M9)
+        float moonHL = max(dot(normal, lightDir), 0.0);
+        color = in.color.rgb;
+        lighting = float3(0.03) + float3(1.05, 1.02, 0.95) * moonHL;
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;
@@ -318,7 +324,7 @@ fragment float4 fragmentShader(
     color *= lighting * in.aoFactor;
 
     // Distance fog — greyscale textured, auto-adapts for FP vs orbit
-    if (in.materialID != 4 && in.materialID != 12) {
+    if (in.materialID != 4 && in.materialID != 12 && in.materialID != 13) {
         float dist = distance(in.worldPosition, frame.cameraPosition);
         float camFromCenter = length(frame.cameraPosition);
         float orbitFactor = smoothstep(3.0, 5.0, camFromCenter);

@@ -243,13 +243,21 @@ final class SceneBuilder {
             opaqueFogTiles.append(TileEntry(instance: markerInst, mesh: tileMeshLib.playerMarker))
         }
 
-        // Celestial bodies (M9): the sun cube at its orbital position, emissive.
+        // Celestial bodies (M9): the sun cube (emissive) and moon cube (sun-lit) at their
+        // orbital positions. Both use the shared celestialCube mesh, so they batch together.
         let cs = gameState.celestialSystem
         let sunPos = cs.sunPosition(time: gameState.time)
         let sunMat = float4x4.translation(sunPos.x, sunPos.y, sunPos.z) * float4x4.scale(cs.sunSize)
-        let sunInst = InstanceDataSwift(modelMatrix: sunMat, baseColor: SIMD4(1.0, 0.93, 0.65, 1.0),
-            materialID: 12, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
-        celestialTiles.append(TileEntry(instance: sunInst, mesh: tileMeshLib.celestialCube))
+        celestialTiles.append(TileEntry(
+            instance: InstanceDataSwift(modelMatrix: sunMat, baseColor: SIMD4(1.0, 0.93, 0.65, 1.0),
+                materialID: 12, tileID: 0, discoveryAmount: 1.0, styleSeed: 0),
+            mesh: tileMeshLib.celestialCube))
+        let moonPos = cs.moonPosition(time: gameState.time)
+        let moonMat = float4x4.translation(moonPos.x, moonPos.y, moonPos.z) * float4x4.scale(cs.moonSize)
+        celestialTiles.append(TileEntry(
+            instance: InstanceDataSwift(modelMatrix: moonMat, baseColor: SIMD4(0.72, 0.72, 0.75, 1.0),
+                materialID: 13, tileID: 0, discoveryAmount: 1.0, styleSeed: 0),
+            mesh: tileMeshLib.celestialCube))
 
         // Pack instances — opaque first, then translucent
         var idx = 0
