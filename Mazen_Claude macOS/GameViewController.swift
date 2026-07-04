@@ -110,11 +110,10 @@ class GameViewController: NSViewController {
         let gs = renderer.gameState
 
         switch event.keyCode {
-        case 126, 13: // Up arrow, W
-            if gs.camera.mode == .firstPerson { gs.steerToLook() }
-            gs.player.tryMoveForward(cubeModel: gs.cubeModel)
-        case 125, 1:  // Down arrow, S
-            gs.player.tryMoveBackward(cubeModel: gs.cubeModel)
+        case 126, 13: // Up arrow, W — hold to walk forward (chained in GameState.update)
+            gs.forwardHeld = true
+        case 125, 1:  // Down arrow, S — hold to walk back
+            gs.backwardHeld = true
         case 123, 0:  // Left arrow, A
             gs.player.tryTurnLeft()
         case 124, 2:  // Right arrow, D
@@ -143,6 +142,15 @@ class GameViewController: NSViewController {
             renderer.resetGame(size: sizes[(idx + 1) % sizes.count])
         default:
             break
+        }
+    }
+
+    override func keyUp(with event: NSEvent) {
+        guard let gs = renderer?.gameState else { return }
+        switch event.keyCode {
+        case 126, 13: gs.forwardHeld = false
+        case 125, 1:  gs.backwardHeld = false
+        default: break
         }
     }
 

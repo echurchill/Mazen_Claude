@@ -173,20 +173,17 @@ fragment float4 fragmentShader(
     float halfLambert = ndotl * 0.5 + 0.5;
     halfLambert = halfLambert * halfLambert;
 
-    // M9.5-2 per-face day/night. Each cube face runs its own cycle from the *local* sun
-    // elevation (sun vs the face's outward normal), so the sun-facing face stays bright at
-    // dawn/dusk instead of the whole cube dimming as one, and the terminator sweeps across
-    // faces. faceUp = the dominant axis of the (cube-centred) world position — which is the
-    // *spun* face normal for free once M9.5-3 rotates the cube.
-    float3 ap = abs(in.worldPosition);
-    float3 faceUp = (ap.x >= ap.y && ap.x >= ap.z) ? float3(sign(in.worldPosition.x), 0.0, 0.0)
-                  : (ap.y >= ap.z)                  ? float3(0.0, sign(in.worldPosition.y), 0.0)
-                  :                                    float3(0.0, 0.0, sign(in.worldPosition.z));
-    float dayFactor = smoothstep(-0.15, 0.15, dot(faceUp, lightDir));
-    float moonUp = smoothstep(-0.05, 0.15, dot(faceUp, frame.moonDirection));
+    // Per-face day/night (M9.5-2), softened (M9.6-terminator): day/night runs off the surface's
+    // *radial* direction — normalize(worldPosition) — instead of the discrete face normal, so the
+    // terminator is a smooth band that sweeps the cube (and curves across each face near the edges)
+    // rather than a hard line at the face seams. Still per-region (sun-facing bright, far side
+    // dark); still the spun direction for free once the cube rotates.
+    float3 surfDir = normalize(in.worldPosition);
+    float dayFactor = smoothstep(-0.22, 0.22, dot(surfDir, lightDir));
+    float moonUp = smoothstep(-0.15, 0.15, dot(surfDir, frame.moonDirection));
     // M9-7 eclipse: when the (nearer) moon aligns with the sun it blocks the sunlight, so the
     // lit faces suddenly darken — dramatic because the moon and sun share an apparent size.
-    float3 sunColor = float3(1.0, 0.95, 0.85) * dayFactor * (1.0 - frame.eclipseFactor);
+    float3 sunColor = float3(0.95, 0.92, 0.84) * dayFactor * (1.0 - frame.eclipseFactor);
     float3 dayAmbient = float3(0.35, 0.45, 0.65);
     float3 nightAmbient = float3(0.06, 0.08, 0.16);
     // M9-5 moonlight: a soft, cool, half-Lambert-wrapped directional light on the night side.
@@ -195,7 +192,8 @@ fragment float4 fragmentShader(
     float3 moonLight = float3(0.5, 0.58, 0.82) * (frame.moonIntensity * moonHL * (1.0 - dayFactor) * moonUp);
     // Eerie reddish twilight lingering on the day side during an eclipse.
     float3 eclipseGlow = float3(0.16, 0.05, 0.03) * (frame.eclipseFactor * dayFactor);
-    float3 skyAmbient = mix(nightAmbient, dayAmbient, dayFactor) + moonLight + eclipseGlow;
+    // skyAmbient is finalized after the shadow block below, so the moonlight can take the
+    // night shadow (M9-6) while the ambient and eclipse glow stay unshadowed.
 
     // Shadow mapping — skip fog (4/5) and posts (8). Posts are thin markers embedded
     // where walls meet, so receiving shadows makes their surface fight the wall depth
@@ -224,6 +222,11 @@ fragment float4 fragmentShader(
             shadowFactor = 1.0 - shadow * 0.55;
         }
     }
+
+    // M9-6 moon shadows: the single shadow map follows the sun by day and the moon at night
+    // (Renderer picks the light), so `shadowFactor` shadows whichever light is active. Only the
+    // direct moonlight takes it here — the ambient and eclipse glow stay unshadowed.
+    float3 skyAmbient = mix(nightAmbient, dayAmbient, dayFactor) + moonLight * shadowFactor + eclipseGlow;
 
     float3 color;
     float alpha = 1.0;

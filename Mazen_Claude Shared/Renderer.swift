@@ -357,17 +357,19 @@ class Renderer: NSObject, MTKViewDelegate {
         let ptr = buf.contents().bindMemory(to: FrameUniformsSwift.self, capacity: 1)
         let ws = gameState.worldScale
         let vp = gameState.viewProjectionMatrix(aspect: aspect)
-        // M9: the shadow-casting light tracks the sun's apparent orbit.
-        let lightDir = gameState.celestialSystem.sunDirection(time: gameState.time)
-        let lightPos = lightDir * ws.lightDistance
-        // Swap the lookAt up-vector when the sun is near-vertical to avoid gimbal collapse.
-        let lightUp: SIMD3<Float> = abs(lightDir.y) > 0.99 ? SIMD3(1, 0, 0) : SIMD3(0, 1, 0)
+        let cs = gameState.celestialSystem
+        // Lighting uses the true sun direction; the shadow map (M9-6) follows the sun by day and
+        // the moon at night — one map, switched light — so nights get faint moon shadows.
+        let lightDir = cs.sunDirection(time: gameState.time)
+        let moonDir = cs.moonDirection(time: gameState.time)
+        let shadowDir = lightDir.y > -0.05 ? lightDir : (moonDir.y > 0.05 ? moonDir : lightDir)
+        let lightPos = shadowDir * ws.lightDistance
+        // Swap the lookAt up-vector when the light is near-vertical to avoid gimbal collapse.
+        let lightUp: SIMD3<Float> = abs(shadowDir.y) > 0.99 ? SIMD3(1, 0, 0) : SIMD3(0, 1, 0)
         let lightView = float4x4.lookAt(eye: lightPos, target: SIMD3(0,0,0), up: lightUp)
         let r = ws.shadowOrthoRadius
         let lightProj = float4x4.orthographic(left: -r, right: r, bottom: -r, top: r, nearZ: ws.shadowNearZ, farZ: ws.shadowFarZ)
         let lightVP = lightProj * lightView
-        let cs = gameState.celestialSystem
-        let moonDir = cs.moonDirection(time: gameState.time)
         // M9-7 eclipse: the nearer moon covers the sun when their directions align. Equal
         // apparent sizes (~1.8° radius each), so ramp across the ~2-radius overlap (cos of it).
         let align = dot(lightDir, moonDir)

@@ -14,6 +14,12 @@ class GameState {
     /// A debug fast-forward to reach night / catch an eclipse without waiting (M9 Phases 5–7).
     var timeScale: Float = 1
     var time: Float = 0
+
+    /// Hold-to-walk state: the input layer sets these on key down/up and `update` chains the
+    /// next hop the instant the current one ends, so walking is continuous and smooth rather
+    /// than gated by the OS key-repeat.
+    var forwardHeld = false
+    var backwardHeld = false
     var frameTimeMs: Float = 0
     var avgFrameTimeMs: Float = 0
 
@@ -83,6 +89,16 @@ class GameState {
             onPlayerArrived()
         }
         player.updateTurn(deltaTime: deltaTime)
+
+        // Chain held-key walking so movement is continuous (no waiting on OS key-repeat).
+        if !player.isMoving && !player.isTurning && !sliceRotation.isActive {
+            if forwardHeld {
+                if camera.mode == .firstPerson { steerToLook() }
+                player.tryMoveForward(cubeModel: cubeModel)
+            } else if backwardHeld {
+                player.tryMoveBackward(cubeModel: cubeModel)
+            }
+        }
 
         if sliceRotation.isActive {
             sliceRotation.progress += deltaTime * sliceRotation.speed / abs(sliceRotation.angle)

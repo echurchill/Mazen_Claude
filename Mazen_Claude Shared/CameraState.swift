@@ -80,7 +80,7 @@ struct CameraState {
 
         if player.isMoving {
             let toEye = eye(player.moveToFace, player.moveToRow, player.moveToCol, player.moveToSubRow, player.moveToSubCol)
-            let t = Self.smoothstep(player.moveProgress)
+            let t = player.moveProgress   // linear = constant walking speed (no per-hop stop-start)
             if player.moveFromFace != player.moveToFace {
                 // Round the corner along the sphere instead of chording straight
                 // through it: slerp the eye *direction* around the shared cube edge and
@@ -98,7 +98,7 @@ struct CameraState {
         if player.isMoving {
             let fromDir = Self.headingToWorld(player.facing, face: player.moveFromFace)
             let toDir = Self.headingToWorld(player.moveNewFacing, face: player.moveToFace)
-            let t = Self.smoothstep(player.moveProgress)
+            let t = player.moveProgress   // linear = constant walking speed (no per-hop stop-start)
             facingWorld = normalize(mix(fromDir, toDir, t: t))
         } else if player.isTurning {
             let fromDir = Self.headingToWorld(player.turnFromFacing, face: player.face)
