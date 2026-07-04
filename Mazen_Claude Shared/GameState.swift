@@ -6,6 +6,7 @@ class GameState {
     let cubeModel: CubeModel
     var player: PlayerState
     var camera = CameraState()
+    var celestialSystem = CelestialSystem()
     var time: Float = 0
     var frameTimeMs: Float = 0
     var avgFrameTimeMs: Float = 0

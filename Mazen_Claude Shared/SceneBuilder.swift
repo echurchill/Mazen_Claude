@@ -51,6 +51,7 @@ final class SceneBuilder {
     private var opaqueFogTiles: [TileEntry] = []
     private var dissolveTiles: [TileEntry] = []
     private var frameTiles: [TileEntry] = []
+    private var celestialTiles: [TileEntry] = []
     private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
     private var mazePathFloorTiles: [UInt8: [TileEntry]] = [:]
     private var mazeWallTiles: [UInt8: [TileEntry]] = [:]
@@ -65,6 +66,7 @@ final class SceneBuilder {
         opaqueFogTiles.removeAll(keepingCapacity: true)
         dissolveTiles.removeAll(keepingCapacity: true)
         frameTiles.removeAll(keepingCapacity: true)
+        celestialTiles.removeAll(keepingCapacity: true)
         for key in mazeFloorTiles.keys { mazeFloorTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazePathFloorTiles.keys { mazePathFloorTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazeWallTiles.keys { mazeWallTiles[key]?.removeAll(keepingCapacity: true) }
@@ -241,6 +243,14 @@ final class SceneBuilder {
             opaqueFogTiles.append(TileEntry(instance: markerInst, mesh: tileMeshLib.playerMarker))
         }
 
+        // Celestial bodies (M9): the sun cube at its orbital position, emissive.
+        let cs = gameState.celestialSystem
+        let sunPos = cs.sunPosition(time: gameState.time)
+        let sunMat = float4x4.translation(sunPos.x, sunPos.y, sunPos.z) * float4x4.scale(cs.sunSize)
+        let sunInst = InstanceDataSwift(modelMatrix: sunMat, baseColor: SIMD4(1.0, 0.93, 0.65, 1.0),
+            materialID: 12, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+        celestialTiles.append(TileEntry(instance: sunInst, mesh: tileMeshLib.celestialCube))
+
         // Pack instances — opaque first, then translucent
         var idx = 0
         var opaqueDrawCalls: [DrawCall] = []
@@ -347,6 +357,23 @@ final class SceneBuilder {
                 indexCount: mesh.indexCount,
                 instanceOffset: startIdx,
                 instanceCount: entries.count
+            ))
+        }
+
+        // Celestial bodies (M9) — emissive, drawn with the opaque geometry (far outside the
+        // shadow-map frustum, so their presence in the shadow pass is a harmless no-op).
+        if !celestialTiles.isEmpty {
+            let mesh = celestialTiles[0].mesh
+            let startIdx = idx
+            for entry in celestialTiles {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: celestialTiles.count
             ))
         }
 

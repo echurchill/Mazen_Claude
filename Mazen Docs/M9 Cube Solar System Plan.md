@@ -202,6 +202,8 @@ The 5° tilt means eclipses are rare but possible — a nice emergent behavior.
 
 **Phases 1–3** deliver the core visual. **Phase 4** makes it atmospheric. **Phases 5–7** are polish.
 
+> **STATUS — M9-1 + M9-2 ✅ done (2026-07-03).** New `CelestialSystem.swift` (owned by `GameState`) computes sun/moon orbits — sun period 90 s, 23° tilt, starts at noon; distances fixed (60 / 22) inside `cameraFarZ = 100`, so the same orbit reads across cube sizes. The shadow-casting light now tracks `sunDirection(time:)` (lookAt up-vector guarded when the sun is near-vertical) → shadows sweep across the maze over the day. A visible **emissive cube-sun** (materialID 12, excluded from distance fog, drawn via a `celestialCube` unit-cube mesh + a `SceneBuilder` celestial batch into the opaque list; harmless in the shadow pass since it's far outside the frustum). The M10 shadow retune already covered the plan's "shadow tuning vs 5× features" trap, so **no retune was needed**. Night is flat until M9-4. **User: "Looks so cool."** Next: M9-3 (moon), M9-4 (day/night).
+
 ---
 
 ## File Changes Summary

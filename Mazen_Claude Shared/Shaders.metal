@@ -306,6 +306,10 @@ fragment float4 fragmentShader(
         float3 stone = diffuseArray.sample(texSampler, in.texCoord, 2).rgb;
         color = stone * float3(1.25, 1.12, 0.9);
         lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
+    } else if (in.materialID == 12) {
+        // Sun — emissive, unlit (M9). Kept out of the fog below so it stays bright.
+        color = in.color.rgb;
+        lighting = float3(1.0);
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;
@@ -314,7 +318,7 @@ fragment float4 fragmentShader(
     color *= lighting * in.aoFactor;
 
     // Distance fog — greyscale textured, auto-adapts for FP vs orbit
-    if (in.materialID != 4) {
+    if (in.materialID != 4 && in.materialID != 12) {
         float dist = distance(in.worldPosition, frame.cameraPosition);
         float camFromCenter = length(frame.cameraPosition);
         float orbitFactor = smoothstep(3.0, 5.0, camFromCenter);

@@ -357,9 +357,12 @@ class Renderer: NSObject, MTKViewDelegate {
         let ptr = buf.contents().bindMemory(to: FrameUniformsSwift.self, capacity: 1)
         let ws = gameState.worldScale
         let vp = gameState.viewProjectionMatrix(aspect: aspect)
-        let lightDir = normalize(SIMD3<Float>(0.4, 0.8, 0.6))
+        // M9: the shadow-casting light tracks the sun's apparent orbit.
+        let lightDir = gameState.celestialSystem.sunDirection(time: gameState.time)
         let lightPos = lightDir * ws.lightDistance
-        let lightView = float4x4.lookAt(eye: lightPos, target: SIMD3(0,0,0), up: SIMD3(0,1,0))
+        // Swap the lookAt up-vector when the sun is near-vertical to avoid gimbal collapse.
+        let lightUp: SIMD3<Float> = abs(lightDir.y) > 0.99 ? SIMD3(1, 0, 0) : SIMD3(0, 1, 0)
+        let lightView = float4x4.lookAt(eye: lightPos, target: SIMD3(0,0,0), up: lightUp)
         let r = ws.shadowOrthoRadius
         let lightProj = float4x4.orthographic(left: -r, right: r, bottom: -r, top: r, nearZ: ws.shadowNearZ, farZ: ws.shadowFarZ)
         let lightVP = lightProj * lightView

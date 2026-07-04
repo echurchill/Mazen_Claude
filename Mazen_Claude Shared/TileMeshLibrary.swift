@@ -14,6 +14,7 @@ class TileMeshLibrary {
     let fogLayers: [TileMesh]
     let playerMarker: TileMesh
     let frameMesh: TileMesh
+    let celestialCube: TileMesh   // unit cube for the M9 sun/moon bodies
     private var floorMeshes: [UInt8: TileMesh] = [:]      // propSpace sub-cells (base ground)
     private var pathFloorMeshes: [UInt8: TileMesh] = [:]  // path-cross sub-cells (paved)
     private var wallMeshes: [UInt8: TileMesh] = [:]
@@ -186,6 +187,11 @@ class TileMeshLibrary {
         let houseStart = allIndices.count
         Self.addHouseQuarter(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.houseCorner.rawValue] = TileMesh(vertexOffset: 0, indexOffset: houseStart, indexCount: allIndices.count - houseStart)
+
+        // Celestial bodies (M9): a unit cube, drawn at the sun/moon positions.
+        let cubeStart = allIndices.count
+        Self.addUnitCube(to: &allVerts, indices: &allIndices)
+        celestialCube = TileMesh(vertexOffset: 0, indexOffset: cubeStart, indexCount: allIndices.count - cubeStart)
 
         vertexBuffer = device.makeBuffer(
             bytes: allVerts,
@@ -415,6 +421,32 @@ class TileMeshLibrary {
         quad(SIMD3(inner1.x, inner1.y, z0), SIMD3(outer1.x, outer1.y, z0),
              SIMD3(outer1.x, outer1.y, z1), SIMD3(inner1.x, inner1.y, z1), capN1,
              SIMD2(0, 0), SIMD2(capU, 0), SIMD2(capU, wallV), SIMD2(0, wallV))
+    }
+
+    // MARK: - Celestial (M9)
+
+    /// A unit cube centred at the origin (±0.5), 6 faces wound CCW-outward with true face
+    /// normals. Scaled + positioned per-instance to render the sun and moon.
+    private static func addUnitCube(to verts: inout [MazeVertexSwift], indices: inout [UInt16]) {
+        let h: Float = 0.5
+        let p = [
+            SIMD3<Float>(-h, -h, -h), SIMD3(h, -h, -h), SIMD3(h, h, -h), SIMD3(-h, h, -h),  // 0..3 back (z=−h)
+            SIMD3<Float>(-h, -h,  h), SIMD3(h, -h,  h), SIMD3(h, h,  h), SIMD3(-h, h,  h),   // 4..7 front (z=+h)
+        ]
+        func quad(_ a: Int, _ b: Int, _ c: Int, _ d: Int) {
+            let n = normalize(cross(p[b] - p[a], p[d] - p[a]))
+            let base = UInt16(verts.count)
+            for i in [a, b, c, d] {
+                verts.append(MazeVertexSwift(position: p[i], normal: n, texCoord: SIMD2(0, 0), aoFactor: 1.0))
+            }
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        quad(4, 5, 6, 7)  // +Z
+        quad(0, 3, 2, 1)  // −Z
+        quad(1, 2, 6, 5)  // +X
+        quad(0, 4, 7, 3)  // −X
+        quad(3, 7, 6, 2)  // +Y
+        quad(0, 1, 5, 4)  // −Y
     }
 
     // MARK: - Props (M10 Phase G)
