@@ -71,7 +71,26 @@ fragment float4 skyFragmentShader(
         0.5 - phi / M_PI_F
     );
 
-    float3 skyColor = skyboxTex.sample(texSampler, skyUV).rgb;
+    float3 stars = skyboxTex.sample(texSampler, skyUV).rgb;
+
+    // M9.5-1 dynamic sky. Day/night is local to the viewer's up — the face normal in first
+    // person (via cameraUp), world-up in orbit — so each face gets its own sky, and the sun
+    // glows in the daytime sky before fading back to the starfield at night.
+    float3 sunDir = normalize(frame.lightDirection);
+    float skyDay = smoothstep(-0.25, 0.20, dot(frame.cameraUp, sunDir));
+
+    // Daytime gradient along the local up, warmed toward the sun.
+    float up = clamp(dot(viewDir, frame.cameraUp) * 0.5 + 0.5, 0.0, 1.0);
+    float3 daySky = mix(float3(0.60, 0.72, 0.86), float3(0.20, 0.42, 0.74), up * up);
+    float sd = max(dot(viewDir, sunDir), 0.0);
+    daySky += float3(1.0, 0.86, 0.58) * pow(sd, 8.0) * 0.5;                  // sun halo
+    // Sunset: redden near the local horizon toward the sun when the sun sits low.
+    float lowSun = 1.0 - smoothstep(0.0, 0.30, dot(frame.cameraUp, sunDir));
+    float horizonBand = 1.0 - smoothstep(0.0, 0.30, abs(dot(viewDir, frame.cameraUp)));
+    daySky = mix(daySky, float3(0.98, 0.46, 0.22), horizonBand * lowSun * sd * 0.7);
+
+    // Night = stars; day = sky with stars faintly showing through (keeps the space identity).
+    float3 skyColor = mix(stars, daySky + stars * 0.12, skyDay);
     return float4(skyColor, 1.0);
 }
 
@@ -154,15 +173,20 @@ fragment float4 fragmentShader(
     float halfLambert = ndotl * 0.5 + 0.5;
     halfLambert = halfLambert * halfLambert;
 
-    // M9-4 day/night cycle. dayFactor crosses 0→1 as the sun clears the horizon; the sun
-    // fades out at night, the ambient shifts warm-day → cool-night, and the moon adds a soft
-    // directional fill while it is up. Every lit material below reads these two, so the whole
-    // scene follows the cycle for free.
-    float dayFactor = smoothstep(-0.15, 0.15, frame.sunElevation);
+    // M9.5-2 per-face day/night. Each cube face runs its own cycle from the *local* sun
+    // elevation (sun vs the face's outward normal), so the sun-facing face stays bright at
+    // dawn/dusk instead of the whole cube dimming as one, and the terminator sweeps across
+    // faces. faceUp = the dominant axis of the (cube-centred) world position — which is the
+    // *spun* face normal for free once M9.5-3 rotates the cube.
+    float3 ap = abs(in.worldPosition);
+    float3 faceUp = (ap.x >= ap.y && ap.x >= ap.z) ? float3(sign(in.worldPosition.x), 0.0, 0.0)
+                  : (ap.y >= ap.z)                  ? float3(0.0, sign(in.worldPosition.y), 0.0)
+                  :                                    float3(0.0, 0.0, sign(in.worldPosition.z));
+    float dayFactor = smoothstep(-0.15, 0.15, dot(faceUp, lightDir));
+    float moonUp = smoothstep(-0.05, 0.15, dot(faceUp, frame.moonDirection));
     float3 sunColor = float3(1.0, 0.95, 0.85) * dayFactor;
     float3 dayAmbient = float3(0.35, 0.45, 0.65);
     float3 nightAmbient = float3(0.06, 0.08, 0.16);
-    float moonUp = smoothstep(-0.05, 0.15, frame.moonDirection.y);
     float moonNdotL = max(dot(normal, frame.moonDirection), 0.0);
     float3 moonFill = float3(0.45, 0.52, 0.72) * (frame.moonIntensity * moonNdotL * (1.0 - dayFactor) * moonUp);
     float3 skyAmbient = mix(nightAmbient, dayAmbient, dayFactor) + moonFill;
