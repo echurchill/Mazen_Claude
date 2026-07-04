@@ -14,8 +14,9 @@ struct CelestialSystem {
     // MARK: Tunables
     /// Seconds for a full day. The plan's "real" value is 300; 90 keeps the shadow sweep
     /// visible without being dizzying. Tune up for play, down for testing.
-    var sunPeriod: Float = 90
-    var moonPeriod: Float = 47
+    // ~8-minute day; the moon's period is slightly longer, roughly matching Earth's ratios.
+    var sunPeriod: Float = 480
+    var moonPeriod: Float = 546
     /// Sun orbit tilt: the plane is spanned by X and an "up" axis leaned `sunTilt` off Y
     /// toward +Z, so the sun rises at +X, passes near overhead, sets at −X, and dips below
     /// at night (a real day/night arc, not a low horizon circle).
@@ -27,10 +28,15 @@ struct CelestialSystem {
     var moonTilt: Float = -34 * .pi / 180
     var moonPhaseOffset: Float = .pi
 
-    var sunOrbitRadius: Float = 60
-    var moonOrbitRadius: Float = 22
-    var sunSize: Float = 8
-    var moonSize: Float = 2.5
+    // M9.5-4: distances chosen for apparent size (= size / distance). The sun sits twice as
+    // far as before (perceived ~2× more distant), and the moon is pushed out until its
+    // apparent size matches the sun's (the Earth eclipse coincidence): moonDist =
+    // moonSize · sunDist/sunSize = 3.4 · 176/11 = 54.4. Sun's far point (176 + 5.5) fits
+    // inside the bumped WorldScale.cameraFarZ (220).
+    var sunOrbitRadius: Float = 176
+    var moonOrbitRadius: Float = 54.4
+    var sunSize: Float = 11
+    var moonSize: Float = 3.4
 
     // MARK: Positions
     func sunPosition(time: Float) -> SIMD3<Float> {

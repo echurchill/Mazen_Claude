@@ -55,7 +55,9 @@ struct WorldScale {
     var firstPersonFOVDegrees: Float = 58.0
     var eyeHeight: Float = 0.09
     var cameraNearZ: Float = 0.01
-    var cameraFarZ: Float = 100.0
+    // Far enough to contain the M9 sun at its pushed-out orbit (176) plus the orbit-camera
+    // distance and the sun's half-size, with margin (~176 + 21 + 5.5 ≈ 203).
+    var cameraFarZ: Float = 220.0
 
     init(cubeSize: Int) {
         self.cubeSize = cubeSize

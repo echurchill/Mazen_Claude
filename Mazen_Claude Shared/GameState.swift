@@ -7,6 +7,9 @@ class GameState {
     var player: PlayerState
     var camera = CameraState()
     var celestialSystem = CelestialSystem()
+    // M9.5-3: slow idle spin of the whole game cube (a planet turning under its sun).
+    var spinEnabled = true
+    var spinPeriod: Float = 120   // seconds per full rotation
     var time: Float = 0
     var frameTimeMs: Float = 0
     var avgFrameTimeMs: Float = 0
@@ -106,16 +109,25 @@ class GameState {
 
     // MARK: - Camera convenience
 
+    /// The current idle-spin transform of the game cube (M9.5-3). Applied to the game-cube
+    /// render instances and the first-person camera (which rides the spin); the sun/moon and
+    /// the orbit camera stay world-frame, so the sun sweeps across the faces as the cube turns.
+    func worldSpinMatrix() -> float4x4 {
+        guard spinEnabled else { return matrix_identity_float4x4 }
+        let angle = time / spinPeriod * 2 * .pi
+        return float4x4.rotation(radians: angle, axis: SIMD3(0, 1, 0))
+    }
+
     func viewProjectionMatrix(aspect: Float) -> float4x4 {
-        camera.viewProjectionMatrix(aspect: aspect, player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
+        camera.viewProjectionMatrix(aspect: aspect, player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpinMatrix())
     }
 
     func cameraPosition() -> SIMD3<Float> {
-        camera.cameraPosition(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
+        camera.cameraPosition(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpinMatrix())
     }
 
     func cameraUp() -> SIMD3<Float> {
-        camera.cameraUp(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
+        camera.cameraUp(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpinMatrix())
     }
 
     // MARK: - Discovery

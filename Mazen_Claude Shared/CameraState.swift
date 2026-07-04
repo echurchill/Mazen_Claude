@@ -20,7 +20,7 @@ struct CameraState {
         }
     }
 
-    func viewProjectionMatrix(aspect: Float, player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> float4x4 {
+    func viewProjectionMatrix(aspect: Float, player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation, worldSpin: float4x4) -> float4x4 {
         let ws = cubeModel.worldScale
         let fov = mode == .orbit ? ws.orbitFOVRadians : ws.firstPersonFOVRadians
         let projection = float4x4.perspective(
@@ -38,23 +38,23 @@ struct CameraState {
             return projection * translate * rotX * rotY
 
         case .firstPerson:
-            let (eye, forward, up) = firstPersonCamera(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
+            let (eye, forward, up) = firstPersonCamera(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpin)
             let view = float4x4.lookAt(eye: eye, target: eye + forward, up: up)
             return projection * view
         }
     }
 
-    func cameraPosition(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> SIMD3<Float> {
+    func cameraPosition(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation, worldSpin: float4x4) -> SIMD3<Float> {
         switch mode {
         case .orbit:
             return SIMD3(0, 0, orbitDistanceOverride ?? cubeModel.worldScale.orbitDistance)
         case .firstPerson:
-            let (eye, _, _) = firstPersonCamera(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
+            let (eye, _, _) = firstPersonCamera(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpin)
             return eye
         }
     }
 
-    private func firstPersonCamera(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> (eye: SIMD3<Float>, forward: SIMD3<Float>, up: SIMD3<Float>) {
+    private func firstPersonCamera(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation, worldSpin: float4x4) -> (eye: SIMD3<Float>, forward: SIMD3<Float>, up: SIMD3<Float>) {
         let eyeHeight = cubeModel.worldScale.eyeHeight
         let step = cubeModel.worldScale.subCellStep
 
@@ -116,15 +116,24 @@ struct CameraState {
             upDir = rotQ.act(upDir)
         }
 
+        // M9.5-3: ride the idle world spin — first person stands on the turning cube, so the
+        // maze stays fixed relative to the player while the world-frame sun/moon/sky sweep by.
+        let se = worldSpin * SIMD4(eyePos, 1)
+        let sf = worldSpin * SIMD4(facingWorld, 0)
+        let su = worldSpin * SIMD4(upDir, 0)
+        eyePos = SIMD3(se.x, se.y, se.z)
+        facingWorld = SIMD3(sf.x, sf.y, sf.z)
+        upDir = SIMD3(su.x, su.y, su.z)
+
         return (eyePos, facingWorld, upDir)
     }
 
-    func cameraUp(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation) -> SIMD3<Float> {
+    func cameraUp(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation, worldSpin: float4x4) -> SIMD3<Float> {
         switch mode {
         case .orbit:
             return SIMD3(0, 1, 0)
         case .firstPerson:
-            let (_, _, up) = firstPersonCamera(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation)
+            let (_, _, up) = firstPersonCamera(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpin)
             return up
         }
     }

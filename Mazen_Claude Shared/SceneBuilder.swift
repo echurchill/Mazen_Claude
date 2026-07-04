@@ -60,6 +60,7 @@ final class SceneBuilder {
 
     func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer) -> SceneDrawData {
         let model = gameState.cubeModel
+        let spin = gameState.worldSpinMatrix()   // M9.5-3 idle cube spin (game geometry only)
         let capacity = buf.length / MemoryLayout<InstanceDataSwift>.stride
         let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: capacity)
 
@@ -94,6 +95,7 @@ final class SceneBuilder {
                     if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) {
                         matrix = animMat * matrix
                     }
+                    matrix = spin * matrix
 
                     let faceColor = Self.faceColors[face]!
 
@@ -228,7 +230,7 @@ final class SceneBuilder {
             let localY = Float(player.subRow - 1) * step
             let tb = player.facing.tangentBitangent
             let facingAngle = atan2f(-tb.t, tb.b)
-            pMatrix = pMatrix
+            pMatrix = spin * pMatrix
                 * float4x4.translation(localX, localY, 0)
                 * float4x4.rotation(radians: facingAngle, axis: SIMD3(0, 0, 1))
                 * float4x4.scale(0.6)
