@@ -35,6 +35,10 @@ typedef struct
     matrix_float4x4 inverseViewProjectionMatrix;
     vector_float3 cameraUp;
     matrix_float4x4 lightViewProjectionMatrix;
+    // M9-4 day/night cycle
+    float sunElevation;          // dot(sunDir, up): >0 day, <0 night
+    vector_float3 moonDirection; // normalized, toward the moon
+    float moonIntensity;         // base strength of the moon's fill light
 } FrameUniforms;
 
 typedef struct

@@ -203,6 +203,39 @@ The 5° tilt means eclipses are rare but possible — a nice emergent behavior.
 **Phases 1–3** deliver the core visual. **Phase 4** makes it atmospheric. **Phases 5–7** are polish.
 
 > **STATUS — M9-1 + M9-2 ✅ done (2026-07-03).** New `CelestialSystem.swift` (owned by `GameState`) computes sun/moon orbits — sun period 90 s, 23° tilt, starts at noon; distances fixed (60 / 22) inside `cameraFarZ = 100`, so the same orbit reads across cube sizes. The shadow-casting light now tracks `sunDirection(time:)` (lookAt up-vector guarded when the sun is near-vertical) → shadows sweep across the maze over the day. A visible **emissive cube-sun** (materialID 12, excluded from distance fog, drawn via a `celestialCube` unit-cube mesh + a `SceneBuilder` celestial batch into the opaque list; harmless in the shadow pass since it's far outside the frustum). The M10 shadow retune already covered the plan's "shadow tuning vs 5× features" trap, so **no retune was needed**. Night is flat until M9-4. **User: "Looks so cool."** Next: M9-3 (moon), M9-4 (day/night).
+>
+> **STATUS — M9-3 ✅ done (2026-07-03).** Moon: a smaller grey cube (materialID 13) at its orbital position (period 47 s, opposite tilt, starts opposite the sun), diffuse-lit by the sun direction so its cube faces read as crisp phases; excluded from fog, batched with the sun via `celestialCube`. **User: "looks correct."**
+>
+> **STATUS — M9-4 done; refinements → M9.5 (2026-07-03).** Day/night cycle: `FrameUniforms` gained `sunElevation` / `moonDirection` / `moonIntensity` (the struct is a Swift `typealias`, so no manual mirror to sync). A `dayFactor = smoothstep(-0.15, 0.15, sunElevation)` fades the sun out at night, shifts ambient warm-day → cool-night, and adds a moon fill light while the moon is up; the fog gained a day/night horizon so it stops glowing against the night sky. Builds and reads as a cycle — but a playtest in **orbit view** exposed three things the cycle *doesn't* touch (now collected into **M9.5** below): the sky never changes, the whole cube dims as one (a flat-world model, wrong for a cube), and the cube itself never moves. Also flagged: sun/moon read a touch close.
+
+## M9.5 — Polish (planned — picking up 2026-07-04)
+
+M9 Phases 1–4 delivered the core (sun, moon, sweeping shadows, day/night). A playtest in **orbit view** — where the sky fills the frame and you see the whole cube at once — showed the cycle stops at the maze and the world feels static. M9.5 collects the polish to make the solar system read as a *living, correct* scene. **Keep the accelerated orbit rate (`sunPeriod` 90 s) until these land**, then re-tune the periods for real play.
+
+### M9.5-1 — Dynamic sky
+`skyFragmentShader` samples one fixed starfield texture (no day/night), so "day" reads as a bright cube in dead-of-night space — glaring in orbit view.
+- Drive the sky from `sunElevation` / `lightDirection`: a lit daytime sky gradient (brighter toward the sun and horizon), warm sunset tones as the sun nears the horizon, fading back to the starfield at night; optionally a soft sun glow around `lightDirection`.
+- No new uniforms — the sky shader already has `frame`.
+- **Design choice:** keep it spacey (stars always faintly present, sky tints over them) vs a full atmospheric blue day. Lean hybrid, to keep the cube-in-space identity.
+
+### M9.5-2 — Per-face day/night (fix the global dimming)
+M9-4's `dayFactor` is a single **global** value from the sun's world elevation (`sunDir.y`) — a flat-world model. On a cube seen whole in orbit it's wrong: the face the sun sits directly on gets dimmed at dawn/dusk instead of staying bright. The base directional lighting already lights faces correctly; the global scaling of `sunColor` is the culprit.
+- Make day/night **per-face**: a local sun elevation from the surface's face normal vs the sun (`dot(faceUp, sunDir)`), so each face runs its own dawn → day → dusk → night as the sun sweeps the cube — the terminator crossing faces is both correct and better-looking.
+- Face-up for a fragment: derive from the dominant axis of its (cube-centred) world position, or pass the tile face normal per-instance. Must use the **spun** normal once M9.5-3 lands.
+- Keep full-strength per-face sun; key the night ambient / moon-fill to the local factor. First-person players still get a real local day/night on their face.
+
+### M9.5-3 — Game-cube idle rotation
+Only the orbit *camera* pans today; the cube itself never moves, which adds to the static feel. Give the world a slow idle spin — a planet turning under its orbiting sun.
+- A slow, time-based `worldSpin` (tilted axis) applied as a global transform to all game-cube instances; the sun/moon and the orbit camera stay world-frame, so the spin sweeps the sun across faces → dynamic lighting/shadows from the spin itself, compounding with the sun's orbit.
+- First-person camera rides the spin (you stand on the turning cube); the orbit camera does not.
+- Composes with the slice-rotation animation (`worldSpin · sliceAnim · worldMatrix`) and the shadow pass (world-frame light; spun geometry sweeps shadows). Coupled with M9.5-2 (spun face normals) — build together.
+- **Tunables:** spin period (minutes), axis tilt. Decide whether it eases/pauses during active first-person navigation to avoid disorientation, or just stays gentle enough not to matter.
+
+### M9.5-4 — Push the sun & moon out
+They read a touch close. Increase `sunOrbitRadius` / `moonOrbitRadius` (≈ 60→90, 22→36) so they sit farther and read as celestial; bump `WorldScale.cameraFarZ` (100→≈160) so they stay inside the frustum; re-tune `sunSize` / `moonSize` for a sensible apparent size at the new distance.
+
+### Sequencing
+M9.5-2 + M9.5-3 are coupled (both about the cube's orientation vs the sun) — do them together. M9.5-1 and M9.5-4 are independent quick wins that can land first. After M9.5: revisit M9 Phases 5–7 (moon-as-light, moon shadows, eclipses) and re-tune orbital periods for real play.
 
 ---
 

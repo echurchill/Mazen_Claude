@@ -366,6 +366,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let r = ws.shadowOrthoRadius
         let lightProj = float4x4.orthographic(left: -r, right: r, bottom: -r, top: r, nearZ: ws.shadowNearZ, farZ: ws.shadowFarZ)
         let lightVP = lightProj * lightView
+        let cs = gameState.celestialSystem
         ptr.pointee = FrameUniformsSwift(
             viewProjectionMatrix: vp,
             cameraPosition: gameState.cameraPosition(),
@@ -373,7 +374,10 @@ class Renderer: NSObject, MTKViewDelegate {
             lightDirection: lightDir,
             inverseViewProjectionMatrix: vp.inverse,
             cameraUp: gameState.cameraUp(),
-            lightViewProjectionMatrix: lightVP
+            lightViewProjectionMatrix: lightVP,
+            sunElevation: lightDir.y,
+            moonDirection: cs.moonDirection(time: gameState.time),
+            moonIntensity: 0.15
         )
     }
 

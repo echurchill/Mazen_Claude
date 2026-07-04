@@ -154,8 +154,18 @@ fragment float4 fragmentShader(
     float halfLambert = ndotl * 0.5 + 0.5;
     halfLambert = halfLambert * halfLambert;
 
-    float3 sunColor = float3(1.0, 0.95, 0.85);
-    float3 skyAmbient = float3(0.35, 0.45, 0.65);
+    // M9-4 day/night cycle. dayFactor crosses 0→1 as the sun clears the horizon; the sun
+    // fades out at night, the ambient shifts warm-day → cool-night, and the moon adds a soft
+    // directional fill while it is up. Every lit material below reads these two, so the whole
+    // scene follows the cycle for free.
+    float dayFactor = smoothstep(-0.15, 0.15, frame.sunElevation);
+    float3 sunColor = float3(1.0, 0.95, 0.85) * dayFactor;
+    float3 dayAmbient = float3(0.35, 0.45, 0.65);
+    float3 nightAmbient = float3(0.06, 0.08, 0.16);
+    float moonUp = smoothstep(-0.05, 0.15, frame.moonDirection.y);
+    float moonNdotL = max(dot(normal, frame.moonDirection), 0.0);
+    float3 moonFill = float3(0.45, 0.52, 0.72) * (frame.moonIntensity * moonNdotL * (1.0 - dayFactor) * moonUp);
+    float3 skyAmbient = mix(nightAmbient, dayAmbient, dayFactor) + moonFill;
 
     // Shadow mapping — skip fog (4/5) and posts (8). Posts are thin markers embedded
     // where walls meet, so receiving shadows makes their surface fight the wall depth
@@ -338,9 +348,12 @@ fragment float4 fragmentShader(
         float fogN2 = fbm(fogUV * 1.8 + float2(-t * 0.3, t * 0.4) + 37.0, 3);
         float fogTex = fogN1 * 0.6 + fogN2 * 0.4;
 
+        // Fog follows the day/night cycle too, or it glows against a dark night sky.
         float3 nightHorizon = float3(0.04, 0.05, 0.08);
+        float3 dayHorizon = float3(0.52, 0.58, 0.66);
+        float3 horizon = mix(nightHorizon, dayHorizon, dayFactor);
         float fogBrightness = mix(0.7, 1.3, fogTex);
-        float3 fogColor = nightHorizon * fogBrightness;
+        float3 fogColor = horizon * fogBrightness;
 
         fogFactor *= (0.85 + 0.3 * fogTex);
         fogFactor = saturate(fogFactor);
