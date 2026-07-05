@@ -20,9 +20,20 @@ struct DrawCall {
 /// One imported model placed on the cube (M12-D asset registry).
 struct ImportedProp {
     let mesh: AssetMesh
-    let diffuse: MTLTexture?
+    let diffuse: MTLTexture?                // textured (one draw, materialID 11); nil = per-sub-mesh flat colours (materialID 10)
     let faceOffset: (row: Int, col: Int)   // tile offset from the +Z face centre
     let target: Float                       // fit the widest dimension to this many units
+    let yUp: Bool                           // OBJ kits import Y-up; USD props Z-up
+}
+
+/// One prepared asset draw for the frame (a whole textured mesh, or one flat-colour sub-mesh).
+struct AssetDrawCmd {
+    let vertexBuffer: MTLBuffer
+    let indexBuffer: MTLBuffer
+    let indexOffset: Int        // element offset
+    let indexCount: Int
+    let instanceIndex: Int
+    let diffuse: MTLTexture?
 }
 
 class Renderer: NSObject, MTKViewDelegate {
@@ -60,9 +71,10 @@ class Renderer: NSObject, MTKViewDelegate {
 
     var frameUniformBuffers: [MTLBuffer]
     var instanceBuffers: [MTLBuffer]
-    // M12: imported props (asset registry) + a per-frame instance buffer.
+    // M12: imported props (asset registry) + a per-frame instance buffer + draw list.
     var importedProps: [ImportedProp] = []
     var assetInstanceBuffers: [MTLBuffer] = []
+    var assetDrawCmds: [AssetDrawCmd] = []
     var opaqueDrawCalls: [DrawCall] = []
     var wallDrawCallRange: Range<Int> = 0..<0
     var translucentDrawCalls: [DrawCall] = []
@@ -224,25 +236,38 @@ class Renderer: NSObject, MTKViewDelegate {
         // M12: load an imported prop (dev absolute path — these get bundled for shipping later)
         // plus a small per-frame instance buffer for its transform/material.
         let modelsRoot = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models"
+        // Textured USD prop (one diffuse map, Z-up).
         func loadProp(_ dir: String, _ diffuse: String, _ off: (Int, Int), _ target: Float) -> ImportedProp? {
             guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(dir)/\(dir).usdc"), device: device) else {
                 print("[Renderer] prop FAILED to load: \(dir)"); return nil
             }
             let diff = Self.loadTextureFromFile(url: URL(fileURLWithPath: "\(modelsRoot)/\(dir)/textures/\(diffuse).jpg"), device: device, srgb: true)
-            return ImportedProp(mesh: mesh, diffuse: diff, faceOffset: off, target: target)
+            return ImportedProp(mesh: mesh, diffuse: diff, faceOffset: off, target: target, yUp: false)
         }
-        // Placed at the plaza-centre tile and its four diagonal neighbours (offsets from centre).
+        // Texture-less OBJ kit piece — flat per-material colours, Y-up.
+        func loadSolid(_ relPath: String, _ off: (Int, Int), _ target: Float) -> ImportedProp? {
+            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(relPath)"), device: device) else {
+                print("[Renderer] solid prop FAILED: \(relPath)"); return nil
+            }
+            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: off, target: target, yUp: true)
+        }
+        // Textured USD props at the plaza centre + its diagonal neighbours; solid-colour OBJ
+        // temple pieces at the edge-middle tiles.
         let loadedProps: [ImportedProp] = [
             loadProp("stone_fire_pit_2k",     "stone_fire_pit_diff_2k",     ( 0,  0), 0.35),
             loadProp("horse_statue_01_2k",    "horse_statue_01_diff_2k",    (-1, -1), 0.60),
             loadProp("tree_stump_01_2k",      "tree_stump_01_diff_2k",      (-1,  1), 0.30),
             loadProp("tree_stump_02_2k",      "tree_stump_02_diff_2k",      ( 1, -1), 0.30),
             loadProp("old_military_crate_2k", "old_military_crate_diff_2k", ( 1,  1), 0.32),
+            loadSolid("Modular Temple/Pillar_Large_Base.obj", (-1, 0), 0.55),
+            loadSolid("Modular Temple/Prop_Flag_Sun.obj",     ( 0, -1), 0.50),
+            loadSolid("Modular Temple/Prop_Flag_Moon.obj",    ( 0,  1), 0.50),
+            loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  0), 0.28),
         ].compactMap { $0 }
         self.importedProps = loadedProps
         var assetBufs: [MTLBuffer] = []
         for _ in 0..<maxBuffersInFlight {
-            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 16, options: .storageModeShared)!)
+            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 256, options: .storageModeShared)!)
         }
         self.assetInstanceBuffers = assetBufs
 
@@ -461,26 +486,43 @@ class Renderer: NSObject, MTKViewDelegate {
     /// tile Z-up), rest its base on the floor, centre it on the plaza-centre tile, and ride the
     /// world spin like any other prop. Rendered flat-coloured for now (texture is M12-C).
     private func updateAssetInstances() {
+        assetDrawCmds.removeAll(keepingCapacity: true)
         guard !importedProps.isEmpty else { return }
-        let ptr = assetInstanceBuffers[currentBufferIndex].contents().bindMemory(to: InstanceDataSwift.self, capacity: 16)
+        let cap = assetInstanceBuffers[currentBufferIndex].length / MemoryLayout<InstanceDataSwift>.stride
+        let ptr = assetInstanceBuffers[currentBufferIndex].contents().bindMemory(to: InstanceDataSwift.self, capacity: cap)
         let ws = gameState.worldScale
         let n = gameState.cubeModel.size
         let spin = gameState.worldSpinMatrix()
-        // USD is Z-up (matches the tile's local Z = out-of-face), so no re-orientation: fit the
-        // widest dimension to `target`, centre the footprint, rest the base (min-Z) on the floor,
-        // and ride the world spin like any prop.
-        for (i, p) in importedProps.enumerated() {
+        var inst = 0
+        for p in importedProps {
             let dim = p.mesh.size
             let maxDim = max(dim.x, max(dim.y, dim.z))
             let fs: Float = maxDim > 0 ? p.target / maxDim : 1
             let c = p.mesh.center
-            let placement =
-                gameState.cubeModel.worldMatrix(face: .positiveZ, row: n / 2 + p.faceOffset.row, col: n / 2 + p.faceOffset.col)
-                * float4x4.translation(-c.x * fs, -c.y * fs, ws.floorY - p.mesh.boundsMin.z * fs)
+            // Y-up (OBJ) → tile Z-up needs a +90° X rotation; Z-up (USD) needs none. Fit the widest
+            // dimension to `target`, centre the footprint, rest the base on the floor (the base and
+            // vertical-centre axes swap with the up-convention), and ride the world spin.
+            let orient = p.yUp ? float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0)) : matrix_identity_float4x4
+            let ty = p.yUp ? c.z * fs : -c.y * fs
+            let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs
+            let model = spin
+                * gameState.cubeModel.worldMatrix(face: .positiveZ, row: n / 2 + p.faceOffset.row, col: n / 2 + p.faceOffset.col)
+                * float4x4.translation(-c.x * fs, ty, tz)
                 * float4x4.scale(fs)
-            ptr[i] = InstanceDataSwift(
-                modelMatrix: spin * placement, baseColor: SIMD4(1, 1, 1, 1),
-                materialID: 11, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                * orient
+            if let diff = p.diffuse {
+                guard inst < cap else { break }
+                ptr[inst] = InstanceDataSwift(modelMatrix: model, baseColor: SIMD4(1, 1, 1, 1), materialID: 11, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                assetDrawCmds.append(AssetDrawCmd(vertexBuffer: p.mesh.vertexBuffer, indexBuffer: p.mesh.indexBuffer, indexOffset: 0, indexCount: p.mesh.totalIndexCount, instanceIndex: inst, diffuse: diff))
+                inst += 1
+            } else {
+                for sm in p.mesh.submeshes {
+                    guard inst < cap else { break }
+                    ptr[inst] = InstanceDataSwift(modelMatrix: model, baseColor: sm.color, materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                    assetDrawCmds.append(AssetDrawCmd(vertexBuffer: p.mesh.vertexBuffer, indexBuffer: p.mesh.indexBuffer, indexOffset: sm.indexOffset, indexCount: sm.indexCount, instanceIndex: inst, diffuse: nil))
+                    inst += 1
+                }
+            }
         }
     }
 
@@ -556,15 +598,16 @@ class Renderer: NSObject, MTKViewDelegate {
                     baseInstance: dc.instanceOffset
                 )
             }
-            // M12: imported props cast shadows too (each its own vertex + uint32 index buffer).
-            if !importedProps.isEmpty {
+            // M12: imported props cast shadows too (each draw = its own vertex + uint32 range).
+            if !assetDrawCmds.isEmpty {
                 vertexArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
-                for (i, p) in importedProps.enumerated() {
-                    vertexArgTable.setAddress(p.mesh.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+                for cmd in assetDrawCmds {
+                    vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
                     shadowEncoder.drawIndexedPrimitives(
-                        primitiveType: .triangle, indexCount: p.mesh.indexCount, indexType: .uint32,
-                        indexBuffer: p.mesh.indexBuffer.gpuAddress, indexBufferLength: p.mesh.indexBuffer.length,
-                        instanceCount: 1, baseVertex: 0, baseInstance: i)
+                        primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
+                        indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
+                        indexBufferLength: cmd.indexBuffer.length - cmd.indexOffset * MemoryLayout<UInt32>.stride,
+                        instanceCount: 1, baseVertex: 0, baseInstance: cmd.instanceIndex)
                 }
                 vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
                 vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
@@ -630,18 +673,18 @@ class Renderer: NSObject, MTKViewDelegate {
             )
         }
 
-        // M12: imported props, drawn with the opaque geometry (own buffers + uint32 indices,
-        // each with its own diffuse texture).
-        if !importedProps.isEmpty {
+        // M12: imported props (each draw = its own vertex + uint32 range + optional texture).
+        if !assetDrawCmds.isEmpty {
             vertexArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             fragmentArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
-            for (i, p) in importedProps.enumerated() {
-                vertexArgTable.setAddress(p.mesh.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
-                if let d = p.diffuse { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
+            for cmd in assetDrawCmds {
+                vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+                if let d = cmd.diffuse { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
                 encoder.drawIndexedPrimitives(
-                    primitiveType: .triangle, indexCount: p.mesh.indexCount, indexType: .uint32,
-                    indexBuffer: p.mesh.indexBuffer.gpuAddress, indexBufferLength: p.mesh.indexBuffer.length,
-                    instanceCount: 1, baseVertex: 0, baseInstance: i)
+                    primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
+                    indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
+                    indexBufferLength: cmd.indexBuffer.length - cmd.indexOffset * MemoryLayout<UInt32>.stride,
+                    instanceCount: 1, baseVertex: 0, baseInstance: cmd.instanceIndex)
             }
             // restore maze buffers for the translucent pass
             vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
