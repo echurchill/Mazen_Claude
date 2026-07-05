@@ -127,10 +127,15 @@ class GameViewController: NSViewController {
             gs.startSliceRotation(clockwise: false)
         case 3:       // F — interact with a prop on the current tile
             gs.interact()
-        case 17:      // T — cycle world time-scale (fast-forward the sky): 1x → 8x → 60x
-            let scales: [Float] = [1, 8, 60]
-            let idx = scales.firstIndex(of: gs.timeScale) ?? 0
-            gs.timeScale = scales[(idx + 1) % scales.count]
+        case 17:      // T — time-scale 1x→8x→60x;  Shift+T — freeze at high noon (stable light)
+            if event.modifierFlags.contains(.shift) {
+                gs.time = 0          // sun overhead at noon (spin + moon also reset to start)
+                gs.timeScale = 0     // and stop, for predictable time/light
+            } else {
+                let scales: [Float] = [1, 8, 60]
+                let idx = scales.firstIndex(of: gs.timeScale) ?? 0
+                gs.timeScale = scales[(idx + 1) % scales.count]
+            }
         case 35:      // P — toggle auto-rotation
             gs.camera.orbitAutoRotate.toggle()
         case 4:       // H — toggle debug HUD
