@@ -10,7 +10,9 @@ Replace the M10 Phase G procedural placeholder props (topiary, obelisk, chest, m
 >
 > **Findings / gotchas:** USD is **Z-up** (no re-orientation needed — the tile's local Z is already out-of-face); a forced load-time `vertexDescriptor` yields 0 meshes (re-lay-out per mesh instead); the macOS app is **sandboxed** (`ENABLE_APP_SANDBOX=YES`) so it can't read the external `Mazen_Models` folder — **dev shortcut in place: sandbox disabled + absolute paths.** Textures came as JPG diffuse + **EXR** normals (unreadable by ImageIO/`sips`; ImageMagick installed to convert EXR→PNG when we add normal maps).
 >
-> **Remaining:** bundle the models properly (folder reference) + re-enable the sandbox before shipping; generalize the one hardcoded fire pit into an **asset registry** and load the statue/stumps/crate (M12-D); **normal maps** (EXR→PNG + tangent extraction for the asset material); scale/placement polish.
+> **M12-D ✅ (2026-07-05):** generalized to an `ImportedProp` registry; all five models load + render textured, placed at the plaza-centre tile + its four diagonal neighbours, each riding the world spin and casting shadows. Model stats (verts): fire pit 11.6k, **statue 44.8k**, **stump_01 123k**, **stump_02 187k**, **crate 52.8k (10 sub-meshes)** — the stumps are why 32-bit indices are required. The statue imports tiny (~0.22 native) and the crate's 10 parts (its open/closed geometry) are flattened into one draw for now.
+>
+> **Remaining:** **normal maps** (EXR→PNG via ImageMagick + tangent extraction for the asset material); the **crate open/closed** state (split its sub-meshes); wire imported props into the M10 prop system + a **house** model; bundle the models (folder reference) + re-enable the sandbox before shipping; scale / placement / winding polish (e.g. the high-poly stumps, the tiny statue's fit).
 
 ## Why this is a real pipeline, not a mesh swap
 
