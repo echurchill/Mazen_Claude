@@ -64,7 +64,10 @@ final class AssetMesh {
                 let o = i * 32
                 func f(_ b: Int) -> Float { vp.load(fromByteOffset: o + b, as: Float.self) }
                 let pos = SIMD3<Float>(f(0), f(4), f(8))
-                verts.append(MazeVertexSwift(position: pos, normal: SIMD3(f(12), f(16), f(20)), texCoord: SIMD2(f(24), f(28)), aoFactor: 1.0))
+                // Flip V: Metal's texture origin is top-left, but OBJ/USD UVs are authored
+                // bottom-left — without this the diffuse atlas samples vertically mirrored
+                // (e.g. the horse statue's wood base bled onto the tail/support strut).
+                verts.append(MazeVertexSwift(position: pos, normal: SIMD3(f(12), f(16), f(20)), texCoord: SIMD2(f(24), 1.0 - f(28)), aoFactor: 1.0))
                 bmin = min(bmin, pos); bmax = max(bmax, pos)
             }
             for case let sm as MDLSubmesh in mesh.submeshes ?? [] {
