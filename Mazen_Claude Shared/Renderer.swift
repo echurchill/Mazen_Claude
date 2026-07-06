@@ -94,6 +94,10 @@ class Renderer: NSObject, MTKViewDelegate {
     var opaqueDrawCalls: [DrawCall] = []
     var wallDrawCallRange: Range<Int> = 0..<0
     var translucentDrawCalls: [DrawCall] = []
+    // M11 killer visual: the counterpart world (the one you can see in the sky) rendered into its
+    // own instance buffers with an orbital offset, when you're standing in a sub-world.
+    var counterpartInstanceBuffers: [MTLBuffer] = []
+    var counterpartOpaqueDrawCalls: [DrawCall] = []
 
     var currentBufferIndex = 0
     var aspect: Float = 1.0
@@ -254,6 +258,11 @@ class Renderer: NSObject, MTKViewDelegate {
         let overworld = GameState(size: Self.initialCubeSize)
         Self.setupInitialDiscovery(gameState: overworld)
         self.worldStack = [overworld]
+        // The moon world exists from the start (persists across visits) so it can hang in earth's
+        // sky — and so any tears you make on it stay put (M11 killer visual).
+        let moon = GameState(size: 3)
+        Self.setupInitialDiscovery(gameState: moon)
+        self.testInterior = moon
 
         // Tile mesh library (geometry baked from the world scale)
         self.tileMeshLib = TileMeshLibrary(device: device, worldScale: overworld.worldScale)
@@ -279,12 +288,15 @@ class Renderer: NSObject, MTKViewDelegate {
 
         var frameBufs: [MTLBuffer] = []
         var instBufs: [MTLBuffer] = []
+        var counterpartBufs: [MTLBuffer] = []
         for _ in 0..<maxBuffersInFlight {
             frameBufs.append(device.makeBuffer(length: frameSize, options: .storageModeShared)!)
             instBufs.append(device.makeBuffer(length: instanceSize, options: .storageModeShared)!)
+            counterpartBufs.append(device.makeBuffer(length: instanceSize, options: .storageModeShared)!)
         }
         self.frameUniformBuffers = frameBufs
         self.instanceBuffers = instBufs
+        self.counterpartInstanceBuffers = counterpartBufs
 
         // M12: load an imported prop (dev absolute path — these get bundled for shipping later)
         // plus a small per-frame instance buffer for its transform/material.
@@ -341,7 +353,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // Residency set
         let resDesc = MTLResidencySetDescriptor()
-        resDesc.initialCapacity = 9 + frameBufs.count + instBufs.count + assetBufs.count + loadedProps.count * 3
+        resDesc.initialCapacity = 9 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count + loadedProps.count * 3
         let rs = try! device.makeResidencySet(descriptor: resDesc)
         rs.addAllocation(tileMeshLib.vertexBuffer)
         rs.addAllocation(tileMeshLib.indexBuffer)
@@ -351,6 +363,7 @@ class Renderer: NSObject, MTKViewDelegate {
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
+        for buf in counterpartBufs { rs.addAllocation(buf) }
         for p in loadedProps {
             rs.addAllocation(p.mesh.vertexBuffer); rs.addAllocation(p.mesh.indexBuffer)
             if let d = p.diffuse { rs.addAllocation(d) }
@@ -394,13 +407,8 @@ class Renderer: NSObject, MTKViewDelegate {
         gameState.forwardHeld = false; gameState.backwardHeld = false
         if worldStack.count > 1 {
             exitWorld()
-        } else {
-            if testInterior == nil {
-                let interior = GameState(size: 3)
-                Self.setupInitialDiscovery(gameState: interior)
-                testInterior = interior
-            }
-            enterWorld(testInterior!)
+        } else if let moon = testInterior {
+            enterWorld(moon)   // the moon persists (created at startup), so its tears stay put
         }
         // …and the arriving world starts stationary (a fresh key press resumes walking).
         gameState.forwardHeld = false; gameState.backwardHeld = false
@@ -567,12 +575,41 @@ class Renderer: NSObject, MTKViewDelegate {
 
     private func buildDrawCalls() {
         let buffer = instanceBuffers[currentBufferIndex]
+        // M11 killer visual — the counterpart world shown hanging in the sky: from earth you see the
+        // MOON, and from inside a sub-world you see the world beneath it. It persists, so tears made
+        // on it stay. When one is shown, suppress the active world's plain M9 moon (no double moon).
+        let counterpart: GameState? = debugSingleTile ? nil
+            : (worldStack.count > 1 ? worldStack[worldStack.count - 2] : testInterior)
         let result = debugSingleTile
             ? sceneBuilder.buildSingleTile(tileMeshLib: tileMeshLib, instanceBuffer: buffer)
-            : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer)
+            : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer,
+                                 includeMoon: counterpart == nil)
         opaqueDrawCalls = result.opaque
         translucentDrawCalls = result.translucent
         wallDrawCallRange = result.wallRange
+
+        // Render the counterpart's real current state (every twist baked in) into its own instance
+        // buffer, pushed out by the orbital offset. No celestials (it shouldn't carry its own sky).
+        counterpartOpaqueDrawCalls = []
+        if let cp = counterpart {
+            let cbuf = counterpartInstanceBuffers[currentBufferIndex]
+            let offset = Self.skyWorldOffset(time: gameState.time, counterpartSize: cp.cubeModel.size)
+            let cresult = sceneBuilder.build(gameState: cp, tileMeshLib: tileMeshLib,
+                                             instanceBuffer: cbuf, worldOffset: offset, includeCelestials: false)
+            counterpartOpaqueDrawCalls = cresult.opaque
+        }
+    }
+
+    /// Where the counterpart world hangs in the sky (M11): a fixed direction/distance — high and to
+    /// the side — with a scale normalised by cube size so a small moon still reads big, plus a slow
+    /// display rotation (keyed to the current world's clock) so every side turns into view. The
+    /// world's *state* stays frozen; this spin is just the planet turning. Tunable.
+    private static func skyWorldOffset(time: Float, counterpartSize: Int) -> float4x4 {
+        let dir = normalize(SIMD3<Float>(0.42, 0.72, 0.46))   // a bit lower in the sky
+        let dist: Float = 24
+        let scale: Float = 11.0 / Float(max(1, counterpartSize))   // target ~11-unit span regardless of size
+        let spin = float4x4.rotation(radians: time * 0.18, axis: SIMD3(0, 1, 0))   // ~35 s per turn
+        return float4x4.translation(dir.x * dist, dir.y * dist, dir.z * dist) * spin * float4x4.scale(scale)
     }
 
     private func updateFrameUniforms() {
@@ -928,6 +965,28 @@ class Renderer: NSObject, MTKViewDelegate {
             }
             // restore maze buffers for the translucent pass
             vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+            vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            fragmentArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+        }
+
+        // M11 killer visual: the counterpart world hanging in the sky. Same maze meshes, its own
+        // instance buffer (built with the orbital offset). Still in the opaque pass (depth on), so it
+        // sits correctly behind near geometry and in front of the sky.
+        if !counterpartOpaqueDrawCalls.isEmpty {
+            vertexArgTable.setAddress(counterpartInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            fragmentArgTable.setAddress(counterpartInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            for dc in counterpartOpaqueDrawCalls {
+                encoder.drawIndexedPrimitives(
+                    primitiveType: .triangle,
+                    indexCount: dc.indexCount,
+                    indexType: .uint16,
+                    indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
+                    indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt16>.stride,
+                    instanceCount: dc.instanceCount,
+                    baseVertex: 0,
+                    baseInstance: dc.instanceOffset
+                )
+            }
             vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             fragmentArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
         }

@@ -60,9 +60,17 @@ final class SceneBuilder {
     private var mazePostTiles: [UInt8: [TileEntry]] = [:]
     private var mazePropTiles: [UInt8: [TileEntry]] = [:]
 
-    func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer) -> SceneDrawData {
+    /// `worldOffset` pushes the entire built world by an extra transform — used (M11) to hang a
+    /// *counterpart* world (the overworld) out in the sky of the world you're standing in, at an
+    /// orbital position/scale. `includeCelestials` is false for that counterpart so it doesn't drag
+    /// its own tiny sun/moon along. Both default to the identity/normal single-world render.
+    func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer,
+               worldOffset: float4x4 = matrix_identity_float4x4, includeCelestials: Bool = true,
+               includeMoon: Bool = true) -> SceneDrawData {
         let model = gameState.cubeModel
-        let spin = gameState.worldSpinMatrix()   // M9.5-3 idle cube spin (game geometry only)
+        // Fold the offset into the spin so every tile/wall/prop/player-marker matrix (all built as
+        // `spin * …`) is pushed out together — one injection point for the whole world.
+        let spin = worldOffset * gameState.worldSpinMatrix()   // M9.5-3 idle cube spin (+ M11 world offset)
         let capacity = buf.length / MemoryLayout<InstanceDataSwift>.stride
         let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: capacity)
 
@@ -257,19 +265,26 @@ final class SceneBuilder {
 
         // Celestial bodies (M9): the sun cube (emissive) and moon cube (sun-lit) at their
         // orbital positions. Both use the shared celestialCube mesh, so they batch together.
-        let cs = gameState.celestialSystem
-        let sunPos = cs.sunPosition(time: gameState.time)
-        let sunMat = float4x4.translation(sunPos.x, sunPos.y, sunPos.z) * float4x4.scale(cs.sunSize)
-        celestialTiles.append(TileEntry(
-            instance: InstanceDataSwift(modelMatrix: sunMat, baseColor: SIMD4(1.0, 0.93, 0.65, 1.0),
-                materialID: 12, tileID: 0, discoveryAmount: 1.0, styleSeed: 0),
-            mesh: tileMeshLib.celestialCube))
-        let moonPos = cs.moonPosition(time: gameState.time)
-        let moonMat = float4x4.translation(moonPos.x, moonPos.y, moonPos.z) * float4x4.scale(cs.moonSize)
-        celestialTiles.append(TileEntry(
-            instance: InstanceDataSwift(modelMatrix: moonMat, baseColor: SIMD4(0.72, 0.72, 0.75, 1.0),
-                materialID: 13, tileID: 0, discoveryAmount: 1.0, styleSeed: 0),
-            mesh: tileMeshLib.celestialCube))
+        // Skipped for a counterpart world (M11) — it shouldn't carry its own sun/moon into the sky.
+        if includeCelestials {
+            let cs = gameState.celestialSystem
+            let sunPos = cs.sunPosition(time: gameState.time)
+            let sunMat = float4x4.translation(sunPos.x, sunPos.y, sunPos.z) * float4x4.scale(cs.sunSize)
+            celestialTiles.append(TileEntry(
+                instance: InstanceDataSwift(modelMatrix: sunMat, baseColor: SIMD4(1.0, 0.93, 0.65, 1.0),
+                    materialID: 12, tileID: 0, discoveryAmount: 1.0, styleSeed: 0),
+                mesh: tileMeshLib.celestialCube))
+            // The plain M9 moon is skipped when the real moon-world is being rendered in its place
+            // (M11), so there aren't two moons in the sky.
+            if includeMoon {
+                let moonPos = cs.moonPosition(time: gameState.time)
+                let moonMat = float4x4.translation(moonPos.x, moonPos.y, moonPos.z) * float4x4.scale(cs.moonSize)
+                celestialTiles.append(TileEntry(
+                    instance: InstanceDataSwift(modelMatrix: moonMat, baseColor: SIMD4(0.72, 0.72, 0.75, 1.0),
+                        materialID: 13, tileID: 0, discoveryAmount: 1.0, styleSeed: 0),
+                    mesh: tileMeshLib.celestialCube))
+            }
+        }
 
         // Pack instances — opaque first, then translucent
         var idx = 0
