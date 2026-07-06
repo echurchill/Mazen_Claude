@@ -83,6 +83,10 @@ class Renderer: NSObject, MTKViewDelegate {
     var instanceBuffers: [MTLBuffer]
     // M12: imported props (asset registry) + a per-frame instance buffer + draw list.
     var importedProps: [ImportedProp] = []
+    /// Stamp the imported decorations into the overworld once (lazily, after the registry loads).
+    /// They become `.importedAsset` Props on facelets so they ride slice rotations — and, being
+    /// stamped only into the overworld, they don't appear in portal-worlds like the test interior.
+    private var needsDecorativeStamp = true
     var houseAssembly: [HouseKitPiece] = []       // M12-E: canonical imported house quarter (two walls)
     var houseAssemblyDoor: [HouseKitPiece] = []   // the front quarter — one wall swapped for a door
     var assetInstanceBuffers: [MTLBuffer] = []
@@ -364,6 +368,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // Collapse to a single fresh overworld (drops any pushed portal-worlds).
         worldStack = [GameState(size: size)]
         Self.setupInitialDiscovery(gameState: gameState)
+        needsDecorativeStamp = true   // re-stamp the imported decorations into the fresh overworld
     }
 
     // MARK: - World stack (M11.1)
@@ -384,13 +389,21 @@ class Renderer: NSObject, MTKViewDelegate {
     /// exercises a *different-size* world sharing the same tile library + buffers. Replaced by
     /// real portal props + a transition in M11.2.
     func toggleTestInterior() {
-        if worldStack.count > 1 { exitWorld(); return }
-        if testInterior == nil {
-            let interior = GameState(size: 3)
-            Self.setupInitialDiscovery(gameState: interior)
-            testInterior = interior
+        // Stop the departing world walking, so neither world auto-continues across the switch —
+        // with walk-through portals, an un-cleared "forward held" would ping-pong through gates.
+        gameState.forwardHeld = false; gameState.backwardHeld = false
+        if worldStack.count > 1 {
+            exitWorld()
+        } else {
+            if testInterior == nil {
+                let interior = GameState(size: 3)
+                Self.setupInitialDiscovery(gameState: interior)
+                testInterior = interior
+            }
+            enterWorld(testInterior!)
         }
-        enterWorld(testInterior!)
+        // …and the arriving world starts stationary (a fresh key press resumes walking).
+        gameState.forwardHeld = false; gameState.backwardHeld = false
     }
 
     /// Begin a fade-to-black, swap the world at the midpoint, then fade back (M11.2b). Ignored if a
@@ -601,82 +614,100 @@ class Renderer: NSObject, MTKViewDelegate {
         )
     }
 
-    /// M12: place the imported prop each frame — fit to ~0.7 units, stand it up (model Y-up →
-    /// tile Z-up), rest its base on the floor, centre it on the plaza-centre tile, and ride the
-    /// world spin like any other prop. Rendered flat-coloured for now (texture is M12-C).
+    /// Stamp the imported decorations into a world as `.importedAsset` Props (one per registry entry,
+    /// at its `faceOffset` tile on +Z, `state` = registry index). As Props on facelets they now ride
+    /// slice rotations and get carried like any other prop — instead of the old static placement.
+    private func stampImportedProps(into gs: GameState) {
+        let n = gs.cubeModel.size
+        for (assetID, p) in importedProps.enumerated() {
+            let row = n / 2 + p.faceOffset.row
+            let col = n / 2 + p.faceOffset.col
+            if let (ci, fi) = gs.cubeModel.faceletAt(face: .positiveZ, row: row, col: col) {
+                gs.cubeModel.cubies[ci].facelets[fi].props.append(
+                    Prop(kind: .importedAsset, subRow: 1, subCol: 1, facing: .n, state: assetID))
+            }
+        }
+    }
+
+    /// Place every imported prop for the frame. Both the decorations (`.importedAsset`, single mesh
+    /// from the registry) and the modular house (`.houseCorner`, kit assembly) are now anchored to
+    /// facelets and scanned here, so they ride the slice `animMat` (worldMatrix → animMat → spin →
+    /// sub-cell → facing) and are carried by `Prop.rotate` — the arena decorations turn with their
+    /// slice exactly like the house. Scans by (face,row,col) so a prop carried to a neighbouring
+    /// face reports its new position.
     private func updateAssetInstances() {
         assetDrawCmds.removeAll(keepingCapacity: true)
+        // Lazily stamp the decorations into the overworld (bottom of the stack) once the registry is
+        // loaded — overworld only, so portal-worlds (the test interior) stay clear of them.
+        if needsDecorativeStamp, let overworld = worldStack.first {
+            stampImportedProps(into: overworld)
+            needsDecorativeStamp = false
+        }
         guard !importedProps.isEmpty || !houseAssembly.isEmpty else { return }
         let cap = assetInstanceBuffers[currentBufferIndex].length / MemoryLayout<InstanceDataSwift>.stride
         let ptr = assetInstanceBuffers[currentBufferIndex].contents().bindMemory(to: InstanceDataSwift.self, capacity: cap)
         let ws = gameState.worldScale
         let n = gameState.cubeModel.size
         let spin = gameState.worldSpinMatrix()
+        let model = gameState.cubeModel
+        let sr = gameState.sliceRotation
+        let sliceAxis: SIMD3<Float> = sr.axis == 0 ? SIMD3(1,0,0) : sr.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
+        let sliceT = sr.progress * sr.progress * (3 - 2 * sr.progress)   // smoothstep, matches SceneBuilder
+        let sliceMat = float4x4.rotation(radians: sr.angle * sliceT, axis: sliceAxis)
+        let step = ws.subCellStep
         var inst = 0
-        for p in importedProps {
-            let dim = p.mesh.size
-            let maxDim = max(dim.x, max(dim.y, dim.z))
-            let fs: Float = maxDim > 0 ? p.target / maxDim : 1
-            let c = p.mesh.center
-            // Y-up (OBJ) → tile Z-up needs a +90° X rotation; Z-up (USD) needs none. Fit the widest
-            // dimension to `target`, centre the footprint, rest the base on the floor (the base and
-            // vertical-centre axes swap with the up-convention), and ride the world spin.
-            let orient = p.yUp ? float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0)) : matrix_identity_float4x4
-            let ty = p.yUp ? c.z * fs : -c.y * fs
-            let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs
-            let model = spin
-                * gameState.cubeModel.worldMatrix(face: .positiveZ, row: n / 2 + p.faceOffset.row, col: n / 2 + p.faceOffset.col)
-                * float4x4.translation(-c.x * fs, ty, tz)
-                * float4x4.scale(fs)
-                * orient
-            if let diff = p.diffuse {
-                guard inst < cap else { break }
-                ptr[inst] = InstanceDataSwift(modelMatrix: model, baseColor: SIMD4(1, 1, 1, 1), materialID: 11, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
-                assetDrawCmds.append(AssetDrawCmd(vertexBuffer: p.mesh.vertexBuffer, indexBuffer: p.mesh.indexBuffer, indexOffset: 0, indexCount: p.mesh.totalIndexCount, instanceIndex: inst, diffuse: diff))
+
+        // Emit one flat-colour sub-mesh or a whole textured mesh at `m`.
+        func emit(_ mesh: AssetMesh, _ m: float4x4, diffuse: MTLTexture?) {
+            if let diff = diffuse {
+                guard inst < cap else { return }
+                ptr[inst] = InstanceDataSwift(modelMatrix: m, baseColor: SIMD4(1,1,1,1), materialID: 11, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                assetDrawCmds.append(AssetDrawCmd(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer, indexOffset: 0, indexCount: mesh.totalIndexCount, instanceIndex: inst, diffuse: diff))
                 inst += 1
             } else {
-                for sm in p.mesh.submeshes {
-                    guard inst < cap else { break }
-                    ptr[inst] = InstanceDataSwift(modelMatrix: model, baseColor: sm.color, materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
-                    assetDrawCmds.append(AssetDrawCmd(vertexBuffer: p.mesh.vertexBuffer, indexBuffer: p.mesh.indexBuffer, indexOffset: sm.indexOffset, indexCount: sm.indexCount, instanceIndex: inst, diffuse: nil))
+                for sm in mesh.submeshes {
+                    guard inst < cap else { return }
+                    ptr[inst] = InstanceDataSwift(modelMatrix: m, baseColor: sm.color, materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                    assetDrawCmds.append(AssetDrawCmd(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer, indexOffset: sm.indexOffset, indexCount: sm.indexCount, instanceIndex: inst, diffuse: nil))
                     inst += 1
                 }
             }
         }
 
-        // M12-E: imported modular house. Placed via the four `.houseCorner` Prop anchors (not the
-        // static faceOffset registry) so each quarter rides its tile's slice rotation — the split
-        // mechanic. Mirror SceneBuilder's tile-matrix math (worldMatrix → animMat → spin → sub-cell
-        // → facing) exactly so the quarters stay glued to their tiles through a rotation. Scan by
-        // (face,row,col): a quarter carried onto a neighbouring face reports its new position here.
-        if !houseAssembly.isEmpty {
-            let model = gameState.cubeModel
-            let sr = gameState.sliceRotation
-            let sliceAxis: SIMD3<Float> = sr.axis == 0 ? SIMD3(1,0,0) : sr.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
-            let sliceT = sr.progress * sr.progress * (3 - 2 * sr.progress)   // smoothstep, matches SceneBuilder
-            let sliceMat = float4x4.rotation(radians: sr.angle * sliceT, axis: sliceAxis)
-            let step = ws.subCellStep
-            for face in CubeFace.allCases {
-                for row in 0..<n {
-                    for col in 0..<n {
-                        guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
-                        for prop in model.cubies[ci].facelets[fi].props where prop.kind == .houseCorner {
-                            var tileM = model.worldMatrix(face: face, row: row, col: col)
-                            if sr.isActive && sr.affectedCubies.contains(ci) { tileM = sliceMat * tileM }
-                            tileM = spin * tileM
-                                * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
-                                * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
-                            // The `.s` quarter is the building's front — it gets the door variant.
+        for face in CubeFace.allCases {
+            for row in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
+                    let props = model.cubies[ci].facelets[fi].props
+                    if props.isEmpty { continue }
+                    // Shared tile matrix with slice animation; sub-cell + facing are added per prop.
+                    var tileBase = model.worldMatrix(face: face, row: row, col: col)
+                    if sr.isActive && sr.affectedCubies.contains(ci) { tileBase = sliceMat * tileBase }
+                    tileBase = spin * tileBase
+                    for prop in props {
+                        let tileM = tileBase
+                            * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
+                            * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
+                        switch prop.kind {
+                        case .importedAsset:
+                            guard prop.state >= 0 && prop.state < importedProps.count else { continue }
+                            let p = importedProps[prop.state]
+                            // Fit the widest dimension to `target`, stand it up (Y-up OBJ → tile Z-up),
+                            // centre the footprint, rest the base on the floor.
+                            let dim = p.mesh.size
+                            let maxDim = max(dim.x, max(dim.y, dim.z))
+                            let fs: Float = maxDim > 0 ? p.target / maxDim : 1
+                            let c = p.mesh.center
+                            let orient = p.yUp ? float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0)) : matrix_identity_float4x4
+                            let ty = p.yUp ? c.z * fs : -c.y * fs
+                            let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs
+                            let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
+                            emit(p.mesh, m, diffuse: p.diffuse)
+                        case .houseCorner:
                             let assembly = prop.facing == .s ? houseAssemblyDoor : houseAssembly
-                            for piece in assembly {
-                                let m = tileM * piece.local
-                                for sm in piece.mesh.submeshes {
-                                    guard inst < cap else { break }
-                                    ptr[inst] = InstanceDataSwift(modelMatrix: m, baseColor: sm.color, materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
-                                    assetDrawCmds.append(AssetDrawCmd(vertexBuffer: piece.mesh.vertexBuffer, indexBuffer: piece.mesh.indexBuffer, indexOffset: sm.indexOffset, indexCount: sm.indexCount, instanceIndex: inst, diffuse: nil))
-                                    inst += 1
-                                }
-                            }
+                            for piece in assembly { emit(piece.mesh, tileM * piece.local, diffuse: nil) }
+                        default:
+                            break
                         }
                     }
                 }

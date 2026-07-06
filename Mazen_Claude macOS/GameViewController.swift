@@ -120,9 +120,9 @@ class GameViewController: NSViewController {
 
         switch event.keyCode {
         case 126, 13: // Up arrow, W — hold to walk forward (chained in GameState.update)
-            gs.forwardHeld = true
+            if !event.isARepeat { gs.forwardHeld = true }   // ignore OS key-repeat: one press = held until keyUp
         case 125, 1:  // Down arrow, S — hold to walk back
-            gs.backwardHeld = true
+            if !event.isARepeat { gs.backwardHeld = true }
         case 123, 0:  // Left arrow, A
             gs.player.tryTurnLeft()
         case 124, 2:  // Right arrow, D

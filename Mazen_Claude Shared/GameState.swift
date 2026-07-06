@@ -176,6 +176,12 @@ class GameState {
     // MARK: - Discovery
 
     private func onPlayerArrived() {
+        // M11.2c: walk-through — stepping onto a portal tile switches worlds (no F). Fires only on a
+        // real tile crossing, so it never triggers at spawn while you're already standing on one.
+        if let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
+           cubeModel.cubies[pci].facelets[pfi].props.contains(where: { $0.kind == .portal }) {
+            portalRequested = true
+        }
         discoverTile(face: player.face, row: player.row, col: player.col)
         let n = cubeModel.size
         for dir in SurfaceDirection.allCases {

@@ -99,14 +99,21 @@ class CubeModel {
                 cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 0, subCol: 0))
             }
         }
-        // On the plaza-centre tile (the player's start tile): a landmark obelisk (SE corner), an
-        // interactive chest (NE corner), and a portal beacon (SW corner). The portal is on the
-        // start tile so it needs no navigation to test (M11.2) — stand there and press F to switch
-        // worlds. (Interact prioritises the portal over the chest while they share this tile.)
+        // On the plaza-centre tile (the player's start tile): a landmark obelisk (SE corner) and an
+        // interactive chest (NE corner).
         if let (ci, fi) = faceletAt(face: .positiveZ, row: size / 2, col: size / 2) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 2, subCol: 2))
             cubies[ci].facelets[fi].props.append(Prop(kind: .chest, subRow: 0, subCol: 2))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 2, subCol: 0))
+        }
+        // Open the start plaza into a walkable hub, and put a portal doorway on the empty tile just
+        // NORTH of the plaza (M11.2c): walking onto it switches worlds — step through it like a
+        // doorway, no button (F still works). The 3×3 plaza itself is fully packed with the imported
+        // decorations, so the portal sits one tile beyond it (reachable — stampOpenPlaza opens that
+        // edge). On a tiny cube with no room north, it falls back into the plaza.
+        stampOpenPlaza(face: .positiveZ, top: top, left: left, height: h, width: w)
+        let portalRow = max(0, top - 1)
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: portalRow, col: left + w / 2) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1))
         }
         // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
         // crowded +Z demo plaza, so it has room to breathe. It sits at the row-0 face edge so an
