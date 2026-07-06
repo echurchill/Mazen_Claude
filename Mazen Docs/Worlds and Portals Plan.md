@@ -53,6 +53,50 @@ Recommendation: build the **world-switch spine first** (works for houses immedia
 - **First target:** a **house interior** (small hand-built room) as the simplest destination — proves the spine end-to-end before the moon's presentation work.
 - **Interiors need no maze at first** — a single room validates the mechanic; maze/puzzle interiors come later.
 
+## Implementation plan (phased) — from the codebase map
+
+*Grounded in a 2026-07-06 read of the actual code. Surface area is ~170 lines, mostly orchestration.*
+
+### The surface area (what assumes one world today)
+- **The single anchor:** `Renderer` holds one `var gameState: GameState` and the whole draw loop reads it (`gameState.update()`, `updateFrameUniforms()`, `updateAssetInstances()`, `sceneBuilder.build(gameState:)`). *This is the thing to make swappable.*
+- **Already multi-world-ready (keep intact):** `SceneBuilder.build(gameState:)` is **stateless** w.r.t. world identity; `WorldScale` is per-world; `CameraState`/`CelestialSystem`/`CubeModel` hold no cross-world refs. A world renders simply by calling `build()` with its state.
+- **Reusable resources (no per-world realloc for sizes 3–9):** the maze instance buffer is sized for the max cube (6·25²), the shadow map is one 2048² texture, and the imported-asset buffers are global — all fine for push/pop where only one world is active.
+- **The one genuinely hard resource:** `TileMeshLibrary` is baked from a single `WorldScale` at init, and the residency set references its buffers. A world of a **different cube size** needs a rebuilt library (+ residency update). → *sidestep this in the spine by making the first interior the same size.*
+- **State that's logically global but currently lives in `GameState`:** `camera` (mode/orbit), `time`/spin, `celestialSystem`. Switching worlds shouldn't reset these — hoist or share them (Phase 3).
+- **The portal hook exists:** `GameState.interact()` already has the comment "a portal would load the M11 moon" but only toggles chests — this is where the world-push goes.
+
+### Phases (each independently verifiable)
+
+**Phase 1 — World-stack spine (instant swap, same size).**
+- `Renderer` gains `var worldStack: [GameState]`; `activeWorld` = top; the draw loop reads `activeWorld` instead of `gameState`. `enterWorld(_:)` / `exitWorld()` push/pop.
+- First interior = **another same-size cube world** (e.g. a small hand-stamped room on a 7³) so `TileMeshLibrary`, buffers, and residency set are all reused unchanged.
+- Temporary debug key to swap worlds (no portal/transition yet) — isolates the plumbing.
+- **Deliverable:** press a key, the rendered world swaps and swaps back, both states intact.
+
+**Phase 2 — Portal + transition.**
+- Add `PropKind.portal` (with a destination id); `interact()` (or walk-through) calls `enterWorld`. A "return gate" in the interior pops.
+- A short **screen fade** (fullscreen quad, alpha ramp ~0.3s) gates the swap so it doesn't pop.
+- **Deliverable:** walk to a door prop, interact, fade into the interior, return through a gate.
+
+**Phase 3 — Hoist the globals.**
+- Move `camera` mode, `time`/spin, and `celestialSystem` so they **persist across worlds** (a small session/app holder above the stack, or shared refs). Day/night and camera mode survive a portal.
+- **Deliverable:** switch worlds; time-of-day and camera mode don't reset.
+
+**Phase 4 — Different-size interiors.**
+- `TileMeshLibrary` **cache keyed by cube size** (or lazy rebuild) + residency-set handling on library change.
+- **Deliverable:** a 3³ interior world reached from the 7³ overworld.
+
+**Phase 5 — The moon + the killer visual.**
+- The moon as a second world (its own palette/rules); then render the **orbital counterpart** — the *real* other world's tiles at their orbital position in the sky (negligible cost via the existing instanced path), updated live with its actual twists.
+- The **moon-transition feel fork** (instant vs travel sequence) lands here as *presentation* on top of the Phase 1–2 spine.
+- **Deliverable:** stand on the moon, see the real cube (with your scars) hanging in the starfield.
+
+### Risks & mitigations
+- **`TileMeshLibrary`/residency rebuild cost** → deferred to Phase 4; the spine uses same-size worlds so nothing rebuilds.
+- **Inactive-world state loss** → the stack *retains* each `GameState`; never rebuild a world on return (that's the whole point — persistent scars).
+- **Shadow map / buffers are single** → fine for push/pop (one active world); only simultaneous split-view would need duplicates.
+- **The render pipeline is cube-face-shaped** → interiors are *cubes* (or rooms stamped on a cube) for now, not arbitrary geometry; a truly free-form interior is a later, separate lift.
+
 ## How it relates to the other threads
 
 - **[Bandaged Cube Mechanic](Bandaged%20Cube%20Mechanic.md):** portal-worlds *reduce* the need for cube structures to split — most content lives inside portals, so the twist can be a rare, deliberate puzzle action rather than something every surface structure must survive. The two ideas reinforce "twist = scalpel, not ambient."

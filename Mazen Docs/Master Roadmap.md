@@ -78,7 +78,7 @@ Then, as separate tracks when desired:
 
 ## 6. Future milestones (design captured)
 
-- **M11 — Worlds & Portals** — [doc](Worlds%20and%20Portals%20Plan.md) *(reframes the [M11 Lunar Excursion Seed](M11%20Lunar%20Excursion%20Seed.md))*. "Bigger on the inside": structures are portals to separate worlds; one transition system for houses, the moon, dungeons. **Open fork: how the moon transition feels — instant portal vs. travel sequence** (recommend: build the spine, add the moon's travel sequence as presentation later).
+- **M11 — Worlds & Portals** — [doc](Worlds%20and%20Portals%20Plan.md) *(reframes the [M11 Lunar Excursion Seed](M11%20Lunar%20Excursion%20Seed.md))*. "Bigger on the inside": structures are portals to separate worlds; one transition system for houses, the moon, dungeons. **Now has a concrete 5-phase implementation plan** grounded in a codebase read (world-stack spine → portal+fade → hoist globals → sized interiors → moon + sky visual; ~170 lines of surface area). **Open fork: how the moon transition feels — instant portal vs. travel sequence** (recommend: build the spine, add the moon's travel sequence as presentation later).
 - **M13 — Bandaged Cube Mechanic** — [doc](Bandaged%20Cube%20Mechanic.md). Bond structures so a twist that would tear them is *refused*; twisting becomes a rare, deliberate, readable puzzle action. The house is the first candidate bonded structure.
 - **M14 — Superellipsoid Cube** — [doc](Superellipsoid%20Cube.md). Inflate the cube toward a rounded planet (n between sphere and cube); reinforces the M9 solar-system feel and *improves* the day/night shading as it rounds.
 

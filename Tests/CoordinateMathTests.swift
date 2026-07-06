@@ -16,6 +16,10 @@ import simd
 //   4. Slice rotation — projection stays bijective after a turn; four quarter turns
 //      restore every cubie position.
 //   5. DirectionMask.rotated — rotation algebra (identity, composition, negatives).
+//   6. Prop.rotate — a placed prop stays glued to its tile: four quarter-turns restore
+//      its sub-cell + facing, 0 turns is a no-op, −1 == 3, and the rotation sense matches
+//      DirectionMask (N→E). Guards the Rubik's split's correctness at the math level (the
+//      cheap insurance the M12-E house-split verification called for).
 
 @main
 struct CoordinateMathTests {
@@ -36,6 +40,7 @@ struct CoordinateMathTests {
             testSliceRotation(size: n)
         }
         testDirectionMaskRotation()
+        testPropRotation()
 
         print("")
         if failed == 0 {
@@ -164,5 +169,52 @@ struct CoordinateMathTests {
         check(DirectionMask.east.rotated(quarterTurns: 1).rawValue == DirectionMask.south.rawValue, "east→south on +1 turn")
         check(DirectionMask.south.rotated(quarterTurns: 1).rawValue == DirectionMask.west.rawValue, "south→west on +1 turn")
         check(DirectionMask.west.rotated(quarterTurns: 1).rawValue == DirectionMask.north.rawValue, "west→north on +1 turn")
+    }
+
+    static func testPropRotation() {
+        // A placed prop must stay glued to its tile through a slice rotation: `Prop.rotate`
+        // rotates the sub-cell offset and facing in the DirectionMask.rotated sense (N→E).
+        // Exhaustively check the round-trip / identity laws over every sub-cell and facing.
+        for subRow in 0...2 {
+            for subCol in 0...2 {
+                for facing in Heading8.allCases {
+                    let base = Prop(kind: .topiary, subRow: subRow, subCol: subCol, facing: facing)
+                    let tag = "(\(subRow),\(subCol),\(facing))"
+
+                    // 0-turn is a no-op.
+                    var p0 = base; p0.rotate(quarterTurns: 0)
+                    check(p0.subRow == subRow && p0.subCol == subCol && p0.facing == facing,
+                          "prop 0-turn identity \(tag)")
+
+                    // Four single quarter-turns restore the prop exactly.
+                    var pFour = base; for _ in 0..<4 { pFour.rotate(quarterTurns: 1) }
+                    check(pFour.subRow == subRow && pFour.subCol == subCol && pFour.facing == facing,
+                          "prop 1×4 identity \(tag) → (\(pFour.subRow),\(pFour.subCol),\(pFour.facing))")
+
+                    // A single call of 4 is the same identity.
+                    var pQuad = base; pQuad.rotate(quarterTurns: 4)
+                    check(pQuad.subRow == subRow && pQuad.subCol == subCol && pQuad.facing == facing,
+                          "prop 4-in-one identity \(tag)")
+
+                    // −1 turn equals +3 turns (and neither escapes the 3×3 grid).
+                    var pNeg = base; pNeg.rotate(quarterTurns: -1)
+                    var pPos = base; pPos.rotate(quarterTurns: 3)
+                    check(pNeg.subRow == pPos.subRow && pNeg.subCol == pPos.subCol && pNeg.facing == pPos.facing,
+                          "prop −1 == 3 \(tag)")
+                    check((0...2).contains(pNeg.subRow) && (0...2).contains(pNeg.subCol),
+                          "prop stays in 3×3 grid \(tag) → (\(pNeg.subRow),\(pNeg.subCol))")
+                }
+            }
+        }
+
+        // Rotation sense: the centre sub-cell is fixed; +1 quarter-turn carries the north
+        // sub-cell (0,1) to the east (1,2) and advances facing N→E — matching DirectionMask.
+        var centre = Prop(kind: .chest, subRow: 1, subCol: 1, facing: .n); centre.rotate(quarterTurns: 1)
+        check(centre.subRow == 1 && centre.subCol == 1, "prop centre fixed under rotation")
+        check(centre.facing == .e, "prop centre facing N→E on +1 turn")
+
+        var north = Prop(kind: .chest, subRow: 0, subCol: 1, facing: .n); north.rotate(quarterTurns: 1)
+        check(north.subRow == 1 && north.subCol == 2, "prop north sub-cell → east (got \(north.subRow),\(north.subCol))")
+        check(north.facing == .e, "prop north facing N→E on +1 turn")
     }
 }
