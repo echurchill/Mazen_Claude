@@ -93,7 +93,17 @@ class Renderer: NSObject, MTKViewDelegate {
     var currentBufferIndex = 0
     var aspect: Float = 1.0
 
-    var gameState: GameState
+    /// The world stack (M11.1). Bottom = the cube overworld (hub); pushing a portal-world puts
+    /// it on top. Everything in the draw loop and input reads `gameState` = the active (top) world,
+    /// so a single push/pop swaps the whole rendered world while every other world's state is
+    /// retained on the stack (the scars persist). Same-size *and* different-size worlds work — the
+    /// tile-mesh library and instance buffers are size-agnostic (see `resetGame`).
+    var worldStack: [GameState] = []
+    /// The active world — top of the stack. Read-only; mutate the stack via enter/exitWorld.
+    var gameState: GameState { worldStack.last! }
+    /// A throwaway 3³ interior world used to prove the swap in M11.1 (toggled with the O key).
+    /// Replaced by real portal destinations in M11.2.
+    private var testInterior: GameState?
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -209,12 +219,15 @@ class Renderer: NSObject, MTKViewDelegate {
         depthDescAlways.isDepthWriteEnabled = false
         self.depthStateAlways = device.makeDepthStencilState(descriptor: depthDescAlways)!
 
-        // Game state (owns the per-world scale) — mark some tiles discovered for visual testing
-        self.gameState = GameState(size: Self.initialCubeSize)
-        Self.setupInitialDiscovery(gameState: self.gameState)
+        // Game state (owns the per-world scale) — mark some tiles discovered for visual testing.
+        // The overworld is the bottom of the world stack (M11.1). Use a local here: the computed
+        // `gameState` getter can't be called before super.init().
+        let overworld = GameState(size: Self.initialCubeSize)
+        Self.setupInitialDiscovery(gameState: overworld)
+        self.worldStack = [overworld]
 
         // Tile mesh library (geometry baked from the world scale)
-        self.tileMeshLib = TileMeshLibrary(device: device, worldScale: gameState.worldScale)
+        self.tileMeshLib = TileMeshLibrary(device: device, worldScale: overworld.worldScale)
 
         // Textures
         self.diffuseArray = Self.loadTextureArray(device: device,
@@ -323,8 +336,36 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     func resetGame(size: Int) {
-        gameState = GameState(size: size)
+        // Collapse to a single fresh overworld (drops any pushed portal-worlds).
+        worldStack = [GameState(size: size)]
         Self.setupInitialDiscovery(gameState: gameState)
+    }
+
+    // MARK: - World stack (M11.1)
+
+    /// Push a portal-world; it becomes the active world. The current world stays on the stack,
+    /// fully intact, so returning to it preserves every twist and step (persistent scars).
+    func enterWorld(_ world: GameState) {
+        worldStack.append(world)
+    }
+
+    /// Pop back to the world beneath. No-op at the bottom (the overworld is never popped).
+    func exitWorld() {
+        if worldStack.count > 1 { worldStack.removeLast() }
+    }
+
+    /// M11.1 spine proof (O key): toggle a throwaway 3³ interior world. A 3³ cube reads as
+    /// obviously different from the 7³ overworld, so a glance confirms the swap — and it also
+    /// exercises a *different-size* world sharing the same tile library + buffers. Replaced by
+    /// real portal props + a transition in M11.2.
+    func toggleTestInterior() {
+        if worldStack.count > 1 { exitWorld(); return }
+        if testInterior == nil {
+            let interior = GameState(size: 3)
+            Self.setupInitialDiscovery(gameState: interior)
+            testInterior = interior
+        }
+        enterWorld(testInterior!)
     }
 
     private static func setupInitialDiscovery(gameState: GameState) {

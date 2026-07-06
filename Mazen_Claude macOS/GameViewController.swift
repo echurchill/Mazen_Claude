@@ -75,15 +75,17 @@ class GameViewController: NSViewController {
         case .slow:   pacing = "SLOW"
         case .step:   pacing = "STEP  [ ] to scrub"
         }
+        let depth = renderer?.worldStack.count ?? 1
+        let world = depth > 1 ? "interior (depth \(depth))" : "overworld"
         let text = String(format: """
             Face: %@  Pos: (%d,%d)  Dir: %@
             Camera: %@  Cube: %dx%dx%d
             Frame: %.1f ms  (%.0f fps)
-            Twist(G): %@
+            Twist(G): %@   World(O): %@
             """,
             "\(gs.player.face)", gs.player.row, gs.player.col, "\(gs.player.facing)",
             gs.camera.mode == .orbit ? "orbit" : "FP", gs.cubeModel.size, gs.cubeModel.size, gs.cubeModel.size,
-            gs.avgFrameTimeMs, fps, pacing)
+            gs.avgFrameTimeMs, fps, pacing, world)
         debugLabel?.stringValue = text
     }
 
@@ -153,6 +155,8 @@ class GameViewController: NSViewController {
             gs.stepSlice(0.06)
         case 33:      // [ — scrub a held twist backward
             gs.stepSlice(-0.06)
+        case 31:      // O — M11.1 spine test: toggle a 3³ interior world (portal in / out)
+            renderer.toggleTestInterior()
         case 35:      // P — toggle auto-rotation
             gs.camera.orbitAutoRotate.toggle()
         case 4:       // H — toggle debug HUD
