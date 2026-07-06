@@ -235,6 +235,7 @@ enum PropKind: UInt8 {
     case houseCorner  // one quarter of a 2×2 modular house (G5)
     case portal       // a doorway to another world — interact (F) switches worlds (M11.2)
     case importedAsset // a decoration backed by an imported mesh; `state` = the Renderer's registry index. Rides slices like any prop.
+    case portalLamp   // the flashing lamp atop the portal (TARDIS-style); rendered emissive + blinking
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.

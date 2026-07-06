@@ -192,6 +192,10 @@ class TileMeshLibrary {
         Self.addPortal(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.portal.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalStart, indexCount: allIndices.count - portalStart)
 
+        let portalLampStart = allIndices.count
+        Self.addPortalLamp(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.portalLamp.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalLampStart, indexCount: allIndices.count - portalLampStart)
+
         // Celestial bodies (M9): a unit cube, drawn at the sun/moon positions.
         let cubeStart = allIndices.count
         Self.addUnitCube(to: &allVerts, indices: &allIndices)
@@ -532,13 +536,44 @@ class TileMeshLibrary {
         }
     }
 
-    /// A portal marker (M11.2) — an upright pylon, taller than the hedges so it's easy to spot,
-    /// tinted a bright colour by SceneBuilder. Interacting (F) while standing on its tile switches
-    /// worlds. Placeholder for a nicer archway / imported gate later. Wound CCW-outward.
+    /// A portal marker (M11.2) — a TARDIS-style police box: a tall blue body with a tented (pyramid)
+    /// roof, taller than the hedges so it's easy to spot. A separate `portalLamp` prop sits at the
+    /// apex and flashes. Interacting (F) or stepping onto its tile switches worlds. Wound CCW-outward.
     private static func addPortal(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
         let z0 = ws.floorY
-        let top: Float = 0.44      // above the 0.24 hedges — an obvious beacon
-        let h: Float = 0.10        // slim footprint, fits a sub-cell
+        let bodyTop: Float = 0.40   // top of the box body (above the 0.24 hedges)
+        let roofTop: Float = 0.50   // apex of the tented roof
+        let h: Float = 0.11         // body half-width (squarish police-box footprint)
+        func ring(_ z: Float) -> [SIMD3<Float>] {
+            [SIMD3(-h, -h, z), SIMD3(h, -h, z), SIMD3(h, h, z), SIMD3(-h, h, z)]
+        }
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            let ao = 0.55 + 0.45 * max(0, min(1, (p.z - z0) / roofTop))   // slightly darker toward the base
+            return MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
+        }
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            let n = normalize(cross(b - a, d - a))
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        func tri(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
+            let n = normalize(cross(b - a, c - a))
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n)])
+            indices.append(contentsOf: [base+0, base+1, base+2])
+        }
+        let b = ring(z0), t = ring(bodyTop)
+        for i in 0..<4 { let j = (i + 1) % 4; quad(b[i], b[j], t[j], t[i]) }   // body sides
+        let apex = SIMD3<Float>(0, 0, roofTop)
+        for i in 0..<4 { let j = (i + 1) % 4; tri(t[i], t[j], apex) }          // tented pyramid roof
+    }
+
+    /// The flashing lamp atop the portal (M11.2 / TARDIS) — a tiny box sitting at the roof apex.
+    /// SceneBuilder renders it emissive (materialID 12) with a blinking brightness, so it reads as a
+    /// beacon "about to take off". Its own prop so it can animate independently of the blue body.
+    private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        let base: Float = 0.50, top: Float = 0.56, h: Float = 0.028
         func ring(_ z: Float) -> [SIMD3<Float>] {
             [SIMD3(-h, -h, z), SIMD3(h, -h, z), SIMD3(h, h, z), SIMD3(-h, h, z)]
         }
@@ -547,13 +582,13 @@ class TileMeshLibrary {
         }
         func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
             let n = normalize(cross(b - a, d - a))
-            let base = UInt16(verts.count)
+            let bi = UInt16(verts.count)
             verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
-            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            indices.append(contentsOf: [bi+0, bi+1, bi+2, bi+0, bi+2, bi+3])
         }
-        let b = ring(z0), t = ring(top)
-        for i in 0..<4 { let j = (i + 1) % 4; quad(b[i], b[j], t[j], t[i]) }   // sides
-        quad(t[0], t[1], t[2], t[3])                                          // top cap
+        let lb = ring(base), lt = ring(top)
+        for i in 0..<4 { let j = (i + 1) % 4; quad(lb[i], lb[j], lt[j], lt[i]) }   // sides
+        quad(lt[0], lt[1], lt[2], lt[3])                                          // top cap
     }
 
     /// A chest — a simple box (4 sides + top) sitting on the floor. The open/closed look is

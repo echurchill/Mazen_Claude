@@ -45,7 +45,8 @@ final class SceneBuilder {
         .obelisk:     SIMD4(0.62, 0.60, 0.55, 1.0),  // pale stone
         .chest:       SIMD4(0.55, 0.36, 0.18, 1.0),  // wood
         .houseCorner: SIMD4(0.50, 0.45, 0.44, 1.0),  // roof grey (walls are imported tan kit; M12-E)
-        .portal:      SIMD4(0.30, 0.85, 0.98, 1.0),  // bright cyan beacon (M11.2 world portal)
+        .portal:      SIMD4(0.11, 0.20, 0.52, 1.0),  // TARDIS police-box blue (M11.2 world portal)
+        .portalLamp:  SIMD4(1.0, 1.0, 1.0, 1.0),     // overridden per-frame by the blink (below)
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
@@ -208,9 +209,17 @@ final class SceneBuilder {
                                 * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
+                            var materialID: UInt32 = 10
                             if prop.kind == .chest && prop.state == 1 { color = SIMD4(0.98, 0.80, 0.30, 1.0) }  // opened / "lit"
+                            if prop.kind == .portalLamp {
+                                // TARDIS-style flash: a brief bright pulse each ~1.4 s cycle, else dim. Emissive.
+                                let cyclePos = gameState.time.truncatingRemainder(dividingBy: 1.4) / 1.4
+                                let v: Float = cyclePos < 0.18 ? 1.0 : 0.28
+                                color = SIMD4(v, v, min(1, v * 1.2), 1.0)   // white with a cool tint
+                                materialID = 12                             // emissive (unlit) → reads as a lamp
+                            }
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
-                                materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                                materialID: materialID, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
                         }
                     }

@@ -114,6 +114,7 @@ class CubeModel {
         let portalRow = max(0, top - 1)
         if let (ci, fi) = faceletAt(face: .positiveZ, row: portalRow, col: left + w / 2) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))  // flashing lamp atop
         }
         // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
         // crowded +Z demo plaza, so it has room to breathe. It sits at the row-0 face edge so an
