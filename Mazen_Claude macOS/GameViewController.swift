@@ -69,14 +69,21 @@ class GameViewController: NSViewController {
     private func updateDebugHUD() {
         guard showDebugHUD, let gs = renderer?.gameState else { return }
         let fps = gs.avgFrameTimeMs > 0 ? 1000.0 / gs.avgFrameTimeMs : 0
+        let pacing: String
+        switch gs.twistPacing {
+        case .normal: pacing = "normal"
+        case .slow:   pacing = "SLOW"
+        case .step:   pacing = "STEP  [ ] to scrub"
+        }
         let text = String(format: """
             Face: %@  Pos: (%d,%d)  Dir: %@
             Camera: %@  Cube: %dx%dx%d
             Frame: %.1f ms  (%.0f fps)
+            Twist(G): %@
             """,
             "\(gs.player.face)", gs.player.row, gs.player.col, "\(gs.player.facing)",
             gs.camera.mode == .orbit ? "orbit" : "FP", gs.cubeModel.size, gs.cubeModel.size, gs.cubeModel.size,
-            gs.avgFrameTimeMs, fps)
+            gs.avgFrameTimeMs, fps, pacing)
         debugLabel?.stringValue = text
     }
 
@@ -136,6 +143,16 @@ class GameViewController: NSViewController {
                 let idx = scales.firstIndex(of: gs.timeScale) ?? 0
                 gs.timeScale = scales[(idx + 1) % scales.count]
             }
+        case 5:       // G — cycle slice-twist pacing (debug): normal → slow → single-step
+            switch gs.twistPacing {
+            case .normal: gs.twistPacing = .slow
+            case .slow:   gs.twistPacing = .step
+            case .step:   gs.twistPacing = .normal
+            }
+        case 30:      // ] — scrub a held twist forward (single-step pacing)
+            gs.stepSlice(0.06)
+        case 33:      // [ — scrub a held twist backward
+            gs.stepSlice(-0.06)
         case 35:      // P — toggle auto-rotation
             gs.camera.orbitAutoRotate.toggle()
         case 4:       // H — toggle debug HUD

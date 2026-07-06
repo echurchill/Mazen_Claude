@@ -26,6 +26,15 @@ struct ImportedProp {
     let yUp: Bool                           // OBJ kits import Y-up; USD props Z-up
 }
 
+/// One piece of the imported modular house, positioned in a quarter's tile-local frame
+/// (M12-E). All pieces of a quarter share that quarter's `.houseCorner` Prop anchor (tile
+/// matrix + facing), so they ride slice rotations together and split as a unit — reusing the
+/// exact machinery that already carries the procedural house.
+struct HouseKitPiece {
+    let mesh: AssetMesh
+    let local: float4x4   // Y-up→Z-up, non-uniform scale, and edge placement within the tile
+}
+
 /// One prepared asset draw for the frame (a whole textured mesh, or one flat-colour sub-mesh).
 struct AssetDrawCmd {
     let vertexBuffer: MTLBuffer
@@ -73,6 +82,8 @@ class Renderer: NSObject, MTKViewDelegate {
     var instanceBuffers: [MTLBuffer]
     // M12: imported props (asset registry) + a per-frame instance buffer + draw list.
     var importedProps: [ImportedProp] = []
+    var houseAssembly: [HouseKitPiece] = []       // M12-E: canonical imported house quarter (two walls)
+    var houseAssemblyDoor: [HouseKitPiece] = []   // the front quarter — one wall swapped for a door
     var assetInstanceBuffers: [MTLBuffer] = []
     var assetDrawCmds: [AssetDrawCmd] = []
     var opaqueDrawCalls: [DrawCall] = []
@@ -265,9 +276,24 @@ class Renderer: NSObject, MTKViewDelegate {
             loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  0), 0.28),
         ].compactMap { $0 }
         self.importedProps = loadedProps
+
+        // M12-E: imported modular house. Load the kit's solid-colour OBJ pieces and assemble one
+        // canonical quarter (authored for facing.n — two outer walls on the −X/−Y tile edges +
+        // floor). The four `.houseCorner` props stamped in CubeModel place/orient the quarters and
+        // carry them through slice rotations, so the building splits at the tile seams for free.
+        func loadKit(_ name: String) -> AssetMesh? {
+            AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/modular_house_collection/\(name).obj"), device: device)
+        }
+        if let wall = loadKit("Structure_Exterior_Wall_Straight") {
+            self.houseAssembly     = Self.buildHouseQuarter(wall: wall, front: false)
+            self.houseAssemblyDoor = Self.buildHouseQuarter(wall: wall, front: true)
+        } else {
+            print("[Renderer] house kit FAILED to load")
+        }
+
         var assetBufs: [MTLBuffer] = []
         for _ in 0..<maxBuffersInFlight {
-            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 256, options: .storageModeShared)!)
+            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 512, options: .storageModeShared)!)
         }
         self.assetInstanceBuffers = assetBufs
 
@@ -487,7 +513,7 @@ class Renderer: NSObject, MTKViewDelegate {
     /// world spin like any other prop. Rendered flat-coloured for now (texture is M12-C).
     private func updateAssetInstances() {
         assetDrawCmds.removeAll(keepingCapacity: true)
-        guard !importedProps.isEmpty else { return }
+        guard !importedProps.isEmpty || !houseAssembly.isEmpty else { return }
         let cap = assetInstanceBuffers[currentBufferIndex].length / MemoryLayout<InstanceDataSwift>.stride
         let ptr = assetInstanceBuffers[currentBufferIndex].contents().bindMemory(to: InstanceDataSwift.self, capacity: cap)
         let ws = gameState.worldScale
@@ -524,6 +550,88 @@ class Renderer: NSObject, MTKViewDelegate {
                 }
             }
         }
+
+        // M12-E: imported modular house. Placed via the four `.houseCorner` Prop anchors (not the
+        // static faceOffset registry) so each quarter rides its tile's slice rotation — the split
+        // mechanic. Mirror SceneBuilder's tile-matrix math (worldMatrix → animMat → spin → sub-cell
+        // → facing) exactly so the quarters stay glued to their tiles through a rotation. Scan by
+        // (face,row,col): a quarter carried onto a neighbouring face reports its new position here.
+        if !houseAssembly.isEmpty {
+            let model = gameState.cubeModel
+            let sr = gameState.sliceRotation
+            let sliceAxis: SIMD3<Float> = sr.axis == 0 ? SIMD3(1,0,0) : sr.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
+            let sliceT = sr.progress * sr.progress * (3 - 2 * sr.progress)   // smoothstep, matches SceneBuilder
+            let sliceMat = float4x4.rotation(radians: sr.angle * sliceT, axis: sliceAxis)
+            let step = ws.subCellStep
+            for face in CubeFace.allCases {
+                for row in 0..<n {
+                    for col in 0..<n {
+                        guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
+                        for prop in model.cubies[ci].facelets[fi].props where prop.kind == .houseCorner {
+                            var tileM = model.worldMatrix(face: face, row: row, col: col)
+                            if sr.isActive && sr.affectedCubies.contains(ci) { tileM = sliceMat * tileM }
+                            tileM = spin * tileM
+                                * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
+                                * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
+                            // The `.s` quarter is the building's front — it gets the door variant.
+                            let assembly = prop.facing == .s ? houseAssemblyDoor : houseAssembly
+                            for piece in assembly {
+                                let m = tileM * piece.local
+                                for sm in piece.mesh.submeshes {
+                                    guard inst < cap else { break }
+                                    ptr[inst] = InstanceDataSwift(modelMatrix: m, baseColor: sm.color, materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                                    assetDrawCmds.append(AssetDrawCmd(vertexBuffer: piece.mesh.vertexBuffer, indexBuffer: piece.mesh.indexBuffer, indexOffset: sm.indexOffset, indexCount: sm.indexCount, instanceIndex: inst, diffuse: nil))
+                                    inst += 1
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Tile-local width the imported house occupies per quarter. 1.0 puts the walls on the tile's
+    /// outer edges → the four quarters form a full 2×2 room the player can walk inside (M12-E).
+    /// `houseWallHeight` is the wall height in tile-Z (the procedural hip roof rests on top of it).
+    static let houseQuarterWidth: Float = 1.0
+    static let houseWallHeight: Float = 0.30
+
+    /// Normalize a kit module (1×1 Y-up, arbitrary authored size) to the quarter: scale its length
+    /// (authored X) to `bw` and its height (authored Y) to `hS`, recentre it on its length/thickness
+    /// with the base at 0, then rotate Y-up → tile-Z-up. The result is a piece lying along tile X,
+    /// centred at the origin, standing in +Z — ready to slide onto a perimeter edge. Handles the
+    /// wall (1.0 wide, 1.0 tall) and the taller/narrower door (0.8 wide, 1.9 tall) uniformly.
+    private static func kitBase(_ mesh: AssetMesh, bw: Float, hS: Float) -> float4x4 {
+        let s = mesh.size
+        let lenScale = s.x > 0 ? bw / s.x : bw
+        let htScale  = s.y > 0 ? hS / s.y : hS
+        let up = float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0))
+        let recenter = float4x4.translation(-mesh.center.x, -mesh.boundsMin.y, -mesh.center.z)
+        return up * float4x4.scale(lenScale, htScale, lenScale) * recenter
+    }
+
+    /// Assemble one imported house quarter (M12-E) in a tile's local frame, authored for `facing.n`.
+    /// Each quarter fills its full tile, contributing two of the building's perimeter walls (an L on
+    /// the −X/−Y outer edges). The four `.houseCorner` props' facings (n/e/w/s) rotate this into the
+    /// four corners, so the L's close a full 2×2 room; the procedural hip roof (TileMeshLibrary) caps
+    /// it. The `front` quarter omits its front wall, leaving an open entrance aligned with the plaza
+    /// opening. Plain imported walls only — a plain box stretches cleanly to fill the big tile,
+    /// unlike the tall window/door modules which squash. No floor slab (the tile already has one).
+    private static func buildHouseQuarter(wall: AssetMesh, front: Bool) -> [HouseKitPiece] {
+        let floorY: Float = 0.001
+        let bw = houseQuarterWidth
+        let hS = houseWallHeight
+        let c: Float = 0.5      // shared 2×2 centre corner in tile-local (facing.n → +X,+Y)
+        let lift = float4x4.translation(0, 0, floorY)
+        let rotZ90 = float4x4.rotation(radians: .pi / 2, axis: SIMD3(0, 0, 1))
+        // `kitBase` leaves a wall piece centred on tile X (length bw) and Y (thickness), base at Z=0.
+        // Slide it onto a perimeter edge: the −Y edge runs along X; the −X edge is rotated to run Y.
+        let onMinusY = lift * float4x4.translation(c - bw / 2, c - bw, 0) * kitBase(wall, bw: bw, hS: hS)
+        let onMinusX = lift * float4x4.translation(c - bw, c - bw / 2, 0) * rotZ90 * kitBase(wall, bw: bw, hS: hS)
+        var pieces = [HouseKitPiece(mesh: wall, local: onMinusX)]   // side wall (always)
+        if !front { pieces.append(HouseKitPiece(mesh: wall, local: onMinusY)) }   // front wall, unless this is the entrance
+        return pieces
     }
 
     // MARK: - MTKViewDelegate

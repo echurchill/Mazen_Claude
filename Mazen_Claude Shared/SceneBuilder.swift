@@ -44,7 +44,7 @@ final class SceneBuilder {
         .topiary:     SIMD4(0.28, 0.52, 0.26, 1.0),  // deep hedge green
         .obelisk:     SIMD4(0.62, 0.60, 0.55, 1.0),  // pale stone
         .chest:       SIMD4(0.55, 0.36, 0.18, 1.0),  // wood
-        .houseCorner: SIMD4(0.72, 0.66, 0.52, 1.0),  // warm plaster
+        .houseCorner: SIMD4(0.50, 0.45, 0.44, 1.0),  // roof grey (walls are imported tan kit; M12-E)
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).

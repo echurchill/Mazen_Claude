@@ -55,6 +55,37 @@ class CubeModel {
         }
     }
 
+    /// Open a rectangular block into a fully walkable, hedge-free room the player can enter
+    /// (M12-E). Every edge of every block tile is opened — so no interior *or* perimeter hedges
+    /// render, leaving the imported house walls to enclose it — and the reciprocal edges of the
+    /// same-face neighbours are opened too, so the player can walk in from the surrounding plaza.
+    /// Edges that fall off the face (the cube-edge sides where a slice splits the house) simply
+    /// find no neighbour and are skipped.
+    func stampOpenPlaza(face: CubeFace, top: Int, left: Int, height: Int, width: Int) {
+        let n = size
+        func open(_ r: Int, _ c: Int, _ dir: SurfaceDirection) {
+            guard (0..<n).contains(r), (0..<n).contains(c),
+                  let (ci, fi) = faceletAt(face: face, row: r, col: c) else { return }
+            let m = Self.directionMask(dir)
+            cubies[ci].facelets[fi].mazeTile.openings.insert(m)
+            cubies[ci].facelets[fi].mazeTile.openEdges.insert(m)
+        }
+        for r in top..<(top + height) {
+            for c in left..<(left + width) {
+                open(r, c, .north); open(r, c, .south); open(r, c, .east); open(r, c, .west)
+            }
+        }
+        // Reciprocal same-face neighbour edges, so the room connects to the plaza around it.
+        for c in left..<(left + width) {
+            open(top - 1, c, .south)         // north neighbour ↔ block
+            open(top + height, c, .north)    // south neighbour ↔ block
+        }
+        for r in top..<(top + height) {
+            open(r, left - 1, .east)         // west neighbour ↔ block
+            open(r, left + width, .west)     // east neighbour ↔ block
+        }
+    }
+
     /// Place a hedge-sculpture topiary in the NW corner sub-cell of each start-plaza tile
     /// so Phase G's prop pipeline is visible — and rides slice rotations (the plaza is on
     /// the start face, so Q/E carries the topiaries around). (M10 Phase G)
@@ -74,16 +105,28 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 2, subCol: 2))
             cubies[ci].facelets[fi].props.append(Prop(kind: .chest, subRow: 0, subCol: 2))
         }
-        // A 2×2 modular house at the face's NW corner (rows/cols 0–1). Placed at the face
-        // edge so a slice rotation from an adjacent face cuts through and splits it. Each
-        // quarter's facing aims its roof-peak at the shared 2×2 centre. Merge the four tiles
-        // into a room (interior hedges removed, so nothing tangles the building) but keep the
-        // perimeter hedges + their gateways, so the courtyard still has proper doors to
-        // travel through — same treatment as the start plaza.
-        stampRoom(face: .positiveZ, top: 0, left: 0, height: 2, width: 2)
-        let house: [(Int, Int, Heading8)] = [(0, 0, .n), (0, 1, .e), (1, 0, .w), (1, 1, .s)]
+        // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
+        // crowded +Z demo plaza, so it has room to breathe. It sits at the row-0 face edge so an
+        // adjacent-face slice still cuts through and splits it. The court is opened into a hedge-free,
+        // walkable room and revealed, so the imported walls do the enclosing and the player can walk
+        // in from the surrounding plaza.
+        let houseFace: CubeFace = .negativeZ
+        let courtW = min(4, size), courtH = min(4, size)
+        let courtLeft = max(0, size / 2 - courtW / 2)
+        stampOpenPlaza(face: houseFace, top: 0, left: courtLeft, height: courtH, width: courtW)
+        for r in 0..<courtH {
+            for c in courtLeft..<(courtLeft + courtW) {
+                if let (ci, fi) = faceletAt(face: houseFace, row: r, col: c) {
+                    cubies[ci].facelets[fi].tileState = .discovered
+                    cubies[ci].facelets[fi].discoveryAmount = 1.0
+                }
+            }
+        }
+        // The 2×2 quarters, centred across the court width, at the row-0 edge (for the split).
+        let hLeft = courtLeft + max(0, (courtW - 2) / 2)
+        let house: [(Int, Int, Heading8)] = [(0, hLeft, .n), (0, hLeft + 1, .e), (1, hLeft, .w), (1, hLeft + 1, .s)]
         for (r, c, f) in house {
-            if let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) {
+            if let (ci, fi) = faceletAt(face: houseFace, row: r, col: c) {
                 cubies[ci].facelets[fi].props.append(Prop(kind: .houseCorner, subRow: 1, subCol: 1, facing: f))
             }
         }

@@ -35,6 +35,11 @@ class GameState {
     }
     var sliceRotation = SliceRotation()
 
+    /// Debug pacing for slice twists (M12-E verification): watch a split happen slowly, or hold a
+    /// twist mid-way and scrub it frame-by-frame with the bracket keys.
+    enum TwistPacing { case normal, slow, step }
+    var twistPacing: TwistPacing = .normal
+
     struct DiscoveryAnim {
         let cubieIndex: Int
         let faceletIndex: Int
@@ -101,7 +106,11 @@ class GameState {
         }
 
         if sliceRotation.isActive {
-            sliceRotation.progress += deltaTime * sliceRotation.speed / abs(sliceRotation.angle)
+            // .step holds the twist for manual scrubbing (see stepSlice); .slow crawls; .normal auto.
+            if twistPacing != .step {
+                let scale: Float = twistPacing == .slow ? 0.15 : 1.0
+                sliceRotation.progress += deltaTime * sliceRotation.speed * scale / abs(sliceRotation.angle)
+            }
             if sliceRotation.progress >= 1.0 {
                 sliceRotation.progress = 1.0
                 sliceRotation.isActive = false
@@ -230,6 +239,18 @@ class GameState {
         )
     }
 
+    /// Debug: manually scrub an in-progress twist (single-step verification, `.step` pacing only).
+    /// Advances/retreats `progress`; finalizes when it reaches 1, and can be scrubbed back toward 0.
+    func stepSlice(_ delta: Float) {
+        guard twistPacing == .step, sliceRotation.isActive else { return }
+        sliceRotation.progress = max(0, sliceRotation.progress + delta)
+        if sliceRotation.progress >= 1.0 {
+            sliceRotation.progress = 1.0
+            sliceRotation.isActive = false
+            finalizeSliceRotation()
+        }
+    }
+
     private func finalizeSliceRotation() {
         let playerCI = sliceRotation.playerCubieIndex
         cubeModel.applySliceRotation(axis: sliceRotation.axis, index: sliceRotation.index, angle: sliceRotation.angle)
@@ -347,6 +368,17 @@ extension float4x4 {
             SIMD4(s, 0, 0, 0),
             SIMD4(0, s, 0, 0),
             SIMD4(0, 0, s, 0),
+            SIMD4(0, 0, 0, 1)
+        ))
+    }
+
+    /// Non-uniform scale — needed for imported kit buildings whose footprint fills a tile
+    /// but whose height must stay realistic (M12-E house).
+    static func scale(_ x: Float, _ y: Float, _ z: Float) -> float4x4 {
+        return float4x4(columns: (
+            SIMD4(x, 0, 0, 0),
+            SIMD4(0, y, 0, 0),
+            SIMD4(0, 0, z, 0),
             SIMD4(0, 0, 0, 1)
         ))
     }

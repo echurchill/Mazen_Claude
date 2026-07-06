@@ -9,3 +9,8 @@ xcuserdata/
 
 # macOS metadata
 .DS_Store
+
+# Large unused model kit (~164 MB of PBR textures) — held out of plain git pending a
+# git-LFS decision. Only needed when the fort multi-texture feature is built (M12); it is
+# loaded from this local path at runtime in the meantime.
+Mazen_Models/modular_fort_01_2k/

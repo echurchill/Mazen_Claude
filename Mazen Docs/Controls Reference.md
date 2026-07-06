@@ -2,20 +2,36 @@
 
 ## macOS — Keyboard & Mouse
 
+### Move & look
 | Input | Action |
 |---|---|
-| W / Up Arrow | Move forward |
-| S / Down Arrow | Move backward (turn 180 then step) |
+| W / Up Arrow | Move forward (hold to keep walking) |
+| S / Down Arrow | Move backward (hold) |
 | A / Left Arrow | Turn left |
 | D / Right Arrow | Turn right |
 | Space | Toggle camera mode (orbit / first-person) |
-| Q | Rotate current face slice clockwise |
-| E | Rotate current face slice counterclockwise |
+| Mouse move (first-person) | Free-look — yaw + pitch (mouselook, always on in FP) |
+| Mouse drag (orbit) | Rotate the orbit camera |
+| Scroll wheel (orbit) | Zoom in/out |
+
+### Cube & slice
+| Input | Action |
+|---|---|
+| Q | Rotate the current face's slice clockwise |
+| E | Rotate the current face's slice counter-clockwise |
+| G | Cycle slice-twist pacing: **normal → slow (0.15×) → single-step** |
+| ] | Scrub a held twist **forward** (single-step pacing) |
+| [ | Scrub a held twist **backward** (single-step pacing) |
+| N | Cycle cube size (3 → 5 → 7 → 9) |
+
+### World & props
+| Input | Action |
+|---|---|
+| F | Interact with a prop on the current tile (e.g. open/close a chest) |
+| T | Cycle time scale (1× → 8× → 60×) |
+| Shift + T | Freeze time at high noon (stable, predictable light) |
 | P | Toggle orbit auto-rotation |
-| N | Cycle cube size (3 → 4 → 5 → 3) |
-| H | Toggle debug HUD (face, position, fps) |
-| Mouse drag | Orbit rotation (orbit mode only) |
-| Scroll wheel | Orbit zoom in/out (range 5–15, orbit mode only) |
+| H | Toggle debug HUD (face, position, camera, cube size, fps, twist pacing) |
 
 ## iOS — Touch Gestures
 
@@ -37,4 +53,5 @@
 - Movement and turning animate smoothly; inputs queue if pressed during an animation.
 - Slice rotation is only available when the player is stationary (not moving or turning).
 - Orbit auto-rotation pauses when you manually drag or pan the camera.
-- The debug HUD (macOS only) shows current face, grid position, facing direction, camera mode, cube size, and frame timing.
+- The debug HUD (macOS only) shows current face, grid position, facing direction, camera mode, cube size, frame timing, and the current twist pacing.
+- **Twist pacing (G / `[` / `]`)** is a diagnostic aid for inspecting how a slice carries geometry — e.g. watching the imported modular house split at its tile seams. In **single-step** pacing a Q/E twist starts frozen; `]` inches it forward a notch and `[` walks it back. It finalizes on reaching the end, and can be scrubbed back toward the start to re-check. Set it back to **normal** with G for regular play.

@@ -226,6 +226,9 @@ class TileMeshLibrary {
     }
 
     func propMesh(kind: PropKind) -> TileMesh? {
+        // M12-E: for .houseCorner this returns just the hip-roof cap; the walls are imported kit
+        // meshes drawn through the asset path (Renderer). Both anchor to the same Prop, so roof and
+        // walls move and split together. (A kit roof was tried but the kit has no 4-way hip piece.)
         return propMeshes[kind.rawValue]
     }
 
@@ -558,20 +561,19 @@ class TileMeshLibrary {
         quad(t[0], t[1], t[2], t[3])       // top
     }
 
-    /// One quarter of a 2×2 modular house (G5). The quarter occupies only its tile's **inner
-    /// corner cell** (toward the shared 2×2 centre), so the assembled house is a compact
-    /// building at the centre with the surrounding path left walkable. It is an L of two outer
-    /// walls (z0…eave) + a hip-roof slope peaking exactly at the tile corner `(hw,hw)` — the
-    /// shared 2×2 centre — so the four quarters meet there with no gap. Placed at tile centre
-    /// and rotated by the prop's `facing` so each peak lands on that shared point; because each
-    /// quarter rides its own tile, a slice cutting the block splits the house Rubik's-style.
-    /// Single-colour placeholder, wound CCW-outward. (G5)
+    /// The **hip-roof cap** for one quarter of the 2×2 modular house (M12-E). The walls are now
+    /// imported kit meshes (Renderer.buildHouseQuarter); this supplies just the roof, because the
+    /// kit has no 4-way hip piece and this geometry was already built for exactly this footprint.
+    /// A single slope over the tile's inner-corner cell, peaking at the tile corner `(hw,hw)` — the
+    /// shared 2×2 centre — so the four quarters' peaks meet there with no gap. Rides its tile's
+    /// slice via the same `.houseCorner` Prop anchor as the imported walls, so roof and walls split
+    /// together. The eave sits at the imported wall height so it rests cleanly on top. (M12-E)
     private static func addHouseQuarter(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
-        let hw = ws.floorHalfSize          // 0.5 — inner corner sits exactly on the tile corner
-        let inner = hw - ws.subCellStep    // ~0.167 — quarter fills just the inner-corner cell
+        let hw = ws.floorHalfSize          // 0.5 — the shared 2×2 centre corner (apex lands here)
+        let inner = -hw                    // roof covers the full tile now that walls are on its edges
         let z0 = ws.floorY
-        let eave = z0 + 0.24               // wall top ≈ hedge height
-        let peak = z0 + 0.40               // roof peak, above the hedges
+        let eave = z0 + 0.30               // wall top (imported wall height hS = 0.30)
+        let peak = z0 + 0.62               // roof peak at the shared 2×2 centre, above the walls
 
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
             let ao = 0.55 + 0.45 * max(0, min(1, (p.z - z0) / (peak - z0)))
@@ -590,15 +592,16 @@ class TileMeshLibrary {
             indices.append(contentsOf: [base+0, base+1, base+2])
         }
 
-        // Two outer walls (the L facing away from the 2×2 centre), z0…eave.
-        quad(SIMD3(inner, hw, z0), SIMD3(inner, inner, z0), SIMD3(inner, inner, eave), SIMD3(inner, hw, eave))   // x=inner, outward −x
-        quad(SIMD3(inner, inner, z0), SIMD3(hw, inner, z0), SIMD3(hw, inner, eave), SIMD3(inner, inner, eave))   // y=inner, outward −y
-
         // Hip-roof quarter: peak at the inner corner (hw,hw) = shared 2×2 centre; eave at the
-        // other three corners of the inner-corner cell.
+        // other three corners of the inner-corner cell (resting on the imported walls). The walls
+        // themselves come from the kit (Renderer), so this emits only the roof. Emit each slope
+        // twice with opposite winding so it's visible from outside AND as a ceiling from inside
+        // (a thin single-sided slope back-face-culls to nothing when you look up at it).
         let apex = SIMD3<Float>(hw, hw, peak)
         tri(SIMD3(inner, inner, eave), SIMD3(hw, inner, eave), apex)
         tri(SIMD3(inner, inner, eave), apex, SIMD3(inner, hw, eave))
+        tri(SIMD3(hw, inner, eave), SIMD3(inner, inner, eave), apex)   // underside
+        tri(apex, SIMD3(inner, inner, eave), SIMD3(inner, hw, eave))   // underside
     }
 
     // MARK: - Posts (M10 Phase B)
