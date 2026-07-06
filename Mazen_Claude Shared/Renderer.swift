@@ -693,6 +693,13 @@ class Renderer: NSObject, MTKViewDelegate {
 
         gameState.update(deltaTime: dt)
 
+        // M11.2: a portal interaction switches worlds. Clear the flag on the requesting world,
+        // then toggle (enter the interior from the overworld, or pop back). Reuses the M11.1 spine.
+        if gameState.portalRequested {
+            gameState.portalRequested = false
+            toggleTestInterior()
+        }
+
         guard let drawable = view.currentDrawable,
               let renderPassDesc = view.currentMTL4RenderPassDescriptor else { return }
 

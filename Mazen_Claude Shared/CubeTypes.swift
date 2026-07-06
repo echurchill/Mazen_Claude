@@ -233,6 +233,7 @@ enum PropKind: UInt8 {
     case obelisk      // tall landmark, visible over the hedges (G3)
     case chest        // interactive (G4)
     case houseCorner  // one quarter of a 2×2 modular house (G5)
+    case portal       // a doorway to another world — interact (F) switches worlds (M11.2)
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.

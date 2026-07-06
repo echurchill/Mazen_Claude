@@ -99,11 +99,14 @@ class CubeModel {
                 cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 0, subCol: 0))
             }
         }
-        // On the plaza-centre tile: a landmark obelisk (SE corner, rises over the hedges)
-        // and an interactive chest (NE corner) — stand on the tile and press F to toggle it.
+        // On the plaza-centre tile (the player's start tile): a landmark obelisk (SE corner), an
+        // interactive chest (NE corner), and a portal beacon (SW corner). The portal is on the
+        // start tile so it needs no navigation to test (M11.2) — stand there and press F to switch
+        // worlds. (Interact prioritises the portal over the chest while they share this tile.)
         if let (ci, fi) = faceletAt(face: .positiveZ, row: size / 2, col: size / 2) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 2, subCol: 2))
             cubies[ci].facelets[fi].props.append(Prop(kind: .chest, subRow: 0, subCol: 2))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 2, subCol: 0))
         }
         // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
         // crowded +Z demo plaza, so it has room to breathe. It sits at the row-0 face edge so an

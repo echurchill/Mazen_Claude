@@ -289,11 +289,22 @@ class GameState {
 
     // MARK: - Interaction (M10 Phase G)
 
+    /// Set by `interact()` when the player stands on a portal tile; the Renderer consumes it to
+    /// switch worlds (M11.2), then clears it. Lives here (per-world) because interact() runs on the
+    /// active world; the Renderer owns the world stack, so the world-switch itself happens there.
+    var portalRequested = false
+
     /// The interaction hook: act on any interactive props on the player's current tile.
-    /// For now only chests respond (toggle open ↔ closed). This is the dispatch point where
-    /// a lever would later trigger a slice rotation, a portal would load the M11 moon, etc.
+    /// A portal takes priority (stepping "through the door" switches worlds); otherwise chests
+    /// toggle open ↔ closed. This is the dispatch point where a lever would trigger a slice
+    /// rotation, etc.
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
+        let props = cubeModel.cubies[ci].facelets[fi].props
+        if props.contains(where: { $0.kind == .portal }) {
+            portalRequested = true
+            return
+        }
         for pi in cubeModel.cubies[ci].facelets[fi].props.indices
         where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .chest {
             cubeModel.cubies[ci].facelets[fi].props[pi].state = 1 - cubeModel.cubies[ci].facelets[fi].props[pi].state

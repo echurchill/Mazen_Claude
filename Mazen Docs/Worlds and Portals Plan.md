@@ -32,7 +32,8 @@ The dressing differs (a house door is a quiet fade-through; the moon might get a
 ## Design sketch
 
 - **World** = a self-contained space: its own `CubeModel`/room geometry, `WorldScale`, props, lighting, and (optionally) its own maze. The cube surface is just the first/hub world.
-- **Portal** = a prop/tile with a `destinationWorld`. Triggered by walking through or interacting (`F`). Fires a **transition** (fade / step-through / zoom) then swaps the active world.
+- **Portal** = a prop/tile with a `destinationWorld`. Fires a **transition** (fade / step-through / zoom) then swaps the active world.
+  - **Target UX: step through the door (walk-through), not press-F.** The portal should trigger **automatically when the player walks onto its sub-cell** — so entering a building, a cave, or a gate feels seamless, like crossing a threshold, with no button prompt. The current F-to-enter (M11.2) is an interim using the existing `interact()` hook; the walk-through trigger (a check in the movement/arrival code that requests the switch when the destination sub-cell holds a portal) is the real goal. Keep press-F as a fallback/alternate where a deliberate action reads better (e.g. a lever-gate).
 - **World stack** = push on enter, pop on exit, so nested travel (cube → house → basement) returns cleanly. State that should persist (player inventory, puzzle flags) lives above the stack; per-world layout can be regenerated or cached.
 - **The cube stays the hub** — the overworld you navigate; portals are the branches to content.
 
@@ -74,9 +75,10 @@ Recommendation: build the **world-switch spine first** (works for houses immedia
 - **Deliverable:** press a key, the rendered world swaps and swaps back, both states intact.
 
 **Phase 2 — Portal + transition.**
-- Add `PropKind.portal` (with a destination id); `interact()` (or walk-through) calls `enterWorld`. A "return gate" in the interior pops.
-- A short **screen fade** (fullscreen quad, alpha ramp ~0.3s) gates the swap so it doesn't pop.
-- **Deliverable:** walk to a door prop, interact, fade into the interior, return through a gate.
+- ✅ **2a (done):** `PropKind.portal` + a beacon mesh; `interact()` (F) sets `portalRequested`; the Renderer consumes it and toggles the world. A portal on the interior's start tile pops back.
+- **2b:** a short **screen fade** (fullscreen quad, alpha ramp ~0.3s) gating the swap so it doesn't pop.
+- **2c (refinement, wanted):** **walk-through trigger** — auto-switch when the player steps onto the portal's sub-cell, so entering a building/cave feels seamless (see the Portal bullet above). Interim is F.
+- **Deliverable:** step into a doorway, fade into the interior, step back out through a gate.
 
 **Phase 3 — Hoist the globals.**
 - Move `camera` mode, `time`/spin, and `celestialSystem` so they **persist across worlds** (a small session/app holder above the stack, or shared refs). Day/night and camera mode survive a portal.

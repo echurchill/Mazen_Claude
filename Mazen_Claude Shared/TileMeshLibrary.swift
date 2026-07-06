@@ -188,6 +188,10 @@ class TileMeshLibrary {
         Self.addHouseQuarter(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.houseCorner.rawValue] = TileMesh(vertexOffset: 0, indexOffset: houseStart, indexCount: allIndices.count - houseStart)
 
+        let portalStart = allIndices.count
+        Self.addPortal(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.portal.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalStart, indexCount: allIndices.count - portalStart)
+
         // Celestial bodies (M9): a unit cube, drawn at the sun/moon positions.
         let cubeStart = allIndices.count
         Self.addUnitCube(to: &allVerts, indices: &allIndices)
@@ -526,6 +530,30 @@ class TileMeshLibrary {
             quad(b[i], b[j], t[j], t[i])   // shaft side
             tri(t[i], t[j], apex)          // pyramidion face
         }
+    }
+
+    /// A portal marker (M11.2) — an upright pylon, taller than the hedges so it's easy to spot,
+    /// tinted a bright colour by SceneBuilder. Interacting (F) while standing on its tile switches
+    /// worlds. Placeholder for a nicer archway / imported gate later. Wound CCW-outward.
+    private static func addPortal(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+        let z0 = ws.floorY
+        let top: Float = 0.44      // above the 0.24 hedges — an obvious beacon
+        let h: Float = 0.10        // slim footprint, fits a sub-cell
+        func ring(_ z: Float) -> [SIMD3<Float>] {
+            [SIMD3(-h, -h, z), SIMD3(h, -h, z), SIMD3(h, h, z), SIMD3(-h, h, z)]
+        }
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: 1.0)
+        }
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            let n = normalize(cross(b - a, d - a))
+            let base = UInt16(verts.count)
+            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        let b = ring(z0), t = ring(top)
+        for i in 0..<4 { let j = (i + 1) % 4; quad(b[i], b[j], t[j], t[i]) }   // sides
+        quad(t[0], t[1], t[2], t[3])                                          // top cap
     }
 
     /// A chest — a simple box (4 sides + top) sitting on the floor. The open/closed look is
