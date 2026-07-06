@@ -27,7 +27,7 @@ A first-person puzzle-exploration game where **the game board *is* a Rubik's cub
 | **M9** — Cube Solar System | Sun/moon orbits, day/night, moon phases, eclipse, per-face terminator | ✅ **Complete** (cosmetic terminator finesse deferred) |
 | **M10** — Tile Scale-Up | Perceptual scale, 3×3 sub-grid movement, gateways, rooms, procedural props | ✅ **Complete** (A–G); Phase H "gates" deferred |
 | **M12** — Asset Import | Import USD/OBJ models, textures, the modular house + split | 🔨 **In progress** — pipeline + house split proven; polish + detail remain |
-| **M11** — Worlds & Portals | Moon + house interiors via one world-transition system | 🌱 **Next** — seed only; reframed around portals |
+| **M11** — Worlds & Portals | Moon + house interiors via one world-transition system | 🔨 **In progress** — spine, portals, and the killer visual built & verified |
 | **M13** — Bandaged Cube | Bonded structures that *refuse* illegal twists | 💡 **Design captured** — future |
 | **M14** — Superellipsoid Cube | Inflate the cube toward a rounded planet | 💡 **Design captured** — future |
 
@@ -78,7 +78,7 @@ Then, as separate tracks when desired:
 
 ## 6. Future milestones (design captured)
 
-- **M11 — Worlds & Portals** — [doc](Worlds%20and%20Portals%20Plan.md) *(reframes the [M11 Lunar Excursion Seed](M11%20Lunar%20Excursion%20Seed.md))*. "Bigger on the inside": structures are portals to separate worlds; one transition system for houses, the moon, dungeons. **Now has a concrete 5-phase implementation plan** grounded in a codebase read (world-stack spine → portal+fade → hoist globals → sized interiors → moon + sky visual; ~170 lines of surface area). **Open fork: how the moon transition feels — instant portal vs. travel sequence** (recommend: build the spine, add the moon's travel sequence as presentation later).
+- **M11 — Worlds & Portals** — [doc](Worlds%20and%20Portals%20Plan.md) *(reframes the [M11 Lunar Excursion Seed](M11%20Lunar%20Excursion%20Seed.md))*. "Bigger on the inside": structures are portals to separate worlds; one transition system for houses, the moon, dungeons. **🔨 Core built & verified (2026-07-06):** world-stack spine, TARDIS walk-through portals + fade, different-size worlds, and **the killer visual** — the real counterpart world (the moon from earth, and vice-versa) hangs in the sky, turning, with every twist baked in; it persists so tears stay. **Remaining:** Phase 3 (persist camera/time across worlds), a real **house interior** destination, moon styling/rules, and multiple portal destinations.
 - **M13 — Bandaged Cube Mechanic** — [doc](Bandaged%20Cube%20Mechanic.md). Bond structures so a twist that would tear them is *refused*; twisting becomes a rare, deliberate, readable puzzle action. The house is the first candidate bonded structure.
 - **M14 — Superellipsoid Cube** — [doc](Superellipsoid%20Cube.md). Inflate the cube toward a rounded planet (n between sphere and cube); reinforces the M9 solar-system feel and *improves* the day/night shading as it rounds.
 
