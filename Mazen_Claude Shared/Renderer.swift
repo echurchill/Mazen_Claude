@@ -66,6 +66,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     var pipelineState: MTLRenderPipelineState
     var skyPipelineState: MTLRenderPipelineState
+    var fadePipelineState: MTLRenderPipelineState   // M11.2b world-transition fade overlay
     var shadowPipelineState: MTLRenderPipelineState
     var depthState: MTLDepthStencilState
     var depthStateNoWrite: MTLDepthStencilState
@@ -104,6 +105,13 @@ class Renderer: NSObject, MTKViewDelegate {
     /// A throwaway 3³ interior world used to prove the swap in M11.1 (toggled with the O key).
     /// Replaced by real portal destinations in M11.2.
     private var testInterior: GameState?
+
+    // M11.2b world-transition fade: swap the active world at the midpoint of a quick fade-to-black.
+    private enum TransitionPhase { case none, fadingOut, fadingIn }
+    private var transitionPhase: TransitionPhase = .none
+    private var transitionT: Float = 0          // 0 clear … 1 fully black
+    private var pendingWorldToggle = false
+    private let transitionSpeed: Float = 5.5    // ~0.18 s per half (fade out, then fade in)
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -181,6 +189,23 @@ class Renderer: NSObject, MTKViewDelegate {
         skyPipeDesc.colorAttachments[0].pixelFormat = metalKitView.colorPixelFormat
 
         self.skyPipelineState = try! compiler.makeRenderPipelineState(descriptor: skyPipeDesc)
+
+        // Fade pipeline (M11.2b): reuses the sky fullscreen triangle, alpha-blended over the scene.
+        let fadeFragDesc = MTL4LibraryFunctionDescriptor()
+        fadeFragDesc.library = library
+        fadeFragDesc.name = "fadeFragmentShader"
+        let fadePipeDesc = MTL4RenderPipelineDescriptor()
+        fadePipeDesc.label = "FadePipeline"
+        fadePipeDesc.rasterSampleCount = metalKitView.sampleCount
+        fadePipeDesc.vertexFunctionDescriptor = skyVertDesc
+        fadePipeDesc.fragmentFunctionDescriptor = fadeFragDesc
+        fadePipeDesc.colorAttachments[0].pixelFormat = metalKitView.colorPixelFormat
+        fadePipeDesc.colorAttachments[0].blendingState = .enabled
+        fadePipeDesc.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        fadePipeDesc.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        fadePipeDesc.colorAttachments[0].sourceAlphaBlendFactor = .sourceAlpha
+        fadePipeDesc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        self.fadePipelineState = try! compiler.makeRenderPipelineState(descriptor: fadePipeDesc)
 
         // Shadow pipeline (depth-only, no fragment)
         let shadowVertDesc = MTL4LibraryFunctionDescriptor()
@@ -368,6 +393,32 @@ class Renderer: NSObject, MTKViewDelegate {
         enterWorld(testInterior!)
     }
 
+    /// Begin a fade-to-black, swap the world at the midpoint, then fade back (M11.2b). Ignored if a
+    /// transition is already running. Both the portal (F) and the debug O key route through here.
+    func beginWorldTransition() {
+        guard transitionPhase == .none else { return }
+        transitionPhase = .fadingOut
+        transitionT = 0
+        pendingWorldToggle = true
+    }
+
+    /// Advance the fade each frame; performs the queued world swap at the fully-black midpoint.
+    private func updateTransition(dt: Float) {
+        switch transitionPhase {
+        case .none: break
+        case .fadingOut:
+            transitionT += dt * transitionSpeed
+            if transitionT >= 1 {
+                transitionT = 1
+                if pendingWorldToggle { toggleTestInterior(); pendingWorldToggle = false }
+                transitionPhase = .fadingIn
+            }
+        case .fadingIn:
+            transitionT -= dt * transitionSpeed
+            if transitionT <= 0 { transitionT = 0; transitionPhase = .none }
+        }
+    }
+
     private static func setupInitialDiscovery(gameState: GameState) {
         let model = gameState.cubeModel
         let n = model.size
@@ -545,7 +596,8 @@ class Renderer: NSObject, MTKViewDelegate {
             sunElevation: lightDir.y,
             moonDirection: moonDir,
             moonIntensity: 0.30,
-            eclipseFactor: eclipse
+            eclipseFactor: eclipse,
+            fadeAmount: transitionPhase == .none ? 0 : transitionT
         )
     }
 
@@ -693,12 +745,13 @@ class Renderer: NSObject, MTKViewDelegate {
 
         gameState.update(deltaTime: dt)
 
-        // M11.2: a portal interaction switches worlds. Clear the flag on the requesting world,
-        // then toggle (enter the interior from the overworld, or pop back). Reuses the M11.1 spine.
+        // M11.2: a portal interaction switches worlds — through a fade (M11.2b). Clear the flag on
+        // the requesting world and start the transition; the swap happens at the fully-black midpoint.
         if gameState.portalRequested {
             gameState.portalRequested = false
-            toggleTestInterior()
+            beginWorldTransition()
         }
+        updateTransition(dt: dt)
 
         guard let drawable = view.currentDrawable,
               let renderPassDesc = view.currentMTL4RenderPassDescriptor else { return }
@@ -861,6 +914,15 @@ class Renderer: NSObject, MTKViewDelegate {
                 baseVertex: 0,
                 baseInstance: dc.instanceOffset
             )
+        }
+
+        // M11.2b: world-transition fade — a fullscreen black quad blended over everything, alpha
+        // from frame.fadeAmount (0 except during a portal swap). Fullscreen triangle, no depth.
+        if transitionPhase != .none {
+            encoder.setRenderPipelineState(fadePipelineState)
+            encoder.setDepthStencilState(depthStateAlways)
+            encoder.setCullMode(.none)
+            encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
         }
 
         encoder.endEncoding()

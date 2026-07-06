@@ -155,8 +155,8 @@ class GameViewController: NSViewController {
             gs.stepSlice(0.06)
         case 33:      // [ — scrub a held twist backward
             gs.stepSlice(-0.06)
-        case 31:      // O — M11.1 spine test: toggle a 3³ interior world (portal in / out)
-            renderer.toggleTestInterior()
+        case 31:      // O — debug: toggle a 3³ interior world (portal in / out), through the fade
+            renderer.beginWorldTransition()
         case 35:      // P — toggle auto-rotation
             gs.camera.orbitAutoRotate.toggle()
         case 4:       // H — toggle debug HUD

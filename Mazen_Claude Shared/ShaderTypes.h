@@ -41,6 +41,7 @@ typedef struct
     vector_float3 moonDirection; // normalized, toward the moon
     float moonIntensity;         // base strength of the moon's fill light
     float eclipseFactor;         // M9-7: 0 normally, →1 as the moon covers the sun
+    float fadeAmount;            // M11.2b: 0 clear → 1 black, for the world-transition fade
 } FrameUniforms;
 
 typedef struct

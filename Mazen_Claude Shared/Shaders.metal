@@ -47,6 +47,15 @@ vertex SkyVertexOut skyVertexShader(uint vid [[vertex_id]]) {
     return out;
 }
 
+// M11.2b: a fullscreen black overlay whose alpha ramps up then down across a world transition,
+// so the swap fades rather than pops. Reuses the sky fullscreen triangle; blended over the scene.
+fragment float4 fadeFragmentShader(
+    SkyVertexOut in [[stage_in]],
+    const device FrameUniforms& frame [[buffer(BufferIndexFrameUniforms)]]
+) {
+    return float4(0.0, 0.0, 0.0, frame.fadeAmount);
+}
+
 fragment float4 skyFragmentShader(
     SkyVertexOut in [[stage_in]],
     const device FrameUniforms& frame [[buffer(BufferIndexFrameUniforms)]],
