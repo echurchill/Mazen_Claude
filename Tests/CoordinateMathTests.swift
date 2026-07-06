@@ -140,6 +140,16 @@ struct CoordinateMathTests {
         let axis = 2, index = n - 1
         let angle: Float = -.pi / 2
 
+        // Stamp a prop on a facelet of a cubie in this slice, to verify props ride the rotation
+        // end-to-end (applySliceRotation → Prop.rotate) and a full 4-turn cycle restores them —
+        // the M12-E house-split invariant, exercised through the real machinery, not in isolation.
+        let sliceCubies = model.cubieIndicesInSlice(axis: axis, index: index)
+        var propCubie = -1
+        if let ci = sliceCubies.first(where: { !model.cubies[$0].facelets.isEmpty }) {
+            propCubie = ci
+            model.cubies[ci].facelets[0].props.append(Prop(kind: .topiary, subRow: 0, subCol: 1, facing: .n))
+        }
+
         model.applySliceRotation(axis: axis, index: index, angle: angle)
         checkBijection(model, size: n, label: "after 1 z-rotation")
 
@@ -151,6 +161,12 @@ struct CoordinateMathTests {
                   "size \(n): cubie \(i) pos after 4 z-turns \(model.cubies[i].position) != orig \(orig[i])")
         }
         checkBijection(model, size: n, label: "after 4 z-rotations")
+
+        // The stamped prop rode all four turns and returned to its original sub-cell + facing.
+        if propCubie >= 0, let p = model.cubies[propCubie].facelets[0].props.first {
+            check(p.subRow == 0 && p.subCol == 1 && p.facing == .n,
+                  "size \(n): prop after 4 z-turns (\(p.subRow),\(p.subCol),\(p.facing)) != (0,1,n)")
+        }
     }
 
     static func testDirectionMaskRotation() {
