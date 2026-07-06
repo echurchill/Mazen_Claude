@@ -1,5 +1,7 @@
 # M10: Tile Scale-Up — Sub-Tile Navigation, Gateways & Multi-Tile Spaces
 
+> **Status: ✅ COMPLETE (Phases A–G)** — see [Master Roadmap](Master%20Roadmap.md). Perceptual scale-up, 3×3 sub-cell path-cross movement + 45° `Heading8` turns, gateways/jamb posts, cross-face crossing, `stampRoom`/`stampOpenPlaza`, and the procedural prop system (topiary/obelisk/chest/2×2 house). Fixes baked in: floor-UV `uvTurns`, corner-cut slerp, gap-removal, shadow-acne. Detailed status block is inline below. **Deferred:** Phase H (doors/locks/animated gates). House-split verification landed later in **M12-E** (with an imported house).
+
 ## Vision
 
 Make each tile *feel* roughly 5x larger from the player's point of view, and use that new space:

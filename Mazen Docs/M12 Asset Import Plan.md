@@ -1,5 +1,7 @@
 # M12 — Asset Import Pipeline Plan
 
+> **Status: 🔨 IN PROGRESS** — see [Master Roadmap](Master%20Roadmap.md). Pipeline proven (M12-A/C/D) and the **modular house splits Rubik's-style** (M12-E). Detailed status blocks are inline below. **Remaining:** normal maps, crate open/closed, fort multi-texture (`modular_fort_01_2k`, 164M — held out of git pending a git-LFS call), richer house detail (tile-many-modules *or* move interiors into a portal-world per [Worlds & Portals](Worlds%20and%20Portals%20Plan.md)), and bundle-models + re-enable-sandbox before shipping.
+
 ## Goal
 
 Replace the M10 Phase G procedural placeholder props (topiary, obelisk, chest, modular house) with real, **textured 3D models**, by building a runtime asset-import pipeline. First art targets are CC0 [Poly Haven](https://polyhaven.com) models — tree stump, island tree, stone fire pit — plus a house model.

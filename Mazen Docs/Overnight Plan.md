@@ -1,6 +1,8 @@
 # Rubik's Maze -- Overnight Plan
 *Generated 2026-06-16 from codebase audit + rendering research*
 
+> **Status: 🗄️ HISTORICAL / SUPERSEDED** — see [Master Roadmap](Master%20Roadmap.md). This was an early codebase audit; its work fed into the M8–M12 milestones, which are the live roadmap. Most items are resolved (SceneBuilder/PlayerState/CameraState extraction happened in M10 Phase 0; the debug HUD exists on `H`; walls are now full 3D hedges, not paper-thin). **Still-open carryovers** were migrated to the roadmap backlog: **iOS touch input** (still minimal) and a **frame-rate check** (a historical 50fps lock — verify it's gone). Kept for provenance; don't plan from this doc directly.
+
 ---
 
 ## Part 1: Codebase vs Plan Cross-Check

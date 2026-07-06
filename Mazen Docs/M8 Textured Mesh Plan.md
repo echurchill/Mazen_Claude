@@ -1,6 +1,10 @@
 # M8: Textured Mesh Rendering Upgrade
 *Generated 2026-07-01 from codebase audit + reference image analysis*
 
+> **Status: ✅ core done (~85%)** — see [Master Roadmap](Master%20Roadmap.md). Painted textures (hedge/gravel/stone via texture arrays), UV mapping, the materialID-1 shader rewrite (normal mapping, half-Lambert, moss blend, orbit/FP blend), dynamic sky, and PCF shadow mapping are all **done**; MSAA 4× on; rounded hedge tops implemented.
+> **Superseded, not TODO:** M8.3's wall-height (→1.2), wall-thickness (→0.12), and eye-height (→0.45) targets were overridden by **M10 Phase A's perceptual scale-up** (walls 0.24, eye 0.09 — a tile reads as a ~19m plaza). Treat those numbers as obsolete.
+> **Deferred:** the 3D "cubie frame" dark rails (M8.6); a true per-vertex tangent on `MazeVertex` (heuristic TBN is used instead).
+
 ---
 
 ## Reference Image Analysis

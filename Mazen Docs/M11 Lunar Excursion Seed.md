@@ -1,6 +1,8 @@
 # M11: Lunar Excursion (Seed)
 
-> **Status: seed, not a plan.** Captures the concept and its architectural implications so the thinking survives. Full phasing happens after M9 and M10 land.
+> **Status: seed, not a plan — NOT implemented.** Captures the concept and its architectural implications so the thinking survives.
+>
+> **⤳ REFRAMED (2026-07-06):** M11 is now the **first showcase of a general world-transition system**, not a bespoke moon feature. See [Worlds & Portals](Worlds%20and%20Portals%20Plan.md) and the [Master Roadmap](Master%20Roadmap.md). The moon becomes one destination among many (house interiors, dungeons) reached through the same "enter a portal → switch world" spine. **Preserve from this seed:** the *orbital-counterpart* "killer visual" (seeing the real other world hanging in the sky, updated live with its actual rotations) and the per-world-`WorldScale` / `SceneBuilder(gameState:)` guardrails, which are already in place.
 
 ## Vision
 

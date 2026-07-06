@@ -21,6 +21,17 @@ Bandaging makes the **maze + structures into the puzzle constraints**: to route 
 
 Both can coexist: a per-structure flag — decorative structures **tear**, "solid" structures **bandage**.
 
+## Design stance: twisting is deliberate, not ambient (from the M12-E house work)
+
+A key realization from building the modular house: the twist mechanic **fights both the player and the content when it's always-on everywhere**. Twists are fast and hard to read (which is why we added the single-step debug control), and every multi-cubie structure has to be authored to survive being torn — expensive and fiddly.
+
+The fix is to treat the twist as a **designed, level-scoped mechanic**, not ambient physics — and **bandaging is what makes that possible**. If most of the cube is bonded (twist-*locked*) by default, twisting becomes a **rare, deliberate, readable action** only in the places a level designs for it. That simultaneously resolves:
+
+- **UX friction** — twists happen only where meaningful, so they can be slow, committed, telegraphed "moves" rather than surprise blender events.
+- **Model complexity** — most structures never need to split, because they sit on locked cubies (or live *inside* a portal-world; see [Worlds & Portals](Worlds%20and%20Portals%20Plan.md)). Only hand-designed set-pieces split, as an intentional reveal.
+
+So the guiding principle: **bandaging turns the twist from ambient chaos into a scalpel** handed to the player in specific puzzles. The default cube is stable to navigate; twisting is a special capability a level grants.
+
 ## Design sketch
 
 - **Bond model.** A *bonded group* is a set of cubie indices that must always move together. Author it alongside a structure (the four house cubies become one bonded group). A cubie may belong to at most one group (v1).
