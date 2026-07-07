@@ -38,6 +38,7 @@ struct CoordinateMathTests {
             testGridWorldConsistency(size: n)
             testEdgeCrossingRoundTrip(size: n)
             testSliceRotation(size: n)
+            testBandagedLegality(size: n)
         }
         testDirectionMaskRotation()
         testPropRotation()
@@ -185,6 +186,41 @@ struct CoordinateMathTests {
         check(DirectionMask.east.rotated(quarterTurns: 1).rawValue == DirectionMask.south.rawValue, "east→south on +1 turn")
         check(DirectionMask.south.rotated(quarterTurns: 1).rawValue == DirectionMask.west.rawValue, "south→west on +1 turn")
         check(DirectionMask.west.rotated(quarterTurns: 1).rawValue == DirectionMask.north.rawValue, "west→north on +1 turn")
+    }
+
+    /// Find the cubie whose integer position matches (x,y,z), if it exists.
+    static func cubieIndex(_ m: CubeModel, _ x: Int, _ y: Int, _ z: Int) -> Int? {
+        m.cubies.firstIndex { $0.position == SIMD3<Int32>(Int32(x), Int32(y), Int32(z)) }
+    }
+
+    /// Bandaging (M13): a slice twist is legal iff every bonded group is entirely inside or entirely
+    /// outside the rotating slice. A group that straddles the slice would be torn → refused.
+    static func testBandagedLegality(size n: Int) {
+        let m = CubeModel(size: n)
+        // No bonds → every slice is legal.
+        for axis in 0..<3 {
+            for index in 0..<n {
+                check(m.canRotateSlice(axis: axis, index: index), "size \(n): no bonds → (\(axis),\(index)) legal")
+            }
+        }
+        // Bond two cubies that share the z=n-1 and y=0 slices but differ in x — a straddle across x.
+        guard let a = cubieIndex(m, 0, 0, n - 1), let b = cubieIndex(m, n - 1, 0, n - 1) else {
+            check(false, "size \(n): bond cubies not found"); return
+        }
+        m.addBond([a, b])
+        // Slices holding BOTH bonded cubies → legal (the whole bond moves together).
+        check(m.canRotateSlice(axis: 2, index: n - 1), "size \(n): z=n-1 holds both → legal")
+        check(m.canRotateSlice(axis: 1, index: 0),     "size \(n): y=0 holds both → legal")
+        // Slices holding exactly ONE → illegal (would tear the bond).
+        check(!m.canRotateSlice(axis: 0, index: 0),     "size \(n): x=0 holds only a → illegal")
+        check(!m.canRotateSlice(axis: 0, index: n - 1), "size \(n): x=n-1 holds only b → illegal")
+        // Slices holding NEITHER → legal.
+        check(m.canRotateSlice(axis: 2, index: 0), "size \(n): z=0 holds neither → legal")
+        // The bond survives a full 4-turn cycle of a legal (fully-in) slice: indices stay valid,
+        // positions restore, and the same straddle is illegal again.
+        for _ in 0..<4 { m.applySliceRotation(axis: 2, index: n - 1, angle: -.pi / 2) }
+        check(!m.canRotateSlice(axis: 0, index: 0),    "size \(n): after 4 turns, x=0 straddle still illegal")
+        check(m.canRotateSlice(axis: 2, index: n - 1), "size \(n): after 4 turns, z=n-1 still legal")
     }
 
     static func testPropRotation() {

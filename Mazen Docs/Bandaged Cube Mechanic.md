@@ -1,6 +1,8 @@
 # Design Note — Bandaged Cube Mechanic ("bonded structures")
 
-*Status: concept / future milestone. Captured 2026-07-05 from the M12-E house work.*
+*Captured 2026-07-05 from the M12-E house work.*
+
+> **Status: 🔨 foundation built (2026-07-07).** The **bond model + legality rule** are implemented and unit-tested (`CubeModel.bondedGroups` / `addBond` / `canRotateSlice`; the bandaged rule = every bonded group entirely in or entirely out of the slice). Verified across cube sizes 3/5/7/9 (`Tests/CoordinateMathTests.swift` → `testBandagedLegality`; bonds survive a full turn cycle, indices stay valid). The **enforcement point is wired** in `GameState.startSliceRotation` (refuses illegal twists; sets `twistRefused`) — currently **inert because nothing is bonded yet**. **Remaining (needs the screen):** bond the first structure (the house), a refusal **cue** (shake/tint/sound), and a visual **affordance** marking what's locked — plus the design conversation about *what you twist toward* (the goal).
 
 ## The idea in one line
 

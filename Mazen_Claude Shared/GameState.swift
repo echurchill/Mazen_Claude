@@ -40,6 +40,10 @@ class GameState {
     enum TwistPacing { case normal, slow, step }
     var twistPacing: TwistPacing = .normal
 
+    /// Set when a twist was refused because it would tear a bonded structure (M13). A refusal cue
+    /// (visual/audio, TODO) reads and clears it. Harmless until bonds exist.
+    var twistRefused = false
+
     struct DiscoveryAnim {
         let cubieIndex: Int
         let faceletIndex: Int
@@ -225,6 +229,12 @@ class GameState {
         guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else { return }
 
         let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
+
+        // M13 bandaging: refuse a twist that would tear a bonded structure. Inert until bonds exist
+        // (canRotateSlice is always true with no bonds). `twistRefused` is the signal a refusal cue
+        // will read + clear once we wire the feedback (shake/tint) — TODO with the user.
+        guard cubeModel.canRotateSlice(axis: axis, index: index) else { twistRefused = true; return }
+
         let angle: Float = clockwise ? -.pi / 2 : .pi / 2
 
         let cubieIndices = cubeModel.cubieIndicesInSlice(axis: axis, index: index)

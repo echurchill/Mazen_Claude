@@ -362,6 +362,32 @@ class CubeModel {
         }
     }
 
+    // MARK: - Bandaging (M13)
+
+    /// Bonded cubie groups: each set of cubie indices must move together, so a slice twist that
+    /// would cut through a group — some of its cubies in the rotating slice, some out — is illegal
+    /// and refused. Indices are into `cubies` and stay valid across turns (`applySliceRotation`
+    /// moves cubies but never reindexes the array). A cubie should belong to at most one group.
+    var bondedGroups: [Set<Int>] = []
+
+    /// Bond a set of cubie indices so they move as one rigid block (M13). Ignores trivial groups.
+    func addBond(_ cubieIndices: Set<Int>) {
+        guard cubieIndices.count > 1 else { return }
+        bondedGroups.append(cubieIndices)
+    }
+
+    /// Whether a slice twist is legal under the current bonds (the bandaged-cube rule): every bonded
+    /// group must be **entirely inside** the rotating slice or **entirely outside** it. A group that
+    /// straddles the slice would be torn, so the twist is refused. No bonds ⇒ always legal.
+    func canRotateSlice(axis: Int, index: Int) -> Bool {
+        guard !bondedGroups.isEmpty else { return true }
+        let slice = Set(cubieIndicesInSlice(axis: axis, index: index))
+        for group in bondedGroups where !group.isDisjoint(with: slice) && !group.isSubset(of: slice) {
+            return false
+        }
+        return true
+    }
+
     func applySliceRotation(axis: Int, index: Int, angle: Float) {
         let axisVec: SIMD3<Float> = axis == 0 ? SIMD3(1,0,0) : axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
         let rotQ = simd_quatf(angle: angle, axis: axisVec)
