@@ -26,9 +26,9 @@ A first-person puzzle-exploration game where **the game board *is* a Rubik's cub
 | **M8** — Textured Mesh | Painted textures, UVs, shader rewrite, sky, shadows | ✅ **Core done** (~85%); a few targets superseded by M10 (see note) |
 | **M9** — Cube Solar System | Sun/moon orbits, day/night, moon phases, eclipse, per-face terminator | ✅ **Complete** (cosmetic terminator finesse deferred) |
 | **M10** — Tile Scale-Up | Perceptual scale, 3×3 sub-grid movement, gateways, rooms, procedural props | ✅ **Complete** (A–G); Phase H "gates" deferred |
-| **M12** — Asset Import | Import USD/OBJ models, textures, the modular house + split | 🔨 **In progress** — pipeline + house split proven; polish + detail remain |
-| **M11** — Worlds & Portals | Moon + house interiors via one world-transition system | 🔨 **In progress** — spine, portals, and the killer visual built & verified |
-| **M13** — Bandaged Cube | Bonded structures that *refuse* illegal twists | 💡 **Design captured** — future |
+| **M12** — Asset Import | Import USD/OBJ models, textures, the modular house + split | 🔨 **In progress** — pipeline, house split, decorations-ride-slices done; texture polish + shipping remain |
+| **M11** — Worlds & Portals | Moon + house interiors via one world-transition system | 🔨 **In progress** — spine, TARDIS walk-through portals, and the killer visual built & verified |
+| **M13** — Bandaged Cube | Bonded structures that *refuse* illegal twists | 🔨 **Foundation built** — legality rule + tests + enforcement wired (inert until something's bonded) |
 | **M14** — Superellipsoid Cube | Inflate the cube toward a rounded planet | 💡 **Design captured** — future |
 
 *(No milestone "M7 and earlier" doc set is tracked here; the [Overnight Plan](Overnight%20Plan.md) is a historical audit, now superseded.)*
