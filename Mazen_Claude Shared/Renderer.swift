@@ -49,6 +49,8 @@ class Renderer: NSObject, MTKViewDelegate {
 
     /// Cube size the app launches with. The N key cycles odd sizes (3→5→7→9) live.
     static let initialCubeSize = 7
+    /// The moon world's cube size (M11). Used to calibrate its apparent size in the sky.
+    static let moonWorldSize = 3
 
     public let device: MTLDevice
 
@@ -260,7 +262,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.worldStack = [overworld]
         // The moon world exists from the start (persists across visits) so it can hang in earth's
         // sky — and so any tears you make on it stay put (M11 killer visual).
-        let moon = GameState(size: 3)
+        let moon = GameState(size: Self.moonWorldSize)
         Self.setupInitialDiscovery(gameState: moon)
         self.testInterior = moon
 
@@ -593,23 +595,24 @@ class Renderer: NSObject, MTKViewDelegate {
         counterpartOpaqueDrawCalls = []
         if let cp = counterpart {
             let cbuf = counterpartInstanceBuffers[currentBufferIndex]
-            let offset = Self.skyWorldOffset(time: gameState.time, counterpartSize: cp.cubeModel.size)
+            let offset = Self.skyWorldOffset(cs: gameState.celestialSystem, time: gameState.time)
             let cresult = sceneBuilder.build(gameState: cp, tileMeshLib: tileMeshLib,
                                              instanceBuffer: cbuf, worldOffset: offset, includeCelestials: false)
             counterpartOpaqueDrawCalls = cresult.opaque
         }
     }
 
-    /// Where the counterpart world hangs in the sky (M11): a fixed direction/distance — high and to
-    /// the side — with a scale normalised by cube size so a small moon still reads big, plus a slow
-    /// display rotation (keyed to the current world's clock) so every side turns into view. The
-    /// world's *state* stays frozen; this spin is just the planet turning. Tunable.
-    private static func skyWorldOffset(time: Float, counterpartSize: Int) -> float4x4 {
-        let dir = normalize(SIMD3<Float>(0.42, 0.72, 0.46))   // a bit lower in the sky
-        let dist: Float = 24
-        let scale: Float = 11.0 / Float(max(1, counterpartSize))   // target ~11-unit span regardless of size
-        let spin = float4x4.rotation(radians: time * 0.18, axis: SIMD3(0, 1, 0))   // ~35 s per turn
-        return float4x4.translation(dir.x * dist, dir.y * dist, dir.z * dist) * spin * float4x4.scale(scale)
+    /// Where the counterpart world hangs in the sky (M11): at the **moon's natural orbital position
+    /// and apparent size** — it *is* the moon, in its real place in the sky (rising and setting with
+    /// the day). Scale is calibrated so the 3³ moon matches the M9 moon's disc, and a larger world
+    /// (earth, seen from the moon) reads proportionally bigger. A gentle spin turns it so every side
+    /// comes into view; the world's *state* stays frozen. (Earlier this used an artificially-close
+    /// distance to make the maze / torn house legible while verifying — now reset to natural.)
+    private static func skyWorldOffset(cs: CelestialSystem, time: Float) -> float4x4 {
+        let pos = cs.moonPosition(time: time)                  // the moon's real orbital position
+        let scale = cs.moonSize / (Float(moonWorldSize) / 2)   // 3³ moon → the M9 moon's apparent size
+        let spin = float4x4.rotation(radians: time * 0.06, axis: SIMD3(0, 1, 0))
+        return float4x4.translation(pos.x, pos.y, pos.z) * spin * float4x4.scale(scale)
     }
 
     private func updateFrameUniforms() {
