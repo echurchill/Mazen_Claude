@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-07. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-08. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md).*
 
 ## The 60-second catch-up
 
@@ -35,11 +35,10 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 
 ## Immediate next actions on resume
 
-- **Verify + commit** the pending sky-world distance change (see below).
-- Then pick up the **design conversation** (the two craft questions above), or start **M14/M16** if we want to move to code.
+- Pick up the **design conversation** (the two craft questions above), or start **M14/M16** if we want to move to code.
 
 ## Pending / uncommitted right now
 
-- **Renderer.swift** has an **uncommitted** change: the killer-visual counterpart world was reset from an artificially-close verify-distance back to the **moon's natural orbital position/size** (`skyWorldOffset`). Builds clean; **awaiting Eddie's visual sign-off**, then commit.
-- Build note: the sandbox blocked `xcodebuild` this session — run builds with the sandbox disabled if it recurs (normal local compile).
-- Everything else is committed and pushed; `main` == `origin/main`. Repo is **private**.
+- **Nothing pending.** The sky-world distance change (killer-visual counterpart reset from an artificially-close verify-distance back to the moon's natural orbital position/size, `skyWorldOffset`) is **committed** (`13fbd32`) and pushed.
+- Build note: the sandbox may block `xcodebuild` — run builds with the sandbox disabled if it recurs (normal local compile).
+- Everything is committed and pushed; `main` == `origin/main`. Repo is **private**.

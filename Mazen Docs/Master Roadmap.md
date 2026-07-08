@@ -86,6 +86,7 @@ Then, as separate tracks when desired:
 
 ## 7. Backlog / carryover (not yet on a milestone)
 
+- **NPC classes** — [doc](NPC%20Classes.md). Design captured (2026-07-08), no implementation. Three classes along a *how memory lives* axis: **machines/computers** (external, networked knowledge, tiered isolated → world-net → inter-world-net, freshest-is-least-complete — a queryable knowledge graph with holes; incl. embedded machines like memory-keeping portals — *more thoughts needed*); **biologic beings** (*tentative, may be cut*); **Builder remnants** (post-biologic, near-certain — internal fallible/self-edited memory, the emotional core of selective-forgetting). **Parked worms:** LLM-backed behavior for the memory-bearing NPCs + co-worker docs to fold in (need paths).
 - **iOS touch input** — the macOS path is rich; iOS interactivity is still minimal/stubbed. Needs a touch-control design (movement + slice twist gestures).
 - **Frame-rate** — `preferredFramesPerSecond = 120`; confirm it's actually achieved (a historical 50fps lock was flagged in the Overnight audit — verify it's gone).
 - **Cubie frame** (from M8.6) — the 3D dark rails between cube segments were deferred.
