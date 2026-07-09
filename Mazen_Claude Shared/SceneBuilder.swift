@@ -116,14 +116,16 @@ final class SceneBuilder {
 
                     let faceColor = Self.faceColors[face]!
 
-                    // Frame rail for every tile
+                    // Frame rail for every tile — inflated per-vertex (M14b) so the cubie-border
+                    // grid bends with the curved floor instead of cutting across it as flat strips.
                     let frameInst = InstanceDataSwift(
-                        modelMatrix: matrix,
+                        modelMatrix: restM,
                         baseColor: SIMD4(0.06, 0.06, 0.08, 1.0),
                         materialID: 7,
                         tileID: 0,
                         discoveryAmount: 1.0,
-                        styleSeed: 0
+                        styleSeed: 0,
+                        spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf
                     )
                     frameTiles.append(TileEntry(instance: frameInst, mesh: tileMeshLib.frameMesh))
 

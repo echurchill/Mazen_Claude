@@ -102,15 +102,23 @@ class TileMeshLibrary {
         let fz: Float = 0.0
         let frameN = SIMD3<Float>(0, 0, 1)
 
+        // Subdivide each rail along its length (a→b / d→c) so it bends with the curved floor under
+        // M14b inflation instead of chording across a tile (M14b). Thin cross-section stays 1 quad.
+        let frameSeg = max(1, ws.floorTess)
         func addFrameStrip(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
-            let base = UInt32(allVerts.count)
-            allVerts.append(contentsOf: [
-                MazeVertexSwift(position: a, normal: frameN, texCoord: SIMD2(0, 0), aoFactor: 0.8),
-                MazeVertexSwift(position: b, normal: frameN, texCoord: SIMD2(1, 0), aoFactor: 0.8),
-                MazeVertexSwift(position: c, normal: frameN, texCoord: SIMD2(1, 1), aoFactor: 0.8),
-                MazeVertexSwift(position: d, normal: frameN, texCoord: SIMD2(0, 1), aoFactor: 0.8),
-            ])
-            allIndices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            for i in 0..<frameSeg {
+                let s0 = Float(i) / Float(frameSeg), s1 = Float(i + 1) / Float(frameSeg)
+                let p00 = a + (b - a) * s0, p10 = a + (b - a) * s1
+                let p11 = d + (c - d) * s1, p01 = d + (c - d) * s0
+                let base = UInt32(allVerts.count)
+                allVerts.append(contentsOf: [
+                    MazeVertexSwift(position: p00, normal: frameN, texCoord: SIMD2(s0, 0), aoFactor: 0.8),
+                    MazeVertexSwift(position: p10, normal: frameN, texCoord: SIMD2(s1, 0), aoFactor: 0.8),
+                    MazeVertexSwift(position: p11, normal: frameN, texCoord: SIMD2(s1, 1), aoFactor: 0.8),
+                    MazeVertexSwift(position: p01, normal: frameN, texCoord: SIMD2(s0, 1), aoFactor: 0.8),
+                ])
+                allIndices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            }
         }
 
         addFrameStrip(SIMD3(-fo, -fo, fz), SIMD3(fo, -fo, fz), SIMD3(fo, -fi, fz), SIMD3(-fo, -fi, fz))
