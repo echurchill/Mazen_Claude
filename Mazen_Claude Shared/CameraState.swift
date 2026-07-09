@@ -64,22 +64,23 @@ struct CameraState {
         let eyeHeight = cubeModel.worldScale.eyeHeight
         let step = cubeModel.worldScale.subCellStep
 
-        // World position of a standing spot's eye (tile center + sub-cell offset + height).
-        func eye(_ f: CubeFace, _ r: Int, _ c: Int, _ sr: Int, _ sc: Int) -> SIMD3<Float> {
-            let m = cubeModel.worldMatrix(face: f, row: r, col: c)
-            let center = SIMD3<Float>(m.columns.3.x, m.columns.3.y, m.columns.3.z)
-            let spot = center + f.tangent * (Float(sc - 1) * step) + f.bitangent * (Float(sr - 1) * step)
-            return spot + f.normal * eyeHeight
+        // M14b Phase 3: a standing spot's eye ON the curved surface — inflate the sub-cell footprint,
+        // stand the eye up along the *local* surface normal. Returns eye + that normal (the up vec).
+        // At roundness 0 this is exactly the old flat spot (inflatedPlacement returns the flat frame).
+        func spot(_ f: CubeFace, _ r: Int, _ c: Int, _ sr: Int, _ sc: Int) -> (eye: SIMD3<Float>, up: SIMD3<Float>) {
+            let p = cubeModel.inflatedPlacement(face: f, row: r, col: c,
+                                                localX: Float(sc - 1) * step, localY: Float(sr - 1) * step)
+            let normal = SIMD3<Float>(p.columns.2.x, p.columns.2.y, p.columns.2.z)
+            let pos = SIMD3<Float>(p.columns.3.x, p.columns.3.y, p.columns.3.z)
+            return (pos + normal * eyeHeight, normal)
         }
 
-        let fromFace = player.isMoving ? player.moveFromFace : player.face
-        var eyePos = player.isMoving
-            ? eye(player.moveFromFace, player.moveFromRow, player.moveFromCol, player.moveFromSubRow, player.moveFromSubCol)
-            : eye(player.face, player.row, player.col, player.subRow, player.subCol)
-        var upDir = fromFace.normal
+        var (eyePos, upDir) = player.isMoving
+            ? spot(player.moveFromFace, player.moveFromRow, player.moveFromCol, player.moveFromSubRow, player.moveFromSubCol)
+            : spot(player.face, player.row, player.col, player.subRow, player.subCol)
 
         if player.isMoving {
-            let toEye = eye(player.moveToFace, player.moveToRow, player.moveToCol, player.moveToSubRow, player.moveToSubCol)
+            let (toEye, toUp) = spot(player.moveToFace, player.moveToRow, player.moveToCol, player.moveToSubRow, player.moveToSubCol)
             let t = player.moveProgress   // linear = constant walking speed (no per-hop stop-start)
             if player.moveFromFace != player.moveToFace {
                 // Round the corner along the sphere instead of chording straight
@@ -88,9 +89,10 @@ struct CameraState {
                 // inside the corner — very visible at the low first-person eye height.
                 let radius = length(eyePos) * (1 - t) + length(toEye) * t
                 eyePos = Self.slerp(normalize(eyePos), normalize(toEye), t: t) * radius
-                upDir = Self.slerp(fromFace.normal, player.moveToFace.normal, t: t)
+                upDir = Self.slerp(upDir, toUp, t: t)
             } else {
                 eyePos = mix(eyePos, toEye, t: t)
+                upDir = normalize(mix(upDir, toUp, t: t))
             }
         }
 
@@ -108,6 +110,10 @@ struct CameraState {
         } else {
             facingWorld = Self.headingToWorld(player.facing, face: player.face)
         }
+
+        // M14b: re-seat the (flat) heading into the local curved tangent plane, so the horizon
+        // stays level with the ground underfoot on an inflated world. No-op at roundness 0.
+        facingWorld = normalize(facingWorld - upDir * dot(facingWorld, upDir))
 
         // Mouse look: yaw about the face up, then pitch about the view's right axis. Free-look
         // and mouselook render identically here; they differ only in whether a forward move

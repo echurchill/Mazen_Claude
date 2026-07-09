@@ -389,6 +389,17 @@ class Renderer: NSObject, MTKViewDelegate {
         needsDecorativeStamp = true   // re-stamp the imported decorations into the fresh overworld
     }
 
+    /// M14b debug: dial shape roundness on **every** world — the active stack *and* the persistent
+    /// moon (the counterpart that hangs in the sky) — so the whole cluster inflates together and you
+    /// can see the round moon over the round Earth. (Per-world authored roundness comes later.)
+    func adjustRoundness(_ delta: Float) {
+        let apply: (GameState) -> Void = {
+            $0.cubeModel.roundness = max(0, min(1, $0.cubeModel.roundness + delta))
+        }
+        worldStack.forEach(apply)
+        if let moon = testInterior { apply(moon) }
+    }
+
     // MARK: - World stack (M11.1)
 
     /// Push a portal-world; it becomes the active world. The current world stays on the stack,

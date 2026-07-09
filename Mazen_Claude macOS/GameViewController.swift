@@ -168,10 +168,10 @@ class GameViewController: NSViewController {
             let sizes = [3, 5, 7, 9]
             let idx = sizes.firstIndex(of: gs.cubeModel.size) ?? 0
             renderer.resetGame(size: sizes[(idx + 1) % sizes.count])
-        case 24:      // = — M14 debug: inflate the cube toward a sphere (shape-as-meaning dial)
-            gs.cubeModel.roundness = min(1, gs.cubeModel.roundness + 0.1)
-        case 27:      // - — M14 debug: deflate toward the hard cube
-            gs.cubeModel.roundness = max(0, gs.cubeModel.roundness - 0.1)
+        case 24:      // = — M14b debug: inflate all worlds toward a sphere (incl. the sky moon)
+            renderer.adjustRoundness(0.1)
+        case 27:      // - — M14b debug: deflate all worlds toward the hard cube
+            renderer.adjustRoundness(-0.1)
         case 46:      // M — M14 debug: toggle flat matte shading (read raw geometry, no texture/fog)
             renderer.debugPlainShading.toggle()
         default:
