@@ -103,6 +103,59 @@ fragment float4 skyFragmentShader(
     return float4(skyColor, 1.0);
 }
 
+// ── M14b per-vertex inflation ─────────────────────────────────
+// Cube→sphere map (Cobb √) blended by roundness; matches CubeModel.inflatedUnitPoint.
+float3 m14bInflate(float3 p, float r) {
+    float x = p.x, y = p.y, z = p.z;
+    float sx = x * sqrt(max(0.0, 1.0 - (y*y + z*z) * 0.5 + (y*y * z*z) / 3.0));
+    float sy = y * sqrt(max(0.0, 1.0 - (z*z + x*x) * 0.5 + (z*z * x*x) / 3.0));
+    float sz = z * sqrt(max(0.0, 1.0 - (x*x + y*y) * 0.5 + (x*x * y*y) / 3.0));
+    return mix(p, float3(sx, sy, sz), r);
+}
+
+struct InflatedVertex { float3 position; float3 normal; float3 tangent; };
+
+// Tile-local vertex → world. roundness == 0: exactly modelMatrix * position (spin pre-baked).
+// roundness > 0: inflate the vertex FOOTPRINT (in-plane, height 0) onto the rounded surface in the
+// rest frame, extrude by its height along the local curved normal, then apply spinMatrix. The
+// footprint-then-extrude split keeps wall tops off the ill-conditioned √ map. (M14b.)
+InflatedVertex m14bTransform(float3 localPos, float3 localNormal,
+                             float4x4 modelMatrix, float4x4 spinMatrix,
+                             float roundness, float invHalfExtent) {
+    InflatedVertex o;
+    float3x3 spin3 = float3x3(spinMatrix[0].xyz, spinMatrix[1].xyz, spinMatrix[2].xyz);
+    if (roundness <= 0.0) {
+        // Flat/rigid. Rigid instances bake spin into modelMatrix and pass spinMatrix = identity
+        // (no-op here); the flat floor path passes an un-spun modelMatrix + spinMatrix = spin.
+        float3 p = (modelMatrix * float4(localPos, 1.0)).xyz;
+        o.position = (spinMatrix * float4(p, 1.0)).xyz;
+        float3x3 nm = float3x3(modelMatrix[0].xyz, modelMatrix[1].xyz, modelMatrix[2].xyz);
+        o.normal = normalize(spin3 * (nm * localNormal));
+        o.tangent = normalize(spin3 * modelMatrix[0].xyz);
+        return o;
+    }
+    float H = 1.0 / invHalfExtent;
+    float3 footFlat = (modelMatrix * float4(localPos.x, localPos.y, 0.0, 1.0)).xyz;
+    float h = localPos.z;
+    float3 u = footFlat * invHalfExtent;
+    float3 surf = m14bInflate(u, roundness) * H;
+    float3 tHat = normalize(modelMatrix[0].xyz);
+    float3 bHat = normalize(modelMatrix[1].xyz);
+    float eps = 0.5 * invHalfExtent;
+    float3 dT = m14bInflate(u + tHat * eps, roundness) * H - surf;
+    float3 dB = m14bInflate(u + bHat * eps, roundness) * H - surf;
+    float3 nInf = normalize(cross(dT, dB));
+    if (dot(nInf, normalize(surf)) < 0.0) nInf = -nInf;
+    float3 rightI = normalize(dT - nInf * dot(dT, nInf));
+    float3 upI = cross(nInf, rightI);
+    float3 posPreSpin = surf + nInf * h;
+    float3x3 inflBasis = float3x3(rightI, upI, nInf);
+    o.position = (spinMatrix * float4(posPreSpin, 1.0)).xyz;
+    o.normal = normalize(spin3 * (inflBasis * localNormal));
+    o.tangent = normalize(spin3 * rightI);
+    return o;
+}
+
 // ── Shadow pass ───────────────────────────────────────────────
 
 vertex float4 shadowVertexShader(
@@ -114,8 +167,9 @@ vertex float4 shadowVertexShader(
 ) {
     const device MazeVertex& vert = vertices[vertexID];
     const device InstanceData& inst = instances[instanceID];
-    float4 worldPos = inst.modelMatrix * float4(vert.position, 1.0);
-    return frame.lightViewProjectionMatrix * worldPos;
+    InflatedVertex xf = m14bTransform(vert.position, vert.normal, inst.modelMatrix,
+                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent);
+    return frame.lightViewProjectionMatrix * float4(xf.position, 1.0);
 }
 
 // ── Scene pass ─────────────────────────────────────────────────
@@ -123,6 +177,7 @@ vertex float4 shadowVertexShader(
 struct VertexOut {
     float4 position [[position]];
     float3 worldNormal;
+    float3 worldTangent;   // M14b: inflated surface tangent, for curve-correct TBN
     float3 worldPosition;
     float3 localPosition;
     float2 texCoord;
@@ -143,18 +198,16 @@ vertex VertexOut vertexShader(
     const device MazeVertex& vert = vertices[vertexID];
     const device InstanceData& inst = instances[instanceID];
 
-    float4 worldPos = inst.modelMatrix * float4(vert.position, 1.0);
-
-    float3x3 normalMatrix = float3x3(
-        inst.modelMatrix.columns[0].xyz,
-        inst.modelMatrix.columns[1].xyz,
-        inst.modelMatrix.columns[2].xyz
-    );
-    float3 worldNormal = normalize(normalMatrix * vert.normal);
+    // M14b: inflate per-vertex when this instance's roundness > 0 (flat/rigid otherwise).
+    InflatedVertex xf = m14bTransform(vert.position, vert.normal, inst.modelMatrix,
+                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent);
+    float4 worldPos = float4(xf.position, 1.0);
+    float3 worldNormal = xf.normal;
 
     VertexOut out;
     out.position = frame.viewProjectionMatrix * worldPos;
     out.worldNormal = worldNormal;
+    out.worldTangent = xf.tangent;
     out.worldPosition = worldPos.xyz;
     out.localPosition = vert.position;
     out.texCoord = vert.texCoord;
@@ -193,7 +246,13 @@ fragment float4 fragmentShader(
     float moonUp = smoothstep(-0.15, 0.15, dot(surfDir, frame.moonDirection));
     // M9-7 eclipse: when the (nearer) moon aligns with the sun it blocks the sunlight, so the
     // lit faces suddenly darken — dramatic because the moon and sun share an apparent size.
-    float3 sunColor = float3(0.95, 0.92, 0.84) * dayFactor * (1.0 - frame.eclipseFactor);
+    // M14b: warm/redden the surface sun as it nears the horizon, so sunrise/sunset read on the
+    // ground (matching the sky's sunset band) — a story beat on the curved worlds. Slightly boost
+    // intensity at grazing so the low sun keeps its drama despite the softened noon term.
+    float lowSun = 1.0 - smoothstep(0.0, 0.35, frame.sunElevation);
+    float3 sunTint = mix(float3(0.95, 0.92, 0.84), float3(1.05, 0.52, 0.26), lowSun * 0.85);
+    float sunPunch = 1.0 + lowSun * 0.25;
+    float3 sunColor = sunTint * sunPunch * dayFactor * (1.0 - frame.eclipseFactor);
     float3 dayAmbient = float3(0.35, 0.45, 0.65);
     float3 nightAmbient = float3(0.06, 0.08, 0.16);
     // M9-5 moonlight: a soft, cool, half-Lambert-wrapped directional light on the night side.
@@ -247,16 +306,11 @@ fragment float4 fragmentShader(
     if (in.materialID == 1) {
         float height = in.localPosition.z;
 
-        // Derive TBN from world normal for normal mapping
-        float3 T, B;
-        float3 absN = abs(normal);
-        if (absN.z > absN.x && absN.z > absN.y) {
-            T = float3(1, 0, 0); B = float3(0, 1, 0);
-        } else if (absN.x > absN.y) {
-            T = float3(0, 1, 0); B = float3(0, 0, 1);
-        } else {
-            T = float3(1, 0, 0); B = float3(0, 0, 1);
-        }
+        // M14b: TBN from the (inflated) surface tangent, Gram-Schmidt-orthogonalized against the
+        // interpolated normal. Curve-correct and continuous — replaces the dominant-axis selection
+        // that flipped mid-surface on a curved floor and swam the normal map.
+        float3 T = normalize(in.worldTangent - normal * dot(in.worldTangent, normal));
+        float3 B = cross(normal, T);
         float3x3 TBN = float3x3(T, B, normal);
 
         // Sample textures
@@ -285,7 +339,10 @@ fragment float4 fragmentShader(
         float3 perturbedN = normalize(TBN * mapN);
         float bumpHL = dot(perturbedN, lightDir) * 0.5 + 0.5;
         bumpHL = bumpHL * bumpHL;
-        lighting = skyAmbient * 0.25 + sunColor * 0.75 * bumpHL * shadowFactor;
+        // Softer sun so lit faces don't clip to silver-white and wash out the surface detail
+        // (the day-side highlight was drowning the texture and hiding the form). Ambient lifted
+        // to keep overall exposure roughly constant.
+        lighting = skyAmbient * 0.35 + sunColor * 0.55 * bumpHL * shadowFactor;
 
         if (height > 0.05) {
             // Wall: darken near base
@@ -376,6 +433,19 @@ fragment float4 fragmentShader(
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;
+    }
+
+    // Debug (M14): flat matte shading to read raw geometry. Simple Lambert on the *geometric*
+    // face normal (not the normal-mapped one) over a neutral grey — flat-shaded facets make the
+    // roundness/curvature legible without the texture, normal-map sparkle, or day/night wash. Skip
+    // celestials, fog, and the player marker so only the maze surface is flattened.
+    bool plainOverride = frame.plainShading > 0.5 &&
+                         in.materialID != 4 && in.materialID != 5 &&
+                         in.materialID != 12 && in.materialID != 13;
+    if (plainOverride) {
+        float lambert = max(dot(normal, lightDir), 0.0);
+        color = float3(0.62) * (0.2 + 0.8 * lambert) * shadowFactor * in.aoFactor;
+        return float4(color, alpha);
     }
 
     color *= lighting * in.aoFactor;

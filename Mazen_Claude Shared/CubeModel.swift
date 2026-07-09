@@ -321,7 +321,91 @@ class CubeModel {
         return findFaceletIndices(id: fid)
     }
 
+    // MARK: - Shape (M14 — shape-as-meaning)
+
+    /// Roundness dial for the superellipsoid "inflated cube". `0` = today's hard cube
+    /// (behavior-neutral); `1` = maximum inflation toward a sphere. **Per-world** — this
+    /// is the shape-as-meaning axis: natural worlds bulge round, mechanistic worlds stay
+    /// hard-cubic. Only the *render geometry* (tile centers + basis) is remapped; the maze
+    /// topology, movement, slice, and bandaging all stay grid-based and untouched.
+    var roundness: Float = 0.0
+
+    /// Low-distortion cube→sphere map (the standard "Cobb"/`√` cube-sphere): pushes a point
+    /// on the unit cube `[-1,1]³` onto the unit sphere, then blends back toward the flat cube
+    /// point by `roundness`. `roundness == 0` returns the point unchanged (no-op fast path).
+    private func inflatedUnitPoint(_ p: SIMD3<Float>) -> SIMD3<Float> {
+        guard roundness > 0 else { return p }
+        let x = p.x, y = p.y, z = p.z
+        let sx = x * (max(0, 1 - (y*y + z*z) / 2 + (y*y * z*z) / 3)).squareRoot()
+        let sy = y * (max(0, 1 - (z*z + x*x) / 2 + (z*z * x*x) / 3)).squareRoot()
+        let sz = z * (max(0, 1 - (x*x + y*y) / 2 + (x*x * y*y) / 3)).squareRoot()
+        let sphere = SIMD3(sx, sy, sz)
+        return p + (sphere - p) * roundness
+    }
+
     // MARK: - World matrices
+
+    /// The **flat** (un-inflated, un-spun) placement of a tile — tangent/bitangent/normal basis at
+    /// the tile center on the axis-aligned cube face. This is the rest frame the M14b vertex shader
+    /// inflates from (per-vertex). Identical to `worldMatrix`'s `roundness == 0` output.
+    func restMatrix(face: CubeFace, row: Int, col: Int) -> float4x4 {
+        let halfN = Float(size) / 2.0
+        let spacing = worldScale.cellSpacing
+        let normal = face.normal
+        let tangent = face.tangent
+        let bitangent = face.bitangent
+        let colF = (Float(col) + 0.5 - halfN) * spacing
+        let rowF = (Float(row) + 0.5 - halfN) * spacing
+        let center = normal * halfN + tangent * colF + bitangent * rowF
+        return float4x4(columns: (
+            SIMD4(tangent.x,   tangent.y,   tangent.z,   0),
+            SIMD4(bitangent.x, bitangent.y, bitangent.z, 0),
+            SIMD4(normal.x,    normal.y,    normal.z,     0),
+            SIMD4(center.x,    center.y,    center.z,     1)
+        ))
+    }
+
+    /// M14b: the inflated **surface placement** of a point at tile-local offset `(localX, localY)`
+    /// from a tile center — position on the curved surface + the local surface frame (tangent /
+    /// bitangent / outward normal as the matrix columns). Used to seat *rigid* objects (imported
+    /// assets like the horse/house) on the curve, tilted to the local normal, rather than bending
+    /// them per-vertex. `roundness == 0` returns the flat placement (offset applied in the tile
+    /// plane) — identical to the old `worldMatrix · translation` seating.
+    func inflatedPlacement(face: CubeFace, row: Int, col: Int, localX: Float, localY: Float) -> float4x4 {
+        let base = restMatrix(face: face, row: row, col: col)
+        // Offset the origin within the tile plane, in the base frame (avoids the render-side
+        // `float4x4.translation` extension so this stays compilable in the test target).
+        let baseRight = SIMD3<Float>(base.columns.0.x, base.columns.0.y, base.columns.0.z)
+        let baseUp    = SIMD3<Float>(base.columns.1.x, base.columns.1.y, base.columns.1.z)
+        let basePos   = SIMD3<Float>(base.columns.3.x, base.columns.3.y, base.columns.3.z)
+        guard roundness > 0 else {
+            var m = base
+            let p = basePos + baseRight * localX + baseUp * localY
+            m.columns.3 = SIMD4<Float>(p.x, p.y, p.z, 1)
+            return m
+        }
+        let halfN = Float(size) / 2.0
+        let spacing = worldScale.cellSpacing
+        let footRest = basePos + baseRight * localX + baseUp * localY
+        let unit = footRest / halfN
+        let worldC = inflatedUnitPoint(unit) * halfN
+
+        let tHat = normalize(baseRight)
+        let bHat = normalize(baseUp)
+        let eps = 0.5 * spacing / halfN
+        let dT = inflatedUnitPoint(unit + tHat * eps) * halfN - worldC
+        let dB = inflatedUnitPoint(unit + bHat * eps) * halfN - worldC
+        var forward = normalize(cross(dT, dB))
+        if dot(forward, normalize(worldC)) < 0 { forward = -forward }
+        let right = normalize(dT - forward * dot(dT, forward))
+        let up = cross(forward, right)
+        return float4x4(columns: (
+            SIMD4(right.x,   right.y,   right.z,   0),
+            SIMD4(up.x,      up.y,      up.z,      0),
+            SIMD4(forward.x, forward.y, forward.z, 0),
+            SIMD4(worldC.x,  worldC.y,  worldC.z,  1)
+        ))
+    }
 
     func worldMatrix(face: CubeFace, row: Int, col: Int) -> float4x4 {
         let halfN = Float(size) / 2.0
@@ -336,15 +420,45 @@ class CubeModel {
 
         let center = normal * halfN + tangent * colF + bitangent * rowF
 
-        let right = tangent
-        let up = bitangent
-        let forward = normal
+        // Flat cube — behavior-neutral, and the common case. (tangent, bitangent, normal) is
+        // right-handed with cross(tangent, bitangent) == normal.
+        guard roundness > 0 else {
+            return float4x4(columns: (
+                SIMD4(tangent.x,   tangent.y,   tangent.z,   0),
+                SIMD4(bitangent.x, bitangent.y, bitangent.z, 0),
+                SIMD4(normal.x,    normal.y,    normal.z,     0),
+                SIMD4(center.x,    center.y,    center.z,     1)
+            ))
+        }
+
+        // Inflated (M14): push the tile center onto the rounded surface, and rebuild its basis
+        // from the local surface tangents (finite differences of the cube→sphere map) so the tile
+        // tilts to follow the curve — lighting, the up-vector, and the camera all follow it. At
+        // roundness → 0 this reduces exactly to the flat basis above.
+        let unit = center / halfN
+        let worldCenter = inflatedUnitPoint(unit) * halfN
+
+        let eps = 0.5 * spacing / halfN                       // ~half a cell, in unit-cube space
+        let dT = inflatedUnitPoint(unit + tangent * eps) * halfN - worldCenter
+        let dB = inflatedUnitPoint(unit + bitangent * eps) * halfN - worldCenter
+
+        var forward = normalize(cross(dT, dB))                // outward surface normal
+        if dot(forward, normalize(worldCenter)) < 0 { forward = -forward }
+        let right = normalize(dT - forward * dot(dT, forward))  // Gram-Schmidt: closest tangent
+        let up = cross(forward, right)                          // completes the right-handed frame
+
+        // Seam hiding: on the curved surface, adjacent flat tiles tilt apart and leave hairline
+        // gaps at their shared edges. Scale each tile slightly in-plane (never in height) so
+        // neighbours overlap and cover the gap. Proportional to roundness ⇒ zero when flat.
+        let overlap = 1.0 + 0.09 * roundness
+        let rightS = right * overlap
+        let upS = up * overlap
 
         return float4x4(columns: (
-            SIMD4(right.x,   right.y,   right.z,   0),
-            SIMD4(up.x,      up.y,      up.z,      0),
-            SIMD4(forward.x, forward.y, forward.z,  0),
-            SIMD4(center.x,  center.y,  center.z,  1)
+            SIMD4(rightS.x,      rightS.y,      rightS.z,      0),
+            SIMD4(upS.x,         upS.y,         upS.z,         0),
+            SIMD4(forward.x,     forward.y,     forward.z,     0),
+            SIMD4(worldCenter.x, worldCenter.y, worldCenter.z, 1)
         ))
     }
 

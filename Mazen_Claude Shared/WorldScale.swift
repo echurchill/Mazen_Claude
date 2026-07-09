@@ -37,6 +37,16 @@ struct WorldScale {
 
     /// Distance between adjacent 3×3 sub-cell centers, in a tile's local frame.
     var subCellStep: Float { 2.0 * floorHalfSize / 3.0 }
+    /// M14b: how many times to subdivide each floor sub-cell edge, so the floor has enough
+    /// interior vertices to follow the curved (inflated) surface smoothly instead of faceting.
+    /// 1 = today's single quad per sub-cell; 3 → a 3×3 grid per sub-cell (9×9 per tile). Render-
+    /// only; the maze grid/topology is unaffected.
+    var floorTess: Int = 3
+    /// M14b: subdivisions of each wall face along its length / height, so hedges bend to follow the
+    /// curved floor (base hugs the ground, no chord gaps) instead of standing as flat slabs. Height
+    /// dominates the bending, so it gets more. Render-only.
+    var wallTessLen: Int = 2
+    var wallTessHeight: Int = 3
     var uvScale: Float = 2.0
     // M10 Phase A perceptual scale-up: the player is shrunk ~5x relative to a tile,
     // so a tile reads as a ~19m plaza instead of a ~3.7m corridor. Walls keep their

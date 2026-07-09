@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-08. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-09. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md).*
 
 ## The 60-second catch-up
 
@@ -35,10 +35,14 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 
 ## Immediate next actions on resume
 
-- Pick up the **design conversation** (the two craft questions above), or start **M14/M16** if we want to move to code.
+- **M14b is mid-implementation and UNCOMMITTED** (see Pending). Next: seat imported assets (horse/house) on the curve; visually re-verify procedural props; decide the committed default roundness (temp `0.5` in `CubeModel` right now — revert to `0.0` before commit); then commit the M14b checkpoint. Full plan + phase status: [M14b Curved Geometry Plan](M14b%20Curved%20Geometry%20Plan.md).
+- Then remaining M14b: Phase 3 (camera/player ride the curve) + Phase 4 (sky-world inflates with its own roundness; perf; sunrise/sunset tuning).
 
 ## Pending / uncommitted right now
 
-- **Nothing pending.** The sky-world distance change (killer-visual counterpart reset from an artificially-close verify-distance back to the moon's natural orbital position/size, `skyWorldOffset`) is **committed** (`13fbd32`) and pushed.
+- **M14b Curved Geometry — IN PROGRESS, UNCOMMITTED, builds clean, all 7060 tests pass, `roundness==0` byte-neutral.** Per-vertex tessellated superellipsoid inflation (replaces the M14 per-tile approach, which levered/swapped hedges). Done + **visually verified**: **Phase 0** uint32 index migration; **Phase 1** floors inflate per-vertex + `floorTess` subdivision (smooth seamless rolling ground); **Phase 2a/2b** walls+posts inflate + `wallTess` mesh subdivision + curve-correct TBN (VS-supplied tangent) + warm low-sun tint. Done in code (**not yet visually verified** — Mac locked): **Phase 2.5** procedural props (topiary/obelisk/chest/portal) inflate via the same footprint+extrude path.
+  - **Mechanism:** `InstanceData` gained per-instance `spinMatrix`/`roundness`/`invHalfExtent` (+ a Swift convenience init — note: it must use `self.init()` + field assignment, NOT a same-labelled `self.init(...)` which infinite-recurses). `CubeModel.restMatrix` = un-spun flat placement; shader `m14bTransform` (in `Shaders.metal`, used by scene **and** shadow VS) does footprint-project → extrude-along-curved-normal → spin. Floors/walls/posts/procedural-props route through it; celestials stay world-frame.
+  - **Files:** `ShaderTypes.h`, `Shaders.metal`, `CubeModel.swift`, `SceneBuilder.swift`, `TileMeshLibrary.swift`, `WorldScale.swift`, `Renderer.swift` (uint32 draw sites + convenience init), `GameViewController.swift` (`M` matte toggle, `-`/`=` roundness, HUD).
+  - **Remaining:** imported assets (horse/house, materialID 11) still **rigid → clip the curve** — they're Y-up with orient baked into the transform, so they need *rigid-seat-on-curve* (project anchor to surface + tilt to local normal), NOT per-vertex bend. Then Phase 3 (camera) + Phase 4 (sky-world + perf + sun tuning). Eddie likes roundness **0.5** ("rolling hills") in FP.
 - Build note: the sandbox may block `xcodebuild` — run builds with the sandbox disabled if it recurs (normal local compile).
-- Everything is committed and pushed; `main` == `origin/main`. Repo is **private**.
+- Otherwise `main` == `origin/main`, pushed. Repo is **private**. (The M14 working-tree changes are the only thing uncommitted.)

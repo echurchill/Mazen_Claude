@@ -125,6 +125,9 @@ class Renderer: NSObject, MTKViewDelegate {
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
+    /// Debug: render the maze as flat matte grey (no texture, normal map, or fog) so the raw
+    /// geometry — e.g. M14 roundness — is legible. Toggled with `M`.
+    var debugPlainShading = false
 
     let sceneBuilder = SceneBuilder()
 
@@ -650,7 +653,8 @@ class Renderer: NSObject, MTKViewDelegate {
             moonDirection: moonDir,
             moonIntensity: 0.30,
             eclipseFactor: eclipse,
-            fadeAmount: transitionPhase == .none ? 0 : transitionT
+            fadeAmount: transitionPhase == .none ? 0 : transitionT,
+            plainShading: debugPlainShading ? 1 : 0
         )
     }
 
@@ -720,13 +724,16 @@ class Renderer: NSObject, MTKViewDelegate {
                     guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
                     let props = model.cubies[ci].facelets[fi].props
                     if props.isEmpty { continue }
-                    // Shared tile matrix with slice animation; sub-cell + facing are added per prop.
-                    var tileBase = model.worldMatrix(face: face, row: row, col: col)
-                    if sr.isActive && sr.affectedCubies.contains(ci) { tileBase = sliceMat * tileBase }
-                    tileBase = spin * tileBase
+                    // M14b: seat each rigid asset at the inflated sub-cell footprint, tilted to the
+                    // local surface normal (roundness==0 → flat, exactly as before). Then facing +
+                    // slice animation + spin. The asset stays rigid (its instance roundness stays 0);
+                    // only its anchor rides the curve, so it no longer pokes through / floats.
                     for prop in props {
-                        let tileM = tileBase
-                            * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
+                        let localX = Float(prop.subCol - 1) * step
+                        let localY = Float(prop.subRow - 1) * step
+                        var placement = model.inflatedPlacement(face: face, row: row, col: col, localX: localX, localY: localY)
+                        if sr.isActive && sr.affectedCubies.contains(ci) { placement = sliceMat * placement }
+                        let tileM = spin * placement
                             * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
                         switch prop.kind {
                         case .importedAsset:
@@ -870,9 +877,9 @@ class Renderer: NSObject, MTKViewDelegate {
                 shadowEncoder.drawIndexedPrimitives(
                     primitiveType: .triangle,
                     indexCount: dc.indexCount,
-                    indexType: .uint16,
-                    indexBuffer: idxBase + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
-                    indexBufferLength: idxLen - dc.indexOffset * MemoryLayout<UInt16>.stride,
+                    indexType: .uint32,
+                    indexBuffer: idxBase + UInt64(dc.indexOffset * MemoryLayout<UInt32>.stride),
+                    indexBufferLength: idxLen - dc.indexOffset * MemoryLayout<UInt32>.stride,
                     instanceCount: dc.instanceCount,
                     baseVertex: 0,
                     baseInstance: dc.instanceOffset
@@ -944,9 +951,9 @@ class Renderer: NSObject, MTKViewDelegate {
             encoder.drawIndexedPrimitives(
                 primitiveType: .triangle,
                 indexCount: dc.indexCount,
-                indexType: .uint16,
-                indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
-                indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt16>.stride,
+                indexType: .uint32,
+                indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt32>.stride),
+                indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt32>.stride,
                 instanceCount: dc.instanceCount,
                 baseVertex: 0,
                 baseInstance: dc.instanceOffset
@@ -982,9 +989,9 @@ class Renderer: NSObject, MTKViewDelegate {
                 encoder.drawIndexedPrimitives(
                     primitiveType: .triangle,
                     indexCount: dc.indexCount,
-                    indexType: .uint16,
-                    indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
-                    indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt16>.stride,
+                    indexType: .uint32,
+                    indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt32>.stride),
+                    indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt32>.stride,
                     instanceCount: dc.instanceCount,
                     baseVertex: 0,
                     baseInstance: dc.instanceOffset
@@ -1000,9 +1007,9 @@ class Renderer: NSObject, MTKViewDelegate {
             encoder.drawIndexedPrimitives(
                 primitiveType: .triangle,
                 indexCount: dc.indexCount,
-                indexType: .uint16,
-                indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt16>.stride),
-                indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt16>.stride,
+                indexType: .uint32,
+                indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt32>.stride),
+                indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt32>.stride,
                 instanceCount: dc.instanceCount,
                 baseVertex: 0,
                 baseInstance: dc.instanceOffset
@@ -1048,3 +1055,24 @@ class Renderer: NSObject, MTKViewDelegate {
 typealias MazeVertexSwift = MazeVertex
 typealias FrameUniformsSwift = FrameUniforms
 typealias InstanceDataSwift = InstanceData
+
+extension InstanceData {
+    /// Convenience init that defaults the M14b inflation fields to "flat/rigid" (spin baked into
+    /// modelMatrix by the caller, as before). Existing call sites keep their original 6 arguments;
+    /// only the per-vertex-inflated maze surface passes `spinMatrix`/`roundness`/`invHalfExtent`.
+    init(modelMatrix: matrix_float4x4, baseColor: SIMD4<Float>, materialID: UInt32,
+         tileID: UInt32, discoveryAmount: Float, styleSeed: UInt32,
+         spinMatrix: matrix_float4x4 = matrix_identity_float4x4,
+         roundness: Float = 0, invHalfExtent: Float = 0) {
+        self.init()
+        self.modelMatrix = modelMatrix
+        self.baseColor = baseColor
+        self.materialID = materialID
+        self.tileID = tileID
+        self.discoveryAmount = discoveryAmount
+        self.styleSeed = styleSeed
+        self.spinMatrix = spinMatrix
+        self.roundness = roundness
+        self.invHalfExtent = invHalfExtent
+    }
+}

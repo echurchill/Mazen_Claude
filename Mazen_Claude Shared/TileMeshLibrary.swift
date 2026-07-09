@@ -23,7 +23,7 @@ class TileMeshLibrary {
 
     init(device: MTLDevice, worldScale ws: WorldScale) {
         var allVerts: [MazeVertexSwift] = []
-        var allIndices: [UInt16] = []
+        var allIndices: [UInt32] = []
 
         func recordMesh() -> TileMesh {
             TileMesh(vertexOffset: 0, indexOffset: 0, indexCount: 0)
@@ -44,7 +44,7 @@ class TileMeshLibrary {
                 MazeVertexSwift(position: c, normal: n, texCoord: uvC, aoFactor: 1.0),
                 MazeVertexSwift(position: d, normal: n, texCoord: uvD, aoFactor: 1.0),
             ])
-            let base = UInt16(start)
+            let base = UInt32(start)
             allIndices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
             fogLayerList.append(TileMesh(vertexOffset: start, indexOffset: iStart, indexCount: 6))
         }
@@ -75,7 +75,7 @@ class TileMeshLibrary {
             let a = pmDirs[i]
             let b = pmDirs[(i + 1) % 4]
             let n = normalize(cross(b - a, pmTip - a))
-            let bi = UInt16(allVerts.count)
+            let bi = UInt32(allVerts.count)
             allVerts.append(MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0), aoFactor: 1.0))
             allVerts.append(MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(1, 0), aoFactor: 1.0))
             allVerts.append(MazeVertexSwift(position: pmTip, normal: n, texCoord: SIMD2(0.5, 1), aoFactor: 1.0))
@@ -83,7 +83,7 @@ class TileMeshLibrary {
         }
         let arrowN = SIMD3<Float>(0, 0, 1)
         let arrowZ: Float = 0.03
-        let ai = UInt16(allVerts.count)
+        let ai = UInt32(allVerts.count)
         allVerts.append(MazeVertexSwift(position: SIMD3(0, pmR + 0.22, arrowZ), normal: arrowN, texCoord: SIMD2(0.5, 1), aoFactor: 1.0))
         allVerts.append(MazeVertexSwift(position: SIMD3(-0.08, pmR + 0.04, arrowZ), normal: arrowN, texCoord: SIMD2(0, 0), aoFactor: 1.0))
         allVerts.append(MazeVertexSwift(position: SIMD3( 0.08, pmR + 0.04, arrowZ), normal: arrowN, texCoord: SIMD2(1, 0), aoFactor: 1.0))
@@ -91,11 +91,8 @@ class TileMeshLibrary {
         let pmIdxCount = allIndices.count - pmIStart
         playerMarker = TileMesh(vertexOffset: pmVStart, indexOffset: pmIStart, indexCount: pmIdxCount)
 
-        // Pad index buffer to 4-byte alignment (UInt16 pairs) so all subsequent
-        // drawIndexedPrimitives calls get a 4-byte-aligned GPU address
-        if allIndices.count % 2 != 0 {
-            allIndices.append(0)
-        }
+        // (uint32 indices are 4 bytes each, so every indexOffset*4 GPU address is already
+        // 4-byte aligned — the old UInt16 alignment pad is no longer needed. M14b Phase 0.)
 
         // Cubie frame — dark border ring around each tile perimeter
         let frameVStart = allVerts.count
@@ -106,7 +103,7 @@ class TileMeshLibrary {
         let frameN = SIMD3<Float>(0, 0, 1)
 
         func addFrameStrip(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
-            let base = UInt16(allVerts.count)
+            let base = UInt32(allVerts.count)
             allVerts.append(contentsOf: [
                 MazeVertexSwift(position: a, normal: frameN, texCoord: SIMD2(0, 0), aoFactor: 0.8),
                 MazeVertexSwift(position: b, normal: frameN, texCoord: SIMD2(1, 0), aoFactor: 0.8),
@@ -210,7 +207,7 @@ class TileMeshLibrary {
 
         indexBuffer = device.makeBuffer(
             bytes: allIndices,
-            length: MemoryLayout<UInt16>.stride * allIndices.count,
+            length: MemoryLayout<UInt32>.stride * allIndices.count,
             options: .storageModeShared
         )!
         indexBuffer.label = "TileMeshIndices"
@@ -264,7 +261,7 @@ class TileMeshLibrary {
     /// (`path: true`) or the propSpace remainder (`path: false`) so each set can be
     /// drawn with its own material. UVs are continuous across the tile so textures
     /// tile seamlessly regardless of the split (M10 Phase C).
-    private static func addFloorCells(to verts: inout [MazeVertexSwift], indices: inout [UInt16], openings: DirectionMask, uvTurns: Int, ws: WorldScale, path: Bool) {
+    private static func addFloorCells(to verts: inout [MazeVertexSwift], indices: inout [UInt32], openings: DirectionMask, uvTurns: Int, ws: WorldScale, path: Bool) {
         let hs = ws.floorHalfSize
         let z = ws.floorY
         let cell = 2.0 * hs / 3.0
@@ -286,26 +283,37 @@ class TileMeshLibrary {
             return SIMD2((rx + hs) * ws.uvScale, (ry + hs) * ws.uvScale)
         }
 
+        // M14b: subdivide each sub-cell into an mf×mf grid so per-vertex inflation curves the floor
+        // smoothly. UVs stay correct (uv() is linear in x,y) and sub-cell edges keep their exact
+        // positions, so neighbouring tiles still share footprints — the curved surface stays seamless.
+        let mf = max(1, ws.floorTess)
         for r in 0..<3 {
             for c in 0..<3 {
                 guard tile.isPathCell(r, c) == path else { continue }
-                let x0 = -hs + Float(c) * cell, x1 = x0 + cell
-                let y0 = -hs + Float(r) * cell, y1 = y0 + cell
-                let base = UInt16(verts.count)
-                verts.append(contentsOf: [
-                    MazeVertexSwift(position: SIMD3(x0, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y0), aoFactor: 1.0),
-                    MazeVertexSwift(position: SIMD3(x1, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x1, y0), aoFactor: 1.0),
-                    MazeVertexSwift(position: SIMD3(x1, y1, z), normal: SIMD3(0, 0, 1), texCoord: uv(x1, y1), aoFactor: 1.0),
-                    MazeVertexSwift(position: SIMD3(x0, y1, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y1), aoFactor: 1.0),
-                ])
-                indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+                let sx0 = -hs + Float(c) * cell
+                let sy0 = -hs + Float(r) * cell
+                let step = cell / Float(mf)
+                for jr in 0..<mf {
+                    for jc in 0..<mf {
+                        let x0 = sx0 + Float(jc) * step, x1 = x0 + step
+                        let y0 = sy0 + Float(jr) * step, y1 = y0 + step
+                        let base = UInt32(verts.count)
+                        verts.append(contentsOf: [
+                            MazeVertexSwift(position: SIMD3(x0, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y0), aoFactor: 1.0),
+                            MazeVertexSwift(position: SIMD3(x1, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x1, y0), aoFactor: 1.0),
+                            MazeVertexSwift(position: SIMD3(x1, y1, z), normal: SIMD3(0, 0, 1), texCoord: uv(x1, y1), aoFactor: 1.0),
+                            MazeVertexSwift(position: SIMD3(x0, y1, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y1), aoFactor: 1.0),
+                        ])
+                        indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+                    }
+                }
             }
         }
     }
 
     /// Build one tile edge as a wall, a gateway (two stubs framing a centered gap), or
     /// nothing (`open`). Dispatches to `addWall` with the appropriate sub-span(s).
-    private static func addEdgeWall(edge: SurfaceDirection, type: EdgeType, to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addEdgeWall(edge: SurfaceDirection, type: EdgeType, to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         switch type {
         case .wall:
             addWall(edge: edge, span: (0, 1), to: &verts, indices: &indices, ws: ws)
@@ -318,7 +326,7 @@ class TileMeshLibrary {
         }
     }
 
-    private static func addWall(edge: SurfaceDirection, span: (Float, Float), to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addWall(edge: SurfaceDirection, span: (Float, Float), to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let hs = ws.tileMeshSize / 2.0
         let wt = ws.wallThickness
         let z0 = ws.floorY
@@ -364,33 +372,54 @@ class TileMeshLibrary {
         let aoBottom: Float = 0.55
         let aoTop: Float = 1.0
 
-        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>,
-                  _ n: SIMD3<Float>,
-                  _ uvA: SIMD2<Float>, _ uvB: SIMD2<Float>, _ uvC: SIMD2<Float>, _ uvD: SIMD2<Float>) {
-            let base = UInt16(verts.count)
+        // M14b: emit a bilinear nu×nv grid over corners a(s0,t0) b(s1,t0) c(s1,t1) d(s0,t1) — `s`
+        // runs a→b (length), `t` runs a→d (height) — so per-vertex inflation can bend the face to
+        // the curved floor. nu=nv=1 reproduces the old single quad exactly.
+        func gridQuad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>,
+                      _ n: SIMD3<Float>,
+                      _ uvA: SIMD2<Float>, _ uvB: SIMD2<Float>, _ uvC: SIMD2<Float>, _ uvD: SIMD2<Float>,
+                      _ nu: Int, _ nv: Int) {
+            func pos(_ s: Float, _ t: Float) -> SIMD3<Float> {
+                let bot = a + (b - a) * s, top = d + (c - d) * s
+                return bot + (top - bot) * t
+            }
+            func uvAt(_ s: Float, _ t: Float) -> SIMD2<Float> {
+                let bot = uvA + (uvB - uvA) * s, top = uvD + (uvC - uvD) * s
+                return bot + (top - bot) * t
+            }
             func ao(_ p: SIMD3<Float>) -> Float { p.z > z0 + 0.01 ? aoTop : aoBottom }
-            verts.append(contentsOf: [
-                MazeVertexSwift(position: a, normal: n, texCoord: uvA, aoFactor: ao(a)),
-                MazeVertexSwift(position: b, normal: n, texCoord: uvB, aoFactor: ao(b)),
-                MazeVertexSwift(position: c, normal: n, texCoord: uvC, aoFactor: ao(c)),
-                MazeVertexSwift(position: d, normal: n, texCoord: uvD, aoFactor: ao(d)),
-            ])
-            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            for i in 0..<nu {
+                let s0 = Float(i) / Float(nu), s1 = Float(i + 1) / Float(nu)
+                for j in 0..<nv {
+                    let t0 = Float(j) / Float(nv), t1 = Float(j + 1) / Float(nv)
+                    let p00 = pos(s0, t0), p10 = pos(s1, t0), p11 = pos(s1, t1), p01 = pos(s0, t1)
+                    let base = UInt32(verts.count)
+                    verts.append(contentsOf: [
+                        MazeVertexSwift(position: p00, normal: n, texCoord: uvAt(s0, t0), aoFactor: ao(p00)),
+                        MazeVertexSwift(position: p10, normal: n, texCoord: uvAt(s1, t0), aoFactor: ao(p10)),
+                        MazeVertexSwift(position: p11, normal: n, texCoord: uvAt(s1, t1), aoFactor: ao(p11)),
+                        MazeVertexSwift(position: p01, normal: n, texCoord: uvAt(s0, t1), aoFactor: ao(p01)),
+                    ])
+                    indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+                }
+            }
         }
 
+        let lw = max(1, ws.wallTessLen)
+        let hw = max(1, ws.wallTessHeight)
         let wallU = ws.tileMeshSize * ws.uvScale * (span.1 - span.0)
         let wallV = (z1 - z0) * ws.uvScale
         let capU = wt * ws.uvScale
 
         // Inner face
-        quad(SIMD3(inner0.x, inner0.y, z0), SIMD3(inner1.x, inner1.y, z0),
-             SIMD3(inner1.x, inner1.y, z1), SIMD3(inner0.x, inner0.y, z1), inN,
-             SIMD2(0, 0), SIMD2(wallU, 0), SIMD2(wallU, wallV), SIMD2(0, wallV))
+        gridQuad(SIMD3(inner0.x, inner0.y, z0), SIMD3(inner1.x, inner1.y, z0),
+                 SIMD3(inner1.x, inner1.y, z1), SIMD3(inner0.x, inner0.y, z1), inN,
+                 SIMD2(0, 0), SIMD2(wallU, 0), SIMD2(wallU, wallV), SIMD2(0, wallV), lw, hw)
         // Outer face
-        quad(SIMD3(outer1.x, outer1.y, z0), SIMD3(outer0.x, outer0.y, z0),
-             SIMD3(outer0.x, outer0.y, z1), SIMD3(outer1.x, outer1.y, z1), outN,
-             SIMD2(0, 0), SIMD2(wallU, 0), SIMD2(wallU, wallV), SIMD2(0, wallV))
-        // Rounded top cap — semicircular arc from inner to outer edge
+        gridQuad(SIMD3(outer1.x, outer1.y, z0), SIMD3(outer0.x, outer0.y, z0),
+                 SIMD3(outer0.x, outer0.y, z1), SIMD3(outer1.x, outer1.y, z1), outN,
+                 SIMD2(0, 0), SIMD2(wallU, 0), SIMD2(wallU, wallV), SIMD2(0, wallV), lw, hw)
+        // Rounded top cap — semicircular arc from inner to outer edge (subdivided along length too)
         let arcSegments = 6
         let arcRadius = wt / 2.0
         let thickDir = normalize(SIMD2<Float>(outer0.x - inner0.x, outer0.y - inner0.y))
@@ -419,26 +448,26 @@ class TileMeshLibrary {
                                          sinf(midTheta))
             let arcV0 = wallV + sin0 * arcRadius * ws.uvScale
             let arcV1 = wallV + sin1 * arcRadius * ws.uvScale
-            quad(a, b, c, d, arcNormal,
-                 SIMD2(0, arcV0), SIMD2(wallU, arcV0), SIMD2(wallU, arcV1), SIMD2(0, arcV1))
+            gridQuad(a, b, c, d, arcNormal,
+                     SIMD2(0, arcV0), SIMD2(wallU, arcV0), SIMD2(wallU, arcV1), SIMD2(0, arcV1), lw, 1)
         }
-        // End cap at p0 side
+        // End cap at p0 side (narrow — subdivide in height only)
         let capN0 = SIMD3<Float>(normalize(SIMD2(inner0.x - inner1.x, inner0.y - inner1.y)), 0)
-        quad(SIMD3(outer0.x, outer0.y, z0), SIMD3(inner0.x, inner0.y, z0),
-             SIMD3(inner0.x, inner0.y, z1), SIMD3(outer0.x, outer0.y, z1), capN0,
-             SIMD2(0, 0), SIMD2(capU, 0), SIMD2(capU, wallV), SIMD2(0, wallV))
+        gridQuad(SIMD3(outer0.x, outer0.y, z0), SIMD3(inner0.x, inner0.y, z0),
+                 SIMD3(inner0.x, inner0.y, z1), SIMD3(outer0.x, outer0.y, z1), capN0,
+                 SIMD2(0, 0), SIMD2(capU, 0), SIMD2(capU, wallV), SIMD2(0, wallV), 1, hw)
         // End cap at p1 side
         let capN1 = -capN0
-        quad(SIMD3(inner1.x, inner1.y, z0), SIMD3(outer1.x, outer1.y, z0),
-             SIMD3(outer1.x, outer1.y, z1), SIMD3(inner1.x, inner1.y, z1), capN1,
-             SIMD2(0, 0), SIMD2(capU, 0), SIMD2(capU, wallV), SIMD2(0, wallV))
+        gridQuad(SIMD3(inner1.x, inner1.y, z0), SIMD3(outer1.x, outer1.y, z0),
+                 SIMD3(outer1.x, outer1.y, z1), SIMD3(inner1.x, inner1.y, z1), capN1,
+                 SIMD2(0, 0), SIMD2(capU, 0), SIMD2(capU, wallV), SIMD2(0, wallV), 1, hw)
     }
 
     // MARK: - Celestial (M9)
 
     /// A unit cube centred at the origin (±0.5), 6 faces wound CCW-outward with true face
     /// normals. Scaled + positioned per-instance to render the sun and moon.
-    private static func addUnitCube(to verts: inout [MazeVertexSwift], indices: inout [UInt16]) {
+    private static func addUnitCube(to verts: inout [MazeVertexSwift], indices: inout [UInt32]) {
         let h: Float = 0.5
         let p = [
             SIMD3<Float>(-h, -h, -h), SIMD3(h, -h, -h), SIMD3(h, h, -h), SIMD3(-h, h, -h),  // 0..3 back (z=−h)
@@ -446,7 +475,7 @@ class TileMeshLibrary {
         ]
         func quad(_ a: Int, _ b: Int, _ c: Int, _ d: Int) {
             let n = normalize(cross(p[b] - p[a], p[d] - p[a]))
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             for i in [a, b, c, d] {
                 verts.append(MazeVertexSwift(position: p[i], normal: n, texCoord: SIMD2(0, 0), aoFactor: 1.0))
             }
@@ -465,7 +494,7 @@ class TileMeshLibrary {
     /// A hedge-sculpture topiary: a slightly squashed ball resting on the floor, sized to
     /// sit inside one 3×3 sub-cell (~0.33 wide) with margin. Wound CCW-outward (front-face
     /// culled) like the walls/posts; single-colour, tinted per-instance by SceneBuilder.
-    private static func addTopiary(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addTopiary(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let rXY: Float = 0.11
         let rZ: Float = 0.12
         let cz = ws.floorY + rZ          // rest the ball on the floor
@@ -489,7 +518,7 @@ class TileMeshLibrary {
                 let p1 = 2 * Float.pi * Float(lon + 1) / Float(nLon)
                 // CCW from outside: lower-left → lower-right → upper-right → upper-left.
                 let a = sph(t1, p0), b = sph(t1, p1), c = sph(t0, p1), d = sph(t0, p0)
-                let base = UInt16(verts.count)
+                let base = UInt32(verts.count)
                 verts.append(contentsOf: [vtx(a), vtx(b), vtx(c), vtx(d)])
                 indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
             }
@@ -499,7 +528,7 @@ class TileMeshLibrary {
     /// A tall obelisk landmark — a slightly tapered square shaft capped with a pyramidion,
     /// rising well above the hedges (~1.16 vs wall 0.24) so it reads across the maze. Thin
     /// enough (~0.12 wide) to sit in a sub-cell. Wound CCW-outward with true face normals. (G3)
-    private static func addObelisk(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addObelisk(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
         let shaftTop: Float = 0.92
         let tip: Float = 1.16
@@ -515,13 +544,13 @@ class TileMeshLibrary {
         }
         func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
             let n = normalize(cross(b - a, d - a))
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
         func tri(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
             let n = normalize(cross(b - a, c - a))
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n)])
             indices.append(contentsOf: [base+0, base+1, base+2])
         }
@@ -539,7 +568,7 @@ class TileMeshLibrary {
     /// A portal marker (M11.2) — a TARDIS-style police box: a tall blue body with a tented (pyramid)
     /// roof, taller than the hedges so it's easy to spot. A separate `portalLamp` prop sits at the
     /// apex and flashes. Interacting (F) or stepping onto its tile switches worlds. Wound CCW-outward.
-    private static func addPortal(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addPortal(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
         let bodyTop: Float = 0.40   // top of the box body (above the 0.24 hedges)
         let roofTop: Float = 0.50   // apex of the tented roof
@@ -553,13 +582,13 @@ class TileMeshLibrary {
         }
         func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
             let n = normalize(cross(b - a, d - a))
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
         func tri(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
             let n = normalize(cross(b - a, c - a))
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n)])
             indices.append(contentsOf: [base+0, base+1, base+2])
         }
@@ -572,7 +601,7 @@ class TileMeshLibrary {
     /// The flashing lamp atop the portal (M11.2 / TARDIS) — a tiny box sitting at the roof apex.
     /// SceneBuilder renders it emissive (materialID 12) with a blinking brightness, so it reads as a
     /// beacon "about to take off". Its own prop so it can animate independently of the blue body.
-    private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let base: Float = 0.50, top: Float = 0.56, h: Float = 0.028
         func ring(_ z: Float) -> [SIMD3<Float>] {
             [SIMD3(-h, -h, z), SIMD3(h, -h, z), SIMD3(h, h, z), SIMD3(-h, h, z)]
@@ -582,7 +611,7 @@ class TileMeshLibrary {
         }
         func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
             let n = normalize(cross(b - a, d - a))
-            let bi = UInt16(verts.count)
+            let bi = UInt32(verts.count)
             verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
             indices.append(contentsOf: [bi+0, bi+1, bi+2, bi+0, bi+2, bi+3])
         }
@@ -594,7 +623,7 @@ class TileMeshLibrary {
     /// A chest — a simple box (4 sides + top) sitting on the floor. The open/closed look is
     /// conveyed by the instance colour (SceneBuilder), so one mesh is enough. Placeholder for
     /// the eventual imported model (e.g. a fire pit that lights). Wound CCW-outward. (G4)
-    private static func addChest(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addChest(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
         let hx: Float = 0.085, hy: Float = 0.06
         let zt = z0 + 0.10
@@ -605,7 +634,7 @@ class TileMeshLibrary {
         }
         func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
             let n = normalize(cross(b - a, d - a))
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             verts.append(contentsOf: [
                 MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0), aoFactor: vtx(a).aoFactor),
                 MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(0, 0), aoFactor: vtx(b).aoFactor),
@@ -631,7 +660,7 @@ class TileMeshLibrary {
     /// shared 2×2 centre — so the four quarters' peaks meet there with no gap. Rides its tile's
     /// slice via the same `.houseCorner` Prop anchor as the imported walls, so roof and walls split
     /// together. The eave sits at the imported wall height so it rests cleanly on top. (M12-E)
-    private static func addHouseQuarter(to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addHouseQuarter(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let hw = ws.floorHalfSize          // 0.5 — the shared 2×2 centre corner (apex lands here)
         let inner = -hw                    // roof covers the full tile now that walls are on its edges
         let z0 = ws.floorY
@@ -644,13 +673,13 @@ class TileMeshLibrary {
         }
         func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
             let n = normalize(cross(b - a, d - a))
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
         func tri(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
             let n = normalize(cross(b - a, c - a))
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n)])
             indices.append(contentsOf: [base+0, base+1, base+2])
         }
@@ -671,7 +700,7 @@ class TileMeshLibrary {
 
     /// Corner posts at all four tile corners plus jamb posts flanking each gateway gap.
     /// These are emitted with a distinct material (light green) by the scene builder.
-    private static func addPosts(tile: MazeTile, to verts: inout [MazeVertexSwift], indices: inout [UInt16], ws: WorldScale) {
+    private static func addPosts(tile: MazeTile, to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let hs = ws.tileMeshSize / 2.0
         let wt = ws.wallThickness
         let z0 = ws.floorY
@@ -706,11 +735,11 @@ class TileMeshLibrary {
 
     /// A vertical box post (4 sides + top), wound CCW-outward for back-face culling.
     private static func addPost(center c: SIMD2<Float>, halfSize h: Float, z0: Float, zTop: Float,
-                                to verts: inout [MazeVertexSwift], indices: inout [UInt16]) {
+                                to verts: inout [MazeVertexSwift], indices: inout [UInt32]) {
         let x0 = c.x - h, x1 = c.x + h, y0 = c.y - h, y1 = c.y + h
 
         func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ cc: SIMD3<Float>, _ d: SIMD3<Float>, _ n: SIMD3<Float>) {
-            let base = UInt16(verts.count)
+            let base = UInt32(verts.count)
             verts.append(contentsOf: [
                 MazeVertexSwift(position: a, normal: n, texCoord: SIMD2(0, 0), aoFactor: 0.85),
                 MazeVertexSwift(position: b, normal: n, texCoord: SIMD2(1, 0), aoFactor: 0.85),

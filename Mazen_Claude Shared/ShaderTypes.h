@@ -42,6 +42,7 @@ typedef struct
     float moonIntensity;         // base strength of the moon's fill light
     float eclipseFactor;         // M9-7: 0 normally, →1 as the moon covers the sun
     float fadeAmount;            // M11.2b: 0 clear → 1 black, for the world-transition fade
+    float plainShading;          // debug: 1 = flat matte Lambert (no texture/normal-map/fog), to read geometry (M14)
 } FrameUniforms;
 
 typedef struct
@@ -52,6 +53,13 @@ typedef struct
     uint tileID;
     float discoveryAmount;
     uint styleSeed;
+    // M14b per-vertex inflation. When roundness > 0 the vertex shader inflates this instance's
+    // vertices onto the rounded surface in the cube's REST frame (modelMatrix must then be the
+    // *un-spun* rest placement), then applies spinMatrix. When roundness == 0 the shader uses
+    // modelMatrix directly (spin baked in as before) and spinMatrix/invHalfExtent are ignored.
+    matrix_float4x4 spinMatrix;  // world spin (+ M11 offset) applied AFTER inflation
+    float roundness;             // 0 = flat/rigid (default); >0 = per-vertex superellipsoid inflate
+    float invHalfExtent;         // 1 / (cubeSize/2) — maps rest world coords to the unit cube
 } InstanceData;
 
 typedef struct

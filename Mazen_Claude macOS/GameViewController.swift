@@ -82,10 +82,12 @@ class GameViewController: NSViewController {
             Camera: %@  Cube: %dx%dx%d
             Frame: %.1f ms  (%.0f fps)
             Twist(G): %@   World(O): %@
+            Roundness(-/=): %.1f   Matte(M): %@
             """,
             "\(gs.player.face)", gs.player.row, gs.player.col, "\(gs.player.facing)",
             gs.camera.mode == .orbit ? "orbit" : "FP", gs.cubeModel.size, gs.cubeModel.size, gs.cubeModel.size,
-            gs.avgFrameTimeMs, fps, pacing, world)
+            gs.avgFrameTimeMs, fps, pacing, world, gs.cubeModel.roundness,
+            (renderer?.debugPlainShading ?? false) ? "ON" : "off")
         debugLabel?.stringValue = text
     }
 
@@ -166,6 +168,12 @@ class GameViewController: NSViewController {
             let sizes = [3, 5, 7, 9]
             let idx = sizes.firstIndex(of: gs.cubeModel.size) ?? 0
             renderer.resetGame(size: sizes[(idx + 1) % sizes.count])
+        case 24:      // = — M14 debug: inflate the cube toward a sphere (shape-as-meaning dial)
+            gs.cubeModel.roundness = min(1, gs.cubeModel.roundness + 0.1)
+        case 27:      // - — M14 debug: deflate toward the hard cube
+            gs.cubeModel.roundness = max(0, gs.cubeModel.roundness - 0.1)
+        case 46:      // M — M14 debug: toggle flat matte shading (read raw geometry, no texture/fog)
+            renderer.debugPlainShading.toggle()
         default:
             break
         }
