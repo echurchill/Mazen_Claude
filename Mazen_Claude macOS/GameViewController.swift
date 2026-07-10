@@ -174,6 +174,10 @@ class GameViewController: NSViewController {
             renderer.adjustRoundness(-0.1)
         case 46:      // M — M14 debug: toggle flat matte shading (read raw geometry, no texture/fog)
             renderer.debugPlainShading.toggle()
+        case 38:      // J — debug: toggle the idle world spin only (leaves the sun/time moving)
+            gs.spinEnabled.toggle()
+        case 40:      // K — debug: freeze/unfreeze time *in place* (no reset to noon, unlike Shift+T)
+            gs.timeScale = gs.timeScale == 0 ? 1 : 0
         default:
             break
         }

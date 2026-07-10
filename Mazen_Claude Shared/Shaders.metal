@@ -309,7 +309,15 @@ fragment float4 fragmentShader(
         // M14b: TBN from the (inflated) surface tangent, Gram-Schmidt-orthogonalized against the
         // interpolated normal. Curve-correct and continuous — replaces the dominant-axis selection
         // that flipped mid-surface on a curved floor and swam the normal map.
-        float3 T = normalize(in.worldTangent - normal * dot(in.worldTangent, normal));
+        // Guard the degenerate case: an E/W wall's face normal lies ALONG the tile tangent, so the
+        // passed tangent is ~parallel to the normal and the Gram-Schmidt collapses to ~0 →
+        // normalize() → NaN → the wall rendered black (and jittered as the spin rotated the near-
+        // parallel vectors). Fall back to a perpendicular reference axis when that happens.
+        float3 tRef = in.worldTangent;
+        if (abs(dot(normalize(tRef), normal)) > 0.99) {
+            tRef = (abs(normal.z) < 0.99) ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+        }
+        float3 T = normalize(tRef - normal * dot(tRef, normal));
         float3 B = cross(normal, T);
         float3x3 TBN = float3x3(T, B, normal);
 
