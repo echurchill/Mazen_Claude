@@ -633,7 +633,8 @@ class Renderer: NSObject, MTKViewDelegate {
         let buf = frameUniformBuffers[currentBufferIndex]
         let ptr = buf.contents().bindMemory(to: FrameUniformsSwift.self, capacity: 1)
         let ws = gameState.worldScale
-        let vp = gameState.viewProjectionMatrix(aspect: aspect)
+        let framePose = gameState.framePose(aspect: aspect)   // one camera-pose evaluation (R2.4)
+        let vp = framePose.viewProjection
         let cs = gameState.celestialSystem
         // Lighting uses the true sun direction; the shadow map (M9-6) follows the sun by day and
         // the moon at night — one map, switched light — so nights get faint moon shadows.
@@ -654,11 +655,11 @@ class Renderer: NSObject, MTKViewDelegate {
         let eclipse = et * et * (3 - 2 * et)
         ptr.pointee = FrameUniformsSwift(
             viewProjectionMatrix: vp,
-            cameraPosition: gameState.cameraPosition(),
+            cameraPosition: framePose.position,
             time: gameState.time,
             lightDirection: lightDir,
             inverseViewProjectionMatrix: vp.inverse,
-            cameraUp: gameState.cameraUp(),
+            cameraUp: framePose.up,
             lightViewProjectionMatrix: lightVP,
             sunElevation: lightDir.y,
             moonDirection: moonDir,

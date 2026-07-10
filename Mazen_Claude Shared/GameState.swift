@@ -169,16 +169,25 @@ class GameState {
         return float4x4.rotation(radians: angle, axis: SIMD3(0, 1, 0))
     }
 
-    func viewProjectionMatrix(aspect: Float) -> float4x4 {
-        camera.viewProjectionMatrix(aspect: aspect, player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpinMatrix())
+    /// Everything the renderer needs from the camera this frame, from ONE first-person pose
+    /// evaluation (R2.4 — previously viewProjection/position/up each re-derived the full pose,
+    /// 3× per frame, each with its own fresh spin matrix).
+    struct FramePose {
+        let viewProjection: float4x4
+        let position: SIMD3<Float>
+        let up: SIMD3<Float>
     }
 
-    func cameraPosition() -> SIMD3<Float> {
-        camera.cameraPosition(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpinMatrix())
-    }
-
-    func cameraUp() -> SIMD3<Float> {
-        camera.cameraUp(player: player, cubeModel: cubeModel, sliceRotation: sliceRotation, worldSpin: worldSpinMatrix())
+    func framePose(aspect: Float) -> FramePose {
+        let pose: FirstPersonPose? = camera.mode == .firstPerson
+            ? camera.firstPersonPose(player: player, cubeModel: cubeModel,
+                                     sliceRotation: sliceRotation, worldSpin: worldSpinMatrix())
+            : nil
+        return FramePose(
+            viewProjection: camera.viewProjectionMatrix(aspect: aspect, cubeModel: cubeModel, pose: pose),
+            position: camera.cameraPosition(cubeModel: cubeModel, pose: pose),
+            up: camera.cameraUp(pose: pose)
+        )
     }
 
     /// Mouselook (Caps-Lock) steering: snap the discrete `facing` to the 8-way nearest the
