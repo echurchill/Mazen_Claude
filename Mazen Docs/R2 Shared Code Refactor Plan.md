@@ -1,6 +1,6 @@
 # R2 — Shared-Code Refactor & Optimization Plan
 
-*Drafted 2026-07-10 from a full read of `Mazen_Claude Shared/` (~5,000 lines). Follows the R1 (WorldScale) convention: every step behavior-neutral unless stated, verified before the next. This is a **tracker** — check items off as they land; nothing here is done yet.*
+*Drafted 2026-07-10 from a full read of `Mazen_Claude Shared/` (~5,000 lines). Follows the R1 (WorldScale) convention: every step behavior-neutral unless stated, verified before the next. This is a **tracker** — check items off as they land. Status: Tier 1 ✅ complete & verified; R2.11 + R2.16 queued next (Eddie, 2026-07-10); rest open.*
 
 **Ratings.** *Confidence* = how certain the change is correct & worth it (High / Med / Low). *Danger* = regression blast radius if done carelessly (None / Low / Med / High). Every item lists its verification.
 
@@ -38,6 +38,17 @@
 - [ ] **R2.8 Split the Renderer god-object (before M15/M16)** — 1,089 lines: pipeline setup, three texture loaders, asset/kit registry + house assembly, world stack, transitions, four draw loops. Extract `PipelineFactory`, `TextureLoader`, `AssetRegistry` (load + stamp); Renderer keeps frame loop + world stack. Mechanical moves only, zero logic change.
   *Confidence:* **High** (structural value before interiors add pipelines/world types). *Danger:* **Med** — big mechanical diff; Metal object creation *order* in init matters; easy to fumble a binding. *Effort:* medium-large. *Verify:* build both targets + full visual smoke (orbit, FP, twist, portal, shadows, HUD).
 
+- [ ] **R2.11 Scale-dependent shader constants → FrameUniforms** *(promoted from Tier 3, 2026-07-10 — confirmed in the wild: this IS the "silver veil" that washes the whole planet from orbit).* The fragment shader's distance fog runs `smoothstep(4, 14, dist)` in orbit — constants tuned for the size-5 world (orbit cam at 12). At size 7 the orbit camera sits at 16.8, so the **entire cube lies past fogFar** and every pixel blends toward the pale horizon color; `M` looks like the "fix" only because matte returns before the fog block. Same problem family: the orbit-blend `smoothstep(3.0, 5.0, camDist)` (texture swap + fog gate, twice). Fix: derive fog near/far + the orbit-blend threshold from `WorldScale`, passed via `FrameUniforms` — chosen so **in orbit the fog starts beyond the cube's far edge** (full normal textures from orbit at every size) while first-person fog keeps today's values exactly (its depth-cue job is correct there).
+  *Confidence:* **High** (root cause read directly from the shader + verified arithmetic). *Danger:* **Low-Med** (visual tuning; FP look must be anchored to today's values). *Effort:* small. *Verify:* orbit at sizes 3/7/9 shows clean textures; FP fog unchanged side-by-side; night + day.
+
+- [ ] **R2.16 Cube-size scaling & safety (cap at 25)** *(added 2026-07-10 from the "how far can size go" audit).* Playable sizes today are 3–9; `WorldScale.maxSupportedSize = 25` **overstates** the real ceiling: instance buffers are provisioned at `6·25·25` = **one instance per tile**, but the scene emits **~4 per tile** (frame rail + floor + path-cross + wall + posts), and SceneBuilder's `ptr[idx] = …` writer has **no bounds check** — beyond roughly size 11–13 that's a *silent buffer overrun*, not an error. The work, in order:
+  1. **Provisioning fix + hard guard** — size the instance buffers with a realistic per-tile multiplier (or an exact count), and add a capacity clamp/assert at the write sites so overflow can never be silent again.
+  2. **Artificial upper limit of 25** *(Eddie's call)* — clamp `cubeSize` at `maxSupportedSize = 25` at world-creation (`WorldScale`/`resetGame`), so nothing can construct a world the buffers aren't provisioned for. The N-key cycle stays 3→9; 11–25 become *possible* (dev/tests), >25 impossible.
+  3. **Shadow-map density** — fixed 2048² over `1.1·size` halves texel density as size doubles; bump resolution or accept softening, verified at 25.
+  4. **Size-derived celestials + far plane** — `sunOrbitRadius 176` / `moonOrbitRadius 54.4` / `cameraFarZ 220` are fixed; fine to ~25, but derive them from `cubeSize` (R1-style, anchored to today's values at sizes 3–9) so framing/orbits stay sane at the cap.
+  *(The remaining scale wall — per-frame full CPU rebuild — is already tracked as R2.6 + R2.7; not duplicated here.)*
+  *Confidence:* **High** (the overrun is arithmetic: 6·13²·~4 > 6·25·25). *Danger:* **Low-Med** — items 1–2 are pure safety; 3–4 are visual tuning that must stay anchored at current sizes. *Effort:* small-medium. *Verify:* tests green (extend size list to include 11/25 for the math suites); run at 11/13/25 with the guard proving no overflow; shadows + sun/moon framing eyeballed at 25; sizes 3–9 pixel-unchanged.
+
 ## Tier 3 — opportunistic (do when passing through)
 
 - [ ] **R2.9 Shader micro-work** — drop the redundant `normalize(modelMatrix[0/1])` in `m14bTransform` (×2 passes, hottest path). ⚠️ Rests on an **undocumented invariant**: every roundness>0 instance has an orthonormal basis (scale lives in `spinMatrix` for the counterpart; imported assets carry scale but are roundness==0). Document the invariant where it's relied on. Analytic Cobb-map Jacobian (replaces 2 of 3 inflate evals/vertex) is a separate, fiddlier follow-up — hold until iOS perf demands it.
@@ -46,8 +57,7 @@
 - [ ] **R2.10 Floor UV-turn mesh dedup** — the 4 baked UV-turn floor variants differ only in texCoords; a 2-bit per-instance `uvTurns` + shader UV rotation cuts floor meshes 4×. (Collapsing the 81 wall configs → 8 per-edge meshes trades verts for instances; only if mesh memory ever matters.)
   *Confidence:* **Med-High**. *Danger:* **Med** — the shader rotation must exactly reproduce baked UVs *through slice finalization* (the `uvTurns` carry logic) or floors visibly "snap" after a twist. *Effort:* medium. *Verify:* twist a slice repeatedly; floor texture stays glued.
 
-- [ ] **R2.11 Scale-dependent shader constants → FrameUniforms** — orbit-blend `smoothstep(3.0, 5.0, camDist)` (twice) and fog near/far assume a size-5 world; behavior differs at 3³/9³. Derive from `WorldScale`, R1-style: formulas chosen to reproduce today's size-7 values exactly.
-  *Confidence:* **High**. *Danger:* **Low-Med** (subtle look shifts if the formulas aren't anchored). *Effort:* small. *Verify:* screenshots at sizes 3/7/9 before vs after.
+- **R2.11** — *moved to Tier 2 (2026-07-10): confirmed as the orbit "silver veil"; see above.*
 
 - [ ] **R2.12 PlayerState as a real state machine** — 14 parallel fields (`moveFrom…`×5, `moveTo…`×5, flags) → enum with associated values (`idle / moving / turning`); makes illegal states unrepresentable and shrinks `firstPersonCamera` branching.
   *Confidence:* **Med** (readability, not perf). *Danger:* **Med** — movement + camera interpolation regressions read as motion glitches. *Effort:* medium. *Verify:* FP walk, turn, edge-cross, held-key chaining, move-during-twist refusal.
@@ -63,7 +73,8 @@
 
 ## Sequencing
 
-1. **Now-ish:** Tier 1 as one "R2 cleanup" pass (R2.5 tests land *first* so R2.1 is caught by them).
-2. **Before M15:** R2.8 (Renderer split) — interiors will pile more onto it.
-3. **When iOS/perf gets real:** R2.6 → R2.7 together.
-4. **Tier 3:** fold into whatever session touches that file anyway. R2.14 anytime.
+1. ~~**Now-ish:** Tier 1 as one "R2 cleanup" pass (R2.5 tests land *first* so R2.1 is caught by them).~~ ✅ **Done 2026-07-10, fully verified.**
+2. **Next up (queued by Eddie, 2026-07-10; awaiting go-ahead):** **R2.11** (orbit silver veil → clean textures from orbit) + **R2.16** (buffer provisioning fix + guard, hard cap at 25, shadow/celestial scaling).
+3. **Before M15:** R2.8 (Renderer split) — interiors will pile more onto it.
+4. **When iOS/perf gets real:** R2.6 → R2.7 together.
+5. **Tier 3:** fold into whatever session touches that file anyway. R2.14 anytime.
