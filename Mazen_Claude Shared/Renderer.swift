@@ -47,8 +47,8 @@ struct AssetDrawCmd {
 
 class Renderer: NSObject, MTKViewDelegate {
 
-    /// Cube size the app launches with. The N key cycles odd sizes (3→5→7→9) live.
-    static let initialCubeSize = 7
+    /// Cube size the app launches with. The N key cycles odd sizes (3→5→7→9) live. This can go as high as 25 but N only cycles from 3 to 9.
+    static let initialCubeSize = 9
     /// The moon world's cube size (M11). Used to calibrate its apparent size in the sky.
     static let moonWorldSize = 3
 
@@ -661,12 +661,18 @@ class Renderer: NSObject, MTKViewDelegate {
         // depth cue on far tiles there). In orbit the fog now begins BEYOND the cube's far corner
         // (camera distance + √3·halfN), so the planet always reads with clean, unfogged textures —
         // the old fixed 4→14 range was tuned for the size-5 world and silver-veiled everything at
-        // size 7+. Far-away things (the counterpart world in the sky) stay fully hazed, as before.
+        // size 7+.
         let isOrbit = gameState.camera.mode == .orbit
         let halfDiagonal = 1.7320508 * ws.faceDistance
         let camDist = simd_length(framePose.position)
         let fogNear: Float = isOrbit ? camDist + halfDiagonal : 1.0
         let fogFar: Float = isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5
+        // Everything local lies within camDist + halfDiagonal of the camera (the far corner of the
+        // active world); beyond that is SKY — the counterpart world hanging up there — which sits
+        // outside the local atmosphere and must not take fog (from FP it was reading as a silver
+        // blob: the 1→3.5 depth-cue fog saturates long before its ~50-unit distance). +1 margin
+        // covers wall height / top arcs poking past the corner radius.
+        let skyDistance: Float = camDist + halfDiagonal + 1.0
         ptr.pointee = FrameUniformsSwift(
             viewProjectionMatrix: vp,
             cameraPosition: framePose.position,
@@ -683,7 +689,8 @@ class Renderer: NSObject, MTKViewDelegate {
             plainShading: debugPlainShading ? 1 : 0,
             fogNear: fogNear,
             fogFar: fogFar,
-            orbitBlend: isOrbit ? 1 : 0
+            orbitBlend: isOrbit ? 1 : 0,
+            skyDistance: skyDistance
         )
     }
 

@@ -49,6 +49,8 @@ typedef struct
     float fogNear;               // world-units from the camera where distance fog begins
     float fogFar;                // ... and where it saturates
     float orbitBlend;            // 1 = orbit camera (stone ground base), 0 = first-person (gravel)
+    float skyDistance;           // beyond this, geometry is a SKY object (the counterpart world in
+                                 // the sky) — outside the local atmosphere, so it takes no fog
 } FrameUniforms;
 
 typedef struct

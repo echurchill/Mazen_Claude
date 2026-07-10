@@ -280,10 +280,12 @@ class CubeModel {
             }
         }
 
-        // Apply to facelets
+        // Apply to facelets. faceletAt = cached projection + O(1) id map — the old per-cell
+        // findFaceletIndices(face:) linear scan made maze gen O(n⁵): ~58M cubie visits at size 25,
+        // the whole of the startup cost (R2, startup-time fix).
         for row in 0..<n {
             for col in 0..<n {
-                if let (ci, fi) = findFaceletIndices(face: face, row: row, col: col) {
+                if let (ci, fi) = faceletAt(face: face, row: row, col: col) {
                     cubies[ci].facelets[fi].mazeTile.openings = grid[row][col]
                 }
             }
@@ -560,10 +562,10 @@ class CubeModel {
                 let crossing = edgeCrossing(face: face, direction: dir, row: departRow, col: departCol)
                 let arrivalDir = crossing.facing.opposite
 
-                if let (ci, fi) = findFaceletIndices(face: face, row: departRow, col: departCol) {
+                if let (ci, fi) = faceletAt(face: face, row: departRow, col: departCol) {
                     cubies[ci].facelets[fi].mazeTile.openings.insert(mask(for: dir))
                 }
-                if let (ci, fi) = findFaceletIndices(face: crossing.face, row: crossing.row, col: crossing.col) {
+                if let (ci, fi) = faceletAt(face: crossing.face, row: crossing.row, col: crossing.col) {
                     cubies[ci].facelets[fi].mazeTile.openings.insert(mask(for: arrivalDir))
                 }
             }
@@ -603,19 +605,8 @@ class CubeModel {
         }
     }
 
-    private func findFaceletIndices(face: CubeFace, row: Int, col: Int) -> (cubieIndex: Int, faceletIndex: Int)? {
-        for (ci, cubie) in cubies.enumerated() {
-            for (fi, facelet) in cubie.facelets.enumerated() {
-                let worldFace = effectiveFace(cubie: cubie, localFace: facelet.localFace)
-                guard worldFace == face else { continue }
-                let (gr, gc) = gridPosition(cubie: cubie, face: face)
-                if gr == row && gc == col {
-                    return (ci, fi)
-                }
-            }
-        }
-        return nil
-    }
+    // (R2 startup fix: the old findFaceletIndices(face:row:col:) — a full linear scan over every
+    // cubie per lookup — is gone; all callers use faceletAt's cached projection + O(1) id map.)
 
     private func findFaceletIndices(id: FaceletID) -> (cubieIndex: Int, faceletIndex: Int)? {
         return faceletLocation[id]

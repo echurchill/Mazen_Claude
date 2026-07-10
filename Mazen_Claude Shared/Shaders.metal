@@ -464,6 +464,10 @@ fragment float4 fragmentShader(
     if (in.materialID != 4 && in.materialID != 12 && in.materialID != 13) {
         float dist = distance(in.worldPosition, frame.cameraPosition);
         float fogFactor = smoothstep(frame.fogNear, frame.fogFar, dist);
+        // Sky objects — geometry beyond the local world's far corner (the counterpart world
+        // hanging in the sky) — sit outside the local atmosphere: no fog, like the sun/moon
+        // billboards (which are exempted by material above).
+        if (dist > frame.skyDistance) { fogFactor = 0.0; }
 
         float t = frame.time * 0.08;
         float2 fogUV = in.worldPosition.xy * 2.5 + float2(in.worldPosition.z * 1.3);
