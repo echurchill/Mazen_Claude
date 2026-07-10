@@ -61,6 +61,30 @@ class Renderer: NSObject, MTKViewDelegate {
     let residencySet: MTLResidencySet
     let vertexArgTable: MTL4ArgumentTable
     let fragmentArgTable: MTL4ArgumentTable
+
+    /// Attachment textures already registered in the residency set. MTKView owns the drawable
+    /// pool / MSAA / depth textures (we never create them), so Metal 4's explicit-residency rule
+    /// was being violated every frame ("attachment … not added to any residency set" under API
+    /// validation — technically UB). They're registered lazily on first appearance; the pool is
+    /// tiny (~3 drawables + MSAA + depth) and only grows on resize.
+    private var residentAttachments = Set<ObjectIdentifier>()
+
+    private func ensureAttachmentsResident(_ desc: MTL4RenderPassDescriptor) {
+        var added = false
+        func ensure(_ tex: MTLTexture?) {
+            guard let tex else { return }
+            let id = ObjectIdentifier(tex as AnyObject)
+            guard !residentAttachments.contains(id) else { return }
+            residencySet.addAllocation(tex)
+            residentAttachments.insert(id)
+            added = true
+        }
+        ensure(desc.colorAttachments[0].texture)
+        ensure(desc.colorAttachments[0].resolveTexture)
+        ensure(desc.depthAttachment.texture)
+        ensure(desc.stencilAttachment.texture)
+        if added { residencySet.commit() }
+    }
 #endif
 
     let endFrameEvent: MTLSharedEvent
@@ -867,6 +891,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
         guard let drawable = view.currentDrawable,
               let renderPassDesc = view.currentMTL4RenderPassDescriptor else { return }
+        ensureAttachmentsResident(renderPassDesc)
 
         let waitValue = UInt64(frameIndex - maxBuffersInFlight)
         endFrameEvent.wait(untilSignaledValue: waitValue, timeoutMS: 10)
@@ -942,9 +967,10 @@ class Renderer: NSObject, MTKViewDelegate {
         }
 
         encoder.label = "Maze Render"
-        encoder.setCullMode(.back)
+        // (No pipeline/cull set here — the sky pass below sets its own immediately, and the scene
+        // state is established right after it. Setting them twice tripped Metal API validation's
+        // "previous set… was unused" every frame.)
         encoder.setFrontFacing(.counterClockwise)
-        encoder.setRenderPipelineState(pipelineState)
 
         encoder.setArgumentTable(vertexArgTable, stages: .vertex)
         encoder.setArgumentTable(fragmentArgTable, stages: .fragment)
