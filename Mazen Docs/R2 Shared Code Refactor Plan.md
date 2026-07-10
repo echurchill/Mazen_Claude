@@ -1,6 +1,8 @@
 # R2 — Shared-Code Refactor & Optimization Plan
 
-*Drafted 2026-07-10 from a full read of `Mazen_Claude Shared/` (~5,000 lines). Follows the R1 (WorldScale) convention: every step behavior-neutral unless stated, verified before the next. This is a **tracker** — check items off as they land. Status: Tier 1 ✅ complete & verified; R2.11 + R2.16 queued next (Eddie, 2026-07-10); rest open.*
+*Drafted 2026-07-10 from a full read of `Mazen_Claude Shared/` (~5,000 lines). Follows the R1 (WorldScale) convention: every step behavior-neutral unless stated, verified before the next.*
+
+**STATUS: DORMANT (Eddie, 2026-07-10).** The backbone is done — Tier 1, R2.8 (Renderer split), R2.11, R2.13, R2.14, R2.16, plus two unplanned wins found along the way (the O(n⁵) startup scan; Metal-4 attachment residency). The remaining items are **trigger-armed, not scheduled**: R2.6→R2.7 fire when iOS/perf gets real; R2.12 folds into M15's movement work; R2.9/R2.10/R2.15 fire opportunistically per their notes. Reopen this doc when a trigger fires.*
 
 **Ratings.** *Confidence* = how certain the change is correct & worth it (High / Med / Low). *Danger* = regression blast radius if done carelessly (None / Low / Med / High). Every item lists its verification.
 
