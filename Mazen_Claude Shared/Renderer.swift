@@ -324,11 +324,11 @@ class Renderer: NSObject, MTKViewDelegate {
         // Textured USD props at the plaza centre + its diagonal neighbours; solid-colour OBJ
         // temple pieces at the edge-middle tiles.
         let loadedProps: [ImportedProp] = [
-            loadProp("stone_fire_pit_2k",     "stone_fire_pit_diff_2k",     ( 0,  0), 0.35),
+            // loadProp("stone_fire_pit_2k",  "stone_fire_pit_diff_2k",     ( 0,  0), 0.35),  // removed for now (Eddie)
             loadProp("horse_statue_01_2k",    "horse_statue_01_diff_2k",    (-1, -1), 0.60),
             loadProp("tree_stump_01_2k",      "tree_stump_01_diff_2k",      (-1,  1), 0.30),
             loadProp("tree_stump_02_2k",      "tree_stump_02_diff_2k",      ( 1, -1), 0.30),
-            loadProp("old_military_crate_2k", "old_military_crate_diff_2k", ( 1,  1), 0.32),
+            // loadProp("old_military_crate_2k", "old_military_crate_diff_2k", ( 1,  1), 0.32),  // removed for now (Eddie)
             loadSolid("Modular Temple/Pillar_Large_Base.obj", (-1, 0), 0.55),
             loadSolid("Modular Temple/Prop_Flag_Sun.obj",     ( 0, -1), 0.50),
             loadSolid("Modular Temple/Prop_Flag_Moon.obj",    ( 0,  1), 0.50),
