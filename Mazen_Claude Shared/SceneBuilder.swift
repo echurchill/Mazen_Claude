@@ -144,41 +144,9 @@ final class SceneBuilder {
                         opaqueFogTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.fogLayers[0]))
 
                     case .adjacent:
-                        let openings = facelet.mazeTile.openings
-                        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
-                        let uvT = facelet.mazeTile.uvTurns
-                        let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)
-                        // Floor: inflated per-vertex (rest matrix + roundness).
-                        let floorInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-                            materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
-                            styleSeed: facelet.mazeTile.styleSeed,
-                            spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
-                        mazeFloorTiles[key, default: []].append(TileEntry(instance: floorInst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
-                        if let pfm = tileMeshLib.pathFloorMesh(for: openings, uvTurns: uvT) {
-                            let pathInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
-                                materialID: 9, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
-                                styleSeed: facelet.mazeTile.styleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
-                            mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
-                        }
-                        // Wall/post: inflate per-vertex (M14b Phase 2) — footprint + extrude along the
-                        // curved normal, so hedges stand up from the curved floor instead of levering.
-                        let cfg = facelet.mazeTile.edgeConfigKey
-                        if let wm = tileMeshLib.wallMesh(configKey: cfg) {
-                            let wallInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-                                materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
-                                styleSeed: facelet.mazeTile.styleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
-                            mazeWallTiles[cfg, default: []].append(TileEntry(instance: wallInst, mesh: wm))
-                        }
-                        if let pm = tileMeshLib.postMesh(configKey: cfg) {
-                            let postInst = InstanceDataSwift(modelMatrix: restM, baseColor: Self.postColor,
-                                materialID: 8, tileID: UInt32(facelet.id.rawValue),
-                                discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
-                            mazePostTiles[cfg, default: []].append(TileEntry(instance: postInst, mesh: pm))
-                        }
-
+                        // Revealed maze geometry + the dissolve fog that is still burning off it.
+                        emitMazeTile(facelet, restM: restM, spin: spin,
+                                     roundness: roundness, invHalf: invHalf, tileMeshLib: tileMeshLib)
                         let fogInst = InstanceDataSwift(
                             modelMatrix: matrix,
                             baseColor: faceColor * 0.9,
@@ -192,40 +160,8 @@ final class SceneBuilder {
                         }
 
                     case .discovered:
-                        let openings = facelet.mazeTile.openings
-                        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
-                        let uvT = facelet.mazeTile.uvTurns
-                        let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)
-                        // Floor: inflated per-vertex (rest matrix + roundness).
-                        let floorInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-                            materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
-                            styleSeed: facelet.mazeTile.styleSeed,
-                            spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
-                        mazeFloorTiles[key, default: []].append(TileEntry(instance: floorInst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
-                        if let pfm = tileMeshLib.pathFloorMesh(for: openings, uvTurns: uvT) {
-                            let pathInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
-                                materialID: 9, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
-                                styleSeed: facelet.mazeTile.styleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
-                            mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
-                        }
-                        // Wall/post: inflate per-vertex (M14b Phase 2) — footprint + extrude along the
-                        // curved normal, so hedges stand up from the curved floor instead of levering.
-                        let cfg = facelet.mazeTile.edgeConfigKey
-                        if let wm = tileMeshLib.wallMesh(configKey: cfg) {
-                            let wallInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-                                materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
-                                styleSeed: facelet.mazeTile.styleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
-                            mazeWallTiles[cfg, default: []].append(TileEntry(instance: wallInst, mesh: wm))
-                        }
-                        if let pm = tileMeshLib.postMesh(configKey: cfg) {
-                            let postInst = InstanceDataSwift(modelMatrix: restM, baseColor: Self.postColor,
-                                materialID: 8, tileID: UInt32(facelet.id.rawValue),
-                                discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
-                            mazePostTiles[cfg, default: []].append(TileEntry(instance: postInst, mesh: pm))
-                        }
+                        emitMazeTile(facelet, restM: restM, spin: spin,
+                                     roundness: roundness, invHalf: invHalf, tileMeshLib: tileMeshLib)
                     }
 
                     // Props (M10 Phase G) — on revealed tiles only. Built on the *rest* matrix and
@@ -481,6 +417,48 @@ final class SceneBuilder {
         }
 
         return SceneDrawData(opaque: opaqueDrawCalls, translucent: translucentDrawCalls, wallRange: wallRange)
+    }
+
+    /// Emit one revealed tile's maze geometry — floor, paved path-cross, hedge walls, jamb posts —
+    /// all on the per-vertex inflation path (rest placement + per-instance spin/roundness), keyed
+    /// into their instancing buckets. Shared by the `.adjacent` and `.discovered` tile states
+    /// (R2.2: previously two hand-maintained copies that had to be edited in lockstep).
+    private func emitMazeTile(_ facelet: MazeFacelet, restM: float4x4, spin: float4x4,
+                              roundness: Float, invHalf: Float, tileMeshLib: TileMeshLibrary) {
+        let openings = facelet.mazeTile.openings
+        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
+        let uvT = facelet.mazeTile.uvTurns
+        let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)
+        // Floor: inflated per-vertex (rest matrix + roundness).
+        let floorInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
+            materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+            styleSeed: facelet.mazeTile.styleSeed,
+            spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
+        mazeFloorTiles[key, default: []].append(TileEntry(instance: floorInst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
+        if let pfm = tileMeshLib.pathFloorMesh(for: openings, uvTurns: uvT) {
+            let pathInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
+                materialID: 9, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                styleSeed: facelet.mazeTile.styleSeed,
+                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
+            mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
+        }
+        // Wall/post: inflate per-vertex (M14b Phase 2) — footprint + extrude along the
+        // curved normal, so hedges stand up from the curved floor instead of levering.
+        let cfg = facelet.mazeTile.edgeConfigKey
+        if let wm = tileMeshLib.wallMesh(configKey: cfg) {
+            let wallInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
+                materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                styleSeed: facelet.mazeTile.styleSeed,
+                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
+            mazeWallTiles[cfg, default: []].append(TileEntry(instance: wallInst, mesh: wm))
+        }
+        if let pm = tileMeshLib.postMesh(configKey: cfg) {
+            let postInst = InstanceDataSwift(modelMatrix: restM, baseColor: Self.postColor,
+                materialID: 8, tileID: UInt32(facelet.id.rawValue),
+                discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed,
+                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
+            mazePostTiles[cfg, default: []].append(TileEntry(instance: postInst, mesh: pm))
+        }
     }
 
     func buildSingleTile(tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer) -> SceneDrawData {
