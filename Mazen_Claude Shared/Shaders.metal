@@ -329,9 +329,9 @@ fragment float4 fragmentShader(
         float3 stoneColor = diffuseArray.sample(texSampler, in.texCoord, 2).rgb;
         float3 stoneN = normalArray.sample(texSampler, in.texCoord, 2).rgb * 2.0 - 1.0;
 
-        // Orbit mode: stone base instead of gravel
-        float camDist = length(frame.cameraPosition);
-        float orbitBlend = smoothstep(3.0, 5.0, camDist);
+        // Orbit mode: stone base instead of gravel (R2.11: camera-mode flag from the CPU — the old
+        // smoothstep(3,5,camDist) proxy misread FP as orbit on larger cubes)
+        float orbitBlend = frame.orbitBlend;
         float3 baseColor = mix(gravelColor, stoneColor, orbitBlend);
         float3 baseN = mix(gravelN, stoneN, orbitBlend);
 
@@ -458,14 +458,12 @@ fragment float4 fragmentShader(
 
     color *= lighting * in.aoFactor;
 
-    // Distance fog — greyscale textured, auto-adapts for FP vs orbit
+    // Distance fog — greyscale textured. Range comes size-derived from the CPU (R2.11): FP keeps
+    // the historical 1→3.5 depth-cue; in orbit it starts beyond the cube's far corner, so the
+    // planet reads clean while truly distant things (the counterpart sky-world) stay hazed.
     if (in.materialID != 4 && in.materialID != 12 && in.materialID != 13) {
         float dist = distance(in.worldPosition, frame.cameraPosition);
-        float camFromCenter = length(frame.cameraPosition);
-        float orbitFactor = smoothstep(3.0, 5.0, camFromCenter);
-        float fogNear = mix(1.0, 4.0, orbitFactor);
-        float fogFar = mix(3.5, 14.0, orbitFactor);
-        float fogFactor = smoothstep(fogNear, fogFar, dist);
+        float fogFactor = smoothstep(frame.fogNear, frame.fogFar, dist);
 
         float t = frame.time * 0.08;
         float2 fogUV = in.worldPosition.xy * 2.5 + float2(in.worldPosition.z * 1.3);

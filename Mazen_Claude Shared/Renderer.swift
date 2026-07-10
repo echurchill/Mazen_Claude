@@ -657,6 +657,16 @@ class Renderer: NSObject, MTKViewDelegate {
         let align = dot(lightDir, moonDir)
         let et = max(0, min(1, (align - 0.9981) / (0.99999 - 0.9981)))
         let eclipse = et * et * (3 - 2 * et)
+        // R2.11: size-derived fog. First-person keeps the historical values exactly (the fog is a
+        // depth cue on far tiles there). In orbit the fog now begins BEYOND the cube's far corner
+        // (camera distance + √3·halfN), so the planet always reads with clean, unfogged textures —
+        // the old fixed 4→14 range was tuned for the size-5 world and silver-veiled everything at
+        // size 7+. Far-away things (the counterpart world in the sky) stay fully hazed, as before.
+        let isOrbit = gameState.camera.mode == .orbit
+        let halfDiagonal = 1.7320508 * ws.faceDistance
+        let camDist = simd_length(framePose.position)
+        let fogNear: Float = isOrbit ? camDist + halfDiagonal : 1.0
+        let fogFar: Float = isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5
         ptr.pointee = FrameUniformsSwift(
             viewProjectionMatrix: vp,
             cameraPosition: framePose.position,
@@ -670,7 +680,10 @@ class Renderer: NSObject, MTKViewDelegate {
             moonIntensity: 0.30,
             eclipseFactor: eclipse,
             fadeAmount: transitionPhase == .none ? 0 : transitionT,
-            plainShading: debugPlainShading ? 1 : 0
+            plainShading: debugPlainShading ? 1 : 0,
+            fogNear: fogNear,
+            fogFar: fogFar,
+            orbitBlend: isOrbit ? 1 : 0
         )
     }
 
