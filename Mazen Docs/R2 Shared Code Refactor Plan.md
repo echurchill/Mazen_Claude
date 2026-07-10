@@ -10,7 +10,7 @@
 
 ## Tier 1 — high value, low risk (the "M14b cleanup" pass; ~a day, mostly deletion + tests)
 
-*✅ Tier 1 landed 2026-07-10 (commits `f234706`…`e7fdb16`), tests-first as planned. 7,060 → 22,142 checks. Verified: both targets build, r==0 pixel-path covered by tests, FP walk + twist + horse-on-pedestal eyeballed at roundness 0.5. Note: R2.5c (bandaging table) already existed; the orbit player-marker at r>0 is test-covered but wasn't personally eyeballed — one glance in orbit mode confirms it.*
+*✅ Tier 1 landed 2026-07-10 (commits `f234706`…`e7fdb16`), tests-first as planned. 7,060 → 22,142 checks. Verified: both targets build, r==0 pixel-path covered by tests, FP walk + twist + horse-on-pedestal eyeballed at roundness 0.5, and **Eddie confirmed the orbit player marker + other seated objects look correct** — Tier 1 fully verified, nothing outstanding. (Note: R2.5c bandaging table already existed.)*
 
 - [x] **R2.1 Consolidate the three placement APIs** — `CubeModel` has `worldMatrix` (still carrying the **superseded** M14 per-tile inflation *and* the 9% seam-overlap hack), `restMatrix`, and `inflatedPlacement`. The inflated `worldMatrix` branch now only feeds the fog anchors + orbit player-marker, and the overlap hack scales their bases. Delete the per-tile branch, make `worldMatrix` ≡ `restMatrix`, seat fog/marker via `inflatedPlacement`.
   *Confidence:* **High** (path is superseded; consumers enumerated). *Danger:* **Low–Med** (fog/marker placement changes at roundness > 0 — that's the *point*, but must be eyeballed). *Effort:* small. *Verify:* R2.5a test (rest == flat world) + visual: fog + player marker at 0 and 0.5.
