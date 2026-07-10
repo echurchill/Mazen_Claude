@@ -16,7 +16,9 @@ import simd
 ///    needs no other edits. The coefficients are chosen to reproduce the historical
 ///    size-5 values exactly, keeping the R1 refactor behavior-neutral.
 struct WorldScale {
-    /// Largest cube size the renderer's instance buffers are provisioned for.
+    /// Largest cube size the engine supports (R2.16). The renderer's instance buffers are
+    /// provisioned for this size, and `init` clamps `cubeSize` to it — so a world larger than
+    /// the buffers can hold is impossible to construct, by design (Eddie's cap, 2026-07-10).
     static let maxSupportedSize = 25
 
     let cubeSize: Int
@@ -65,12 +67,17 @@ struct WorldScale {
     var firstPersonFOVDegrees: Float = 58.0
     var eyeHeight: Float = 0.09
     var cameraNearZ: Float = 0.01
-    // Far enough to contain the M9 sun at its pushed-out orbit (176) plus the orbit-camera
-    // distance and the sun's half-size, with margin (~176 + 21 + 5.5 ≈ 203).
-    var cameraFarZ: Float = 220.0
+    // Far enough to contain the M9 sun (orbit 176 + half-size 5.5) seen from the orbit camera at
+    // its max zoom-out (3·size) on the far side, with margin. Anchored: exactly the historical 220
+    // for sizes ≤ 10; grows for the larger dev sizes (R2.16 — at size 25 the max-zoom camera sits
+    // at 75, and a fixed 220 would clip the sun on the opposite side).
+    var cameraFarZ: Float { max(220.0, 3.0 * sizeF + 190.0) }
 
     init(cubeSize: Int) {
-        self.cubeSize = cubeSize
+        // R2.16: hard upper limit — clamp rather than trust callers, so nothing can ever build
+        // a world bigger than the instance buffers are provisioned for. (Lower bound 2 keeps the
+        // math meaningful; the game itself uses 3+.)
+        self.cubeSize = min(max(cubeSize, 2), Self.maxSupportedSize)
     }
 
     // MARK: - Derived world extents (scale with cube size; exact at size 5)

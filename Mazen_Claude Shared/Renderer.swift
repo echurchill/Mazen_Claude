@@ -286,8 +286,12 @@ class Renderer: NSObject, MTKViewDelegate {
         samplerDesc.tAddressMode = .repeat
         self.texSampler = device.makeSamplerState(descriptor: samplerDesc)!
 
-        // Per-frame buffers
-        let maxInstances = 6 * WorldScale.maxSupportedSize * WorldScale.maxSupportedSize
+        // Per-frame buffers. R2.16: a tile emits SEVERAL instances (frame rail + floor + path-cross
+        // + wall + posts; adjacent tiles add dissolve-fog layers; plus props/marker/celestials), so
+        // provision a generous per-tile budget — the old 1-per-tile math silently overran beyond
+        // ~size 13. SceneBuilder now also hard-guards the write, so any future shortfall is loud.
+        let instancesPerTileBudget = 8
+        let maxInstances = 6 * WorldScale.maxSupportedSize * WorldScale.maxSupportedSize * instancesPerTileBudget
         let instanceSize = MemoryLayout<InstanceDataSwift>.stride * maxInstances
         let frameSize = MemoryLayout<FrameUniformsSwift>.stride
 

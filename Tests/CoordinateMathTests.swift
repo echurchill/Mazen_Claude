@@ -32,7 +32,7 @@ struct CoordinateMathTests {
     }
 
     static func main() {
-        let sizes = [3, 5, 7, 9]
+        let sizes = [3, 5, 7, 9, 25]   // 25 = the R2.16 hard cap — the math must hold at the ceiling
         for n in sizes {
             testProjectionBijection(size: n)
             testGridWorldConsistency(size: n)
@@ -45,6 +45,7 @@ struct CoordinateMathTests {
         testDirectionMaskRotation()
         testPropRotation()
         testInflateGoldens()
+        testSizeCap()
 
         print("")
         if failed == 0 {
@@ -389,5 +390,15 @@ struct CoordinateMathTests {
         m.roundness = 0
         let p = SIMD3<Float>(0.37, -0.91, 1.0)
         check(m.inflatedUnitPoint(p) == p, "inflate r=0 identity")
+    }
+
+    /// R2.16 — the hard size cap: WorldScale clamps cubeSize to maxSupportedSize (25), so a world
+    /// bigger than the renderer's instance buffers can hold is impossible to construct.
+    static func testSizeCap() {
+        check(WorldScale(cubeSize: 99).cubeSize == WorldScale.maxSupportedSize, "size 99 clamps to cap")
+        check(WorldScale(cubeSize: 25).cubeSize == 25, "cap itself passes through")
+        check(WorldScale(cubeSize: 7).cubeSize == 7, "normal sizes untouched")
+        check(WorldScale(cubeSize: 1).cubeSize == 2, "floor clamps to 2")
+        check(CubeModel(size: 99).size == WorldScale.maxSupportedSize, "CubeModel inherits the cap")
     }
 }

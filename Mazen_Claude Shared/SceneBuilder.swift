@@ -240,7 +240,21 @@ final class SceneBuilder {
             }
         }
 
-        // Pack instances — opaque first, then translucent
+        // Pack instances — opaque first, then translucent.
+        // R2.16 hard guard: the writes below are raw `ptr[idx]` stores with no per-store bounds
+        // check, so prove the whole frame fits BEFORE writing — a silent buffer overrun (the old
+        // failure mode beyond ~size 13) must never be possible again. Provisioning in Renderer
+        // budgets 8 instances/tile, so this should be unreachable; if it ever fires, the budget
+        // (not this check) is what needs raising.
+        let totalInstances = frameTiles.count
+            + mazeFloorTiles.values.reduce(0) { $0 + $1.count }
+            + mazePathFloorTiles.values.reduce(0) { $0 + $1.count }
+            + mazeWallTiles.values.reduce(0) { $0 + $1.count }
+            + mazePostTiles.values.reduce(0) { $0 + $1.count }
+            + mazePropTiles.values.reduce(0) { $0 + $1.count }
+            + opaqueFogTiles.count + dissolveTiles.count + celestialTiles.count
+        precondition(totalInstances <= capacity,
+                     "SceneBuilder instance overflow: \(totalInstances) > capacity \(capacity) — raise instancesPerTileBudget in Renderer")
         var idx = 0
         var opaqueDrawCalls: [DrawCall] = []
         var translucentDrawCalls: [DrawCall] = []
