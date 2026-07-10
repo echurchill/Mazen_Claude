@@ -84,15 +84,9 @@ final class SceneBuilder {
         for key in mazePostTiles.keys { mazePostTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazePropTiles.keys { mazePropTiles[key]?.removeAll(keepingCapacity: true) }
 
-        // Precompute slice rotation matrix if active
-        var sliceAnimMatrix: float4x4?
+        // Precompute the in-flight twist matrix if active (single source: SliceRotation, R2.3)
         let sr = gameState.sliceRotation
-        if sr.isActive {
-            let axisVec: SIMD3<Float> = sr.axis == 0 ? SIMD3(1,0,0) : sr.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
-            let t = sr.progress * sr.progress * (3 - 2 * sr.progress)
-            let currentAngle = sr.angle * t
-            sliceAnimMatrix = float4x4.rotation(radians: currentAngle, axis: axisVec)
-        }
+        let sliceAnimMatrix: float4x4? = sr.isActive ? sr.currentMatrix : nil
 
         for face in CubeFace.allCases {
             for row in 0..<model.size {

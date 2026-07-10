@@ -706,9 +706,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let spin = gameState.worldSpinMatrix()
         let model = gameState.cubeModel
         let sr = gameState.sliceRotation
-        let sliceAxis: SIMD3<Float> = sr.axis == 0 ? SIMD3(1,0,0) : sr.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
-        let sliceT = sr.progress * sr.progress * (3 - 2 * sr.progress)   // smoothstep, matches SceneBuilder
-        let sliceMat = float4x4.rotation(radians: sr.angle * sliceT, axis: sliceAxis)
+        let sliceMat = sr.currentMatrix   // single source: SliceRotation (R2.3)
         let step = ws.subCellStep
         var inst = 0
 

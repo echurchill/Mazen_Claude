@@ -123,10 +123,7 @@ struct CameraState {
         facingWorld = normalize(simd_quatf(angle: lookPitch, axis: rightAxis).act(facingWorld))
 
         if sliceRotation.isActive && sliceRotation.playerCubieIndex >= 0 && sliceRotation.affectedCubies.contains(sliceRotation.playerCubieIndex) {
-            let axisVec: SIMD3<Float> = sliceRotation.axis == 0 ? SIMD3(1,0,0) : sliceRotation.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1)
-            let t = Self.smoothstep(sliceRotation.progress)
-            let currentAngle = sliceRotation.angle * t
-            let rotQ = simd_quatf(angle: currentAngle, axis: axisVec)
+            let rotQ = sliceRotation.currentQuat   // single source: SliceRotation (R2.3)
             eyePos = rotQ.act(eyePos)
             facingWorld = rotQ.act(facingWorld)
             upDir = rotQ.act(upDir)

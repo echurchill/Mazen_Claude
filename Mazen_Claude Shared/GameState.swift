@@ -37,6 +37,20 @@ class GameState {
         var speed: Float = 2.5
         var affectedCubies: Set<Int> = []
         var playerCubieIndex: Int = -1
+
+        // R2.3: the ONE definition of the in-flight twist transform. SceneBuilder, the asset
+        // instancer, and the camera all animate off these — previously three hand-copied
+        // smoothstep+rotation constructions that had to be kept in sync by comment.
+        var axisVector: SIMD3<Float> {
+            axis == 0 ? SIMD3(1, 0, 0) : axis == 1 ? SIMD3(0, 1, 0) : SIMD3(0, 0, 1)
+        }
+        /// Smoothstep-eased current angle of the in-flight twist.
+        var currentAngle: Float {
+            let t = progress * progress * (3 - 2 * progress)
+            return angle * t
+        }
+        var currentMatrix: float4x4 { float4x4.rotation(radians: currentAngle, axis: axisVector) }
+        var currentQuat: simd_quatf { simd_quatf(angle: currentAngle, axis: axisVector) }
     }
     var sliceRotation = SliceRotation()
 
