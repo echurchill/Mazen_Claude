@@ -333,7 +333,10 @@ class CubeModel {
     /// Low-distortion cube→sphere map (the standard "Cobb"/`√` cube-sphere): pushes a point
     /// on the unit cube `[-1,1]³` onto the unit sphere, then blends back toward the flat cube
     /// point by `roundness`. `roundness == 0` returns the point unchanged (no-op fast path).
-    private func inflatedUnitPoint(_ p: SIMD3<Float>) -> SIMD3<Float> {
+    /// ⚠️ Twin implementation: must stay bit-identical to `m14bInflate` in Shaders.metal — the
+    /// camera/props seat on THIS function while the floor renders through the shader one. The
+    /// golden-value test in CoordinateMathTests is the tripwire (internal, not private, for it).
+    func inflatedUnitPoint(_ p: SIMD3<Float>) -> SIMD3<Float> {
         guard roundness > 0 else { return p }
         let x = p.x, y = p.y, z = p.z
         let sx = x * (max(0, 1 - (y*y + z*z) / 2 + (y*y * z*z) / 3)).squareRoot()

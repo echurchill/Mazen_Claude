@@ -39,9 +39,12 @@ struct CoordinateMathTests {
             testEdgeCrossingRoundTrip(size: n)
             testSliceRotation(size: n)
             testBandagedLegality(size: n)
+            testRestPlacement(size: n)
+            testFootprintContinuity(size: n)
         }
         testDirectionMaskRotation()
         testPropRotation()
+        testInflateGoldens()
 
         print("")
         if failed == 0 {
@@ -268,5 +271,123 @@ struct CoordinateMathTests {
         var north = Prop(kind: .chest, subRow: 0, subCol: 1, facing: .n); north.rotate(quarterTurns: 1)
         check(north.subRow == 1 && north.subCol == 2, "prop north sub-cell → east (got \(north.subRow),\(north.subCol))")
         check(north.facing == .e, "prop north facing N→E on +1 turn")
+    }
+
+    // MARK: - M14b placement invariants (R2.5)
+
+    static func col3(_ m: float4x4, _ i: Int) -> SIMD3<Float> {
+        let c = i == 0 ? m.columns.0 : i == 1 ? m.columns.1 : i == 2 ? m.columns.2 : m.columns.3
+        return SIMD3(c.x, c.y, c.z)
+    }
+
+    static func approx(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ eps: Float) -> Bool {
+        abs(a.x - b.x) < eps && abs(a.y - b.y) < eps && abs(a.z - b.z) < eps
+    }
+
+    /// R2.5a — the rest placement is the flat cube placement, independently re-derived:
+    /// basis = (tangent, bitangent, normal), center = normal·halfN + tangent·colF + bitangent·rowF.
+    /// Also: `inflatedPlacement` at roundness 0 == rest basis with the origin offset in-plane,
+    /// and the rest frame must NOT change with roundness (it is the pre-inflation frame).
+    static func testRestPlacement(size n: Int) {
+        let m = CubeModel(size: n)
+        let halfN = Float(n) / 2.0
+        let spacing = m.worldScale.cellSpacing
+        for face in CubeFace.allCases {
+            for row in 0..<n {
+                for col in 0..<n {
+                    let colF = (Float(col) + 0.5 - halfN) * spacing
+                    let rowF = (Float(row) + 0.5 - halfN) * spacing
+                    let center = face.normal * halfN + face.tangent * colF + face.bitangent * rowF
+
+                    m.roundness = 0
+                    let rest = m.restMatrix(face: face, row: row, col: col)
+                    check(approx(col3(rest, 0), face.tangent, 1e-6) &&
+                          approx(col3(rest, 1), face.bitangent, 1e-6) &&
+                          approx(col3(rest, 2), face.normal, 1e-6),
+                          "size \(n): rest basis (\(face),\(row),\(col))")
+                    check(approx(col3(rest, 3), center, 1e-5), "size \(n): rest center (\(face),\(row),\(col))")
+
+                    // roundness must not leak into the rest frame
+                    m.roundness = 0.7
+                    let restR = m.restMatrix(face: face, row: row, col: col)
+                    check(approx(col3(restR, 3), center, 1e-5) && approx(col3(restR, 2), face.normal, 1e-6),
+                          "size \(n): rest is roundness-independent (\(face),\(row),\(col))")
+
+                    // flat inflatedPlacement == rest basis + in-plane offset origin
+                    m.roundness = 0
+                    let off = m.inflatedPlacement(face: face, row: row, col: col, localX: 0.25, localY: -0.4)
+                    let expected = center + face.tangent * 0.25 + face.bitangent * (-0.4)
+                    check(approx(col3(off, 0), face.tangent, 1e-6) && approx(col3(off, 2), face.normal, 1e-6),
+                          "size \(n): flat placement basis (\(face),\(row),\(col))")
+                    check(approx(col3(off, 3), expected, 1e-5), "size \(n): flat placement origin (\(face),\(row),\(col))")
+                }
+            }
+        }
+    }
+
+    /// R2.5b — footprint continuity: adjacent tiles' shared-edge placements coincide (position AND
+    /// frame) at several roundness values. This is the property that makes the curved surface
+    /// seamless — tile A's east edge and its east neighbour's west edge are the SAME cube point,
+    /// so they must inflate to the same place with the same local frame.
+    static func testFootprintContinuity(size n: Int) {
+        let m = CubeModel(size: n)
+        let h = m.worldScale.cellSpacing / 2
+        for r: Float in [0.0, 0.3, 1.0] {
+            m.roundness = r
+            for face in CubeFace.allCases {
+                for row in 0..<n {
+                    for col in 0..<(n - 1) {   // col-adjacent pair, shared edge at +localX / −localX
+                        let a = m.inflatedPlacement(face: face, row: row, col: col, localX: h, localY: 0.2)
+                        let b = m.inflatedPlacement(face: face, row: row, col: col + 1, localX: -h, localY: 0.2)
+                        check(approx(col3(a, 3), col3(b, 3), 1e-4), "size \(n) r=\(r): col-seam pos (\(face),\(row),\(col))")
+                        check(approx(col3(a, 0), col3(b, 0), 1e-4) && approx(col3(a, 2), col3(b, 2), 1e-4),
+                              "size \(n) r=\(r): col-seam frame (\(face),\(row),\(col))")
+                    }
+                }
+                for row in 0..<(n - 1) {
+                    for col in 0..<n {         // row-adjacent pair, shared edge at +localY / −localY
+                        let a = m.inflatedPlacement(face: face, row: row, col: col, localX: -0.3, localY: h)
+                        let b = m.inflatedPlacement(face: face, row: row + 1, col: col, localX: -0.3, localY: -h)
+                        check(approx(col3(a, 3), col3(b, 3), 1e-4), "size \(n) r=\(r): row-seam pos (\(face),\(row),\(col))")
+                        check(approx(col3(a, 2), col3(b, 2), 1e-4), "size \(n) r=\(r): row-seam normal (\(face),\(row),\(col))")
+                    }
+                }
+            }
+            // Cross-face: +Z's east edge meets +X's west edge at the same cube point — positions
+            // must coincide there too (frames legitimately differ; each face has its own basis).
+            for row in 0..<n {
+                let a = m.inflatedPlacement(face: .positiveZ, row: row, col: n - 1, localX: h, localY: 0)
+                let b = m.inflatedPlacement(face: .positiveX, row: row, col: 0, localX: -h, localY: 0)
+                check(approx(col3(a, 3), col3(b, 3), 1e-4), "size \(n) r=\(r): cross-face edge pos row \(row)")
+            }
+        }
+    }
+
+    /// R2.5d — golden values for the Cobb cube→sphere map. These constants were computed
+    /// independently (double-precision, outside this codebase) and double as the spec that BOTH
+    /// twin implementations must match: `CubeModel.inflatedUnitPoint` (tested here) and
+    /// `m14bInflate` in Shaders.metal (same math on the GPU; guarded by review + this spec).
+    static func testInflateGoldens() {
+        let m = CubeModel(size: 3)
+        let cases: [(p: SIMD3<Float>, r: Float, want: SIMD3<Float>)] = [
+            (SIMD3( 1.0, 0.5, -0.25), 0.5, SIMD3( 0.9606947,  0.4249256, -0.2096254)),
+            (SIMD3( 1.0, 0.5, -0.25), 1.0, SIMD3( 0.9213893,  0.3498512, -0.1692508)),
+            (SIMD3( 0.2, -0.8,  0.6), 0.5, SIMD3( 0.1759474, -0.7588426,  0.5452917)),
+            (SIMD3( 0.2, -0.8,  0.6), 1.0, SIMD3( 0.1518947, -0.7176852,  0.4905833)),
+            (SIMD3( 1.0,  1.0,  1.0), 1.0, SIMD3( 0.5773503,  0.5773503,  0.5773503)),  // corner → 1/√3
+            (SIMD3( 1.0,  1.0,  1.0), 0.5, SIMD3( 0.7886751,  0.7886751,  0.7886751)),
+            (SIMD3( 0.0,  0.0,  1.0), 1.0, SIMD3( 0.0,        0.0,        1.0)),        // face centre fixed
+            (SIMD3(-0.7,  0.3,  1.0), 0.5, SIMD3(-0.5937468,  0.2470180,  0.9256466)),
+            (SIMD3(-0.7,  0.3,  1.0), 1.0, SIMD3(-0.4874936,  0.1940361,  0.8512931)),
+        ]
+        for c in cases {
+            m.roundness = c.r
+            let got = m.inflatedUnitPoint(c.p)
+            check(approx(got, c.want, 5e-6), "inflate golden p=\(c.p) r=\(c.r): got \(got), want \(c.want)")
+        }
+        // r == 0 is the exact identity (the guard path).
+        m.roundness = 0
+        let p = SIMD3<Float>(0.37, -0.91, 1.0)
+        check(m.inflatedUnitPoint(p) == p, "inflate r=0 identity")
     }
 }
