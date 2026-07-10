@@ -97,14 +97,16 @@ final class SceneBuilder {
         for face in CubeFace.allCases {
             for row in 0..<model.size {
                 for col in 0..<model.size {
-                    var matrix = model.worldMatrix(face: face, row: row, col: col)
+                    // M14b: the maze surface (floors/walls/posts/frame/props) inflates per-vertex in
+                    // the shader from the *un-spun rest* placement + per-instance spin/roundness.
+                    // `matrix` — a rigid seat ON the curved surface at the tile centre — anchors only
+                    // the translucent fog layers (R2.1: via inflatedPlacement, not the old per-tile-
+                    // inflated worldMatrix).
+                    var matrix = model.inflatedPlacement(face: face, row: row, col: col, localX: 0, localY: 0)
 
                     guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
                     let facelet = model.cubies[ci].facelets[fi]
 
-                    // M14b: the maze-surface (floors) inflate per-vertex in the shader, so they need
-                    // the *un-spun rest* placement + per-instance spin/roundness. Walls/posts/props/
-                    // frame stay rigid (Phase 1) on the spun `matrix` exactly as before.
                     var restM = model.restMatrix(face: face, row: row, col: col)
                     if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) {
                         matrix = animMat * matrix
@@ -257,21 +259,21 @@ final class SceneBuilder {
             }
         }
 
-        // Player marker (orbit mode only)
+        // Player marker (orbit mode only) — seated at the inflated sub-cell footprint (R2.1), so
+        // it sits ON the curved surface exactly like the FP camera, then faced and shrunk to fit.
         if gameState.camera.mode == .orbit {
             let player = gameState.player
-            var pMatrix = model.worldMatrix(face: player.face, row: player.row, col: player.col)
-            if let animMat = sliceAnimMatrix, sr.playerCubieIndex >= 0, sr.affectedCubies.contains(sr.playerCubieIndex) {
-                pMatrix = animMat * pMatrix
-            }
-            // Offset to the standing sub-cell, rotate to the 8-way heading, shrink to fit.
             let step = model.worldScale.subCellStep
             let localX = Float(player.subCol - 1) * step
             let localY = Float(player.subRow - 1) * step
+            var pMatrix = model.inflatedPlacement(face: player.face, row: player.row, col: player.col,
+                                                  localX: localX, localY: localY)
+            if let animMat = sliceAnimMatrix, sr.playerCubieIndex >= 0, sr.affectedCubies.contains(sr.playerCubieIndex) {
+                pMatrix = animMat * pMatrix
+            }
             let tb = player.facing.tangentBitangent
             let facingAngle = atan2f(-tb.t, tb.b)
             pMatrix = spin * pMatrix
-                * float4x4.translation(localX, localY, 0)
                 * float4x4.rotation(radians: facingAngle, axis: SIMD3(0, 0, 1))
                 * float4x4.scale(0.6)
             let markerInst = InstanceDataSwift(
