@@ -26,14 +26,18 @@ struct SceneDrawData {
 /// world (the M11 moon) is rendered simply by calling it with that world's state.
 final class SceneBuilder {
 
-    static let faceColors: [CubeFace: SIMD4<Float>] = [
-        .positiveX: SIMD4(0.85, 0.75, 0.70, 1.0),
-        .negativeX: SIMD4(0.70, 0.80, 0.85, 1.0),
-        .positiveY: SIMD4(0.80, 0.85, 0.70, 1.0),
-        .negativeY: SIMD4(0.85, 0.80, 0.65, 1.0),
-        .positiveZ: SIMD4(0.80, 0.75, 0.85, 1.0),
-        .negativeZ: SIMD4(0.75, 0.85, 0.80, 1.0),
-    ]
+    /// Per-face fog tint. A total switch (R2.13) — no dictionary lookup + force-unwrap in the
+    /// per-tile hot loop.
+    static func faceColor(_ face: CubeFace) -> SIMD4<Float> {
+        switch face {
+        case .positiveX: return SIMD4(0.85, 0.75, 0.70, 1.0)
+        case .negativeX: return SIMD4(0.70, 0.80, 0.85, 1.0)
+        case .positiveY: return SIMD4(0.80, 0.85, 0.70, 1.0)
+        case .negativeY: return SIMD4(0.85, 0.80, 0.65, 1.0)
+        case .positiveZ: return SIMD4(0.80, 0.75, 0.85, 1.0)
+        case .negativeZ: return SIMD4(0.75, 0.85, 0.80, 1.0)
+        }
+    }
 
     /// Light green for corner / jamb posts (M10 Phase B), rendered via materialID 8.
     static let postColor = SIMD4<Float>(0.55, 0.82, 0.42, 1.0)
@@ -110,7 +114,7 @@ final class SceneBuilder {
                     let roundness = model.roundness
                     let invHalf: Float = 1.0 / model.worldScale.faceDistance
 
-                    let faceColor = Self.faceColors[face]!
+                    let faceColor = Self.faceColor(face)
 
                     // Frame rail for every tile — inflated per-vertex (M14b) so the cubie-border
                     // grid bends with the curved floor instead of cutting across it as flat strips.

@@ -17,23 +17,9 @@ struct DrawCall {
     var instanceCount: Int
 }
 
-/// One imported model placed on the cube (M12-D asset registry).
-struct ImportedProp {
-    let mesh: AssetMesh
-    let diffuse: MTLTexture?                // textured (one draw, materialID 11); nil = per-sub-mesh flat colours (materialID 10)
-    let faceOffset: (row: Int, col: Int)   // tile offset from the +Z face centre
-    let target: Float                       // fit the widest dimension to this many units
-    let yUp: Bool                           // OBJ kits import Y-up; USD props Z-up
-}
-
-/// One piece of the imported modular house, positioned in a quarter's tile-local frame
-/// (M12-E). All pieces of a quarter share that quarter's `.houseCorner` Prop anchor (tile
-/// matrix + facing), so they ride slice rotations together and split as a unit — reusing the
-/// exact machinery that already carries the procedural house.
-struct HouseKitPiece {
-    let mesh: AssetMesh
-    let local: float4x4   // Y-up→Z-up, non-uniform scale, and edge placement within the tile
-}
+// (R2.8: ImportedProp / HouseKitPiece + all asset loading live in AssetRegistry.swift; texture
+// decoding in TextureLoader.swift; pipeline/state construction in PipelineFactory.swift. Renderer
+// keeps the frame loop, the world stack, and per-frame instance building.)
 
 /// One prepared asset draw for the frame (a whole textured mesh, or one flat-colour sub-mesh).
 struct AssetDrawCmd {
@@ -135,6 +121,8 @@ class Renderer: NSObject, MTKViewDelegate {
     /// tile-mesh library and instance buffers are size-agnostic (see `resetGame`).
     var worldStack: [GameState] = []
     /// The active world — top of the stack. Read-only; mutate the stack via enter/exitWorld.
+    /// Invariant (why `last!` is safe): the stack is created with the overworld in init and
+    /// `exitWorld`/`resetGame` never leave it empty — the overworld is never popped.
     var gameState: GameState { worldStack.last! }
     /// A throwaway 3³ interior world used to prove the swap in M11.1 (toggled with the O key).
     /// Replaced by real portal destinations in M11.2.
@@ -183,103 +171,23 @@ class Renderer: NSObject, MTKViewDelegate {
         metalKitView.sampleCount = 4
         metalKitView.clearColor = MTLClearColor(red: 0.04, green: 0.05, blue: 0.08, alpha: 1.0)
 
-        // Pipeline
+        // Pipelines / depth states / shadow map / sampler — one-time construction (PipelineFactory, R2.8)
         let library = device.makeDefaultLibrary()!
         let compiler = try! device.makeCompiler(descriptor: MTL4CompilerDescriptor())
-
-        let vertFuncDesc = MTL4LibraryFunctionDescriptor()
-        vertFuncDesc.library = library
-        vertFuncDesc.name = "vertexShader"
-        let fragFuncDesc = MTL4LibraryFunctionDescriptor()
-        fragFuncDesc.library = library
-        fragFuncDesc.name = "fragmentShader"
-
-        let pipeDesc = MTL4RenderPipelineDescriptor()
-        pipeDesc.label = "MazePipeline"
-        pipeDesc.rasterSampleCount = metalKitView.sampleCount
-        pipeDesc.vertexFunctionDescriptor = vertFuncDesc
-        pipeDesc.fragmentFunctionDescriptor = fragFuncDesc
-        pipeDesc.colorAttachments[0].pixelFormat = metalKitView.colorPixelFormat
-        pipeDesc.colorAttachments[0].blendingState = .enabled
-        pipeDesc.colorAttachments[0].rgbBlendOperation = .add
-        pipeDesc.colorAttachments[0].alphaBlendOperation = .add
-        pipeDesc.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-        pipeDesc.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
-        pipeDesc.colorAttachments[0].sourceAlphaBlendFactor = .one
-        pipeDesc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
-
-        self.pipelineState = try! compiler.makeRenderPipelineState(descriptor: pipeDesc)
-
-        // Sky pipeline
-        let skyVertDesc = MTL4LibraryFunctionDescriptor()
-        skyVertDesc.library = library
-        skyVertDesc.name = "skyVertexShader"
-        let skyFragDesc = MTL4LibraryFunctionDescriptor()
-        skyFragDesc.library = library
-        skyFragDesc.name = "skyFragmentShader"
-
-        let skyPipeDesc = MTL4RenderPipelineDescriptor()
-        skyPipeDesc.label = "SkyPipeline"
-        skyPipeDesc.rasterSampleCount = metalKitView.sampleCount
-        skyPipeDesc.vertexFunctionDescriptor = skyVertDesc
-        skyPipeDesc.fragmentFunctionDescriptor = skyFragDesc
-        skyPipeDesc.colorAttachments[0].pixelFormat = metalKitView.colorPixelFormat
-
-        self.skyPipelineState = try! compiler.makeRenderPipelineState(descriptor: skyPipeDesc)
-
-        // Fade pipeline (M11.2b): reuses the sky fullscreen triangle, alpha-blended over the scene.
-        let fadeFragDesc = MTL4LibraryFunctionDescriptor()
-        fadeFragDesc.library = library
-        fadeFragDesc.name = "fadeFragmentShader"
-        let fadePipeDesc = MTL4RenderPipelineDescriptor()
-        fadePipeDesc.label = "FadePipeline"
-        fadePipeDesc.rasterSampleCount = metalKitView.sampleCount
-        fadePipeDesc.vertexFunctionDescriptor = skyVertDesc
-        fadePipeDesc.fragmentFunctionDescriptor = fadeFragDesc
-        fadePipeDesc.colorAttachments[0].pixelFormat = metalKitView.colorPixelFormat
-        fadePipeDesc.colorAttachments[0].blendingState = .enabled
-        fadePipeDesc.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-        fadePipeDesc.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
-        fadePipeDesc.colorAttachments[0].sourceAlphaBlendFactor = .sourceAlpha
-        fadePipeDesc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
-        self.fadePipelineState = try! compiler.makeRenderPipelineState(descriptor: fadePipeDesc)
-
-        // Shadow pipeline (depth-only, no fragment)
-        let shadowVertDesc = MTL4LibraryFunctionDescriptor()
-        shadowVertDesc.library = library
-        shadowVertDesc.name = "shadowVertexShader"
-
-        let shadowPipeDesc = MTL4RenderPipelineDescriptor()
-        shadowPipeDesc.label = "ShadowPipeline"
-        shadowPipeDesc.rasterSampleCount = 1
-        shadowPipeDesc.vertexFunctionDescriptor = shadowVertDesc
-
-        self.shadowPipelineState = try! compiler.makeRenderPipelineState(descriptor: shadowPipeDesc)
-
-        // Shadow map texture (2048x2048 — keeps texel density up as the ortho volume
-        // grows with cube size; a 9-face jamb/wall is only a few texels at 1024)
-        let shadowDesc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .depth32Float, width: 2048, height: 2048, mipmapped: false)
-        shadowDesc.storageMode = .private
-        shadowDesc.usage = [.renderTarget, .shaderRead]
-        self.shadowMapTexture = device.makeTexture(descriptor: shadowDesc)!
-        self.shadowMapTexture.label = "ShadowMap"
-
-        // Depth states
-        let depthDesc = MTLDepthStencilDescriptor()
-        depthDesc.depthCompareFunction = .less
-        depthDesc.isDepthWriteEnabled = true
-        self.depthState = device.makeDepthStencilState(descriptor: depthDesc)!
-
-        let depthDescNoWrite = MTLDepthStencilDescriptor()
-        depthDescNoWrite.depthCompareFunction = .less
-        depthDescNoWrite.isDepthWriteEnabled = false
-        self.depthStateNoWrite = device.makeDepthStencilState(descriptor: depthDescNoWrite)!
-
-        let depthDescAlways = MTLDepthStencilDescriptor()
-        depthDescAlways.depthCompareFunction = .always
-        depthDescAlways.isDepthWriteEnabled = false
-        self.depthStateAlways = device.makeDepthStencilState(descriptor: depthDescAlways)!
+        let sampleCount = metalKitView.sampleCount
+        let colorFormat = metalKitView.colorPixelFormat
+        self.pipelineState = PipelineFactory.makeMazePipeline(compiler: compiler, library: library,
+                                                              sampleCount: sampleCount, colorFormat: colorFormat)
+        self.skyPipelineState = PipelineFactory.makeSkyPipeline(compiler: compiler, library: library,
+                                                                sampleCount: sampleCount, colorFormat: colorFormat)
+        self.fadePipelineState = PipelineFactory.makeFadePipeline(compiler: compiler, library: library,
+                                                                  sampleCount: sampleCount, colorFormat: colorFormat)
+        self.shadowPipelineState = PipelineFactory.makeShadowPipeline(compiler: compiler, library: library)
+        self.shadowMapTexture = PipelineFactory.makeShadowMap(device: device)
+        let depthStates = PipelineFactory.makeDepthStates(device: device)
+        self.depthState = depthStates.write
+        self.depthStateNoWrite = depthStates.noWrite
+        self.depthStateAlways = depthStates.always
 
         // Game state (owns the per-world scale) — mark some tiles discovered for visual testing.
         // The overworld is the bottom of the world stack (M11.1). Use a local here: the computed
@@ -297,18 +205,12 @@ class Renderer: NSObject, MTKViewDelegate {
         self.tileMeshLib = TileMeshLibrary(device: device, worldScale: overworld.worldScale)
 
         // Textures
-        self.diffuseArray = Self.loadTextureArray(device: device,
+        self.diffuseArray = TextureLoader.loadTextureArray(device: device,
             names: ["hedge_diff", "gravel_diff", "stone_diff"], srgb: true)
-        self.normalArray = Self.loadTextureArray(device: device,
+        self.normalArray = TextureLoader.loadTextureArray(device: device,
             names: ["hedge_nor", "gravel_nor", "stone_nor"], srgb: false)
-        self.skyboxTexture = Self.loadTexture2D(device: device, name: "skybox", srgb: true)
-
-        let samplerDesc = MTLSamplerDescriptor()
-        samplerDesc.minFilter = .linear
-        samplerDesc.magFilter = .linear
-        samplerDesc.sAddressMode = .repeat
-        samplerDesc.tAddressMode = .repeat
-        self.texSampler = device.makeSamplerState(descriptor: samplerDesc)!
+        self.skyboxTexture = TextureLoader.loadTexture2D(device: device, name: "skybox", srgb: true)
+        self.texSampler = PipelineFactory.makeSampler(device: device)
 
         // Per-frame buffers. R2.16: a tile emits SEVERAL instances (frame rail + floor + path-cross
         // + wall + posts; adjacent tiles add dissolve-fog layers; plus props/marker/celestials), so
@@ -331,52 +233,13 @@ class Renderer: NSObject, MTKViewDelegate {
         self.instanceBuffers = instBufs
         self.counterpartInstanceBuffers = counterpartBufs
 
-        // M12: load an imported prop (dev absolute path — these get bundled for shipping later)
-        // plus a small per-frame instance buffer for its transform/material.
-        let modelsRoot = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models"
-        // Textured USD prop (one diffuse map, Z-up).
-        func loadProp(_ dir: String, _ diffuse: String, _ off: (Int, Int), _ target: Float) -> ImportedProp? {
-            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(dir)/\(dir).usdc"), device: device) else {
-                print("[Renderer] prop FAILED to load: \(dir)"); return nil
-            }
-            let diff = Self.loadTextureFromFile(url: URL(fileURLWithPath: "\(modelsRoot)/\(dir)/textures/\(diffuse).jpg"), device: device, srgb: true)
-            return ImportedProp(mesh: mesh, diffuse: diff, faceOffset: off, target: target, yUp: false)
-        }
-        // Texture-less OBJ kit piece — flat per-material colours, Y-up.
-        func loadSolid(_ relPath: String, _ off: (Int, Int), _ target: Float) -> ImportedProp? {
-            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(relPath)"), device: device) else {
-                print("[Renderer] solid prop FAILED: \(relPath)"); return nil
-            }
-            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: off, target: target, yUp: true)
-        }
-        // Textured USD props at the plaza centre + its diagonal neighbours; solid-colour OBJ
-        // temple pieces at the edge-middle tiles.
-        let loadedProps: [ImportedProp] = [
-            // loadProp("stone_fire_pit_2k",  "stone_fire_pit_diff_2k",     ( 0,  0), 0.35),  // removed for now (Eddie)
-            loadProp("horse_statue_01_2k",    "horse_statue_01_diff_2k",    (-1, -1), 0.60),
-            loadProp("tree_stump_01_2k",      "tree_stump_01_diff_2k",      (-1,  1), 0.30),
-            loadProp("tree_stump_02_2k",      "tree_stump_02_diff_2k",      ( 1, -1), 0.30),
-            // loadProp("old_military_crate_2k", "old_military_crate_diff_2k", ( 1,  1), 0.32),  // removed for now (Eddie)
-            loadSolid("Modular Temple/Pillar_Large_Base.obj", (-1, 0), 0.55),
-            loadSolid("Modular Temple/Prop_Flag_Sun.obj",     ( 0, -1), 0.50),
-            loadSolid("Modular Temple/Prop_Flag_Moon.obj",    ( 0,  1), 0.50),
-            loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  0), 0.28),
-        ].compactMap { $0 }
-        self.importedProps = loadedProps
+        // M12: the imported assets — decoration props + the modular house kit (AssetRegistry, R2.8).
+        let assets = AssetRegistry.loadAll(device: device)
+        self.importedProps = assets.props
+        let loadedProps = assets.props
 
-        // M12-E: imported modular house. Load the kit's solid-colour OBJ pieces and assemble one
-        // canonical quarter (authored for facing.n — two outer walls on the −X/−Y tile edges +
-        // floor). The four `.houseCorner` props stamped in CubeModel place/orient the quarters and
-        // carry them through slice rotations, so the building splits at the tile seams for free.
-        func loadKit(_ name: String) -> AssetMesh? {
-            AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/modular_house_collection/\(name).obj"), device: device)
-        }
-        if let wall = loadKit("Structure_Exterior_Wall_Straight") {
-            self.houseAssembly     = Self.buildHouseQuarter(wall: wall, front: false)
-            self.houseAssemblyDoor = Self.buildHouseQuarter(wall: wall, front: true)
-        } else {
-            print("[Renderer] house kit FAILED to load")
-        }
+        self.houseAssembly = assets.house
+        self.houseAssemblyDoor = assets.houseDoor
 
         var assetBufs: [MTLBuffer] = []
         for _ in 0..<maxBuffersInFlight {
@@ -499,121 +362,7 @@ class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
-    private static func loadTextureArray(device: MTLDevice, names: [String], srgb: Bool) -> MTLTexture? {
-        let desc = MTLTextureDescriptor()
-        desc.textureType = .type2DArray
-        desc.pixelFormat = srgb ? .rgba8Unorm_srgb : .rgba8Unorm
-        desc.width = 512
-        desc.height = 512
-        desc.arrayLength = names.count
-        desc.storageMode = .shared
-        desc.usage = .shaderRead
-
-        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
-        texture.label = srgb ? "DiffuseArray" : "NormalArray"
-
-        let bytesPerRow = 512 * 4
-        let bytesPerImage = bytesPerRow * 512
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-
-        for (i, name) in names.enumerated() {
-            guard let url = Bundle.main.url(forResource: name, withExtension: "png") else {
-                NSLog("Texture not found: %@.png", name)
-                continue
-            }
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-                NSLog("Failed to decode: %@.png", name)
-                continue
-            }
-
-            var pixels = [UInt8](repeating: 255, count: bytesPerImage)
-            guard let ctx = CGContext(data: &pixels,
-                                     width: 512, height: 512,
-                                     bitsPerComponent: 8,
-                                     bytesPerRow: bytesPerRow,
-                                     space: colorSpace,
-                                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-                continue
-            }
-            ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: 512, height: 512))
-
-            let region = MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
-                                   size: MTLSize(width: 512, height: 512, depth: 1))
-            texture.replace(region: region, mipmapLevel: 0, slice: i,
-                           withBytes: pixels, bytesPerRow: bytesPerRow, bytesPerImage: bytesPerImage)
-        }
-
-        return texture
-    }
-
-    private static func loadTexture2D(device: MTLDevice, name: String, srgb: Bool) -> MTLTexture? {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "png"),
-              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            NSLog("Texture not found: %@.png", name)
-            return nil
-        }
-
-        let w = cgImage.width
-        let h = cgImage.height
-        let bytesPerRow = w * 4
-        let bytesPerImage = bytesPerRow * h
-
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: srgb ? .rgba8Unorm_srgb : .rgba8Unorm,
-            width: w, height: h, mipmapped: false)
-        desc.storageMode = .shared
-        desc.usage = .shaderRead
-
-        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
-        texture.label = name
-
-        var pixels = [UInt8](repeating: 255, count: bytesPerImage)
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let ctx = CGContext(data: &pixels,
-                                 width: w, height: h,
-                                 bitsPerComponent: 8,
-                                 bytesPerRow: bytesPerRow,
-                                 space: colorSpace,
-                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-            return nil
-        }
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
-
-        let region = MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
-                               size: MTLSize(width: w, height: h, depth: 1))
-        texture.replace(region: region, mipmapLevel: 0,
-                       withBytes: pixels, bytesPerRow: bytesPerRow)
-
-        return texture
-    }
-
-    /// M12: load a texture from an arbitrary file URL (imported model textures live outside
-    /// the bundle). CGImageSource decodes JPG/PNG all the same.
-    private static func loadTextureFromFile(url: URL, device: MTLDevice, srgb: Bool) -> MTLTexture? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            NSLog("Asset texture not found/decodable: %@", url.path)
-            return nil
-        }
-        let w = cgImage.width, h = cgImage.height
-        let bytesPerRow = w * 4
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: srgb ? .rgba8Unorm_srgb : .rgba8Unorm, width: w, height: h, mipmapped: false)
-        desc.storageMode = .shared
-        desc.usage = .shaderRead
-        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
-        texture.label = url.lastPathComponent
-        var pixels = [UInt8](repeating: 255, count: bytesPerRow * h)
-        guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8,
-                                  bytesPerRow: bytesPerRow, space: CGColorSpaceCreateDeviceRGB(),
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
-        texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: w, height: h, depth: 1)),
-                        mipmapLevel: 0, withBytes: pixels, bytesPerRow: bytesPerRow)
-        return texture
-    }
+    // (R2.8: texture decoding lives in TextureLoader.swift.)
 
     // MARK: - Per-frame
 
@@ -718,21 +467,6 @@ class Renderer: NSObject, MTKViewDelegate {
         )
     }
 
-    /// Stamp the imported decorations into a world as `.importedAsset` Props (one per registry entry,
-    /// at its `faceOffset` tile on +Z, `state` = registry index). As Props on facelets they now ride
-    /// slice rotations and get carried like any other prop — instead of the old static placement.
-    private func stampImportedProps(into gs: GameState) {
-        let n = gs.cubeModel.size
-        for (assetID, p) in importedProps.enumerated() {
-            let row = n / 2 + p.faceOffset.row
-            let col = n / 2 + p.faceOffset.col
-            if let (ci, fi) = gs.cubeModel.faceletAt(face: .positiveZ, row: row, col: col) {
-                gs.cubeModel.cubies[ci].facelets[fi].props.append(
-                    Prop(kind: .importedAsset, subRow: 1, subCol: 1, facing: .n, state: assetID))
-            }
-        }
-    }
-
     /// Place every imported prop for the frame. Both the decorations (`.importedAsset`, single mesh
     /// from the registry) and the modular house (`.houseCorner`, kit assembly) are now anchored to
     /// facelets and scanned here, so they ride the slice `animMat` (worldMatrix → animMat → spin →
@@ -744,7 +478,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // Lazily stamp the decorations into the overworld (bottom of the stack) once the registry is
         // loaded — overworld only, so portal-worlds (the test interior) stay clear of them.
         if needsDecorativeStamp, let overworld = worldStack.first {
-            stampImportedProps(into: overworld)
+            AssetRegistry.stamp(importedProps, into: overworld)
             needsDecorativeStamp = false
         }
         guard !importedProps.isEmpty || !houseAssembly.isEmpty else { return }
@@ -818,49 +552,6 @@ class Renderer: NSObject, MTKViewDelegate {
                 }
             }
         }
-    }
-
-    /// Tile-local width the imported house occupies per quarter. 1.0 puts the walls on the tile's
-    /// outer edges → the four quarters form a full 2×2 room the player can walk inside (M12-E).
-    /// `houseWallHeight` is the wall height in tile-Z (the procedural hip roof rests on top of it).
-    static let houseQuarterWidth: Float = 1.0
-    static let houseWallHeight: Float = 0.30
-
-    /// Normalize a kit module (1×1 Y-up, arbitrary authored size) to the quarter: scale its length
-    /// (authored X) to `bw` and its height (authored Y) to `hS`, recentre it on its length/thickness
-    /// with the base at 0, then rotate Y-up → tile-Z-up. The result is a piece lying along tile X,
-    /// centred at the origin, standing in +Z — ready to slide onto a perimeter edge. Handles the
-    /// wall (1.0 wide, 1.0 tall) and the taller/narrower door (0.8 wide, 1.9 tall) uniformly.
-    private static func kitBase(_ mesh: AssetMesh, bw: Float, hS: Float) -> float4x4 {
-        let s = mesh.size
-        let lenScale = s.x > 0 ? bw / s.x : bw
-        let htScale  = s.y > 0 ? hS / s.y : hS
-        let up = float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0))
-        let recenter = float4x4.translation(-mesh.center.x, -mesh.boundsMin.y, -mesh.center.z)
-        return up * float4x4.scale(lenScale, htScale, lenScale) * recenter
-    }
-
-    /// Assemble one imported house quarter (M12-E) in a tile's local frame, authored for `facing.n`.
-    /// Each quarter fills its full tile, contributing two of the building's perimeter walls (an L on
-    /// the −X/−Y outer edges). The four `.houseCorner` props' facings (n/e/w/s) rotate this into the
-    /// four corners, so the L's close a full 2×2 room; the procedural hip roof (TileMeshLibrary) caps
-    /// it. The `front` quarter omits its front wall, leaving an open entrance aligned with the plaza
-    /// opening. Plain imported walls only — a plain box stretches cleanly to fill the big tile,
-    /// unlike the tall window/door modules which squash. No floor slab (the tile already has one).
-    private static func buildHouseQuarter(wall: AssetMesh, front: Bool) -> [HouseKitPiece] {
-        let floorY: Float = 0.001
-        let bw = houseQuarterWidth
-        let hS = houseWallHeight
-        let c: Float = 0.5      // shared 2×2 centre corner in tile-local (facing.n → +X,+Y)
-        let lift = float4x4.translation(0, 0, floorY)
-        let rotZ90 = float4x4.rotation(radians: .pi / 2, axis: SIMD3(0, 0, 1))
-        // `kitBase` leaves a wall piece centred on tile X (length bw) and Y (thickness), base at Z=0.
-        // Slide it onto a perimeter edge: the −Y edge runs along X; the −X edge is rotated to run Y.
-        let onMinusY = lift * float4x4.translation(c - bw / 2, c - bw, 0) * kitBase(wall, bw: bw, hS: hS)
-        let onMinusX = lift * float4x4.translation(c - bw, c - bw / 2, 0) * rotZ90 * kitBase(wall, bw: bw, hS: hS)
-        var pieces = [HouseKitPiece(mesh: wall, local: onMinusX)]   // side wall (always)
-        if !front { pieces.append(HouseKitPiece(mesh: wall, local: onMinusY)) }   // front wall, unless this is the entrance
-        return pieces
     }
 
     // MARK: - MTKViewDelegate

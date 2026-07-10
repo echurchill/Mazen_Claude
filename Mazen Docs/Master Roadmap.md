@@ -29,7 +29,7 @@ A first-person puzzle-exploration game where **the game board *is* a Rubik's cub
 | **M12** — Asset Import | Import USD/OBJ models, textures, the modular house + split | 🔨 **In progress** — pipeline, house split, decorations-ride-slices done; texture polish + shipping remain |
 | **M11** — Worlds & Portals | Moon + house interiors via one world-transition system | 🔨 **In progress** — spine, TARDIS walk-through portals, and the killer visual built & verified |
 | **M13** — Bandaged Cube | Bonded structures that *refuse* illegal twists | 🔨 **Foundation built** — legality rule + tests + enforcement wired (inert until something's bonded) |
-| **M14** — Superellipsoid Cube | Inflate the cube toward a rounded planet | 💡 **Design captured** — future |
+| **M14/M14b** — Curved Geometry | Cube renders as a rounded planet (per-vertex inflation) | ✅ **Complete** (2026-07-09) |
 
 *(No milestone "M7 and earlier" doc set is tracked here; the [Overnight Plan](Overnight%20Plan.md) is a historical audit, now superseded.)*
 
@@ -71,7 +71,7 @@ Suggested order within M11:
 
 Then, as separate tracks when desired:
 - **M13 Bandaged Cube** — makes the twist deliberate; pairs with real level design.
-- **M14 Superellipsoid Cube** — visual; pairs with the M9 planet feel.
+- **M14b Curved Geometry** — ✅ done; remaining polish = per-world authored roundness + sunset tuning.
 - **M12 loose ends** — normal maps / fort multi-texture / bundling — as polish, not blockers.
 
 ---
@@ -80,14 +80,14 @@ Then, as separate tracks when desired:
 
 - **M11 — Worlds & Portals** — [doc](Worlds%20and%20Portals%20Plan.md) *(reframes the [M11 Lunar Excursion Seed](M11%20Lunar%20Excursion%20Seed.md))*. "Bigger on the inside": structures are portals to separate worlds; one transition system for houses, the moon, dungeons. **🔨 Core built & verified (2026-07-06):** world-stack spine, TARDIS walk-through portals + fade, different-size worlds, and **the killer visual** — the real counterpart world (the moon from earth, and vice-versa) hangs in the sky, turning, with every twist baked in; it persists so tears stay. **Remaining:** Phase 3 (persist camera/time across worlds), a real **house interior** destination, moon styling/rules, and multiple portal destinations.
 - **M13 — Bandaged Cube Mechanic** — [doc](Bandaged%20Cube%20Mechanic.md). Bond structures so a twist that would tear them is *refused*; twisting becomes a rare, deliberate, readable puzzle action. The house is the first candidate bonded structure.
-- **M14 — Superellipsoid Cube** — [doc](Superellipsoid%20Cube.md). Inflate the cube toward a rounded planet (n between sphere and cube); reinforces the M9 solar-system feel and *improves* the day/night shading as it rounds. **🔨 First pass built (2026-07-09, uncommitted):** per-world `roundness` dial + cube→sphere remap in `worldMatrix`, `M` matte-debug toggle, sun-softening. **Proven insufficient by design:** per-*tile* inflation only tilts tiles rigidly, so tall hedge walls lever and **cross/swap**, corrupting maze legibility even at low roundness → superseded by M14b.
-- **M14b — Curved Geometry (per-vertex tessellated inflation)** — [doc](M14b%20Curved%20Geometry%20Plan.md). **📋 Planned, awaiting sign-off (2026-07-09).** The real fix: tessellate floor/wall meshes and inflate **per-vertex in the shader** (footprint-project + extrude along the curved normal) so hedges bend instead of swapping. Per-**instance** `roundness`/`spin`/`invHalfExtent` so **sky-worlds inflate with their own shape** — a round moon over a round Earth, and cubic/hybrid worlds overhead **foreshadow** their nature before the player visits. Prereq Phase 0: widen the maze mesh to uint32 indices. Phases: uint32 → floors → **walls (core fix)** → camera-rides-curve → sky signaling + perf.
+- **M14 — Superellipsoid Cube** — [doc](Superellipsoid%20Cube.md). **Superseded by M14b** (the per-tile first pass tilted tiles rigidly, so hedge walls levered and crossed; its keepers — the `roundness` dial, `M` matte toggle, sun-softening — live on inside M14b).
+- **M14b — Curved Geometry (per-vertex tessellated inflation)** — [doc](M14b%20Curved%20Geometry%20Plan.md). **✅ COMPLETE & verified (2026-07-09, committed).** Floors/walls/posts/frame/props tessellate and inflate per-vertex (footprint-project + extrude along the curved normal); rigid assets + the FP camera seat on the curve via `inflatedPlacement`; **sky-worlds inflate with their own roundness** (verified standing on the round 3³ moon); 9³ at 100fps; `roundness == 0` byte-neutral (`-`/`=` dial, default 0). **Remaining = polish/authoring only:** per-world *authored* roundness (natural≈0.5 / mech≈0 — where the sky-foreshadowing pays off) + sunrise/sunset terminator tuning.
 
 ---
 
 ## 7. Backlog / carryover (not yet on a milestone)
 
-- **R2 shared-code refactor & optimization** — [doc](R2%20Shared%20Code%20Refactor%20Plan.md). Tracked checklist (2026-07-10) with per-item confidence/danger: Tier 1 "M14b cleanup" (placement-API consolidation, SceneBuilder dedup, slice-matrix single source, camera-pose caching, invariant tests), Tier 2 (per-world uniforms → dirty-flagged scene rebuild; **Renderer split — do before M15**), Tier 3 opportunistic. Nothing started.
+- **R2 shared-code refactor & optimization** — [doc](R2%20Shared%20Code%20Refactor%20Plan.md). Tracked checklist (2026-07-10) with per-item confidence/danger: Tier 1 "M14b cleanup" (placement-API consolidation, SceneBuilder dedup, slice-matrix single source, camera-pose caching, invariant tests), Tier 2 (per-world uniforms → dirty-flagged scene rebuild; **Renderer split — do before M15**), Tier 3 opportunistic. **Status: Tier 1 ✅, R2.11/R2.16 ✅, R2.8 Renderer split ✅ (+R2.13/R2.14); remaining: R2.6→R2.7 (perf pair), R2.9/R2.10/R2.12/R2.15.**
 - **NPC classes** — [doc](NPC%20Classes.md). Design captured (2026-07-08), no implementation. Three classes along a *how memory lives* axis: **machines/computers** (external, networked knowledge, tiered isolated → world-net → inter-world-net, freshest-is-least-complete — a queryable knowledge graph with holes; incl. embedded machines like memory-keeping portals — *more thoughts needed*); **biologic beings** (*tentative, may be cut*); **Builder remnants** (post-biologic, near-certain — internal fallible/self-edited memory, the emotional core of selective-forgetting). **Parked worms:** LLM-backed behavior for the memory-bearing NPCs + co-worker docs to fold in (need paths).
 - **iOS touch input** — the macOS path is rich; iOS interactivity is still minimal/stubbed. Needs a touch-control design (movement + slice twist gestures).
 - **Frame-rate** — `preferredFramesPerSecond = 120`; confirm it's actually achieved (a historical 50fps lock was flagged in the Overnight audit — verify it's gone).

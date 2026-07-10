@@ -7,9 +7,10 @@ import simd
 /// `time`); the renderer turns `sunDirection` into the shadow-casting light and draws
 /// the two cube bodies at `sunPosition`/`moonPosition`.
 ///
-/// Distances are fixed (comfortably inside `WorldScale.cameraFarZ = 100`) rather than
-/// size-derived: the cube is always small relative to a ~60-unit sun, so the same orbit
-/// reads well across cube sizes 3…9 — only the cube's apparent size changes.
+/// Distances are fixed (comfortably inside `WorldScale.cameraFarZ`, which is 220 for sizes
+/// ≤ 10 and grows with the R2.16 dev sizes) rather than size-derived: the cube is always
+/// small relative to the pushed-out sun, so the same orbit reads well across cube sizes
+/// 3…9 — only the cube's apparent size changes.
 struct CelestialSystem {
     // MARK: Tunables
     /// Seconds for a full day. The plan's "real" value is 300; 90 keeps the shadow sweep
