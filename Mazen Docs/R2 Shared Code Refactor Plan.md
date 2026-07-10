@@ -10,19 +10,21 @@
 
 ## Tier 1 — high value, low risk (the "M14b cleanup" pass; ~a day, mostly deletion + tests)
 
-- [ ] **R2.1 Consolidate the three placement APIs** — `CubeModel` has `worldMatrix` (still carrying the **superseded** M14 per-tile inflation *and* the 9% seam-overlap hack), `restMatrix`, and `inflatedPlacement`. The inflated `worldMatrix` branch now only feeds the fog anchors + orbit player-marker, and the overlap hack scales their bases. Delete the per-tile branch, make `worldMatrix` ≡ `restMatrix`, seat fog/marker via `inflatedPlacement`.
+*✅ Tier 1 landed 2026-07-10 (commits `f234706`…`e7fdb16`), tests-first as planned. 7,060 → 22,142 checks. Verified: both targets build, r==0 pixel-path covered by tests, FP walk + twist + horse-on-pedestal eyeballed at roundness 0.5. Note: R2.5c (bandaging table) already existed; the orbit player-marker at r>0 is test-covered but wasn't personally eyeballed — one glance in orbit mode confirms it.*
+
+- [x] **R2.1 Consolidate the three placement APIs** — `CubeModel` has `worldMatrix` (still carrying the **superseded** M14 per-tile inflation *and* the 9% seam-overlap hack), `restMatrix`, and `inflatedPlacement`. The inflated `worldMatrix` branch now only feeds the fog anchors + orbit player-marker, and the overlap hack scales their bases. Delete the per-tile branch, make `worldMatrix` ≡ `restMatrix`, seat fog/marker via `inflatedPlacement`.
   *Confidence:* **High** (path is superseded; consumers enumerated). *Danger:* **Low–Med** (fog/marker placement changes at roundness > 0 — that's the *point*, but must be eyeballed). *Effort:* small. *Verify:* R2.5a test (rest == flat world) + visual: fog + player marker at 0 and 0.5.
 
-- [ ] **R2.2 Deduplicate SceneBuilder `.adjacent` / `.discovered`** — ~40 near-identical lines of instance emission (colors re-declared in both; M14b required editing both in lockstep twice). Extract `emitTileGeometry(...)` with a with-fog flag.
+- [x] **R2.2 Deduplicate SceneBuilder `.adjacent` / `.discovered`** — ~40 near-identical lines of instance emission (colors re-declared in both; M14b required editing both in lockstep twice). Extract `emitTileGeometry(...)` with a with-fog flag.
   *Confidence:* **High**. *Danger:* **Low** (pure extraction; expected pixel-identical). *Effort:* small. *Verify:* screenshot diff before/after, both tile states visible.
 
-- [ ] **R2.3 One source for the slice-anim matrix** — `SceneBuilder:88`, `Renderer:~697`, `CameraState:119` each rebuild `smoothstep(progress) → rotation` (a comment currently does a function's job). Extract `GameState.currentSliceMatrix() -> float4x4?`. All three already use the same smoothstep, so this is pure consolidation.
+- [x] **R2.3 One source for the slice-anim matrix** — `SceneBuilder:88`, `Renderer:~697`, `CameraState:119` each rebuild `smoothstep(progress) → rotation` (a comment currently does a function's job). Extract `GameState.currentSliceMatrix() -> float4x4?`. All three already use the same smoothstep, so this is pure consolidation.
   *Confidence:* **High**. *Danger:* **Low** (if one call site were silently different, extraction *reveals* it — that's a win). *Effort:* trivial. *Verify:* twist a slice at normal + `.step` pacing; walls/props/camera stay glued.
 
-- [ ] **R2.4 Compute the FP camera pose once per frame** — `viewProjectionMatrix()` / `cameraPosition()` / `cameraUp()` each run the full `firstPersonCamera` (slerp + look quats + `inflatedPlacement`'s 3 finite-difference inflations) plus a fresh `worldSpinMatrix()` — 3× per frame. Cache a `CameraPose` computed once after `gameState.update`.
+- [x] **R2.4 Compute the FP camera pose once per frame** — `viewProjectionMatrix()` / `cameraPosition()` / `cameraUp()` each run the full `firstPersonCamera` (slerp + look quats + `inflatedPlacement`'s 3 finite-difference inflations) plus a fresh `worldSpinMatrix()` — 3× per frame. Cache a `CameraPose` computed once after `gameState.update`.
   *Confidence:* **High**. *Danger:* **Low** — the one trap is *ordering* (pose must be built after update, before uniforms). *Effort:* small. *Verify:* FP walk incl. edge crossing + during a twist; no one-frame lag between view and marker.
 
-- [ ] **R2.5 Invariant tests** — (a) `restMatrix` == old flat `worldMatrix` for all faces/cells/sizes; (b) **footprint continuity**: adjacent tiles' shared-edge `inflatedPlacement`s coincide at several roundness values (the seamless-surface property); (c) `canRotateSlice` bandaging truth-table; (d) golden-value test for `inflatedUnitPoint` — honest limitation: it guards the *Swift* side only (MSL twin can't run headless); the golden doubles as the spec both implementations must match.
+- [x] **R2.5 Invariant tests** — (a) `restMatrix` == old flat `worldMatrix` for all faces/cells/sizes; (b) **footprint continuity**: adjacent tiles' shared-edge `inflatedPlacement`s coincide at several roundness values (the seamless-surface property); (c) `canRotateSlice` bandaging truth-table; (d) golden-value test for `inflatedUnitPoint` — honest limitation: it guards the *Swift* side only (MSL twin can't run headless); the golden doubles as the spec both implementations must match.
   *Confidence:* **High**. *Danger:* **None** (additive). *Effort:* small-medium. *Verify:* they run in `run-tests.sh`.
 
 ## Tier 2 — bigger wins, worth planning as their own sessions
