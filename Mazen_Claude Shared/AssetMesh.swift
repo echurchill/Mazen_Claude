@@ -94,7 +94,7 @@ final class AssetMesh {
         self.submeshes = subs
         self.boundsMin = bmin
         self.boundsMax = bmax
-        print("[AssetMesh] \(url.lastPathComponent): \(verts.count) verts, \(indices.count) indices, \(subs.count) submeshes")
+        if verboseDebugLog { print("[AssetMesh] \(url.lastPathComponent): \(verts.count) verts, \(indices.count) indices, \(subs.count) submeshes") }
     }
 
     /// The sub-mesh material's diffuse colour (ModelIO maps the OBJ/MTL `Kd` to `.baseColor`).

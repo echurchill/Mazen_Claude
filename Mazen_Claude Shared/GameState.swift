@@ -1,6 +1,11 @@
 import simd
 import Foundation
 
+/// Master switch for the chatty developer console output — the per-world maze ASCII diagram,
+/// player start/arrival lines, and asset-load summaries. Off by default so startup stays quiet;
+/// flip to `true` when you want the play-by-play. Genuine error/failure logs are NOT gated.
+let verboseDebugLog = false
+
 class GameState {
     let worldScale: WorldScale
     let cubeModel: CubeModel
@@ -57,7 +62,7 @@ class GameState {
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws)
         player = PlayerState(size: size)
-        printMazeDebug(face: player.face)
+        if verboseDebugLog { printMazeDebug(face: player.face) }
     }
 
     func printMazeDebug(face: CubeFace) {

@@ -54,7 +54,7 @@ struct PlayerState {
             subRow = moveToSubRow
             subCol = moveToSubCol
             facing = moveNewFacing
-            if crossedTile {
+            if crossedTile && verboseDebugLog {
                 NSLog("Arrived tile: %@ (%d,%d) sub(%d,%d) facing %@", "\(face)", row, col, subRow, subCol, "\(facing)")
             }
             return crossedTile
