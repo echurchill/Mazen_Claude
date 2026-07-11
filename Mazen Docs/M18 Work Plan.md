@@ -1,128 +1,117 @@
-# M18 — Freeform Movement & Solidity (work plan)
+# M18 — Densified Grid Movement & Solidity (work plan)
 
-*Drafted 2026-07-11 at Eddie's call: "we need to make walking more free form (not just a few
-points on the walk ways) and the poly/3d shapes more 'real'." Two long-standing simplifications
-retire together, because they're the same problem: **where can the player BE** (continuous
-position, not path-cross points) and **what stops them** (walls and props become solid).
-Numbering note: this claims the M18 slot; the informal "one small solar system" milestone
-becomes **M19**, cozy/feel polish **M20**. Status: **📋 awaiting greenlight.***
+*Drafted 2026-07-11 from Eddie's counter-proposal to the freeform plan (kept as the
+[aspirational north star](M18%20Freeform%20Movement%20%28Aspirational%29.md)): instead of
+continuous movement, **densify the stand points** (3×3 → 9×9-ish), let the player step off the
+paths onto the grass, and make walls/props solid by **removing the stand points under them**.
+Numbering: M18 = this; solar-system slice = M19; cozy/feel polish = M20.
+Status: **📋 awaiting greenlight.***
 
-## What exists today (the thing being replaced)
+## Why this shape (the trade, honestly)
 
-`PlayerState` is a tile anchor `(face, row, col)` plus a discrete sub-cell `(subRow, subCol)`
-on the 3×3 **path cross** — movement is scripted hops between those points (`startMove` /
-`beginMove` / `updateMovement`), facing is 8-way `Heading8` with snap turns, tiles are only
-exited through an edge-middle cell + open gateway, and **nothing collides** — the player
-ghosts through dials, plaques, pillars, and (if aimed right) hedge geometry. It has been a
-great scaffold: reliable, cross-face-correct, twist-riding-correct. M18 keeps everything it
-proved and swaps the representation underneath.
+The freeform plan's two big risks were continuous cube-edge crossing (hard math) and feel
+regression (the game's cozy rhythm lives partly in the hop cadence). This plan keeps the hop
+state machine **structurally untouched** — `subRow/subCol` just range wider — so every
+discrete coupling (portals, twist player-remap, interact, discovery, `steerToLook`) survives
+with mechanical coordinate scaling. Edge crossing stays a discrete hop through the existing
+`edgeCrossing` remap. Solidity needs no physics at all: a prop subtracts the cells it sits on
+from the walkable set, and `startMove`'s existing "is the target cell standable" check does
+the rest. What we give up, for now: free yaw (heading stays 8-way) and sub-cell smoothness.
+What we keep forever: the footprint data is exactly what a future continuous-collision system
+would consume — a stepping stone, not a detour.
 
-## The architectural bet
+## Core concepts
 
-**Keep the tile anchor; free the offset.** The player becomes `(face, row, col)` + a
-*continuous* tile-local offset (float, in sub-cell units) + a *continuous* yaw. Crossing a
-tile boundary re-anchors to the neighbor (same `edgeCrossing` math, now applied to a float
-offset + velocity + yaw instead of a sub-cell index). Why this and not a raw world-space
-position: every system that works today — walk-through portals, prop interact, discovery,
-slice riding (the anchor tile's `restMatrix` already carries `animMat`), the twist-remap of
-the player, the M15 interior basis — is keyed by tile. Anchored-continuous keeps their blast
-radius near zero; `subRow/subCol` and `facing: Heading8` survive as *derived* (rounded)
-properties during bring-up so nothing breaks mid-refactor.
-
-Collision is **analytic, not mesh-based**: walls are derived from `mazeTile.openings` (the
-same truth the wall meshes are built from — they cannot drift apart), props from a small
-per-kind footprint table. Circle-vs-slab in tile-local 2D with slide response. All of it is
-pure shared-code math — no Metal — so the headless harness can hammer it.
+- **Density `d`** — one constant, everything derived. Must be an **odd multiple of 3**
+  (9, 15, 21): multiple-of-3 makes every legacy 3×3 coordinate scale by an exact integer
+  `k = d/3`; odd keeps a true centre cell (spawn, portals, twist-remap rounding rely on one).
+  At perceptual scale (tile ≈ 19 m): 9×9 → ~2.1 m cells (a stride), 15×15 → ~1.3 m.
+  Ground speed is normalized (`hopDuration = 1 / (speed · k)`) so density never changes pace.
+- **Walkability mask** — per-facelet `d×d` bitmask, derived: start all-walkable (**grass is
+  standable** — the freedom this milestone buys), subtract hedge walls + jambs (from
+  `mazeTile.openings`, the same truth the wall meshes are built from), subtract prop
+  footprints. Lives with the facelet → rides slice rotations for free; re-derived when props
+  change (e.g. M17's mote leaving its pedestal frees the cell).
+- **Footprints** — a per-`PropKind` table of cell spans (procedural props have authored sizes
+  in TileMeshLibrary); imported assets auto-derive from mesh bounds × target scale, rounded
+  outward. `footprint = none` for props that must stay standable (portals — stepping on them
+  IS the trigger) and ghost-decor.
 
 ## Phases
 
-### Phase 0 — Representation swap (no behavior change)
-Continuous `offset: SIMD2<Float>` + `yaw: Float` inside PlayerState; hops re-expressed as
-short glides between the same points; derived `subRow/subCol/facing` keep every consumer
-(HUD, interact, portals, twist remap, `steerToLook`) working untouched.
-*Danger:* Med (touching the spine everything stands on). *Verify:* plays identically to today.
+### Phase 0 — Densify (behavior-identical)
+Introduce `d` and the integer scaling: prop subcell coordinates, `edgeMiddle`, spawn centre,
+player marker, portal/interact positions, the twist player-remap. First flip walkability to
+*exactly the scaled path cross* so the game plays identically to today — this flushes every
+hidden `0...2` assumption while behavior is still bit-comparable.
+*Danger:* Med (wide but mechanical). *Verify:* plays identically; headless remap tests.
 
-### Phase 1 — Free locomotion (feel-first, still no collision)
-Held-key velocity (WASD-style) relative to camera yaw with short accel/decel ramps; free
-continuous yaw (D1); speed matched to today's ~1.2 s/tile. Tile exits no longer require the
-edge-middle cell — you walk where you point. Gateways still gate at this phase via a cheap
-"is the crossing open" check so the maze stays a maze before walls are solid.
-*Danger:* Med. *Verify:* feel pass — Eddie walks the overworld; cozy or bust.
+### Phase 1 — Open the grass, mask the walls
+Walkable-by-default + wall/jamb subtraction replaces the path-cross rule. The player steps
+off the path for the first time. Gateways now gate by geometry (the wall cells), not by the
+edge-middle rule — tile exits allowed from any open edge cell, crossing to the neighbour's
+mirrored cell through `edgeCrossing` (generalizing the existing sub-cell remap pattern).
+*Danger:* Med — the edge/interior sub-cell remap is this plan's hardest math (a far smaller
+cousin of the freeform plan's Phase 4). *Verify:* world-position-pinned crossing tests (the
+M15 technique) over every edge, exterior + interior, several sizes; then a feel walk.
 
-### Phase 2 — Solid walls
-Per-tile collider set from `openings`: closed edge → full-edge slab; open edge → two flanking
-slabs leaving the gateway gap; jamb posts. Player circle (radius, D3) vs slabs, **slide**
-response (velocity projected along the wall, no sticky stops). Near edges, the 3×3 tile
-neighborhood's colliders are consulted (with the face-edge basis remap at cube borders).
-Phase 1's gateway check retires — geometry itself now does the gating.
-*Danger:* Med. *Verify:* headless invariant tests (never penetrate, gateways passable,
-corners never trap, fuzz-walk N thousand random inputs stays in legal space) + feel pass.
+### Phase 2 — Solid props (stand-point removal)
+The footprint table + auto-derived imports; subtraction into the mask. A plaque, dial,
+pedestal, pillar, or house wall simply cannot be stood in — the plaque saga becomes
+inexpressible rather than merely fixed. Includes the **connectivity sanity check**: a
+footprint may never disconnect a tile's gateways from each other (authoring mistakes become
+log lines, not unwinnable mazes).
+*Danger:* Low-Med. *Verify:* can't occupy a prop's cells; F-interact still reaches from
+adjacent cells; connectivity check fires on a deliberately bad stamp in tests.
 
-### Phase 3 — Solid props
-A footprint (circle or box) per `PropKind` in one table: pedestals, dials, obelisks, plaques,
-pillars, house walls; imported assets auto-derive from mesh bounds × target scale. Portals
-stay walk-through (their trigger is the point of them); small ground decor stays ghost (D4).
-This closes the plaque saga for good: a plaque can sit anywhere and simply can't be stood in.
-*Danger:* Low-Med (tuning which footprints feel fair). *Verify:* can't walk through a dial;
-can still reach its F-interact range comfortably.
+### Phase 3 — Density & pace tuning (Eddie's phase)
+`d` is already a constant; add a debug key to cycle 9 ↔ 15 (rebuild scene + remap player,
+like the `N` size cycle) and run a feel pass: stride rhythm, footprint fairness around the
+dials/plaques, grass wandering, diagonal movement (D2). Lock the default; decide whether `d`
+stays per-world (WorldScale) or global.
+*Danger:* Low. *Verify:* Eddie's verdict — this phase exists to be played, not coded.
 
-### Phase 4 — Seams, faces, interiors
-Continuous crossing at cube edges: offset, velocity, and yaw remapped through `edgeCrossing`
-(the discrete version of this remap already exists in the twist player-carry — same pattern);
-the interior worlds' mirrored basis goes through the same conjugated path M15 proved. Camera
-up-vector slerp across edges (the corner-cut treatment) so walking over a cube edge stays the
-signature "horizon rolls toward you" moment, now without the hop rhythm.
-*Danger:* **High** — this is the hard math of the milestone. *Verify:* world-position-pinned
-continuity tests (the M15 technique): walk a straight line across every edge of every face,
-exterior and interior, at several sizes; position and heading must be continuous.
+### Phase 4 — Sweep & retire assumptions
+HUD shows the finer position; delete the temporary path-cross-equivalence shim from Phase 0;
+docs + STATE OF PLAY; note what the aspirational plan would still add (free yaw, sub-cell
+smoothness) so the north star stays visible.
+*Danger:* Low. *Verify:* full suite + a long play session.
 
-### Phase 5 — Twists + curvature under continuous feet
-Riding a rotating slice already works via the anchor tile; verify with continuous offset
-(including walking *while* the slice turns — now possible, decide if allowed, D5). Refusal
-wobble unchanged. M14b: movement math stays in flat rest space, the camera seats via
-`inflatedPlacement` exactly as today — verify feel at roundness 0.5 (gentle slopes underfoot).
-*Danger:* Med. *Verify:* twist while walking; moon at 0.5 roundness feel pass.
-
-### Phase 6 — Retire the scaffold
-Delete the hop state machine (`isMoving/moveProgress/moveTo*`, snap-turn state), collapse the
-derived-compat shims that turned out unneeded, update the HUD. Docs + STATE OF PLAY sweep.
-*Danger:* Low. *Verify:* full test suite + one long play session.
-
-**M18 exit criterion:** walk anywhere the geometry allows and nowhere it doesn't — smoothly,
-across tile seams, cube edges, and interior mirrors, while slices twist and the world curves —
-with the maze, portals, locks, dials, and plaques all behaving exactly as before.
+**M18 exit criterion:** walk anywhere on a tile the geometry honestly allows — including the
+grass — and never into a wall, plaque, dial, pedestal, or house; across tile seams, cube
+edges, and interior mirrors; while slices twist; at a density that survived a real feel pass.
 
 ## Decision points for Eddie
 
-- **D1 — Steering.** (a) *Free yaw* (recommended): held arrow keys / mouse-look turn smoothly,
-  any angle; `Heading8` lives on only as a derived value where systems need a discrete
-  direction (portal exit facing, interact). (b) Keep 8-way snap turns over continuous
-  translation — cozier rhythm, but fights the freeform goal.
-- **D2 — Collision source:** analytic from `openings` + footprint table (recommended) vs.
-  colliders generated from the render meshes (heavier, drift-proof by construction, overkill
-  for box hedges).
-- **D3 — Player radius:** proposed ~0.25 sub-cell — wide enough that walls feel like walls,
-  narrow enough that a gateway (one sub-cell) never pinches. Tuned in the Phase 2 feel pass.
-- **D4 — What's solid:** walls, jambs, pedestals/dials/obelisks/plaques/pillars/house/imported
-  assets solid; portals walk-through; flags/vase/small decor ghost (recommended) — or
-  everything solid for maximum "real".
-- **D5 — Walking during a twist:** freeze feet while riding (today's rule, recommended for v1)
-  vs. free walking on the rotating slice (delightful, but collision against mid-rotation
-  neighbors is a can of worms — note for M15.3's percept experiment, which this milestone
-  makes much easier).
-- **D6 — Input mapping:** keep keyboard-only (arrows/WASD + Caps-Lock mouselook) for now
-  (recommended); full mouse-look default and iOS touch design are their own later item.
+- **D1 — Default density:** 9 (recommended start — stride-scale cells, chunky-but-fair
+  footprints) vs 15 (finer avoidance, smoother-looking blocking). Phase 3 decides with feet.
+- **D2 — Diagonal rule:** generalize today's flanking-cell rule (a diagonal hop needs at
+  least one adjacent orthogonal cell open — recommended; prevents slipping through wall
+  corners) vs free diagonals.
+- **D3 — What blocks:** walls/jambs + pedestals, dials, obelisks, plaques, pillars, house,
+  imported assets solid; portals + lamps + flags/vase ghost (recommended list — amend at will).
+- **D4 — Density scope:** per-world in `WorldScale` (recommended — interiors may want finer)
+  vs one global constant.
+- **D5 — Grass pace:** same speed on grass as on path, or a touch slower on grass (flavor,
+  cheap, maybe cozy — no recommendation, feel-pass question).
 
-## Risks
+## Additional notes & thoughts
 
-1. **Feel regression.** The grid-hop is reliable and cozy; continuous movement can feel
-   floaty or jittery. Mitigation: Phase 1 is a feel gate — if it doesn't feel *better*, stop
-   and reassess before any collision work.
-2. **Hidden discrete couplings.** Portals, interact, discovery, twist-remap, `steerToLook`,
-   `framePose` caching all assume the anchor model somewhere. The anchored-continuous
-   representation + derived-compat shims are the mitigation; Phase 0 exists to flush these
-   out while behavior is still identical.
-3. **Cube-edge crossing is the hard part** (Phase 4). Same class of problem as M15's inverted
-   basis — solved the same way: world-position-pinned headless tests before believing eyes.
-4. **Scope creep into physics.** No jumping, no gravity sim, no dynamic bodies — "solidity"
-   means *you can't stand inside things*, nothing more.
+- **The upgrade path is real, not rhetorical.** Mask derivation = rasterized version of the
+  aspirational plan's analytic colliders, from the same sources (`openings` + footprints).
+  Going freeform later means swapping the consumer (cell lookup → circle-vs-slab slide),
+  keeping every input. Nothing built here is throwaway.
+- **Discovery/fog is untouched** — it's tile-level, and the player still occupies exactly one
+  tile. Same for portals' walk-through, dial interact range, and the M17 plan (which never
+  touches movement; the two milestones stay order-independent, M17-first still recommended).
+- **iOS benefits quietly:** discrete cells make future touch input (tap-to-step, swipe-to-turn)
+  much easier to design than analog sticks would be.
+- **Perf is a non-issue:** masks are `d²` bits per facelet, derived on stamp/spawn and on prop
+  change; movement stays O(1) per hop.
+- **M15.3 percept experiment** (camera rides the slice) is unaffected either way; the
+  aspirational plan would have made it easier, this plan leaves it as-is.
+- **Watch item for Phase 1:** with grass walkable, the *maze* is now enforced only by hedge
+  walls — any tile whose wall emission doesn't fully cover its closed edges becomes a secret
+  shortcut. The mask derives from `openings` (not the meshes), so the mask is airtight even if
+  a mesh has a visual gap — but the reverse (mask hole, mesh solid) would read as an invisible
+  wall; the headless mask-vs-openings invariant test guards it.
