@@ -148,9 +148,11 @@ class CubeModel {
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1))
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
             sealedPortalCubies.insert(dci)   // M16.4: closed until unlocked AND twisted open
-            // M16.5: the lock speaks — a carved tesseract-shadow plaque on the door's approach side
-            // (on the bonded tile, so the lock livery gilds it and the refusal flares it).
-            cubies[dci].facelets[dfi].props.append(Prop(kind: .glyph, subRow: 0, subCol: 0, facing: .n))
+            // M16.5: the lock speaks — a carved tesseract-shadow plaque on the door tile (bonded,
+            // so the lock livery gilds it and refusals flare it), oriented to face the open
+            // approach — never a wall (Eddie).
+            let doorOpenings = cubies[dci].facelets[dfi].mazeTile.openings
+            cubies[dci].facelets[dfi].props.append(glyphPlaque(onTile: doorOpenings, preferred: .north))
             var bond: Set<Int> = [dci]
             for pc in [doorCol - 1, doorCol + 1] where (0..<size).contains(pc) {
                 if let (pci, pfi) = faceletAt(face: .positiveZ, row: templeRow, col: pc) {
@@ -187,7 +189,10 @@ class CubeModel {
                     cubies[ci2].facelets[fi2].props.append(Prop(kind: .dial, subRow: 1, subCol: 1, facing: f, state: st))
                     // M16.5: the same mark beside every dial — the association between the four
                     // dials and the locked temple, said in the Builders' language, not in words.
-                    cubies[ci2].facelets[fi2].props.append(Prop(kind: .glyph, subRow: 0, subCol: 0, facing: f))
+                    // Oriented to an open direction (preferring toward the plaza), never a wall.
+                    let dialOpenings = cubies[ci2].facelets[fi2].mazeTile.openings
+                    let towardPlaza: SurfaceDirection = r < cc ? .south : .north
+                    cubies[ci2].facelets[fi2].props.append(glyphPlaque(onTile: dialOpenings, preferred: towardPlaza))
                 }
             }
         }
@@ -215,6 +220,20 @@ class CubeModel {
             if let (ci, fi) = faceletAt(face: houseFace, row: r, col: c) {
                 cubies[ci].facelets[fi].props.append(Prop(kind: .houseCorner, subRow: 1, subCol: 1, facing: f))
             }
+        }
+    }
+
+    /// M16.5 orientation rule (Eddie): a plaque must never face into a wall. Face it along an
+    /// OPEN direction of its tile (preferring the approach side) and stand it back against the
+    /// opposite edge — mounted like a wall plaque, reading into the open space.
+    private func glyphPlaque(onTile openings: DirectionMask, preferred: SurfaceDirection) -> Prop {
+        let order: [SurfaceDirection] = [preferred, .north, .south, .east, .west]
+        let dir = order.first(where: { openings.contains(Self.directionMask($0)) }) ?? preferred
+        switch dir {
+        case .north: return Prop(kind: .glyph, subRow: 2, subCol: 1, facing: .n)
+        case .south: return Prop(kind: .glyph, subRow: 0, subCol: 1, facing: .s)
+        case .east:  return Prop(kind: .glyph, subRow: 1, subCol: 0, facing: .e)
+        case .west:  return Prop(kind: .glyph, subRow: 1, subCol: 2, facing: .w)
         }
     }
 
@@ -250,7 +269,8 @@ class CubeModel {
         // carved glyph beside it (M16.5) — the mote's future home, marked in the language.
         if let (ci, fi) = faceletAt(face: .positiveZ, row: max(0, c - 1), col: c) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .glyph, subRow: 2, subCol: 1, facing: .s))
+            let pedOpenings = cubies[ci].facelets[fi].mazeTile.openings
+            cubies[ci].facelets[fi].props.append(glyphPlaque(onTile: pedOpenings, preferred: .south))
         }
         // Return portal south of centre (walking onto it exits — depth > 1 always pops).
         // Its exit direction is north: arrivals emerge facing the hall and the pedestal.
