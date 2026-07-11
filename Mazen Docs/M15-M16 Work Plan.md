@@ -1,5 +1,7 @@
 # M15 + M16 — Work Plan (inverted interiors → the lock→break→enter loop)
 
+**STATUS: THE CORE LOOP IS PLAYABLE AND VERIFIED (2026-07-11)** — notice → refused → understand → unlock → twist open → enter, all built and Eddie-tested in one day (M15.0–2, M16.1–4). Remaining: M16.5 (the carved glyph), the M15.3 twist-percept experiment, and polish (clue slab, carried-light, feel tuning).
+
 *Drafted 2026-07-10 (evening) for Eddie's greenlight, incorporating this week's design decisions: the [World Graph](World%20Graph%20—%20Relational%20Worlds.md) (route-keyed worlds — M15's first build step), [Builder Glyphs](Builder%20Glyphs%20—%204D%20Shadows.md) (locks eventually speak in 4D shadows), the M13 bandaging foundation (built, inert), and M10's deferred Phase H (gates). R2 left the runway clear: Renderer split, placement unified behind `restMatrix`/`inflatedPlacement`, 107k tests. Statuses: **📋 all phases awaiting greenlight.***
 
 ## Why these two together
@@ -57,7 +59,7 @@ When a twist is refused: a soft resistance shake (a few degrees of rotation that
 The Player Journey's beat, minimally: **four dial-props** placed around the garden, three pre-aligned, one not; an environmental clue (a carved slab prop). Interacting (F) with the last dial aligns it → `removeBond` fires → the glow goes warm → the structure's slice is twistable. M10's deferred Phase H (gates/locks) is raw material here.
 *Scope guard:* this is deliberately "find the pattern and act once" — the *deep* version (composable glyph grammar) is M17+ territory; do not gold-plate.
 
-### Phase 4 — Twist open → enter → the loop closes
+### Phase 4 — Twist open → enter → the loop closes ✅ (2026-07-11 — sealed doors, opened by the unlocked twist; Eddie ran the full loop end to end: "That was fun")
 The now-unlocked slice twist swings the temple open, revealing the portal (the door prop activates / appears) → walk through → **the M15 interior**. First full run of the core loop, end to end.
 *Verify (the milestone's whole point):* a fresh player-eye run: notice the structure → try the twist → refusal cue → find the dials → align → twist open → step inside → the reveal (engineered interior under the natural surface).
 

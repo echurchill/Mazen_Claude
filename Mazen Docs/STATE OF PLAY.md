@@ -35,7 +35,10 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 
 ## Immediate next actions on resume
 
-- **Greenlight the [M15/M16 Work Plan](M15-M16%20Work%20Plan.md)** — drafted 2026-07-10 evening for Eddie's review. Five decision points (D1 sequence, D2 interior lighting, D3 first-interior size, D4 first bonded structure, D5 registry key format), each with a recommendation. First build step on approval: **M15 Phase 0, the World Registry** (route-keyed worlds per the [World Graph](World%20Graph%20—%20Relational%20Worlds.md)).
+- **THE CORE LOOP IS PLAYABLE (2026-07-11):** notice → twist refused (strain + red flare) → find the grey dial → align (F) → the temple sheds its gold → twist swings it open → the door lights → step into the inverted 5³ temple interior. Eddie's verdict after the first full run: **"That was fun."** All of M15.0–2 and M16.1–4 were built AND verified in one session (world registry; inverted interiors; door-semantics portals; the bonded gold temple rooted through the hollow world's core; dials; sealed doors).
+- **Next:** M16.5 (the first carved glyph — Builder-Glyphs style, cosmetic seed), the M15.3 twist-percept experiment (camera decoupling while riding), polish (clue slab, player-carried light, feel tuning) — then M17 (memory) / M18 (the slice worlds).
+- ~~Greenlight the [M15/M16 Work Plan](M15-M16%20Work%20Plan.md)~~ — **greenlit and mostly executed**; statuses live in that doc.
+- *(Original pre-greenlight note follows for context:)* **the [M15/M16 Work Plan](M15-M16%20Work%20Plan.md)** — drafted 2026-07-10 evening for Eddie's review. Five decision points (D1 sequence, D2 interior lighting, D3 first-interior size, D4 first bonded structure, D5 registry key format), each with a recommendation. First build step on approval: **M15 Phase 0, the World Registry** (route-keyed worlds per the [World Graph](World%20Graph%20—%20Relational%20Worlds.md)).
 - Loose ends that can ride along anytime: M14b polish (per-world authored roundness; sunset terminator tuning), one FP glance at the moon to fully close R2.11's note.
 
 ## Where things stand (as of 2026-07-10 night)
