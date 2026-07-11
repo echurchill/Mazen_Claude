@@ -7,6 +7,7 @@ enum WorldStamp {
     case moonDemo        // the moon: the demo plaza but only its one door home (no temple doorway)
     case templeInterior  // the first hand-stamped interior: central hall, pedestal, return portal
     case bare            // nothing authored — the bare generated maze (tests; procedural worlds later)
+    case natural         // M18 Phase 1: no walls anywhere — open ground + a few landmarks (the open-field testbed; M19 grows it into the Natureworld)
 }
 
 class CubeModel {
@@ -44,6 +45,42 @@ class CubeModel {
             stampTempleInterior()
         case .bare:
             break
+        case .natural:
+            stampNatural()
+        }
+    }
+
+    /// M18 Phase 1 — the open-field testbed: every edge of every tile fully open (no hedge
+    /// walls, no gateways — just ground, everywhere, across every face and cube edge), a
+    /// scatter of topiary landmarks so walking has reference points, and the way home. M19
+    /// turns this from testbed into the authored Natureworld (water, trees, relief).
+    private func stampNatural() {
+        let all: DirectionMask = [.north, .east, .south, .west]
+        for ci in cubies.indices {
+            for fi in cubies[ci].facelets.indices {
+                cubies[ci].facelets[fi].mazeTile.openings = all
+                cubies[ci].facelets[fi].mazeTile.openEdges = all
+            }
+        }
+        let c = size / 2
+        // Landmarks: an off-center ring of topiary around the arrival area, one obelisk
+        // farther out as a horizon reference. Bounds-checked before faceletAt — it indexes
+        // the projection grid directly, so range is the caller's job (at size 3 most of
+        // this ring simply doesn't fit, and that's fine).
+        for (dr, dc) in [(-2, -1), (-1, 2), (1, -2), (2, 1)] {
+            let r = c + dr, cl = c + dc
+            guard (0..<size).contains(r), (0..<size).contains(cl) else { continue }
+            if let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: cl) {
+                cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 1, subCol: 1))
+            }
+        }
+        if let (ci, fi) = faceletAt(face: .negativeZ, row: c, col: c) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+        }
+        // The way home — a walk-through return portal one tile south of arrival.
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: min(size - 1, c + 1), col: c) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
     }
 

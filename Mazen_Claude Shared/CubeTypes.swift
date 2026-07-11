@@ -227,6 +227,29 @@ struct MazeTile {
         }
         return false
     }
+
+    /// M18 Phase 1 — whether edge `dir` lets a player stand at / cross through lateral
+    /// stand-cell `lateral` (0..<grid along the edge). Fully open edges (room interiors,
+    /// natural worlds) allow anywhere; gateway edges only through the centered gap (the
+    /// middle third — exactly the visual gap `gatewayGapFraction` cuts, jambs flank it);
+    /// closed edges never (the hedge wall occupies the border strip).
+    func edgeAllows(_ dir: SurfaceDirection, lateral: Int, grid: Int) -> Bool {
+        if openEdges.contains(direction: dir) { return true }
+        guard openings.contains(direction: dir) else { return false }
+        let gapLo = grid / 3
+        return lateral >= gapLo && lateral < grid - gapLo
+    }
+
+    /// M18 Phase 1 — the walkability rule: every stand cell is walkable (grass!) except
+    /// border cells claimed by their edge's wall geometry. A corner cell answers to both
+    /// of its edges. (Prop footprints subtract on top of this in M18 Phase 2.)
+    func isStandable(_ subRow: Int, _ subCol: Int, grid: Int) -> Bool {
+        if subRow == 0 && !edgeAllows(.north, lateral: subCol, grid: grid) { return false }
+        if subRow == grid - 1 && !edgeAllows(.south, lateral: subCol, grid: grid) { return false }
+        if subCol == 0 && !edgeAllows(.west, lateral: subRow, grid: grid) { return false }
+        if subCol == grid - 1 && !edgeAllows(.east, lateral: subRow, grid: grid) { return false }
+        return true
+    }
 }
 
 /// A placed object living on a tile's propSpace (M10 Phase G). Anchored to its facelet,

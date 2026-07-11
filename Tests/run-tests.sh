@@ -12,6 +12,7 @@ swiftc -O \
     "$SHARED/CubeTypes.swift" \
     "$SHARED/EdgeCrossing.swift" \
     "$SHARED/CubeModel.swift" \
+    "$SHARED/PlayerState.swift" \
     "Tests/CoordinateMathTests.swift" \
     -o "$OUT"
 

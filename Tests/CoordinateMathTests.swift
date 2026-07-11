@@ -1,6 +1,10 @@
 import Foundation
 import simd
 
+/// The app defines this global in GameState.swift (not compiled here); PlayerState
+/// references it, so the harness supplies the quiet default.
+let verboseDebugLog = false
+
 // Standalone coordinate-math test runner (Phase 0 / R4).
 //
 // Compiles the pure-Swift model sources (no Metal) together with this file and
@@ -44,7 +48,10 @@ struct CoordinateMathTests {
             testInteriorPlacement(size: n)
             testEdgeContinuity(size: n, interior: false)
             testEdgeContinuity(size: n, interior: true)
+            testStandGridCrossing(size: n, interior: false)
+            testStandGridCrossing(size: n, interior: true)
         }
+        testStandableRules()
         testDirectionMaskRotation()
         testPropRotation()
         testInflateGoldens()
@@ -59,6 +66,135 @@ struct CoordinateMathTests {
             for f in failures.prefix(50) { print("   - \(f)") }
             if failures.count > 50 { print("   … and \(failures.count - 50) more") }
             exit(1)
+        }
+    }
+
+    /// M18 Phase 1 — hand-derived walkability truths (non-circular: expectations written out
+    /// case by case, not recomputed from the same formula).
+    static func testStandableRules() {
+        let d = 9, c = 4
+        // A north-gateway corridor tile: gap cells on the north border only, everything
+        // interior walkable (grass), all other borders wall-claimed.
+        let gate = MazeTile(openings: [.north], styleSeed: 0)
+        check(gate.isStandable(0, c, grid: d), "gateway: north gap centre standable")
+        check(gate.isStandable(0, 3, grid: d) && gate.isStandable(0, 5, grid: d), "gateway: full gap third standable")
+        check(!gate.isStandable(0, 2, grid: d) && !gate.isStandable(0, 6, grid: d), "gateway: jamb cells blocked")
+        check(!gate.isStandable(0, 0, grid: d) && !gate.isStandable(0, d - 1, grid: d), "gateway: north corners blocked")
+        check(!gate.isStandable(d - 1, c, grid: d), "gateway: closed south border blocked")
+        check(!gate.isStandable(c, 0, grid: d) && !gate.isStandable(c, d - 1, grid: d), "gateway: closed west/east borders blocked")
+        check(gate.isStandable(1, 1, grid: d) && gate.isStandable(c, c, grid: d) && gate.isStandable(d - 2, d - 2, grid: d),
+              "gateway: interior grass standable everywhere")
+        // A room-interior tile (north fully open): whole north border standable except the
+        // corners its closed side edges claim.
+        let room = MazeTile(openings: [.north], styleSeed: 0, openEdges: [.north])
+        check(room.isStandable(0, 1, grid: d) && room.isStandable(0, c, grid: d) && room.isStandable(0, d - 2, grid: d),
+              "open edge: border standable")
+        check(!room.isStandable(0, 0, grid: d) && !room.isStandable(0, d - 1, grid: d),
+              "open edge: corners still claimed by the closed side edges")
+        // The natural world: everything open ⇒ every cell standable, corners included.
+        let all: DirectionMask = [.north, .east, .south, .west]
+        let field = MazeTile(openings: all, styleSeed: 0, openEdges: all)
+        for r in 0..<d { for cl in 0..<d {
+            check(field.isStandable(r, cl, grid: d), "natural: (\(r),\(cl)) standable")
+        } }
+    }
+
+    /// M18 Phase 1 — world-position-pinned crossing continuity on the stand grid (the M15
+    /// technique): walk over every tile seam and cube edge, exterior and interior, cardinal
+    /// AND diagonal, from every lateral cell — and pin the world geometry:
+    ///   • same-face: the arrival cell's world position must equal the departure tile's
+    ///     linear extrapolation (seam invisible by construction);
+    ///   • cube-edge: the lateral coordinate along the shared edge axis must be preserved
+    ///     (cardinal) or shifted by exactly one stand step (diagonal) — a straight or
+    ///     diagonal walk never skips sideways at a fold.
+    static func testStandGridCrossing(size n: Int, interior: Bool) {
+        let model = CubeModel(worldScale: WorldScale(cubeSize: n, interior: interior), stamp: .natural)
+        model.roundness = 0
+        let ws = model.worldScale
+        let d = ws.standGrid, c = d / 2
+        let step = ws.standStep * ws.cellSpacing
+        let tag = interior ? "int" : "ext"
+
+        func pos(_ f: CubeFace, _ r: Int, _ cl: Int, _ sr: Int, _ sc: Int) -> SIMD3<Float> {
+            col3(model.inflatedPlacement(face: f, row: r, col: cl,
+                                         localX: Float(sc - c) * ws.standStep,
+                                         localY: Float(sr - c) * ws.standStep), 3)
+        }
+        // Border cell of edge `dir` at lateral index `lat`.
+        func borderCell(_ dir: SurfaceDirection, _ lat: Int) -> (Int, Int) {
+            switch dir {
+            case .north: return (0, lat)
+            case .south: return (d - 1, lat)
+            case .west:  return (lat, 0)
+            case .east:  return (lat, d - 1)
+            }
+        }
+        // Travel headings that exit through `dir`: the cardinal and its two diagonals.
+        func travels(_ dir: SurfaceDirection) -> [Heading8] {
+            let card = Heading8.from(surfaceDirection: dir)
+            let left = Heading8(rawValue: (card.rawValue + 1) % 8)!
+            let right = Heading8(rawValue: (card.rawValue + 7) % 8)!
+            return [card, left, right]
+        }
+
+        for face in CubeFace.allCases {
+            for dir in [SurfaceDirection.north, .south, .east, .west] {
+                // One tile mid-face (same-face seam) and one on the cube edge (fold).
+                let mid = n / 2
+                let edgeTile: (Int, Int)
+                let midTile: (Int, Int)
+                switch dir {
+                case .north: edgeTile = (0, mid); midTile = (mid, mid)
+                case .south: edgeTile = (n - 1, mid); midTile = (mid == 0 ? 0 : mid - 1, mid)
+                case .west:  edgeTile = (mid, 0); midTile = (mid, mid)
+                case .east:  edgeTile = (mid, n - 1); midTile = (mid, mid == 0 ? 0 : mid - 1)
+                }
+                for (row, col) in [edgeTile, midTile] {
+                    for lat in 0..<d {
+                        for travel in travels(dir) {
+                            let (sr, sc) = borderCell(dir, lat)
+                            var p = PlayerState(size: n, standGrid: d)
+                            p.face = face; p.row = row; p.col = col
+                            p.subRow = sr; p.subCol = sc
+                            p.facing = travel
+                            p.tryMoveForward(cubeModel: model)
+
+                            // Does this hop exit at all? The lateral shift must stay on the edge;
+                            // a shifted-out diagonal is a legal *within-tile*… no — from a border
+                            // cell every travel through `dir` leaves the grid. Shift out of range ⇒
+                            // refused (corner-to-corner), which is the spec.
+                            let (dr, dc) = travel.subDelta
+                            let shifted = (dir == .north || dir == .south) ? sc + dc : sr + dr
+                            guard (0..<d).contains(shifted) else {
+                                check(!p.isMoving, "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): corner exit must refuse")
+                                continue
+                            }
+                            check(p.isMoving, "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): crossing must start")
+                            guard p.isMoving else { continue }
+                            _ = p.updateMovement(deltaTime: 10)
+
+                            let dep = pos(face, row, col, sr, sc)
+                            let arr = pos(p.face, p.row, p.col, p.subRow, p.subCol)
+                            let lateralShift = Float(abs(travel.rawValue % 2 == 0 ? 0 : 1)) * step
+
+                            if p.face == face {
+                                // Same-face: exact — the neighbor's cell IS the linear extrapolation.
+                                let expected = pos(face, row, col, sr + dr, sc + dc)
+                                check(approx(arr, expected, 2e-4),
+                                      "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): same-face seam exact")
+                            } else {
+                                // Cube edge: lateral position along the shared edge axis is pinned.
+                                let axis = normalize(cross(face.normal, p.face.normal))
+                                let latErr = abs(abs(dot(arr - dep, axis)) - lateralShift)
+                                check(latErr < 2e-4,
+                                      "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): edge lateral drift \(latErr)")
+                                check(length(arr - dep) < 1.6 * step,
+                                      "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): fold distance \(length(arr - dep))")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

@@ -64,7 +64,7 @@ possible, so **M18 runs before M17.** Consequences for this plan:
 
 ## Phases
 
-### Phase 0 — Densify (behavior-identical) — 🔨 built 2026-07-11, awaiting Eddie's play check
+### Phase 0 — Densify (behavior-identical) — ✅ verified (Eddie, 2026-07-11)
 Introduce `d` and the integer scaling: prop subcell coordinates, `edgeMiddle`, spawn centre,
 player marker, portal/interact positions, the twist player-remap. First flip walkability to
 *exactly the scaled path cross* so the game plays identically to today — this flushes every
@@ -78,7 +78,7 @@ Touched: WorldScale, CubeTypes (`isPathCell(grid:)`), PlayerState, GameState (sp
 twist remap), CameraState (FP eye), SceneBuilder (marker), Renderer (portal seating);
 +5,424 checks (stand-grid cross at d=3/9/15 × all 16 opening combos).
 
-### Phase 1 — Open the grass, mask the walls
+### Phase 1 — Open the grass, mask the walls — 🔨 built 2026-07-11, awaiting Eddie's play check
 Walkable-by-default + wall/jamb subtraction replaces the path-cross rule. The player steps
 off the path for the first time. Gateways now gate by geometry (the wall cells), not by the
 edge-middle rule — tile exits allowed from any open edge cell, crossing to the neighbour's
@@ -91,6 +91,17 @@ the standing testbed for the open-field feel question.
 cousin of the freeform plan's Phase 4). *Verify:* world-position-pinned crossing tests (the
 M15 technique) over every edge, exterior + interior, several sizes, cardinal AND diagonal;
 then a feel walk — corridor and open field.
+*Build note:* walkability = `MazeTile.isStandable` (grass by default; closed edges claim
+their border cells, gateways their non-gap cells — the gap is exactly the visual middle
+third). Crossings from ANY border gap cell, lateral index preserved via an EdgeCrossing
+probe (`PlayerState.lateralSign`) so interior conjugation is consistent for free; diagonal
+exits decompose to cardinal-cross + lateral shift; travel heading rotates with the surface
+frame (a diagonal walk stays diagonal over a fold). `.natural` stamp (all edges open +
+landmarks + return portal), **B key** visits it (registry world "natural", size 7).
+Tests: +31,050 (hand-derived standable truths; world-pinned seam/fold continuity, cardinal
++ diagonal, ext + int — same-face seams exact, folds pin the lateral along the shared cube
+edge axis); 146,115 green. Also fixed: faceletAt crashes on out-of-range coords — natural
+stamp bounds-checks (found by the size-3 test).
 
 ### Phase 2 — Solid props (stand-point removal)
 The footprint table + auto-derived imports; subtraction into the mask. A plaque, dial,

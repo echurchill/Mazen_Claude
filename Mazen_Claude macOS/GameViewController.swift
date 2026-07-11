@@ -176,6 +176,8 @@ class GameViewController: NSViewController {
             renderer.debugPlainShading.toggle()
         case 34:      // I — M15.2 debug: fade into / out of the temple-interior world
             renderer.beginWorldTransition(destinationID: 1)
+        case 11:      // B — M18 Phase 1 debug: fade into / out of the "natural" open-field world
+            renderer.beginWorldTransition(destinationID: 2)
         case 38:      // J — debug: toggle the idle world spin only (leaves the sun/time moving)
             gs.spinEnabled.toggle()
         case 40:      // K — debug: freeze/unfreeze time *in place* (no reset to noon, unlike Shift+T)
