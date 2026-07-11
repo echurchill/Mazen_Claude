@@ -178,8 +178,12 @@ final class SceneBuilder {
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             var materialID: UInt32 = 10
-                            if refusalGlow > 0, model.bondedGroups.contains(where: { $0.contains(ci) }) {
-                                color = mix(color, SIMD4(1.0, 0.12, 0.08, 1.0), t: refusalGlow)   // the lock flares
+                            if model.bondedGroups.contains(where: { $0.contains(ci) }) {
+                                // Locked-structure livery (M16.2, Eddie): golden yellow, so a lock
+                                // is findable at a glance — and it flares red while a refused
+                                // twist strains against it.
+                                color = SIMD4(0.95, 0.78, 0.20, 1.0)
+                                if refusalGlow > 0 { color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow) }
                             }
                             if prop.kind == .chest && prop.state == 1 { color = SIMD4(0.98, 0.80, 0.30, 1.0) }  // opened / "lit"
                             if prop.kind == .portalLamp {
