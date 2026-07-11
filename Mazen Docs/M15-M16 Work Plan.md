@@ -34,7 +34,7 @@ A per-world `orientation: exterior | interior` (on `WorldScale` or `GameState`) 
 A small hand-stamped **temple interior** (3³ or 5³ — decision D3) registered as `(temple-interior, from: overworld)`, reached through a portal prop on the overworld. Stamp it sparsely: stone register (existing stone texture), a couple of prop pedestals, one open chamber — legible, not busy.
 *Verify:* the full walk-through: overworld → portal → fade → standing *inside* — look up, see the far wall's maze overhead. Return trip persists scars.
 
-### Phase 3 — Twist while inside 🔎 (works; percept experiment queued)
+### Phase 3 — Twist while inside ✅ core works (2026-07-11); percept experiment still queued
 Eddie's observation (2026-07-11): riding your own slice, the static walls sweep on screen and read as "the OTHER slices rotating" (no sky inside → the large visual field wins the motion attribution). **Experiment:** decouple camera position from orientation while riding — position follows the slice exactly, orientation stays world-anchored (or lags) — so the room holds still and *you* feel carried through the arc.
 Slice rotation of the world you're standing in — the *room rearranges around you*. Architecturally this should mostly already work (twist machinery is per-`GameState`; the camera rides via `playerCubieIndex`), but nobody has ever twisted an interior.
 *Verify:* Q/E inside; walls/ceiling sweep past correctly; `.step` scrub looks right; bandaging legality still enforced.
@@ -45,11 +45,11 @@ Slice rotation of the world you're standing in — the *room rearranges around y
 
 ## M16 — Lock → Break → Enter (activating M13 as the verb)
 
-### Phase 1 — Bond a real structure
+### Phase 1 — Bond a real structure ✅ (2026-07-11 — gold temple door + pillars, rooted through the hollow world's core to the opposite face; Eddie verified the refusal)
 The overworld temple structure (new prop cluster, or the existing house — decision D4) becomes an M13 **bonded group**. Twists through its slices now *refuse*. Needs one tiny API addition: `removeBond` (bonds are currently add-only).
 *Verify:* existing bandaging tests + a new remove/unbond test; the refused twist genuinely doesn't move.
 
-### Phase 2 — The refusal cue *(the `twistRefused` flag finally gets its consumer)*
+### Phase 2 — The refusal cue ✅ (2026-07-11 — strain shake + spring-back, camera rides it; lock-gold livery flares red; Eddie verified: "slice doesn't rotate and the gold props flash red")
 When a twist is refused: a soft resistance shake (a few degrees of rotation that spring back), a low tone placeholder, and a **glow trace on the bonded structure** (the Player Journey's four-points image). This is the game's first *taught-not-told* beat — the refusal IS the tutorial for "lock."
 *Danger:* **Low-Med** (first gameplay-feel work; iterate with Eddie live). *Verify:* feel pass together.
 
