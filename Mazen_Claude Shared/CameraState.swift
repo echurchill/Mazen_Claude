@@ -106,17 +106,19 @@ struct CameraState {
 
         var facingWorld: SIMD3<Float>
         if player.isMoving {
-            let fromDir = Self.headingToWorld(player.facing, face: player.moveFromFace)
-            let toDir = Self.headingToWorld(player.moveNewFacing, face: player.moveToFace)
+            let interior = cubeModel.worldScale.interior
+            let fromDir = Self.headingToWorld(player.facing, face: player.moveFromFace, interior: interior)
+            let toDir = Self.headingToWorld(player.moveNewFacing, face: player.moveToFace, interior: interior)
             let t = player.moveProgress   // linear = constant walking speed (no per-hop stop-start)
             facingWorld = normalize(mix(fromDir, toDir, t: t))
         } else if player.isTurning {
-            let fromDir = Self.headingToWorld(player.turnFromFacing, face: player.face)
-            let toDir = Self.headingToWorld(player.turnToFacing, face: player.face)
+            let interior = cubeModel.worldScale.interior
+            let fromDir = Self.headingToWorld(player.turnFromFacing, face: player.face, interior: interior)
+            let toDir = Self.headingToWorld(player.turnToFacing, face: player.face, interior: interior)
             let t = Self.smoothstep(player.turnProgress)
             facingWorld = normalize(mix(fromDir, toDir, t: t))
         } else {
-            facingWorld = Self.headingToWorld(player.facing, face: player.face)
+            facingWorld = Self.headingToWorld(player.facing, face: player.face, interior: cubeModel.worldScale.interior)
         }
 
         // M14b: re-seat the (flat) heading into the local curved tangent plane, so the horizon
@@ -161,16 +163,18 @@ struct CameraState {
     // MARK: - Helpers
 
     /// World-space direction a heading points, in a face's local (tangent, bitangent) plane.
-    static func headingToWorld(_ h: Heading8, face: CubeFace) -> SIMD3<Float> {
+    /// Interior worlds (M15.1) mirror the row/bitangent axis — the face seen from inside.
+    static func headingToWorld(_ h: Heading8, face: CubeFace, interior: Bool) -> SIMD3<Float> {
         let tb = h.tangentBitangent
-        return normalize(face.tangent * tb.t + face.bitangent * tb.b)
+        let b = interior ? -face.bitangent : face.bitangent
+        return normalize(face.tangent * tb.t + b * tb.b)
     }
 
     /// Nearest 8-way heading for a world-space direction on a face (inverse of the above).
-    static func worldToHeading8(_ dir: SIMD3<Float>, face: CubeFace) -> Heading8 {
+    static func worldToHeading8(_ dir: SIMD3<Float>, face: CubeFace, interior: Bool) -> Heading8 {
         let t = dot(dir, face.tangent)
-        let b = dot(dir, face.bitangent)
-        let angle = atan2f(t, -b)  // 0 = north (−bitangent)
+        let b = dot(dir, interior ? -face.bitangent : face.bitangent)
+        let angle = atan2f(t, -b)  // 0 = north (−bitangent in the world frame of this orientation)
         var idx = Int((angle / (.pi / 4)).rounded())
         idx = ((idx % 8) + 8) % 8
         return Heading8(rawValue: idx)!

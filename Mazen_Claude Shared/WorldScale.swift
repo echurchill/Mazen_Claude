@@ -23,6 +23,13 @@ struct WorldScale {
 
     let cubeSize: Int
 
+    /// M15.1: an **interior** world — the maze lives on the *inside* faces of a hollow cube (the
+    /// temples/homes you break into). Consumed by `CubeModel.restMatrix`/`inflatedPlacement` (the
+    /// placement basis points "up" inward and mirrors the row axis — seeing a face from behind is
+    /// a mirror image), by `CubeModel.edgeCrossing` (conjugated adjacency), and by the renderer
+    /// (no sky, no celestials, lantern light). Grid/maze/twist logic is orientation-blind.
+    let interior: Bool
+
     // MARK: - Tile geometry & spacing
     /// Distance between adjacent tile centers. 1.0 (M10 decision #5 gap removal) so
     /// adjacent floors meet seamlessly instead of showing a dark trench across plazas.
@@ -73,11 +80,12 @@ struct WorldScale {
     // at 75, and a fixed 220 would clip the sun on the opposite side).
     var cameraFarZ: Float { max(220.0, 3.0 * sizeF + 190.0) }
 
-    init(cubeSize: Int) {
+    init(cubeSize: Int, interior: Bool = false) {
         // R2.16: hard upper limit — clamp rather than trust callers, so nothing can ever build
         // a world bigger than the instance buffers are provisioned for. (Lower bound 2 keeps the
         // math meaningful; the game itself uses 3+.)
         self.cubeSize = min(max(cubeSize, 2), Self.maxSupportedSize)
+        self.interior = interior
     }
 
     // MARK: - Derived world extents (scale with cube size; exact at size 5)

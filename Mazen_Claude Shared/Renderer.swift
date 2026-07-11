@@ -291,11 +291,33 @@ class Renderer: NSObject, MTKViewDelegate {
             $0.cubeModel.roundness = max(0, min(1, $0.cubeModel.roundness + delta))
         }
         // Whole universe, each distinct world exactly once (a world can be on the stack AND in
-        // the registry — e.g. standing on the moon — and must not be double-stepped).
+        // the registry — e.g. standing on the moon — and must not be double-stepped). Interior
+        // worlds stay flat (roundness 0): they're engineered, and the inflation math is
+        // exterior-only (M15.1).
         var seen = Set<ObjectIdentifier>()
-        for w in worldStack + worldRegistry.allWorlds where seen.insert(ObjectIdentifier(w)).inserted {
+        for w in worldStack + worldRegistry.allWorlds
+        where !w.worldScale.interior && seen.insert(ObjectIdentifier(w)).inserted {
             apply(w)
         }
+    }
+
+    /// M15.1 debug (I key): hop into the first inverted-interior world — the 5³ "temple interior"
+    /// (D3) — resolved by route through the registry, created on first entry, persistent after.
+    /// From inside, I (or O) pops back out. Direct swap for now; the real portal comes in M15.2.
+    func toggleInteriorDebug() {
+        gameState.forwardHeld = false; gameState.backwardHeld = false
+        if worldStack.count > 1 {
+            exitWorld()
+        } else {
+            let key = WorldKey(destination: "temple-interior", origin: gameState.name)
+            let interiorWorld = worldRegistry.world(for: key) {
+                let w = GameState(size: 5, name: "temple-interior", interior: true)
+                Self.setupInitialDiscovery(gameState: w)
+                return w
+            }
+            enterWorld(interiorWorld)
+        }
+        gameState.forwardHeld = false; gameState.backwardHeld = false
     }
 
     // MARK: - World stack (M11.1)
@@ -381,12 +403,15 @@ class Renderer: NSObject, MTKViewDelegate {
         // What hangs in the sky: from a pushed world, the world beneath you on the stack; from the
         // root, whatever the registry resolves for this world's sky edge (M15.0 — an edge, not a
         // fact: today that's moon-<here>; a lying/variant sky is a registry binding away).
-        let counterpart: GameState? = debugSingleTile ? nil
+        // Interior worlds (M15.1) are enclosed: no sky, no celestials, no counterpart overhead.
+        let interior = gameState.worldScale.interior
+        let counterpart: GameState? = (debugSingleTile || interior) ? nil
             : (worldStack.count > 1 ? worldStack[worldStack.count - 2]
                                     : worldRegistry.existing(WorldKey(destination: "moon", origin: gameState.name)))
         let result = debugSingleTile
             ? sceneBuilder.buildSingleTile(tileMeshLib: tileMeshLib, instanceBuffer: buffer)
             : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer,
+                                 includeCelestials: !interior,
                                  includeMoon: counterpart == nil)
         opaqueDrawCalls = result.opaque
         translucentDrawCalls = result.translucent
@@ -426,7 +451,11 @@ class Renderer: NSObject, MTKViewDelegate {
         let cs = gameState.celestialSystem
         // Lighting uses the true sun direction; the shadow map (M9-6) follows the sun by day and
         // the moon at night — one map, switched light — so nights get faint moon shadows.
-        let lightDir = cs.sunDirection(time: gameState.time)
+        // M15.1 (D2): interior worlds have no sun — a fixed warm "lantern" directional instead
+        // (mild positive y so the warm low-sun tint stays subtle; revisit after the loop works).
+        let interior = gameState.worldScale.interior
+        let lightDir = interior ? normalize(SIMD3<Float>(0.35, 0.55, 0.75))
+                                : cs.sunDirection(time: gameState.time)
         let moonDir = cs.moonDirection(time: gameState.time)
         let shadowDir = lightDir.y > -0.05 ? lightDir : (moonDir.y > 0.05 ? moonDir : lightDir)
         let lightPos = shadowDir * ws.lightDistance
@@ -449,8 +478,9 @@ class Renderer: NSObject, MTKViewDelegate {
         let isOrbit = gameState.camera.mode == .orbit
         let halfDiagonal = 1.7320508 * ws.faceDistance
         let camDist = simd_length(framePose.position)
-        let fogNear: Float = isOrbit ? camDist + halfDiagonal : 1.0
-        let fogFar: Float = isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5
+        // Interior worlds (M15.1): no atmosphere yet — fog off (pushed past everything).
+        let fogNear: Float = interior ? 1e6 : (isOrbit ? camDist + halfDiagonal : 1.0)
+        let fogFar: Float = interior ? 2e6 : (isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5)
         // Everything local lies within camDist + halfDiagonal of the camera (the far corner of the
         // active world); beyond that is SKY — the counterpart world hanging up there — which sits
         // outside the local atmosphere and must not take fog (from FP it was reading as a silver
@@ -467,7 +497,7 @@ class Renderer: NSObject, MTKViewDelegate {
             lightViewProjectionMatrix: lightVP,
             sunElevation: lightDir.y,
             moonDirection: moonDir,
-            moonIntensity: 0.30,
+            moonIntensity: interior ? 0 : 0.30,
             eclipseFactor: eclipse,
             fadeAmount: transitionPhase == .none ? 0 : transitionT,
             plainShading: debugPlainShading ? 1 : 0,
@@ -694,13 +724,16 @@ class Renderer: NSObject, MTKViewDelegate {
         if let d = importedProps.first?.diffuse { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
         if let s = texSampler { fragmentArgTable.setSamplerState(s.gpuResourceID, index: 0) }
 
-        // Sky pass: fullscreen triangle, no depth test/write
-        encoder.setRenderPipelineState(skyPipelineState)
-        encoder.setDepthStencilState(depthStateAlways)
-        encoder.setCullMode(.none)
-        encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
+        // Sky pass: fullscreen triangle, no depth test/write. Interior worlds (M15.1) are
+        // enclosed — no sky; the dark clear color reads as unlit cavern for now.
+        if !gameState.worldScale.interior {
+            encoder.setRenderPipelineState(skyPipelineState)
+            encoder.setDepthStencilState(depthStateAlways)
+            encoder.setCullMode(.none)
+            encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
+        }
 
-        // Restore scene state
+        // Scene state
         encoder.setRenderPipelineState(pipelineState)
         encoder.setCullMode(.back)
         encoder.setFrontFacing(.counterClockwise)

@@ -22,11 +22,11 @@ What does *not* come for free (the real M15 work): edge crossings on a concave d
 
 ## M15 — Inverted-Cube Interiors
 
-### Phase 0 — The World Registry *(the World Graph, realized; subsumes M11's "multiple portal destinations")*
+### Phase 0 — The World Registry ✅ (built 2026-07-11; Eddie verified moon-in-sky + O-hop) *(the World Graph, realized; subsumes M11's "multiple portal destinations")*
 Replace `worldStack` + the hardcoded `testInterior` with a **registry**: `[(destination, context) : GameState]`, lazy-created, persistent (scars keep). The stack remains navigation *history*; the registry is the *universe*. Counterpart (sky) lookup goes through the same registry — identity-bound edges (earth↔moon) resolve to one instance; divergent edges to variants.
 *Danger:* **Low** (refactor + feature; the moon keeps working exactly as today, now as a registry entry). *Verify:* portal hop earth↔moon unchanged; scars persist across visits; tests green; a second registered destination reachable from a second portal proves the key actually keys.
 
-### Phase 1 — The inverted world type
+### Phase 1 — The inverted world type 🔨 (in progress 2026-07-11)
 A per-world `orientation: exterior | interior` (on `WorldScale` or `GameState`) consumed *only* inside `restMatrix`/`inflatedPlacement` (the basis flip above). Interior worlds: `includeCelestials: false`, **no sky pass** (dark clear color for now), fog off, **roundness 0 — deliberately**: interiors are *engineered*, so hard-cubic interiors are the shape-as-meaning dial doing its job (and it defers all inverted-inflation math, possibly forever).
 *Danger:* **Med** — the two known traps: (1) **EdgeCrossing on a concave dihedral** — the face-adjacency table should hold combinatorially (same cube graph), but the camera's corner-rounding slerp was tuned for convex corners; expect a sign/behavior fix at interior edges. (2) **Lighting** — sun direction is meaningless inside; first pass = a fixed warm "lantern" directional + ambient (decision point D2). *Verify:* stand on an interior floor in FP, level horizon; walk across all 6 interior faces incl. edge crossings (the Escher moment: rooms overhead); orbit view of an interior world renders sanely (debug).
 

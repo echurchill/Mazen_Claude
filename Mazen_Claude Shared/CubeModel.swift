@@ -361,6 +361,22 @@ class CubeModel {
         let bitangent = face.bitangent
         let colF = (Float(col) + 0.5 - halfN) * spacing
         let rowF = (Float(row) + 0.5 - halfN) * spacing
+
+        // M15.1 — interior world: the tile sits on the SAME face plane but is seen from inside,
+        // which is a mirror image. Keep col ↔ +tangent, mirror the row axis instead: basis
+        // (tangent, −bitangent, −normal) — right-handed, det +1 (cross(t,−b) = −n ✓), local "up"
+        // (+z) points into the cube — and mirror the row *placement* to match (rowF term negated),
+        // so tile-local geometry (walls on grid-north edges etc.) stays aligned with grid logic.
+        if worldScale.interior {
+            let center = normal * halfN + tangent * colF - bitangent * rowF
+            return float4x4(columns: (
+                SIMD4(tangent.x,    tangent.y,    tangent.z,    0),
+                SIMD4(-bitangent.x, -bitangent.y, -bitangent.z, 0),
+                SIMD4(-normal.x,    -normal.y,    -normal.z,    0),
+                SIMD4(center.x,     center.y,     center.z,     1)
+            ))
+        }
+
         let center = normal * halfN + tangent * colF + bitangent * rowF
         return float4x4(columns: (
             SIMD4(tangent.x,   tangent.y,   tangent.z,   0),
@@ -531,7 +547,20 @@ class CubeModel {
     // MARK: - Edge Crossing
 
     func edgeCrossing(face: CubeFace, direction: SurfaceDirection, row: Int, col: Int) -> (face: CubeFace, row: Int, col: Int, facing: SurfaceDirection) {
-        EdgeCrossing.cross(face: face, direction: direction, row: row, col: col, cubeSize: size)
+        guard worldScale.interior else {
+            return EdgeCrossing.cross(face: face, direction: direction, row: row, col: col, cubeSize: size)
+        }
+        // M15.1 — interior adjacency by conjugation: an interior cell (r,c) occupies the same
+        // world spot as the exterior cell (n−1−r, c) on the same face (the row axis is mirrored
+        // in restMatrix), and grid N/S are world-swapped while E/W are unchanged. So: mirror into
+        // exterior coordinates, cross with the proven exterior table, mirror back. The headless
+        // edge-continuity test pins this to world positions.
+        func flip(_ d: SurfaceDirection) -> SurfaceDirection {
+            d == .north ? .south : (d == .south ? .north : d)
+        }
+        let ext = EdgeCrossing.cross(face: face, direction: flip(direction),
+                                     row: size - 1 - row, col: col, cubeSize: size)
+        return (ext.face, size - 1 - ext.row, ext.col, flip(ext.facing))
     }
 
     private func addEdgeBridges() {

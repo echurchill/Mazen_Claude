@@ -75,9 +75,9 @@ class GameState {
     /// "earth" for the overworld, "moon", "temple-interior", … Used to resolve sky/portal edges.
     let name: String
 
-    init(size: Int = 3, name: String = "world") {
+    init(size: Int = 3, name: String = "world", interior: Bool = false) {
         self.name = name
-        let ws = WorldScale(cubeSize: size)
+        let ws = WorldScale(cubeSize: size, interior: interior)
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws)
         player = PlayerState(size: size)
@@ -200,11 +200,12 @@ class GameState {
     /// Geometry-based (via `worldToHeading8`), so it stays consistent with however the camera
     /// renders the look — no separate sign convention to keep straight.
     func steerToLook() {
-        let up = player.face.normal
-        let base = CameraState.headingToWorld(player.facing, face: player.face)
+        let interior = worldScale.interior
+        let up = interior ? -player.face.normal : player.face.normal
+        let base = CameraState.headingToWorld(player.facing, face: player.face, interior: interior)
         let look = simd_quatf(angle: camera.lookYaw, axis: up).act(base)
-        let newFacing = CameraState.worldToHeading8(look, face: player.face)
-        let snapped = CameraState.headingToWorld(newFacing, face: player.face)
+        let newFacing = CameraState.worldToHeading8(look, face: player.face, interior: interior)
+        let snapped = CameraState.headingToWorld(newFacing, face: player.face, interior: interior)
         // signed residual angle from the snapped facing to the actual look, about `up`
         camera.lookYaw = atan2f(dot(cross(snapped, look), up), dot(snapped, look))
         player.facing = newFacing
@@ -315,15 +316,17 @@ class GameState {
                     player.col = newCol
 
                     let rotQ = simd_quatf(angle: sliceRotation.angle, axis: sliceRotation.axis == 0 ? SIMD3(1,0,0) : sliceRotation.axis == 1 ? SIMD3(0,1,0) : SIMD3(0,0,1))
-                    let oldDir = CameraState.headingToWorld(player.facing, face: player.face)
+                    let interior = worldScale.interior
+                    let oldDir = CameraState.headingToWorld(player.facing, face: player.face, interior: interior)
                     let newDir = rotQ.act(oldDir)
-                    player.facing = CameraState.worldToHeading8(newDir, face: player.face)
+                    player.facing = CameraState.worldToHeading8(newDir, face: player.face, interior: interior)
 
                     // Rotate the standing sub-cell the same way the tile's contents rotate:
                     // rotate its offset-from-center by the slice quaternion, then re-read it
                     // in the face frame. Consistent with the openings rotation (same rotQ),
                     // so the player stays on the rotated path cross.
-                    let t = player.face.tangent, b = player.face.bitangent
+                    let t = player.face.tangent
+                    let b = interior ? -player.face.bitangent : player.face.bitangent
                     let oldOffset = t * Float(player.subCol - 1) + b * Float(player.subRow - 1)
                     let newOffset = rotQ.act(oldOffset)
                     player.subCol = min(2, max(0, Int(dot(newOffset, t).rounded()) + 1))

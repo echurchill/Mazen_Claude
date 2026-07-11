@@ -41,6 +41,9 @@ struct CoordinateMathTests {
             testBandagedLegality(size: n)
             testRestPlacement(size: n)
             testFootprintContinuity(size: n)
+            testInteriorPlacement(size: n)
+            testEdgeContinuity(size: n, interior: false)
+            testEdgeContinuity(size: n, interior: true)
         }
         testDirectionMaskRotation()
         testPropRotation()
@@ -404,6 +407,77 @@ struct CoordinateMathTests {
         m.roundness = 0
         let p = SIMD3<Float>(0.37, -0.91, 1.0)
         check(m.inflatedUnitPoint(p) == p, "inflate r=0 identity")
+    }
+
+    // MARK: - M15.1 interior-world invariants
+
+    /// Interior placement: the tile sits on the same face plane but is seen from inside — basis
+    /// (tangent, −bitangent, −normal), right-handed, with the row *placement* mirrored to match,
+    /// so tile-local geometry stays aligned with grid logic.
+    static func testInteriorPlacement(size n: Int) {
+        let m = CubeModel(worldScale: WorldScale(cubeSize: n, interior: true))
+        let halfN = Float(n) / 2.0
+        let spacing = m.worldScale.cellSpacing
+        for face in CubeFace.allCases {
+            for row in [0, n / 2, n - 1] {
+                for col in [0, n / 2, n - 1] {
+                    let colF = (Float(col) + 0.5 - halfN) * spacing
+                    let rowF = (Float(row) + 0.5 - halfN) * spacing
+                    let center = face.normal * halfN + face.tangent * colF - face.bitangent * rowF
+                    let rest = m.restMatrix(face: face, row: row, col: col)
+                    check(approx(col3(rest, 0), face.tangent, 1e-6) &&
+                          approx(col3(rest, 1), -face.bitangent, 1e-6) &&
+                          approx(col3(rest, 2), -face.normal, 1e-6),
+                          "size \(n): interior basis (\(face),\(row),\(col))")
+                    check(approx(col3(rest, 3), center, 1e-5), "size \(n): interior center (\(face),\(row),\(col))")
+                    // Right-handed: cross(right, up) == forward (det +1 — winding/culling safe).
+                    let cr = cross(col3(rest, 0), col3(rest, 1))
+                    check(approx(cr, col3(rest, 2), 1e-6), "size \(n): interior handedness (\(face),\(row),\(col))")
+                }
+            }
+        }
+    }
+
+    /// Edge-crossing continuity, pinned to WORLD positions: walking off a border cell arrives at a
+    /// cell whose shared-edge midpoint is the SAME world point. Run on the exterior first (which
+    /// validates the test against the proven table), then on the interior (which validates the
+    /// M15.1 conjugated crossing). Also: interior crossings round-trip home.
+    static func testEdgeContinuity(size n: Int, interior: Bool) {
+        let m = CubeModel(worldScale: WorldScale(cubeSize: n, interior: interior))
+        let half = m.worldScale.cellSpacing / 2
+        let tag = interior ? "interior" : "exterior"
+
+        // World direction of a grid heading on a face = ± the placement basis columns
+        // (grid north = tile-local −y = −up; east = +right) — orientation handled by restMatrix.
+        func gridDirWorld(_ rest: float4x4, _ d: SurfaceDirection) -> SIMD3<Float> {
+            switch d {
+            case .north: return -col3(rest, 1)
+            case .south: return  col3(rest, 1)
+            case .east:  return  col3(rest, 0)
+            case .west:  return -col3(rest, 0)
+            }
+        }
+
+        for face in CubeFace.allCases {
+            for dir in SurfaceDirection.allCases {
+                for i in [0, n / 2, n - 1] {
+                    let (row, col) = borderCell(dir: dir, i: i, n: n)
+                    let rest1 = m.restMatrix(face: face, row: row, col: col)
+                    let edge1 = col3(rest1, 3) + gridDirWorld(rest1, dir) * half
+
+                    let x = m.edgeCrossing(face: face, direction: dir, row: row, col: col)
+                    let rest2 = m.restMatrix(face: x.face, row: x.row, col: x.col)
+                    let edge2 = col3(rest2, 3) + gridDirWorld(rest2, x.facing.opposite) * half
+                    check(approx(edge1, edge2, 1e-4),
+                          "size \(n) \(tag): edge continuity (\(face),\(dir),\(row),\(col)) → (\(x.face),\(x.row),\(x.col))")
+
+                    // Round-trip: cross back through the edge you came in by.
+                    let back = m.edgeCrossing(face: x.face, direction: x.facing.opposite, row: x.row, col: x.col)
+                    check(back.face == face && back.row == row && back.col == col,
+                          "size \(n) \(tag): round-trip (\(face),\(dir),\(row),\(col))")
+                }
+            }
+        }
     }
 
     /// R2.16 — the hard size cap: WorldScale clamps cubeSize to maxSupportedSize (25), so a world
