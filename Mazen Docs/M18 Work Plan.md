@@ -78,7 +78,7 @@ Touched: WorldScale, CubeTypes (`isPathCell(grid:)`), PlayerState, GameState (sp
 twist remap), CameraState (FP eye), SceneBuilder (marker), Renderer (portal seating);
 +5,424 checks (stand-grid cross at d=3/9/15 × all 16 opening combos).
 
-### Phase 1 — Open the grass, mask the walls — 🔨 built 2026-07-11, awaiting Eddie's play check
+### Phase 1 — Open the grass, mask the walls — ✅ verified (Eddie, 2026-07-11)
 Walkable-by-default + wall/jamb subtraction replaces the path-cross rule. The player steps
 off the path for the first time. Gateways now gate by geometry (the wall cells), not by the
 edge-middle rule — tile exits allowed from any open edge cell, crossing to the neighbour's
@@ -103,7 +103,7 @@ Tests: +31,050 (hand-derived standable truths; world-pinned seam/fold continuity
 edge axis); 146,115 green. Also fixed: faceletAt crashes on out-of-range coords — natural
 stamp bounds-checks (found by the size-3 test).
 
-### Phase 2 — Solid props (stand-point removal)
+### Phase 2 — Solid props (stand-point removal) — 🔨 built 2026-07-11, awaiting Eddie's play check
 The footprint table + auto-derived imports; subtraction into the mask. A plaque, dial,
 pedestal, pillar, or house wall simply cannot be stood in — the plaque saga becomes
 inexpressible rather than merely fixed. Includes the **connectivity sanity check**: a
@@ -111,6 +111,15 @@ footprint may never disconnect a tile's gateways from each other (authoring mist
 log lines, not unwinnable mazes).
 *Danger:* Low-Med. *Verify:* can't occupy a prop's cells; F-interact still reaches from
 adjacent cells; connectivity check fires on a deliberately bad stamp in tests.
+*Build note:* `PropKind.isSolid` (portals + lamps walk-through, all else solid) +
+`Prop.blocks(_:_:grid:)` — a solid prop removes the k×k stand block of its author sub-cell
+(k = grid/3, so the three author thirds tile the stand grid exactly). PlayerState consults
+prop footprints on both within-tile and cross-tile landings. Imported-asset footprints stay
+one author cell for now (mesh-bounds auto-derivation is Phase 3 — the model layer has no
+mesh). Connectivity guard: BFS (8-connected, matching movement) over every tile of every
+authored world proves all walkable border cells stay one component — no footprint severs a
+tile (opening the grass is what saves it: you detour around any prop through interior grass).
+Tests: +26,836 (footprint tiling + walk-through + per-world connectivity); 172,951 green.
 
 ### Phase 3 — Density, pace & open-field tuning (Eddie's phase)
 `d` is already a constant; add a debug key to cycle 9 ↔ 15 (rebuild scene + remap player,

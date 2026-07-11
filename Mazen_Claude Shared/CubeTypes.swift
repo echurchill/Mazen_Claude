@@ -264,10 +264,21 @@ enum PropKind: UInt8 {
     case portalLamp   // the flashing lamp atop the portal (TARDIS-style); rendered emissive + blinking
     case dial         // M16.3: a stone lock-dial; `state` 1 = aligned (gold), 0 = off (grey); interact (F) aligns
     case glyph        // M16.5: a carved Builder-glyph plaque (a frozen 4D cross-section) — presence, not system yet
+
+    /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
+    /// walk-through (stepping onto a portal IS the interaction); everything else is solid
+    /// and removes the stand points under it. (Imported assets: solid for now; a
+    /// mesh-bounds-derived footprint is Phase 3 tuning — the model layer has no mesh here.)
+    var isSolid: Bool {
+        switch self {
+        case .portal, .portalLamp: return false
+        default: return true
+        }
+    }
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.
-/// Sub-cell corner props need no collision — the player only walks the path cross.
+/// Props live on the 3×3 AUTHOR grid; a solid one removes the stand cells under it (M18 P2).
 struct Prop {
     var kind: PropKind
     /// Sub-cell it stands on (subRow 0 = north … 2 = south, subCol 0 = west … 2 = east).
@@ -277,6 +288,18 @@ struct Prop {
     var facing: Heading8 = .n
     /// Free-form per-prop state (e.g. chest open = 1 / closed = 0).
     var state: Int = 0
+
+    /// M18 Phase 2 — does this prop remove stand cell (subRow, subCol) of a `grid`×`grid`
+    /// tile? A solid prop occupies the k×k stand block of its author sub-cell (author grid
+    /// is always 3, so k = grid/3 tiles it exactly: author 0→[0,k), 1→[k,2k), 2→[2k,3k)).
+    /// Walk-through props (portals) block nothing. Footprint tuning (thinner plaques, bigger
+    /// houses) is Phase 3; the connectivity guard proves no footprint severs a tile.
+    func blocks(_ subRow: Int, _ subCol: Int, grid: Int) -> Bool {
+        guard kind.isSolid else { return false }
+        let k = grid / 3
+        let r0 = self.subRow * k, c0 = self.subCol * k
+        return subRow >= r0 && subRow < r0 + k && subCol >= c0 && subCol < c0 + k
+    }
 
     /// Rotate the prop's placement to match a slice rotation, in the same sense as
     /// `DirectionMask.rotated` (one quarter-turn = local +90°, N→E). Keeps the prop glued

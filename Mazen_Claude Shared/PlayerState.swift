@@ -122,15 +122,17 @@ struct PlayerState {
         guard !isMoving && !isTurning else { return }
         guard let (ci, fi) = cubeModel.faceletAt(face: face, row: row, col: col) else { return }
         let tile = cubeModel.cubies[ci].facelets[fi].mazeTile
+        let props = cubeModel.cubies[ci].facelets[fi].props
 
         let d = standGrid
         let (dr, dc) = travel.subDelta
         let tr = subRow + dr, tc = subCol + dc
 
         if (0..<d).contains(tr) && (0..<d).contains(tc) {
-            // Within-tile hop — target must be standable. (M18 Phase 2 will also subtract
-            // prop footprints here, via the walkability mask.)
+            // Within-tile hop — target must be standable (grass minus walls) and clear of
+            // any solid prop's footprint (M18 Phase 2 — stand-point removal).
             guard tile.isStandable(tr, tc, grid: d) else { return }
+            guard !props.contains(where: { $0.blocks(tr, tc, grid: d) }) else { return }
             beginMove(toFace: face, toRow: row, toCol: col, toSub: (tr, tc), newFacing: facing)
             return
         }
@@ -161,6 +163,7 @@ struct PlayerState {
 
         guard let (nci, nfi) = cubeModel.faceletAt(face: arrFace, row: arrRow, col: arrCol) else { return }
         let arrTile = cubeModel.cubies[nci].facelets[nfi].mazeTile
+        let arrProps = cubeModel.cubies[nci].facelets[nfi].props
         let entryDir = arrDir.opposite
 
         // Carry the lateral position across the seam. Same-face crossings keep it verbatim;
@@ -181,6 +184,7 @@ struct PlayerState {
         case .east:  toSub = (arrLat, d - 1)
         }
         guard arrTile.isStandable(toSub.0, toSub.1, grid: d) else { return }
+        guard !arrProps.contains(where: { $0.blocks(toSub.0, toSub.1, grid: d) }) else { return }
 
         // Rotate the travel heading by however much the crossing rotated the surface frame
         // (same-face: not at all — a diagonal walk stays diagonal), then let arrivalFacing

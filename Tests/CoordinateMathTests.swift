@@ -52,6 +52,8 @@ struct CoordinateMathTests {
             testStandGridCrossing(size: n, interior: true)
         }
         testStandableRules()
+        testPropFootprint()
+        testPropConnectivity()
         testDirectionMaskRotation()
         testPropRotation()
         testInflateGoldens()
@@ -66,6 +68,84 @@ struct CoordinateMathTests {
             for f in failures.prefix(50) { print("   - \(f)") }
             if failures.count > 50 { print("   … and \(failures.count - 50) more") }
             exit(1)
+        }
+    }
+
+    /// M18 Phase 2 — a solid prop removes exactly the k×k stand block of its author sub-cell;
+    /// a walk-through prop removes nothing.
+    static func testPropFootprint() {
+        for d in [3, 9, 15] {
+            let k = d / 3
+            for ar in 0..<3 { for ac in 0..<3 {
+                let solid = Prop(kind: .obelisk, subRow: ar, subCol: ac)
+                let walkThrough = Prop(kind: .portal, subRow: ar, subCol: ac)
+                for sr in 0..<d { for sc in 0..<d {
+                    let inBlock = sr >= ar * k && sr < ar * k + k && sc >= ac * k && sc < ac * k + k
+                    check(solid.blocks(sr, sc, grid: d) == inBlock,
+                          "footprint d=\(d) obelisk@(\(ar),\(ac)): cell (\(sr),\(sc)) expected \(inBlock)")
+                    check(!walkThrough.blocks(sr, sc, grid: d),
+                          "footprint d=\(d) portal@(\(ar),\(ac)): cell (\(sr),\(sc)) must be walk-through")
+                } }
+            } }
+            // The three author cells tile the axis with no overlap and no gap. Probe along
+            // author row 0 (stand row 0 sits inside author row 0's block).
+            var covered = Array(repeating: 0, count: d)
+            for ac in 0..<3 {
+                let p = Prop(kind: .dial, subRow: 0, subCol: ac)
+                for sc in 0..<d where p.blocks(0, sc, grid: d) { covered[sc] += 1 }
+            }
+            check(covered.allSatisfy { $0 == 1 }, "footprint d=\(d): author thirds tile the stand grid exactly")
+        }
+    }
+
+    /// M18 Phase 2 — the connectivity guard: in every authored world, no prop footprint may
+    /// sever a tile — whichever gateway you enter by, you can reach every other gateway of
+    /// that tile. BFS (8-connected, matching movement) over walkable stand cells; assert all
+    /// walkable border cells land in one component. This is what turns an authoring mistake
+    /// (a prop dropped across the only route) into a red test instead of an unwinnable maze.
+    static func testPropConnectivity() {
+        let cases: [(String, WorldStamp, Int, Bool)] = [
+            ("overworld", .overworldDemo, 9, false),
+            ("overworld", .overworldDemo, 5, false),
+            ("moon",      .moonDemo,      5, false),
+            ("temple",    .templeInterior, 5, true),
+            ("natural",   .natural,       7, false),
+            ("natural",   .natural,       3, false),
+        ]
+        for (label, stamp, n, interior) in cases {
+            let m = CubeModel(worldScale: WorldScale(cubeSize: n, interior: interior), stamp: stamp)
+            let d = m.worldScale.standGrid
+            for face in CubeFace.allCases {
+                for r in 0..<n { for c in 0..<n {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    let tile = m.cubies[ci].facelets[fi].mazeTile
+                    let props = m.cubies[ci].facelets[fi].props
+                    func walk(_ sr: Int, _ sc: Int) -> Bool {
+                        tile.isStandable(sr, sc, grid: d) && !props.contains { $0.blocks(sr, sc, grid: d) }
+                    }
+                    var border: [(Int, Int)] = []
+                    for i in 0..<d {
+                        if walk(0, i)     { border.append((0, i)) }
+                        if walk(d - 1, i) { border.append((d - 1, i)) }
+                        if walk(i, 0)     { border.append((i, 0)) }
+                        if walk(i, d - 1) { border.append((i, d - 1)) }
+                    }
+                    guard let start = border.first else { continue }
+                    var seen = Set<Int>([start.0 * d + start.1])
+                    var stack = [start]
+                    while let (sr, sc) = stack.popLast() {
+                        for ddr in -1...1 { for ddc in -1...1 where !(ddr == 0 && ddc == 0) {
+                            let nr = sr + ddr, nc = sc + ddc
+                            guard (0..<d).contains(nr), (0..<d).contains(nc), walk(nr, nc) else { continue }
+                            if seen.insert(nr * d + nc).inserted { stack.append((nr, nc)) }
+                        } }
+                    }
+                    for (br, bc) in border {
+                        check(seen.contains(br * d + bc),
+                              "\(label) n=\(n) \(face)(\(r),\(c)): gateway cell (\(br),\(bc)) severed by a prop footprint")
+                    }
+                } }
+            }
         }
     }
 
