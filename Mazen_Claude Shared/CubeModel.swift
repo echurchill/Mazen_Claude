@@ -3,7 +3,8 @@ import simd
 /// What gets stamped onto a freshly generated world (M15.2). The maze itself is always generated;
 /// the stamp is the authored layer on top — rooms, props, portals.
 enum WorldStamp {
-    case overworldDemo   // the dev overworld: start plaza + props, portals, the −Z house court
+    case overworldDemo   // the dev overworld: start plaza + props, BOTH doorways, the −Z house court
+    case moonDemo        // the moon: the demo plaza but only its one door home (no temple doorway)
     case templeInterior  // the first hand-stamped interior: central hall, pedestal, return portal
 }
 
@@ -34,7 +35,10 @@ class CubeModel {
         switch stamp {
         case .overworldDemo:
             stampDemoRoom()
-            stampDemoProps()
+            stampDemoProps(templeDoor: true)
+        case .moonDemo:
+            stampDemoRoom()
+            stampDemoProps(templeDoor: false)
         case .templeInterior:
             stampTempleInterior()
         }
@@ -101,7 +105,7 @@ class CubeModel {
     /// Place a hedge-sculpture topiary in the NW corner sub-cell of each start-plaza tile
     /// so Phase G's prop pipeline is visible — and rides slice rotations (the plaza is on
     /// the start face, so Q/E carries the topiaries around). (M10 Phase G)
-    private func stampDemoProps() {
+    private func stampDemoProps(templeDoor: Bool) {
         let h = min(3, size), w = min(3, size)
         let top = max(0, size / 2 - h / 2)
         let left = max(0, size / 2 - w / 2)
@@ -130,9 +134,9 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))  // flashing lamp atop
         }
         // M15.2: a second doorway SOUTH of the plaza — the temple interior (destination id 1;
-        // Prop.state carries which world a portal leads to).
+        // Prop.state carries which world a portal leads to). Overworld only.
         let templeRow = min(size - 1, top + h)
-        if let (ci, fi) = faceletAt(face: .positiveZ, row: templeRow, col: left + w / 2) {
+        if templeDoor, let (ci, fi) = faceletAt(face: .positiveZ, row: templeRow, col: left + w / 2) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }

@@ -203,7 +203,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // The moon world exists from the start (persists across visits) so it can hang in earth's
         // sky — and so any tears you make on it stay put (M11 killer visual). Registered on the
         // identity-bound edge moon-earth (M15.0): the moon you see IS the moon you can visit.
-        let moon = GameState(size: Self.moonWorldSize, name: "moon")
+        let moon = GameState(size: Self.moonWorldSize, name: "moon", stamp: .moonDemo)
         Self.setupInitialDiscovery(gameState: moon)
         worldRegistry.bind(WorldKey(destination: "moon", origin: "earth"), to: moon)
 
@@ -345,7 +345,7 @@ class Renderer: NSObject, MTKViewDelegate {
                 case "temple-interior":
                     w = GameState(size: 5, name: dest, interior: true, stamp: .templeInterior)
                 default:
-                    w = GameState(size: Self.moonWorldSize, name: dest)
+                    w = GameState(size: Self.moonWorldSize, name: dest, stamp: .moonDemo)
                 }
                 Self.setupInitialDiscovery(gameState: w)
                 return w
