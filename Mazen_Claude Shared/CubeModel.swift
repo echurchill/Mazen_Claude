@@ -125,14 +125,15 @@ class CubeModel {
         stampOpenPlaza(face: .positiveZ, top: top, left: left, height: h, width: w)
         let portalRow = max(0, top - 1)
         if let (ci, fi) = faceletAt(face: .positiveZ, row: portalRow, col: left + w / 2) {
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1))
+            // facing = the door's EXIT direction (M15.2): emerge looking south, back at the plaza.
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .s))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))  // flashing lamp atop
         }
         // M15.2: a second doorway SOUTH of the plaza — the temple interior (destination id 1;
         // Prop.state carries which world a portal leads to).
         let templeRow = min(size - 1, top + h)
         if let (ci, fi) = faceletAt(face: .positiveZ, row: templeRow, col: left + w / 2) {
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, state: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
         // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
@@ -162,6 +163,23 @@ class CubeModel {
         }
     }
 
+    /// Where this world's (first) portal doorway stands — arrivals emerge here, facing the
+    /// portal's `facing` (its exit direction), so travel reads as walking through a door
+    /// (M15.2). Scans the grid; worlds have at most a couple of portals.
+    func firstPortalLocation() -> (face: CubeFace, row: Int, col: Int, exitFacing: Heading8)? {
+        for face in CubeFace.allCases {
+            for row in 0..<size {
+                for col in 0..<size {
+                    if let (ci, fi) = faceletAt(face: face, row: row, col: col),
+                       let portal = cubies[ci].facelets[fi].props.first(where: { $0.kind == .portal }) {
+                        return (face, row, col, portal.facing)
+                    }
+                }
+            }
+        }
+        return nil
+    }
+
     /// M15.2 — the first hand-stamped interior world (a 5³ temple, D3). Sparse and legible: a
     /// 3×3 open hall centred on the arrival face (+Z, where the player spawns at the centre), a
     /// pedestal to the north (placeholder for the M17 memory-mote), and the way home to the
@@ -178,8 +196,9 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
         }
         // Return portal south of centre (walking onto it exits — depth > 1 always pops).
+        // Its exit direction is north: arrivals emerge facing the hall and the pedestal.
         if let (ci, fi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c) {
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
     }

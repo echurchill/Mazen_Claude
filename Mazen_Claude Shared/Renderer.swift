@@ -328,8 +328,11 @@ class Renderer: NSObject, MTKViewDelegate {
         // Stop the departing world walking, so neither world auto-continues across the switch —
         // with walk-through portals, an un-cleared "forward held" would ping-pong through gates.
         gameState.forwardHeld = false; gameState.backwardHeld = false
+        let departingMode = gameState.camera.mode   // FPV stays FPV across worlds (Eddie, M15.2)
+        let pushed: Bool
         if worldStack.count > 1 {
             exitWorld()
+            pushed = false
         } else {
             let dest = Self.portalDestinations.indices.contains(destinationID)
                 ? Self.portalDestinations[destinationID] : "moon"
@@ -348,6 +351,34 @@ class Renderer: NSObject, MTKViewDelegate {
                 return w
             }
             enterWorld(world)
+            pushed = true
+        }
+
+        // Arrival = stepping OUT of a door (Eddie, M15.2): same camera mode as you left in, and
+        // you emerge looking the portal's exit direction — the door at your back.
+        let arriving = gameState
+        arriving.camera.mode = departingMode
+        arriving.camera.lookYaw = 0
+        arriving.camera.lookPitch = 0
+        arriving.player.isMoving = false
+        arriving.player.isTurning = false
+        if pushed {
+            // Emerge FROM the destination's own doorway, wherever it stands.
+            if let door = arriving.cubeModel.firstPortalLocation() {
+                arriving.player.face = door.face
+                arriving.player.row = door.row
+                arriving.player.col = door.col
+                arriving.player.subRow = 1
+                arriving.player.subCol = 1
+                arriving.player.facing = door.exitFacing
+            }
+        } else {
+            // Popping home: you're standing on the door you left through — turn to its exit side.
+            if let (ci, fi) = arriving.cubeModel.faceletAt(face: arriving.player.face,
+                                                           row: arriving.player.row, col: arriving.player.col),
+               let portal = arriving.cubeModel.cubies[ci].facelets[fi].props.first(where: { $0.kind == .portal }) {
+                arriving.player.facing = portal.facing
+            }
         }
         // …and the arriving world starts stationary (a fresh key press resumes walking).
         gameState.forwardHeld = false; gameState.backwardHeld = false
