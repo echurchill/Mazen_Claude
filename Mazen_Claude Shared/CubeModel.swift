@@ -147,6 +147,7 @@ class CubeModel {
         if templeDoor, let (dci, dfi) = faceletAt(face: .positiveZ, row: templeRow, col: doorCol) {
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1))
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+            sealedPortalCubies.insert(dci)   // M16.4: closed until unlocked AND twisted open
             var bond: Set<Int> = [dci]
             for pc in [doorCol - 1, doorCol + 1] where (0..<size).contains(pc) {
                 if let (pci, pfi) = faceletAt(face: .positiveZ, row: templeRow, col: pc) {
@@ -555,6 +556,11 @@ class CubeModel {
     }
 
     // MARK: - Bandaging (M13)
+
+    /// M16.4: portals SEALED behind a lock — inert and dark until, after the bond is undone, a
+    /// finalized twist of their slice swings them open (GameState.finalizeSliceRotation removes
+    /// them here). Cubie indices, stable across turns like bonds.
+    var sealedPortalCubies: Set<Int> = []
 
     /// Bonded cubie groups: each set of cubie indices must move together, so a slice twist that
     /// would cut through a group — some of its cubies in the rotating slice, some out — is illegal

@@ -241,7 +241,8 @@ class GameState {
         // real tile crossing, so it never triggers at spawn while you're already standing on one.
         // M15.2: the portal's `state` says WHERE it leads (index into Renderer.portalDestinations).
         if let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
-           let portal = cubeModel.cubies[pci].facelets[pfi].props.first(where: { $0.kind == .portal }) {
+           let portal = cubeModel.cubies[pci].facelets[pfi].props.first(where: { $0.kind == .portal }),
+           !cubeModel.sealedPortalCubies.contains(pci) {   // M16.4: a sealed door is just a door
             portalRequested = true
             portalDestinationID = portal.state
         }
@@ -337,6 +338,15 @@ class GameState {
         let playerCI = sliceRotation.playerCubieIndex
         cubeModel.applySliceRotation(axis: sliceRotation.axis, index: sliceRotation.index, angle: sliceRotation.angle)
 
+        // M16.4: the opening — a completed twist of an UNLOCKED sealed door's slice swings it
+        // open: the door lights up and becomes a portal. (Still bonded ⇒ the twist was refused
+        // long before we got here, so checking "no bond" is enough.)
+        for ci in sliceRotation.affectedCubies where cubeModel.sealedPortalCubies.contains(ci) {
+            if !cubeModel.bondedGroups.contains(where: { $0.contains(ci) }) {
+                cubeModel.sealedPortalCubies.remove(ci)
+            }
+        }
+
         if playerCI >= 0 {
             let cubie = cubeModel.cubies[playerCI]
             for facelet in cubie.facelets {
@@ -388,7 +398,8 @@ class GameState {
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props
-        if let portal = props.first(where: { $0.kind == .portal }) {
+        if let portal = props.first(where: { $0.kind == .portal }),
+           !cubeModel.sealedPortalCubies.contains(ci) {    // M16.4: sealed = inert
             portalRequested = true
             portalDestinationID = portal.state
             return

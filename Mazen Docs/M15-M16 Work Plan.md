@@ -53,7 +53,7 @@ The overworld temple structure (new prop cluster, or the existing house — deci
 When a twist is refused: a soft resistance shake (a few degrees of rotation that spring back), a low tone placeholder, and a **glow trace on the bonded structure** (the Player Journey's four-points image). This is the game's first *taught-not-told* beat — the refusal IS the tutorial for "lock."
 *Danger:* **Low-Med** (first gameplay-feel work; iterate with Eddie live). *Verify:* feel pass together.
 
-### Phase 3 — The first "understand → unlock" mechanism
+### Phase 3 — The first "understand → unlock" mechanism ✅ (2026-07-11 — four dials, colour-rhyme clue, F aligns, bond dissolves; Eddie: "a great initial puzzle")
 The Player Journey's beat, minimally: **four dial-props** placed around the garden, three pre-aligned, one not; an environmental clue (a carved slab prop). Interacting (F) with the last dial aligns it → `removeBond` fires → the glow goes warm → the structure's slice is twistable. M10's deferred Phase H (gates/locks) is raw material here.
 *Scope guard:* this is deliberately "find the pattern and act once" — the *deep* version (composable glyph grammar) is M17+ territory; do not gold-plate.
 

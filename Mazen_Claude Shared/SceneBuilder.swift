@@ -186,6 +186,9 @@ final class SceneBuilder {
                                 color = SIMD4(0.95, 0.78, 0.20, 1.0)
                                 if refusalGlow > 0 { color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow) }
                             }
+                            if prop.kind == .portal, model.sealedPortalCubies.contains(ci) {
+                                color = SIMD4(0.16, 0.17, 0.22, 1.0)   // M16.4: sealed — dark, inert
+                            }
                             if prop.kind == .dial {
                                 // M16.3: aligned dials wear the SAME gold as the locked temple —
                                 // the colour rhyme is the clue that these four belong to the lock.
@@ -194,11 +197,15 @@ final class SceneBuilder {
                             }
                             if prop.kind == .chest && prop.state == 1 { color = SIMD4(0.98, 0.80, 0.30, 1.0) }  // opened / "lit"
                             if prop.kind == .portalLamp {
-                                // TARDIS-style flash: a brief bright pulse each ~1.4 s cycle, else dim. Emissive.
-                                let cyclePos = gameState.time.truncatingRemainder(dividingBy: 1.4) / 1.4
-                                let v: Float = cyclePos < 0.18 ? 1.0 : 0.28
-                                color = SIMD4(v, v, min(1, v * 1.2), 1.0)   // white with a cool tint
-                                materialID = 12                             // emissive (unlit) → reads as a lamp
+                                if model.sealedPortalCubies.contains(ci) {
+                                    color = SIMD4(0.10, 0.10, 0.12, 1.0)    // M16.4: sealed — lamp dead
+                                } else {
+                                    // TARDIS-style flash: a brief bright pulse each ~1.4 s cycle, else dim. Emissive.
+                                    let cyclePos = gameState.time.truncatingRemainder(dividingBy: 1.4) / 1.4
+                                    let v: Float = cyclePos < 0.18 ? 1.0 : 0.28
+                                    color = SIMD4(v, v, min(1, v * 1.2), 1.0)   // white with a cool tint
+                                    materialID = 12                             // emissive (unlit) → reads as a lamp
+                                }
                             }
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
                                 materialID: materialID, tileID: 0, discoveryAmount: 1.0, styleSeed: 0,
