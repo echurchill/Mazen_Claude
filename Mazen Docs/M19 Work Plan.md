@@ -17,6 +17,16 @@ NOT stage the story beats on them — the temple, dials, seam-grooves, and memor
 The split keeps this milestone judgeable on one question: *does standing on these worlds
 feel like the concept images?*
 
+**Scope steer (Eddie, 2026-07-11):** the Journey (M20) uses only a **small region** of the
+Natureworld — the rest of the sphere is authored *loosely* now and used later in the game.
+The Moon is **visible-only** for the Journey (a sky element; the story revisits it later on
+the ground) — so Phase 3 is sky-quality first: it must be right in the home/garden sky at
+concept-image fidelity, while its ground detail can trail behind everything else in this
+plan without blocking M20. And per the world-graph's new
+[time-periods section](World%20Graph%20—%20Relational%20Worlds.md), earth/moon may eventually
+exist in **multiple era instances** — stamps should be written era-parameterizable-later
+(one lineage, era-varied dressing), not hardcoded to a single now.
+
 ## Phases
 
 ### Phase 0 — World-authoring foundation

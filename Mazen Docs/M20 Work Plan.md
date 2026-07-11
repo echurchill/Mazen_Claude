@@ -43,7 +43,10 @@ work (the interior gravity flip needs the gentle transition the script's holes-l
 ### Phase 0 — Paper edit
 Walk the script against the built game world-by-world and write the *shot list*: where each
 beat physically lives on the M19 Natureworld (where the arch is, where the dead-end seam is,
-where the temple squats, where the four dials hide, which hill buries the machine). Cheap,
+where the temple squats, where the four dials hide, which hill buries the machine). Scope
+steer (Eddie): the Journey occupies a **small region** of the sphere — the shot list picks
+that region and leaves the rest of the world as loose authored wilderness for later game;
+the Moon appears only in the sky. Cheap,
 and it drives every stamp that follows.
 *Verify:* Eddie signs off the shot list before staging starts.
 

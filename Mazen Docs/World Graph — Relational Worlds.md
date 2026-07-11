@@ -17,6 +17,35 @@
 
 If the edge key is `(destination, context)`, *context* need not stop at "world you came from" — it can eventually include **what the player knows**. The same door resolves differently once you carry a certain memory: understanding doesn't just unlock doors, it **re-aims** them. That makes the *knowledge-is-transportation* pillar literal, and turns the original Garden concept's "the portal network is a language" into architecture.
 
+## Time periods & decayed portals (Eddie, 2026-07-11)
+
+*The "variants for free" line above grows teeth: multiple earths and moons representing
+**different time periods**, reachable because some portals can route across eras — either by
+design, or because their tech has **decayed**.* It's Builder tech; of course some of it does
+things its makers would call malfunction and we call time travel.
+
+- **A time period is just a key component.** `earth@bloom-era` and `earth@ruin-era` are two
+  instances in the registry sharing a stamp lineage — lazy-created, independently scarred, no
+  new machinery. Portals route to *instances*, never to "the past of a live timeline," so
+  there is **no paradox problem by construction**: changes in an old era propagate nowhere
+  unless we *choose* to `bind()` an echo across eras. Paradox is a design dial, not physics.
+- **Decayed portals = doors that lie.** A decayed portal's destination key has drifted or
+  gone unstable (a wrong or wandering era component). Mechanically trivial; narratively gold —
+  the companion to the sky-can-lie principle: **the door can lie too.** Decay states could
+  range from "consistently wrong era" (a stable, exploitable bug) to "unstable" (era varies —
+  use with care, or first understand its pattern).
+- **Learning the tweak verb from a broken teacher.** The M17 extension below says knowledge
+  re-aims doors; the decayed portal is how the player *earns* that verb — watch a broken
+  portal do the "wrong" thing, understand *why* (its glyphs? its mechanism? its era dial?),
+  and that understanding becomes the ability to deliberately tweak working portals. The best
+  kind of Builder lesson: the curriculum is a ruin.
+- **NPC tie-in:** the memory-keeping portal (embedded machine, [NPC Classes](NPC%20Classes.md))
+  and the decayed time-portal are the same character at different stages of decline — a
+  machine whose *memory of where it goes* is failing. Freshest-is-least-complete, inverted.
+- **Story geometry this enables:** standing on ruin-era earth while bloom-era earth hangs in
+  the sky (sky edges resolve through the registry too — the sky can show another *time*);
+  visiting the moon "again" and finding it younger; the Builders' fate witnessable in strata.
+
 ## Open questions
 
 - **Portal-specific keys** — do two doors on the same world leading to the "same" destination ever resolve differently (key = `(destination, origin, portal)`)? Undecided; the key type should leave room.
