@@ -4,7 +4,7 @@
 [aspirational north star](M18%20Freeform%20Movement%20%28Aspirational%29.md)): instead of
 continuous movement, **densify the stand points** (3×3 → 9×9-ish), let the player step off the
 paths onto the grass, and make walls/props solid by **removing the stand points under them**.
-Numbering: M18 = this; solar-system slice = M19; cozy/feel polish = M20.
+Numbering: M18 = this; solar-system slice = M19; Journey Walkthrough = M20; cozy/feel polish = M21.
 Status: **📋 awaiting greenlight.***
 
 ## Why this shape (the trade, honestly)
