@@ -224,6 +224,16 @@ class GameState {
         player.facing = newFacing
     }
 
+    /// M16.3: true when no dial anywhere is still unaligned.
+    private func allDialsAligned() -> Bool {
+        for cubie in cubeModel.cubies {
+            for facelet in cubie.facelets {
+                if facelet.props.contains(where: { $0.kind == .dial && $0.state == 0 }) { return false }
+            }
+        }
+        return true
+    }
+
     // MARK: - Discovery
 
     private func onPlayerArrived() {
@@ -381,6 +391,17 @@ class GameState {
         if let portal = props.first(where: { $0.kind == .portal }) {
             portalRequested = true
             portalDestinationID = portal.state
+            return
+        }
+        // M16.3: dials — the lock's mechanism. Aligning the last one dissolves the bond: the
+        // temple sheds its gold and the face twists again. (One lock per world for now — the
+        // dial→lock association becomes real data with the glyph system, M17.)
+        if let di = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .dial }) {
+            if cubeModel.cubies[ci].facelets[fi].props[di].state == 0 {
+                cubeModel.cubies[ci].facelets[fi].props[di].state = 1
+                cubeModel.cubies[ci].facelets[fi].props[di].facing = .n
+                if allDialsAligned() { cubeModel.bondedGroups.removeAll() }
+            }
             return
         }
         for pi in cubeModel.cubies[ci].facelets[fi].props.indices

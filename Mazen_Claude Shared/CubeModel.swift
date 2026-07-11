@@ -164,6 +164,25 @@ class CubeModel {
                 bond.insert(root)
             }
             addBond(bond)
+
+            // M16.3: the lock's mechanism — four stone dials spread to the garden's diagonal
+            // quarters. Three are aligned (gold, pointer north); the SE one — nearest the temple —
+            // is off (grey, pointer east). Align it (F, GameState.interact) and the temple
+            // unbonds: understanding is the key. Deliberately "find the pattern and act once";
+            // the composable glyph grammar is M17's.
+            let cc = size / 2
+            let spread = min(3, size / 2)
+            let dialSpots: [(Int, Int, Heading8, Int)] = [
+                (cc - spread, cc - spread, .n, 1),
+                (cc - spread, cc + spread, .n, 1),
+                (cc + spread, cc - spread, .n, 1),
+                (cc + spread, cc + spread, .e, 0),
+            ]
+            for (r, c2, f, st) in dialSpots {
+                if let (ci2, fi2) = faceletAt(face: .positiveZ, row: r, col: c2) {
+                    cubies[ci2].facelets[fi2].props.append(Prop(kind: .dial, subRow: 1, subCol: 1, facing: f, state: st))
+                }
+            }
         }
         // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
         // crowded +Z demo plaza, so it has room to breathe. It sits at the row-0 face edge so an

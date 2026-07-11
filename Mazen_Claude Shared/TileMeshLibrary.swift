@@ -201,6 +201,10 @@ class TileMeshLibrary {
         Self.addPortalLamp(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.portalLamp.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalLampStart, indexCount: allIndices.count - portalLampStart)
 
+        let dialStart = allIndices.count
+        Self.addDial(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.dial.rawValue] = TileMesh(vertexOffset: 0, indexOffset: dialStart, indexCount: allIndices.count - dialStart)
+
         // Celestial bodies (M9): a unit cube, drawn at the sun/moon positions.
         let cubeStart = allIndices.count
         Self.addUnitCube(to: &allVerts, indices: &allIndices)
@@ -609,6 +613,36 @@ class TileMeshLibrary {
     /// The flashing lamp atop the portal (M11.2 / TARDIS) — a tiny box sitting at the roof apex.
     /// SceneBuilder renders it emissive (materialID 12) with a blinking brightness, so it reads as a
     /// beacon "about to take off". Its own prop so it can animate independently of the blue body.
+    /// M16.3: a squat stone lock-dial — pedestal, dial plate, and a pointer wedge toward local
+    /// north (−y). The prop's `facing` rotates the whole mesh (existing machinery), so the pointer
+    /// direction IS the dial's setting; interact turns it to north.
+    private static func addDial(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        func box(_ hx: Float, _ hy: Float, _ cy: Float, _ zb: Float, _ zt: Float) {
+            let corners = [SIMD3<Float>(-hx, cy - hy, 0), SIMD3<Float>(hx, cy - hy, 0),
+                           SIMD3<Float>(hx, cy + hy, 0), SIMD3<Float>(-hx, cy + hy, 0)]
+            func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+                MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: 0.9)
+            }
+            func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+                let n = normalize(cross(b - a, d - a))
+                let base = UInt32(verts.count)
+                verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
+                indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            }
+            let b0 = corners.map { SIMD3($0.x, $0.y, zb) }
+            let t0 = corners.map { SIMD3($0.x, $0.y, zt) }
+            for i in 0..<4 {
+                let j = (i + 1) % 4
+                quad(b0[i], b0[j], t0[j], t0[i])          // side
+            }
+            quad(t0[3], t0[2], t0[1], t0[0])              // top (wound to face +z)
+        }
+        box(0.085, 0.085, 0, z0, z0 + 0.045)              // pedestal
+        box(0.065, 0.065, 0, z0 + 0.045, z0 + 0.065)      // dial plate
+        box(0.015, 0.024, -0.042, z0 + 0.065, z0 + 0.090) // pointer wedge, toward local north (−y)
+    }
+
     private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let base: Float = 0.50, top: Float = 0.56, h: Float = 0.028
         func ring(_ z: Float) -> [SIMD3<Float>] {

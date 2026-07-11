@@ -51,6 +51,7 @@ final class SceneBuilder {
         .houseCorner: SIMD4(0.50, 0.45, 0.44, 1.0),  // roof grey (walls are imported tan kit; M12-E)
         .portal:      SIMD4(0.11, 0.20, 0.52, 1.0),  // TARDIS police-box blue (M11.2 world portal)
         .portalLamp:  SIMD4(1.0, 1.0, 1.0, 1.0),     // overridden per-frame by the blink (below)
+        .dial:        SIMD4(0.52, 0.52, 0.58, 1.0),  // M16.3 — overridden by state below
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
@@ -184,6 +185,12 @@ final class SceneBuilder {
                                 // twist strains against it.
                                 color = SIMD4(0.95, 0.78, 0.20, 1.0)
                                 if refusalGlow > 0 { color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow) }
+                            }
+                            if prop.kind == .dial {
+                                // M16.3: aligned dials wear the SAME gold as the locked temple —
+                                // the colour rhyme is the clue that these four belong to the lock.
+                                color = prop.state == 1 ? SIMD4(0.95, 0.78, 0.20, 1.0)
+                                                        : SIMD4(0.52, 0.52, 0.58, 1.0)
                             }
                             if prop.kind == .chest && prop.state == 1 { color = SIMD4(0.98, 0.80, 0.30, 1.0) }  // opened / "lit"
                             if prop.kind == .portalLamp {
