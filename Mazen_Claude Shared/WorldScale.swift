@@ -54,7 +54,8 @@ struct WorldScale {
     /// odd keeps a true centre cell (spawn/portal seating/twist-remap rounding rely on one).
     /// Walking pace is normalized to this in PlayerState, so density never changes speed.
     /// Per-world on purpose — interiors may want finer (M18 D4).
-    var standGrid: Int = 9
+    /// 15 (≈1.3 m/step at perceptual scale — a natural stride) is the default (Eddie, M18 P3).
+    var standGrid: Int = 15
     /// Distance between adjacent stand-cell centers, in a tile's local frame.
     var standStep: Float { 2.0 * floorHalfSize / Float(standGrid) }
     /// M14b: how many times to subdivide each floor sub-cell edge, so the floor has enough
