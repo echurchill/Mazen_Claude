@@ -75,11 +75,11 @@ class GameState {
     /// "earth" for the overworld, "moon", "temple-interior", … Used to resolve sky/portal edges.
     let name: String
 
-    init(size: Int = 3, name: String = "world", interior: Bool = false) {
+    init(size: Int = 3, name: String = "world", interior: Bool = false, stamp: WorldStamp = .overworldDemo) {
         self.name = name
         let ws = WorldScale(cubeSize: size, interior: interior)
         worldScale = ws
-        cubeModel = CubeModel(worldScale: ws)
+        cubeModel = CubeModel(worldScale: ws, stamp: stamp)
         player = PlayerState(size: size)
         if verboseDebugLog { printMazeDebug(face: player.face) }
     }
@@ -216,9 +216,11 @@ class GameState {
     private func onPlayerArrived() {
         // M11.2c: walk-through — stepping onto a portal tile switches worlds (no F). Fires only on a
         // real tile crossing, so it never triggers at spawn while you're already standing on one.
+        // M15.2: the portal's `state` says WHERE it leads (index into Renderer.portalDestinations).
         if let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
-           cubeModel.cubies[pci].facelets[pfi].props.contains(where: { $0.kind == .portal }) {
+           let portal = cubeModel.cubies[pci].facelets[pfi].props.first(where: { $0.kind == .portal }) {
             portalRequested = true
+            portalDestinationID = portal.state
         }
         discoverTile(face: player.face, row: player.row, col: player.col)
         let n = cubeModel.size
@@ -345,6 +347,9 @@ class GameState {
     /// switch worlds (M11.2), then clears it. Lives here (per-world) because interact() runs on the
     /// active world; the Renderer owns the world stack, so the world-switch itself happens there.
     var portalRequested = false
+    /// Which world the requesting portal leads to (M15.2) — the portal Prop's `state`, indexing
+    /// `Renderer.portalDestinations`. Ignored when the swap is a pop (leaving a sub-world).
+    var portalDestinationID = 0
 
     /// The interaction hook: act on any interactive props on the player's current tile.
     /// A portal takes priority (stepping "through the door" switches worlds); otherwise chests
@@ -353,8 +358,9 @@ class GameState {
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props
-        if props.contains(where: { $0.kind == .portal }) {
+        if let portal = props.first(where: { $0.kind == .portal }) {
             portalRequested = true
+            portalDestinationID = portal.state
             return
         }
         for pi in cubeModel.cubies[ci].facelets[fi].props.indices

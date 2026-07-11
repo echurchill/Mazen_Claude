@@ -133,8 +133,12 @@ class Renderer: NSObject, MTKViewDelegate {
     private enum TransitionPhase { case none, fadingOut, fadingIn }
     private var transitionPhase: TransitionPhase = .none
     private var transitionT: Float = 0          // 0 clear … 1 fully black
-    private var pendingWorldToggle = false
+    private var pendingPortalDestination: Int?  // destination id queued for the fade midpoint (M15.2)
     private let transitionSpeed: Float = 5.5    // ~0.18 s per half (fade out, then fade in)
+
+    /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
+    /// sub-world a portal simply pops back out; the destination only matters from the root.
+    static let portalDestinations = ["moon", "temple-interior"]
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -301,24 +305,8 @@ class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
-    /// M15.1 debug (I key): hop into the first inverted-interior world — the 5³ "temple interior"
-    /// (D3) — resolved by route through the registry, created on first entry, persistent after.
-    /// From inside, I (or O) pops back out. Direct swap for now; the real portal comes in M15.2.
-    func toggleInteriorDebug() {
-        gameState.forwardHeld = false; gameState.backwardHeld = false
-        if worldStack.count > 1 {
-            exitWorld()
-        } else {
-            let key = WorldKey(destination: "temple-interior", origin: gameState.name)
-            let interiorWorld = worldRegistry.world(for: key) {
-                let w = GameState(size: 5, name: "temple-interior", interior: true)
-                Self.setupInitialDiscovery(gameState: w)
-                return w
-            }
-            enterWorld(interiorWorld)
-        }
-        gameState.forwardHeld = false; gameState.backwardHeld = false
-    }
+    // (M15.2: the old direct-swap interior debug hop is gone — the I key now routes through
+    // beginWorldTransition(destinationID: 1), same as walking through the temple portal.)
 
     // MARK: - World stack (M11.1)
 
@@ -333,30 +321,46 @@ class Renderer: NSObject, MTKViewDelegate {
         if worldStack.count > 1 { worldStack.removeLast() }
     }
 
-    /// M11.1 spine proof (O key): toggle a throwaway 3³ interior world. A 3³ cube reads as
-    /// obviously different from the 7³ overworld, so a glance confirms the swap — and it also
-    /// exercises a *different-size* world sharing the same tile library + buffers. Replaced by
-    /// real portal props + a transition in M11.2.
-    func toggleTestInterior() {
+    /// Perform the world swap (at the fade midpoint): inside any sub-world, pop back out;
+    /// from the root, enter the destination — resolved by route through the registry (M15.2),
+    /// created on first visit, persistent forever after.
+    private func performPortalSwap(destinationID: Int) {
         // Stop the departing world walking, so neither world auto-continues across the switch —
         // with walk-through portals, an un-cleared "forward held" would ping-pong through gates.
         gameState.forwardHeld = false; gameState.backwardHeld = false
         if worldStack.count > 1 {
             exitWorld()
-        } else if let moon = worldRegistry.existing(WorldKey(destination: "moon", origin: gameState.name)) {
-            enterWorld(moon)   // resolved by route (M15.0); persistent, so its tears stay put
+        } else {
+            let dest = Self.portalDestinations.indices.contains(destinationID)
+                ? Self.portalDestinations[destinationID] : "moon"
+            let key = WorldKey(destination: dest, origin: gameState.name)
+            let world = worldRegistry.world(for: key) {
+                // First visit — build the destination. (The moon is pre-bound at init, so its
+                // create only runs as a fallback for an unexpected origin.)
+                let w: GameState
+                switch dest {
+                case "temple-interior":
+                    w = GameState(size: 5, name: dest, interior: true, stamp: .templeInterior)
+                default:
+                    w = GameState(size: Self.moonWorldSize, name: dest)
+                }
+                Self.setupInitialDiscovery(gameState: w)
+                return w
+            }
+            enterWorld(world)
         }
         // …and the arriving world starts stationary (a fresh key press resumes walking).
         gameState.forwardHeld = false; gameState.backwardHeld = false
     }
 
-    /// Begin a fade-to-black, swap the world at the midpoint, then fade back (M11.2b). Ignored if a
-    /// transition is already running. Both the portal (F) and the debug O key route through here.
-    func beginWorldTransition() {
+    /// Begin a fade-to-black, swap the world at the midpoint, then fade back (M11.2b). Ignored if
+    /// a transition is already running. Walk-through portals, the O key (moon), and the I key
+    /// (temple) all route through here with their destination id (M15.2).
+    func beginWorldTransition(destinationID: Int = 0) {
         guard transitionPhase == .none else { return }
         transitionPhase = .fadingOut
         transitionT = 0
-        pendingWorldToggle = true
+        pendingPortalDestination = destinationID
     }
 
     /// Advance the fade each frame; performs the queued world swap at the fully-black midpoint.
@@ -367,7 +371,7 @@ class Renderer: NSObject, MTKViewDelegate {
             transitionT += dt * transitionSpeed
             if transitionT >= 1 {
                 transitionT = 1
-                if pendingWorldToggle { toggleTestInterior(); pendingWorldToggle = false }
+                if let id = pendingPortalDestination { performPortalSwap(destinationID: id); pendingPortalDestination = nil }
                 transitionPhase = .fadingIn
             }
         case .fadingIn:
@@ -617,7 +621,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // the requesting world and start the transition; the swap happens at the fully-black midpoint.
         if gameState.portalRequested {
             gameState.portalRequested = false
-            beginWorldTransition()
+            beginWorldTransition(destinationID: gameState.portalDestinationID)
         }
         updateTransition(dt: dt)
 

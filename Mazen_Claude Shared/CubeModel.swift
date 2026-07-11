@@ -1,5 +1,12 @@
 import simd
 
+/// What gets stamped onto a freshly generated world (M15.2). The maze itself is always generated;
+/// the stamp is the authored layer on top — rooms, props, portals.
+enum WorldStamp {
+    case overworldDemo   // the dev overworld: start plaza + props, portals, the −Z house court
+    case templeInterior  // the first hand-stamped interior: central hall, pedestal, return portal
+}
+
 class CubeModel {
     let size: Int
     let worldScale: WorldScale
@@ -15,7 +22,7 @@ class CubeModel {
     // from an O(n²) scan into an O(1) lookup.
     private var faceletLocation: [FaceletID: (cubieIndex: Int, faceletIndex: Int)] = [:]
 
-    init(worldScale: WorldScale) {
+    init(worldScale: WorldScale, stamp: WorldStamp = .overworldDemo) {
         self.worldScale = worldScale
         self.size = worldScale.cubeSize
         self.cubies = []
@@ -24,8 +31,13 @@ class CubeModel {
         generateMaze()
         addEdgeBridges()
         rebuildProjection()
-        stampDemoRoom()
-        stampDemoProps()
+        switch stamp {
+        case .overworldDemo:
+            stampDemoRoom()
+            stampDemoProps()
+        case .templeInterior:
+            stampTempleInterior()
+        }
     }
 
     // MARK: - Rooms (M10 Phase F)
@@ -116,6 +128,13 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))  // flashing lamp atop
         }
+        // M15.2: a second doorway SOUTH of the plaza — the temple interior (destination id 1;
+        // Prop.state carries which world a portal leads to).
+        let templeRow = min(size - 1, top + h)
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: templeRow, col: left + w / 2) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, state: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        }
         // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
         // crowded +Z demo plaza, so it has room to breathe. It sits at the row-0 face edge so an
         // adjacent-face slice still cuts through and splits it. The court is opened into a hedge-free,
@@ -140,6 +159,28 @@ class CubeModel {
             if let (ci, fi) = faceletAt(face: houseFace, row: r, col: c) {
                 cubies[ci].facelets[fi].props.append(Prop(kind: .houseCorner, subRow: 1, subCol: 1, facing: f))
             }
+        }
+    }
+
+    /// M15.2 — the first hand-stamped interior world (a 5³ temple, D3). Sparse and legible: a
+    /// 3×3 open hall centred on the arrival face (+Z, where the player spawns at the centre), a
+    /// pedestal to the north (placeholder for the M17 memory-mote), and the way home to the
+    /// south — a walk-through return portal. The generated maze stands everywhere else: the
+    /// chamber is the anteroom, the rest of the inside is there to be explored.
+    private func stampTempleInterior() {
+        let n = size
+        let c = n / 2
+        let top = max(0, c - 1), left = max(0, c - 1)
+        let h = min(3, n), w = min(3, n)
+        stampOpenPlaza(face: .positiveZ, top: top, left: left, height: h, width: w)
+        // Pedestal north of centre (the player spawns AT centre — keep it clear).
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: max(0, c - 1), col: c) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+        }
+        // Return portal south of centre (walking onto it exits — depth > 1 always pops).
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
     }
 
