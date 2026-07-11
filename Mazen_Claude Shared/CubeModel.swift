@@ -444,6 +444,17 @@ class CubeModel {
         bondedGroups.append(cubieIndices)
     }
 
+    /// Dissolve the bond containing `cubieIndex` (M16: understanding undoes a lock — the bonded
+    /// structure becomes twistable again). Cubie indices stay valid across turns, so the caller
+    /// can hold one member (e.g. the structure's anchor cubie) from bond time. Returns whether
+    /// a bond was actually removed.
+    @discardableResult
+    func removeBond(containing cubieIndex: Int) -> Bool {
+        guard let i = bondedGroups.firstIndex(where: { $0.contains(cubieIndex) }) else { return false }
+        bondedGroups.remove(at: i)
+        return true
+    }
+
     /// Whether a slice twist is legal under the current bonds (the bandaged-cube rule): every bonded
     /// group must be **entirely inside** the rotating slice or **entirely outside** it. A group that
     /// straddles the slice would be torn, so the twist is refused. No bonds ⇒ always legal.

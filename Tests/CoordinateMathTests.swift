@@ -225,6 +225,20 @@ struct CoordinateMathTests {
         for _ in 0..<4 { m.applySliceRotation(axis: 2, index: n - 1, angle: -.pi / 2) }
         check(!m.canRotateSlice(axis: 0, index: 0),    "size \(n): after 4 turns, x=0 straddle still illegal")
         check(m.canRotateSlice(axis: 2, index: n - 1), "size \(n): after 4 turns, z=n-1 still legal")
+
+        // M16.1 groundwork — removeBond (understanding undoes a lock). Both bonds straddle the
+        // x=0 slice, so it only becomes legal when BOTH are gone: removing one leaves the other
+        // enforcing (bonds are independent), removing the second restores legality, and a repeat
+        // remove is a no-op.
+        guard let c = cubieIndex(m, 0, n - 1, 0), let d = cubieIndex(m, n - 1, n - 1, 0) else {
+            check(false, "size \(n): second-bond cubies not found"); return
+        }
+        m.addBond([c, d])   // second, independent bond — also straddles x (c at x=0, d at x=n-1)
+        check(m.removeBond(containing: a), "size \(n): removeBond finds bond 1 via a member")
+        check(!m.canRotateSlice(axis: 0, index: 0), "size \(n): x=0 still illegal — bond 2 untouched")
+        check(m.removeBond(containing: c), "size \(n): removeBond finds bond 2 via a member")
+        check(m.canRotateSlice(axis: 0, index: 0), "size \(n): x=0 legal once fully unbonded")
+        check(!m.removeBond(containing: a), "size \(n): repeat remove is a no-op")
     }
 
     static func testPropRotation() {
