@@ -58,10 +58,10 @@ enum AssetRegistry {
             loadProp("tree_stump_01_2k",      "tree_stump_01_diff_2k",      (-1,  1), 0.30),
             loadProp("tree_stump_02_2k",      "tree_stump_02_diff_2k",      ( 1, -1), 0.30),
             // loadProp("old_military_crate_2k", "old_military_crate_diff_2k", ( 1,  1), 0.32),  // removed for now (Eddie)
-            loadSolid("Modular Temple/Pillar_Large_Base.obj", (-1, 0), 0.55),
+            // loadSolid("Modular Temple/Pillar_Large_Base.obj", (-1, 0), 0.55),  // hidden for now — blocked the moon-door path (Eddie)
             loadSolid("Modular Temple/Prop_Flag_Sun.obj",     ( 0, -1), 0.50),
             loadSolid("Modular Temple/Prop_Flag_Moon.obj",    ( 0,  1), 0.50),
-            loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  0), 0.28),
+            loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  1), 0.28),   // moved off the temple-door path (Eddie)
         ].compactMap { $0 }
 
         // M12-E: imported modular house. Load the kit's solid-colour OBJ pieces and assemble one

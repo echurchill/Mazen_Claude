@@ -154,9 +154,12 @@ class CubeModel {
                     bond.insert(pci)
                 }
             }
-            // The root: the cubie directly beneath the door (+Z face at init: col→x, row→y, z=n−1).
+            // The root: the cube is HOLLOW (only surface cubies exist — buildCubies skips
+            // interiors), so the lock anchors straight through the world's core to the cubie on
+            // the OPPOSITE face (z = 0). Any twist of the start face's slice would tear door from
+            // root — refused until the lock is undone.
             if let root = cubies.firstIndex(where: {
-                $0.position == SIMD3<Int32>(Int32(doorCol), Int32(templeRow), Int32(size - 2))
+                $0.position == SIMD3<Int32>(Int32(doorCol), Int32(templeRow), 0)
             }) {
                 bond.insert(root)
             }
