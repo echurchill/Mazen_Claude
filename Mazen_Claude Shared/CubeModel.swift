@@ -148,6 +148,9 @@ class CubeModel {
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1))
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
             sealedPortalCubies.insert(dci)   // M16.4: closed until unlocked AND twisted open
+            // M16.5: the lock speaks — a carved tesseract-shadow plaque on the door's approach side
+            // (on the bonded tile, so the lock livery gilds it and the refusal flares it).
+            cubies[dci].facelets[dfi].props.append(Prop(kind: .glyph, subRow: 0, subCol: 0, facing: .n))
             var bond: Set<Int> = [dci]
             for pc in [doorCol - 1, doorCol + 1] where (0..<size).contains(pc) {
                 if let (pci, pfi) = faceletAt(face: .positiveZ, row: templeRow, col: pc) {
@@ -182,6 +185,9 @@ class CubeModel {
             for (r, c2, f, st) in dialSpots {
                 if let (ci2, fi2) = faceletAt(face: .positiveZ, row: r, col: c2) {
                     cubies[ci2].facelets[fi2].props.append(Prop(kind: .dial, subRow: 1, subCol: 1, facing: f, state: st))
+                    // M16.5: the same mark beside every dial — the association between the four
+                    // dials and the locked temple, said in the Builders' language, not in words.
+                    cubies[ci2].facelets[fi2].props.append(Prop(kind: .glyph, subRow: 0, subCol: 0, facing: f))
                 }
             }
         }
@@ -240,9 +246,11 @@ class CubeModel {
         let top = max(0, c - 1), left = max(0, c - 1)
         let h = min(3, n), w = min(3, n)
         stampOpenPlaza(face: .positiveZ, top: top, left: left, height: h, width: w)
-        // Pedestal north of centre (the player spawns AT centre — keep it clear).
+        // Pedestal north of centre (the player spawns AT centre — keep it clear), with the same
+        // carved glyph beside it (M16.5) — the mote's future home, marked in the language.
         if let (ci, fi) = faceletAt(face: .positiveZ, row: max(0, c - 1), col: c) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .glyph, subRow: 2, subCol: 1, facing: .s))
         }
         // Return portal south of centre (walking onto it exits — depth > 1 always pops).
         // Its exit direction is north: arrivals emerge facing the hall and the pedestal.

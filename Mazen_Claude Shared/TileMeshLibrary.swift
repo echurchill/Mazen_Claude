@@ -205,6 +205,10 @@ class TileMeshLibrary {
         Self.addDial(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.dial.rawValue] = TileMesh(vertexOffset: 0, indexOffset: dialStart, indexCount: allIndices.count - dialStart)
 
+        let glyphStart = allIndices.count
+        Self.addGlyphPlaque(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.glyph.rawValue] = TileMesh(vertexOffset: 0, indexOffset: glyphStart, indexCount: allIndices.count - glyphStart)
+
         // Celestial bodies (M9): a unit cube, drawn at the sun/moon positions.
         let cubeStart = allIndices.count
         Self.addUnitCube(to: &allVerts, indices: &allIndices)
@@ -641,6 +645,67 @@ class TileMeshLibrary {
         box(0.085, 0.085, 0, z0, z0 + 0.045)              // pedestal
         box(0.065, 0.065, 0, z0 + 0.045, z0 + 0.065)      // dial plate
         box(0.015, 0.024, -0.042, z0 + 0.065, z0 + 0.090) // pointer wedge, toward local north (−y)
+    }
+
+    /// M16.5: the first carved Builder glyph — an upright stone plaque bearing a frozen 4D
+    /// cross-section (the cell-first tesseract shadow: a square within a square, corners joined)
+    /// as raised linework. The language's first public appearance — presence, not system (see
+    /// `Mazen Docs/Builder Glyphs — 4D Shadows.md`). All linework is double-sided, so winding
+    /// never hides a stroke.
+    private static func addGlyphPlaque(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: 0.92)
+        }
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            let n = normalize(cross(b - a, d - a))
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        func quadDS(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            quad(a, b, c, d); quad(d, c, b, a)
+        }
+        // The slab: upright, x across, z up, thin in y; the glyph face is the −y (north) side.
+        func slabBox(_ hx: Float, _ hy: Float, _ zb: Float, _ zt: Float) {
+            let corners = [SIMD3<Float>(-hx, -hy, 0), SIMD3<Float>(hx, -hy, 0),
+                           SIMD3<Float>(hx, hy, 0), SIMD3<Float>(-hx, hy, 0)]
+            let b0 = corners.map { SIMD3($0.x, $0.y, zb) }
+            let t0 = corners.map { SIMD3($0.x, $0.y, zt) }
+            for i in 0..<4 { let j = (i + 1) % 4; quad(b0[i], b0[j], t0[j], t0[i]) }
+            quad(t0[3], t0[2], t0[1], t0[0])
+        }
+        // A raised stroke on the glyph face: (x,z)-plane segment, half-width w, standing off
+        // the face toward −y.
+        let faceY: Float = -0.014
+        let raise: Float = 0.012
+        func stroke(_ a2: SIMD2<Float>, _ b2: SIMD2<Float>, _ w: Float) {
+            let dir = simd_normalize(b2 - a2)
+            let perp = SIMD2<Float>(-dir.y, dir.x) * w
+            let p0 = a2 - perp, p1 = a2 + perp, p2 = b2 + perp, p3 = b2 - perp
+            func P(_ v: SIMD2<Float>, _ y: Float) -> SIMD3<Float> { SIMD3(v.x, y, v.y) }
+            let yb = faceY, yf = faceY - raise
+            quadDS(P(p0, yf), P(p1, yf), P(p2, yf), P(p3, yf))     // stroke face
+            quadDS(P(p0, yb), P(p1, yb), P(p1, yf), P(p0, yf))     // sides
+            quadDS(P(p2, yb), P(p3, yb), P(p3, yf), P(p2, yf))
+            quadDS(P(p1, yb), P(p2, yb), P(p2, yf), P(p1, yf))
+            quadDS(P(p3, yb), P(p0, yb), P(p0, yf), P(p3, yf))
+        }
+        slabBox(0.085, 0.014, z0, z0 + 0.24)
+        // The glyph: cell-first tesseract shadow, centred on the slab.
+        let zc: Float = z0 + 0.145
+        let w: Float = 0.0065
+        func square(_ h: Float) -> [SIMD2<Float>] {
+            [SIMD2(-h, zc - h), SIMD2(h, zc - h), SIMD2(h, zc + h), SIMD2(-h, zc + h)]
+        }
+        let outer = square(0.054)
+        let inner = square(0.023)
+        for i in 0..<4 {
+            let j = (i + 1) % 4
+            stroke(outer[i], outer[j], w)   // outer cell
+            stroke(inner[i], inner[j], w)   // inner cell
+            stroke(outer[i], inner[i], w)   // the joining edges — the 4D hint
+        }
     }
 
     private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {

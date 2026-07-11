@@ -237,6 +237,7 @@ enum PropKind: UInt8 {
     case importedAsset // a decoration backed by an imported mesh; `state` = the Renderer's registry index. Rides slices like any prop.
     case portalLamp   // the flashing lamp atop the portal (TARDIS-style); rendered emissive + blinking
     case dial         // M16.3: a stone lock-dial; `state` 1 = aligned (gold), 0 = off (grey); interact (F) aligns
+    case glyph        // M16.5: a carved Builder-glyph plaque (a frozen 4D cross-section) — presence, not system yet
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.

@@ -52,6 +52,7 @@ final class SceneBuilder {
         .portal:      SIMD4(0.11, 0.20, 0.52, 1.0),  // TARDIS police-box blue (M11.2 world portal)
         .portalLamp:  SIMD4(1.0, 1.0, 1.0, 1.0),     // overridden per-frame by the blink (below)
         .dial:        SIMD4(0.52, 0.52, 0.58, 1.0),  // M16.3 — overridden by state below
+        .glyph:       SIMD4(0.68, 0.65, 0.59, 1.0),  // M16.5 — carved stone (lock livery may gild it)
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
