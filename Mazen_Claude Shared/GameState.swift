@@ -71,7 +71,12 @@ class GameState {
     }
     var activeAnimations: [DiscoveryAnim] = []
 
-    init(size: Int = 3) {
+    /// The world's identity name — the `destination` half of its `WorldKey` (M15.0 world graph):
+    /// "earth" for the overworld, "moon", "temple-interior", … Used to resolve sky/portal edges.
+    let name: String
+
+    init(size: Int = 3, name: String = "world") {
+        self.name = name
         let ws = WorldScale(cubeSize: size)
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws)

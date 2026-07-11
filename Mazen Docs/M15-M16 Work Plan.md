@@ -65,13 +65,13 @@ Carve one **hand-authored placeholder glyph** in the Builder-Glyphs *style* (a f
 
 ---
 
-## Decision points for Eddie (greenlight items)
+## Decision points — ✅ GREENLIT (Eddie, 2026-07-11)
 
-- **D1 — Sequence.** Recommended: M15.0 → M15.1–2 → **M16.1–2 (early, cheap, parallelizable)** → M15.3 → M16.3–5. Alternative "loop-first": stub the interior with the existing moon world to reach M16's loop sooner (payoff is fake; not recommended).
-- **D2 — Interior lighting first pass:** fixed warm lantern-directional + ambient (cheap, recommended) vs. a real point-light model (better, more work — can follow).
-- **D3 — First interior size:** 3³ (tight, temple-chamber feel, cheapest to stamp) vs 5³ (roomier, more maze). Recommend **3³** for the first one.
-- **D4 — First bonded structure:** a new temple prop-cluster on the overworld (recommended — purpose-built, sits on the plaza) vs. reusing the −Z house.
-- **D5 — Registry naming:** adopt the `<destination>-<origin>` convention from the World Graph doc as the actual key format now, or keep keys opaque until variants exist.
+- **D1 — Sequence:** as recommended — M15.0 → M15.1–2 → M16.1–2 early → M15.3 → M16.3–5.
+- **D2 — Interior lighting:** fixed warm lantern-directional + ambient first; revisit after the loop works.
+- **D3 — First interior size: 5³** *(Eddie's call — roomier, more maze inside; overrides the 3³ recommendation).*
+- **D4 — First bonded structure:** a **new temple** prop-cluster on the overworld plaza.
+- **D5 — Registry keys:** adopt the `<destination>-<origin>` convention as the literal key format now.
 
 ## Risks (honest list)
 

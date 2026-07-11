@@ -124,9 +124,10 @@ class Renderer: NSObject, MTKViewDelegate {
     /// Invariant (why `last!` is safe): the stack is created with the overworld in init and
     /// `exitWorld`/`resetGame` never leave it empty — the overworld is never popped.
     var gameState: GameState { worldStack.last! }
-    /// A throwaway 3³ interior world used to prove the swap in M11.1 (toggled with the O key).
-    /// Replaced by real portal destinations in M11.2.
-    private var testInterior: GameState?
+    /// The universe (M15.0 world graph): every world reachable by route, keyed
+    /// `(destination, origin)`, lazily created, persistent — scars keep. The stack above is the
+    /// navigation *history*; this is the *universe*. Sky/counterpart lookups resolve through it.
+    let worldRegistry = WorldRegistry()
 
     // M11.2b world-transition fade: swap the active world at the midpoint of a quick fade-to-black.
     private enum TransitionPhase { case none, fadingOut, fadingIn }
@@ -192,14 +193,15 @@ class Renderer: NSObject, MTKViewDelegate {
         // Game state (owns the per-world scale) — mark some tiles discovered for visual testing.
         // The overworld is the bottom of the world stack (M11.1). Use a local here: the computed
         // `gameState` getter can't be called before super.init().
-        let overworld = GameState(size: Self.initialCubeSize)
+        let overworld = GameState(size: Self.initialCubeSize, name: "earth")
         Self.setupInitialDiscovery(gameState: overworld)
         self.worldStack = [overworld]
         // The moon world exists from the start (persists across visits) so it can hang in earth's
-        // sky — and so any tears you make on it stay put (M11 killer visual).
-        let moon = GameState(size: Self.moonWorldSize)
+        // sky — and so any tears you make on it stay put (M11 killer visual). Registered on the
+        // identity-bound edge moon-earth (M15.0): the moon you see IS the moon you can visit.
+        let moon = GameState(size: Self.moonWorldSize, name: "moon")
         Self.setupInitialDiscovery(gameState: moon)
-        self.testInterior = moon
+        worldRegistry.bind(WorldKey(destination: "moon", origin: "earth"), to: moon)
 
         // Tile mesh library (geometry baked from the world scale)
         self.tileMeshLib = TileMeshLibrary(device: device, worldScale: overworld.worldScale)
@@ -274,8 +276,9 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     func resetGame(size: Int) {
-        // Collapse to a single fresh overworld (drops any pushed portal-worlds).
-        worldStack = [GameState(size: size)]
+        // Collapse to a single fresh overworld (drops any pushed portal-worlds). It keeps the
+        // "earth" identity, so its sky edges (moon-earth) keep resolving; registry worlds persist.
+        worldStack = [GameState(size: size, name: "earth")]
         Self.setupInitialDiscovery(gameState: gameState)
         needsDecorativeStamp = true   // re-stamp the imported decorations into the fresh overworld
     }
@@ -287,8 +290,12 @@ class Renderer: NSObject, MTKViewDelegate {
         let apply: (GameState) -> Void = {
             $0.cubeModel.roundness = max(0, min(1, $0.cubeModel.roundness + delta))
         }
-        worldStack.forEach(apply)
-        if let moon = testInterior { apply(moon) }
+        // Whole universe, each distinct world exactly once (a world can be on the stack AND in
+        // the registry — e.g. standing on the moon — and must not be double-stepped).
+        var seen = Set<ObjectIdentifier>()
+        for w in worldStack + worldRegistry.allWorlds where seen.insert(ObjectIdentifier(w)).inserted {
+            apply(w)
+        }
     }
 
     // MARK: - World stack (M11.1)
@@ -314,8 +321,8 @@ class Renderer: NSObject, MTKViewDelegate {
         gameState.forwardHeld = false; gameState.backwardHeld = false
         if worldStack.count > 1 {
             exitWorld()
-        } else if let moon = testInterior {
-            enterWorld(moon)   // the moon persists (created at startup), so its tears stay put
+        } else if let moon = worldRegistry.existing(WorldKey(destination: "moon", origin: gameState.name)) {
+            enterWorld(moon)   // resolved by route (M15.0); persistent, so its tears stay put
         }
         // …and the arriving world starts stationary (a fresh key press resumes walking).
         gameState.forwardHeld = false; gameState.backwardHeld = false
@@ -371,8 +378,12 @@ class Renderer: NSObject, MTKViewDelegate {
         // M11 killer visual — the counterpart world shown hanging in the sky: from earth you see the
         // MOON, and from inside a sub-world you see the world beneath it. It persists, so tears made
         // on it stay. When one is shown, suppress the active world's plain M9 moon (no double moon).
+        // What hangs in the sky: from a pushed world, the world beneath you on the stack; from the
+        // root, whatever the registry resolves for this world's sky edge (M15.0 — an edge, not a
+        // fact: today that's moon-<here>; a lying/variant sky is a registry binding away).
         let counterpart: GameState? = debugSingleTile ? nil
-            : (worldStack.count > 1 ? worldStack[worldStack.count - 2] : testInterior)
+            : (worldStack.count > 1 ? worldStack[worldStack.count - 2]
+                                    : worldRegistry.existing(WorldKey(destination: "moon", origin: gameState.name)))
         let result = debugSingleTile
             ? sceneBuilder.buildSingleTile(tileMeshLib: tileMeshLib, instanceBuffer: buffer)
             : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer,
