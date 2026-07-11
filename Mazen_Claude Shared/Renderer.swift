@@ -368,8 +368,8 @@ class Renderer: NSObject, MTKViewDelegate {
                 arriving.player.face = door.face
                 arriving.player.row = door.row
                 arriving.player.col = door.col
-                arriving.player.subRow = 1
-                arriving.player.subCol = 1
+                arriving.player.subRow = arriving.player.standCenter
+                arriving.player.subCol = arriving.player.standCenter
                 arriving.player.facing = door.exitFacing
             }
         } else {

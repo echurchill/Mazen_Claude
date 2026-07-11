@@ -45,7 +45,18 @@ struct WorldScale {
     var floorY: Float = 0.001
 
     /// Distance between adjacent 3×3 sub-cell centers, in a tile's local frame.
+    /// This is the PROP/AUTHOR grid — prop placement stays 3×3; movement uses `standGrid`.
     var subCellStep: Float { 2.0 * floorHalfSize / 3.0 }
+
+    /// M18 Phase 0: the STAND grid — standing spots per tile side. Movement runs on this
+    /// finer d×d grid while props keep the 3×3 author grid above. Must be an **odd multiple
+    /// of 3** (9, 15, 21…): ×3 keeps every legacy 3×3 coordinate an exact integer scale-up,
+    /// odd keeps a true centre cell (spawn/portal seating/twist-remap rounding rely on one).
+    /// Walking pace is normalized to this in PlayerState, so density never changes speed.
+    /// Per-world on purpose — interiors may want finer (M18 D4).
+    var standGrid: Int = 9
+    /// Distance between adjacent stand-cell centers, in a tile's local frame.
+    var standStep: Float { 2.0 * floorHalfSize / Float(standGrid) }
     /// M14b: how many times to subdivide each floor sub-cell edge, so the floor has enough
     /// interior vertices to follow the curved (inflated) surface smoothly instead of faceting.
     /// 1 = today's single quad per sub-cell; 3 → a 3×3 grid per sub-cell (9×9 per tile). Render-

@@ -89,7 +89,7 @@ class GameState {
         let ws = WorldScale(cubeSize: size, interior: interior)
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws, stamp: stamp)
-        player = PlayerState(size: size)
+        player = PlayerState(size: size, standGrid: ws.standGrid)
         if verboseDebugLog { printMazeDebug(face: player.face) }
     }
 
@@ -369,10 +369,11 @@ class GameState {
                     // so the player stays on the rotated path cross.
                     let t = player.face.tangent
                     let b = interior ? -player.face.bitangent : player.face.bitangent
-                    let oldOffset = t * Float(player.subCol - 1) + b * Float(player.subRow - 1)
+                    let sc = player.standCenter
+                    let oldOffset = t * Float(player.subCol - sc) + b * Float(player.subRow - sc)
                     let newOffset = rotQ.act(oldOffset)
-                    player.subCol = min(2, max(0, Int(dot(newOffset, t).rounded()) + 1))
-                    player.subRow = min(2, max(0, Int(dot(newOffset, b).rounded()) + 1))
+                    player.subCol = min(player.standGrid - 1, max(0, Int(dot(newOffset, t).rounded()) + sc))
+                    player.subRow = min(player.standGrid - 1, max(0, Int(dot(newOffset, b).rounded()) + sc))
                     break
                 }
             }

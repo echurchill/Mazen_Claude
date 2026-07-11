@@ -70,14 +70,15 @@ struct CameraState {
 
     func firstPersonPose(player: PlayerState, cubeModel: CubeModel, sliceRotation: GameState.SliceRotation, worldSpin: float4x4) -> FirstPersonPose {
         let eyeHeight = cubeModel.worldScale.eyeHeight
-        let step = cubeModel.worldScale.subCellStep
+        let step = cubeModel.worldScale.standStep
+        let center = cubeModel.worldScale.standGrid / 2
 
-        // M14b Phase 3: a standing spot's eye ON the curved surface — inflate the sub-cell footprint,
+        // M14b Phase 3: a standing spot's eye ON the curved surface — inflate the stand-cell footprint,
         // stand the eye up along the *local* surface normal. Returns eye + that normal (the up vec).
         // At roundness 0 this is exactly the old flat spot (inflatedPlacement returns the flat frame).
         func spot(_ f: CubeFace, _ r: Int, _ c: Int, _ sr: Int, _ sc: Int) -> (eye: SIMD3<Float>, up: SIMD3<Float>) {
             let p = cubeModel.inflatedPlacement(face: f, row: r, col: c,
-                                                localX: Float(sc - 1) * step, localY: Float(sr - 1) * step)
+                                                localX: Float(sc - center) * step, localY: Float(sr - center) * step)
             let normal = SIMD3<Float>(p.columns.2.x, p.columns.2.y, p.columns.2.z)
             let pos = SIMD3<Float>(p.columns.3.x, p.columns.3.y, p.columns.3.z)
             return (pos + normal * eyeHeight, normal)

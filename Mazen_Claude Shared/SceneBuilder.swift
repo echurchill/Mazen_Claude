@@ -222,9 +222,9 @@ final class SceneBuilder {
         // it sits ON the curved surface exactly like the FP camera, then faced and shrunk to fit.
         if gameState.camera.mode == .orbit {
             let player = gameState.player
-            let step = model.worldScale.subCellStep
-            let localX = Float(player.subCol - 1) * step
-            let localY = Float(player.subRow - 1) * step
+            let step = model.worldScale.standStep
+            let localX = Float(player.subCol - player.standCenter) * step
+            let localY = Float(player.subRow - player.standCenter) * step
             var pMatrix = model.inflatedPlacement(face: player.face, row: player.row, col: player.col,
                                                   localX: localX, localY: localY)
             if let animMat = sliceAnimMatrix, sr.playerCubieIndex >= 0, sr.affectedCubies.contains(sr.playerCubieIndex) {

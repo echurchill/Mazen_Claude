@@ -5,27 +5,32 @@ struct PlayerState {
     var face: CubeFace = .positiveZ
     var row: Int
     var col: Int
-    // Sub-cell standing spot within the tile's 3×3 grid (M10 Phase D). Path cells only.
-    var subRow: Int = 1
-    var subCol: Int = 1
+    /// The stand grid's density (M18 Phase 0) — from `WorldScale.standGrid`. Standing
+    /// spots run 0..<standGrid per axis; `standCenter` is the tile-centre cell.
+    let standGrid: Int
+    var standCenter: Int { standGrid / 2 }
+    // Stand-cell standing spot within the tile's d×d grid (M10 Phase D, densified M18).
+    // Path cells only (until M18 Phase 1 opens the grass).
+    var subRow: Int
+    var subCol: Int
     var facing: Heading8 = .n
 
     var isMoving = false
     var moveProgress: Float = 0
     // Progress-per-second across one hop → time per hop = 1/moveSpeed. A hop is one
-    // sub-cell (a third of a tile) since M10 Phase D, so ~2.5 (0.4s/hop) keeps roughly
-    // the ~1.2s-per-tile pace Phase A dialed in. Tune to taste.
+    // stand cell; the init scales this with the stand grid so the per-TILE pace stays
+    // the ~1.2s M10 Phase A dialed in, whatever the density. Tune the 2.5 to taste.
     var moveSpeed: Float = 2.5
     var moveFromFace: CubeFace = .positiveZ
     var moveFromRow: Int = 0
     var moveFromCol: Int = 0
-    var moveFromSubRow: Int = 1
-    var moveFromSubCol: Int = 1
+    var moveFromSubRow: Int
+    var moveFromSubCol: Int
     var moveToFace: CubeFace = .positiveZ
     var moveToRow: Int = 0
     var moveToCol: Int = 0
-    var moveToSubRow: Int = 1
-    var moveToSubCol: Int = 1
+    var moveToSubRow: Int
+    var moveToSubCol: Int
     var moveNewFacing: Heading8 = .n
 
     var isTurning = false
@@ -34,9 +39,15 @@ struct PlayerState {
     var turnFromFacing: Heading8 = .n
     var turnToFacing: Heading8 = .n
 
-    init(size: Int) {
+    init(size: Int, standGrid: Int = 9) {
+        self.standGrid = standGrid
         row = size / 2
         col = size / 2
+        let c = standGrid / 2
+        subRow = c; subCol = c
+        moveFromSubRow = c; moveFromSubCol = c
+        moveToSubRow = c; moveToSubCol = c
+        moveSpeed = 2.5 * Float(standGrid) / 3.0
     }
 
     // MARK: - Update
@@ -112,10 +123,10 @@ struct PlayerState {
         let (dr, dc) = travel.subDelta
         let tr = subRow + dr, tc = subCol + dc
 
-        if (0...2).contains(tr) && (0...2).contains(tc) {
+        if (0..<standGrid).contains(tr) && (0..<standGrid).contains(tc) {
             // Within-tile hop — target must be a path cell. (Phase G will also reject a
             // diagonal whose flanking cell is occupied by a prop.)
-            guard tile.isPathCell(tr, tc) else { return }
+            guard tile.isPathCell(tr, tc, grid: standGrid) else { return }
             beginMove(toFace: face, toRow: row, toCol: col, toSub: (tr, tc), newFacing: facing)
             return
         }
@@ -123,7 +134,7 @@ struct PlayerState {
         // Exiting the tile: only a cardinal move from that edge's middle cell, through
         // an open gateway, may cross.
         guard let dir = travel.cardinal else { return }
-        guard (subRow, subCol) == Self.edgeMiddle(dir) else { return }
+        guard (subRow, subCol) == edgeMiddle(dir) else { return }
         guard tile.openings.contains(direction: dir) else { return }
 
         let n = cubeModel.size
@@ -145,7 +156,7 @@ struct PlayerState {
 
         let crossHeading = Heading8.from(surfaceDirection: arrDir)
         beginMove(toFace: arrFace, toRow: arrRow, toCol: arrCol,
-                  toSub: Self.edgeMiddle(entryDir), newFacing: arrivalFacing(crossHeading))
+                  toSub: edgeMiddle(entryDir), newFacing: arrivalFacing(crossHeading))
     }
 
     private mutating func beginMove(toFace: CubeFace, toRow: Int, toCol: Int, toSub: (Int, Int), newFacing: Heading8) {
@@ -160,13 +171,14 @@ struct PlayerState {
 
     // MARK: - Direction helpers
 
-    /// The middle sub-cell of an edge (the sub-cell a gateway opens through).
-    static func edgeMiddle(_ dir: SurfaceDirection) -> (Int, Int) {
+    /// The middle stand cell of an edge (the cell a gateway opens through).
+    func edgeMiddle(_ dir: SurfaceDirection) -> (Int, Int) {
+        let c = standCenter
         switch dir {
-        case .north: return (0, 1)
-        case .south: return (2, 1)
-        case .east:  return (1, 2)
-        case .west:  return (1, 0)
+        case .north: return (0, c)
+        case .south: return (standGrid - 1, c)
+        case .east:  return (c, standGrid - 1)
+        case .west:  return (c, 0)
         }
     }
 

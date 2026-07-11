@@ -64,12 +64,19 @@ possible, so **M18 runs before M17.** Consequences for this plan:
 
 ## Phases
 
-### Phase 0 — Densify (behavior-identical)
+### Phase 0 — Densify (behavior-identical) — 🔨 built 2026-07-11, awaiting Eddie's play check
 Introduce `d` and the integer scaling: prop subcell coordinates, `edgeMiddle`, spawn centre,
 player marker, portal/interact positions, the twist player-remap. First flip walkability to
 *exactly the scaled path cross* so the game plays identically to today — this flushes every
 hidden `0...2` assumption while behavior is still bit-comparable.
 *Danger:* Med (wide but mechanical). *Verify:* plays identically; headless remap tests.
+*Build note:* one deliberate deviation — **props keep the 3×3 author grid forever**
+(`Prop.subRow/subCol` untouched, `subCellStep` stays the prop step); only the STAND grid
+densified (`WorldScale.standGrid = 9`, `standStep`, PlayerState carries `standGrid` with
+pace normalized ×d/3). Less churn, and Phase 2 maps a prop cell → k×k stand cells anyway.
+Touched: WorldScale, CubeTypes (`isPathCell(grid:)`), PlayerState, GameState (spawn +
+twist remap), CameraState (FP eye), SceneBuilder (marker), Renderer (portal seating);
++5,424 checks (stand-grid cross at d=3/9/15 × all 16 opening combos).
 
 ### Phase 1 — Open the grass, mask the walls
 Walkable-by-default + wall/jamb subtraction replaces the path-cross rule. The player steps

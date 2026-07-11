@@ -49,6 +49,7 @@ struct CoordinateMathTests {
         testPropRotation()
         testInflateGoldens()
         testSizeCap()
+        testStandGridPathCross()
 
         print("")
         if failed == 0 {
@@ -58,6 +59,55 @@ struct CoordinateMathTests {
             for f in failures.prefix(50) { print("   - \(f)") }
             if failures.count > 50 { print("   … and \(failures.count - 50) more") }
             exit(1)
+        }
+    }
+
+    /// M18 Phase 0 — the generalized stand-grid path cross must agree with the legacy 3×3
+    /// rule at every density: cross cells walkable exactly per openings, everything off the
+    /// centre row/column never walkable, and the d-grid cross a strict scale-up of the 3×3.
+    static func testStandGridPathCross() {
+        let combos: [DirectionMask] = {
+            var out: [DirectionMask] = []
+            for bits in 0..<16 {
+                var m = DirectionMask()
+                if bits & 1 != 0 { m.insert(.north) }
+                if bits & 2 != 0 { m.insert(.east) }
+                if bits & 4 != 0 { m.insert(.south) }
+                if bits & 8 != 0 { m.insert(.west) }
+                out.append(m)
+            }
+            return out
+        }()
+        for openings in combos {
+            let tile = MazeTile(openings: openings, styleSeed: 0)
+            for d in [3, 9, 15] {
+                let c = d / 2
+                for r in 0..<d {
+                    for cl in 0..<d {
+                        let walkable = tile.isPathCell(r, cl, grid: d)
+                        let expected: Bool
+                        if cl == c && r == c { expected = true }
+                        else if cl == c { expected = openings.contains(r < c ? .north : .south) }
+                        else if r == c { expected = openings.contains(cl < c ? .west : .east) }
+                        else { expected = false }
+                        check(walkable == expected,
+                              "standGrid d=\(d) openings=\(openings.rawValue): cell (\(r),\(cl)) expected \(expected)")
+                    }
+                }
+                // The centre cell is always standable; the four edge-middles gate on openings.
+                check(tile.isPathCell(c, c, grid: d), "standGrid d=\(d): centre must be path")
+                check(tile.isPathCell(0, c, grid: d) == openings.contains(.north), "standGrid d=\(d): north edge-middle")
+                check(tile.isPathCell(d - 1, c, grid: d) == openings.contains(.south), "standGrid d=\(d): south edge-middle")
+                check(tile.isPathCell(c, 0, grid: d) == openings.contains(.west), "standGrid d=\(d): west edge-middle")
+                check(tile.isPathCell(c, d - 1, grid: d) == openings.contains(.east), "standGrid d=\(d): east edge-middle")
+            }
+            // Legacy agreement: the default grid is the old 3×3 rule verbatim.
+            for r in 0...2 {
+                for cl in 0...2 {
+                    check(tile.isPathCell(r, cl) == tile.isPathCell(r, cl, grid: 3),
+                          "legacy 3×3 default disagrees at (\(r),\(cl))")
+                }
+            }
         }
     }
 
