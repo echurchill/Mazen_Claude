@@ -20,6 +20,31 @@ the rest. What we give up, for now: free yaw (heading stays 8-way) and sub-cell 
 What we keep forever: the footprint data is exactly what a future continuous-collision system
 would consume — a stepping stone, not a detour.
 
+## The driver: natural worlds (why M18 outranks M17)
+
+*(Eddie, 2026-07-11.)* M19's earth/moon worlds are **mazeless**: roundness ~1.0, natural ground
+(grass fields with trees, or regolith with craters), and walking there must feel like *not
+being in a maze at all* — no paths in the traditional sense. That is what M18 exists to make
+possible, so **M18 runs before M17.** Consequences for this plan:
+
+- **A natural world is just a wall-less stamp.** Masks start all-walkable; trees, boulders,
+  and crater rims are footprint props. "Paths" become purely visual (worn grass), never
+  mechanical. The mask system needs nothing new for this — it's its best case.
+- **The feel bar moves.** The old test was "maze walking stays cozy." The real test is now
+  "an open field doesn't feel like a grid." Two specific threats: (1) **8-way heading in the
+  open** — corridors mask the 45° polyline, a grass field won't; (2) **seam invisibility** —
+  at roundness 1.0 the cube edges vanish visually, so crossing one must feel like nothing,
+  and today diagonal travel can't cross a tile edge at all (cardinal-only exits). Both get
+  tested early on a wall-less stamp instead of being discovered in M19.
+- **The escape hatch is priced in:** if 8-way in the open fails the feel pass, the ladder is
+  16-way heading → free yaw over grid position (a slice of the
+  [aspirational plan](M18%20Freeform%20Movement%20%28Aspirational%29.md)) — the mask and
+  footprint work is identical under all three.
+- **The thematic jackpot, for the record:** a perfect green sphere that is *secretly a cube
+  maze underneath* is the game's whole thesis — the engineered truth beneath the natural
+  surface. The first twist on a "natural" world, shearing a grass field along an invisible
+  slice plane, is M19's killer moment; M18 is what earns it.
+
 ## Core concepts
 
 - **Density `d`** — one constant, everything derived. Must be an **odd multiple of 3**
@@ -50,10 +75,15 @@ hidden `0...2` assumption while behavior is still bit-comparable.
 Walkable-by-default + wall/jamb subtraction replaces the path-cross rule. The player steps
 off the path for the first time. Gateways now gate by geometry (the wall cells), not by the
 edge-middle rule — tile exits allowed from any open edge cell, crossing to the neighbour's
-mirrored cell through `edgeCrossing` (generalizing the existing sub-cell remap pattern).
+mirrored cell through `edgeCrossing` (generalizing the existing sub-cell remap pattern),
+**including diagonal exits** (decomposed as cardinal cross + lateral cell offset) so a
+diagonal walk never stutters at a tile seam — mandatory for the natural worlds, where seams
+are invisible. Add a `.natural` **test stamp** (wall-less world, a few tree footprints) as
+the standing testbed for the open-field feel question.
 *Danger:* Med — the edge/interior sub-cell remap is this plan's hardest math (a far smaller
 cousin of the freeform plan's Phase 4). *Verify:* world-position-pinned crossing tests (the
-M15 technique) over every edge, exterior + interior, several sizes; then a feel walk.
+M15 technique) over every edge, exterior + interior, several sizes, cardinal AND diagonal;
+then a feel walk — corridor and open field.
 
 ### Phase 2 — Solid props (stand-point removal)
 The footprint table + auto-derived imports; subtraction into the mask. A plaque, dial,
@@ -64,12 +94,17 @@ log lines, not unwinnable mazes).
 *Danger:* Low-Med. *Verify:* can't occupy a prop's cells; F-interact still reaches from
 adjacent cells; connectivity check fires on a deliberately bad stamp in tests.
 
-### Phase 3 — Density & pace tuning (Eddie's phase)
+### Phase 3 — Density, pace & open-field tuning (Eddie's phase)
 `d` is already a constant; add a debug key to cycle 9 ↔ 15 (rebuild scene + remap player,
-like the `N` size cycle) and run a feel pass: stride rhythm, footprint fairness around the
-dials/plaques, grass wandering, diagonal movement (D2). Lock the default; decide whether `d`
-stays per-world (WorldScale) or global.
-*Danger:* Low. *Verify:* Eddie's verdict — this phase exists to be played, not coded.
+like the `N` size cycle) and run TWO feel passes. **Maze pass:** stride rhythm, footprint
+fairness around the dials/plaques, grass wandering, diagonal movement (D2). **Open-field
+pass (the one that gates M19):** the `.natural` test stamp at roundness 1.0 — wander the
+sphere in every direction, over the invisible edges, among the trees; does it feel like
+ground, or like a grid with the walls deleted? If 8-way heading is the tell, climb the
+escape-hatch ladder (16-way → free yaw over grid position) before locking anything.
+Lock the default `d`; decide per-world vs global (D4).
+*Danger:* Low to code, **high stakes to judge** — this verdict is what M19 stands on.
+*Verify:* Eddie's verdict on both passes — this phase exists to be played, not coded.
 
 ### Phase 4 — Sweep & retire assumptions
 HUD shows the finer position; delete the temporary path-cross-equivalence shim from Phase 0;
@@ -80,6 +115,9 @@ smoothness) so the north star stays visible.
 **M18 exit criterion:** walk anywhere on a tile the geometry honestly allows — including the
 grass — and never into a wall, plaque, dial, pedestal, or house; across tile seams, cube
 edges, and interior mirrors; while slices twist; at a density that survived a real feel pass.
+**And the M19 gate:** on the wall-less test sphere at roundness 1.0, walking reads as *ground*,
+not as a maze with the walls deleted — seams imperceptible, heading unobtrusive, trees dodged
+like trees.
 
 ## Decision points for Eddie
 
@@ -103,7 +141,12 @@ edges, and interior mirrors; while slices twist; at a density that survived a re
   keeping every input. Nothing built here is throwaway.
 - **Discovery/fog is untouched** — it's tile-level, and the player still occupies exactly one
   tile. Same for portals' walk-through, dial interact range, and the M17 plan (which never
-  touches movement; the two milestones stay order-independent, M17-first still recommended).
+  touches movement; the milestones stay order-independent — **M18 first** per Eddie, as the
+  natural-worlds prerequisite).
+- **Terrain relief is NOT this milestone.** Craters, rolling hills, and local ground
+  displacement are M19 authoring (on top of M14b's tessellated floors). M18 ground stays
+  flat-per-tile; if M19 displaces floor vertices, eye-height should follow the same floor
+  function — leave the hook, build nothing.
 - **iOS benefits quietly:** discrete cells make future touch input (tap-to-step, swipe-to-turn)
   much easier to design than analog sticks would be.
 - **Perf is a non-issue:** masks are `d²` bits per facelet, derived on stamp/spawn and on prop
