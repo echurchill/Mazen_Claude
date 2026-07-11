@@ -6,6 +6,7 @@ enum WorldStamp {
     case overworldDemo   // the dev overworld: start plaza + props, BOTH doorways, the −Z house court
     case moonDemo        // the moon: the demo plaza but only its one door home (no temple doorway)
     case templeInterior  // the first hand-stamped interior: central hall, pedestal, return portal
+    case bare            // nothing authored — the bare generated maze (tests; procedural worlds later)
 }
 
 class CubeModel {
@@ -41,6 +42,8 @@ class CubeModel {
             stampDemoProps(templeDoor: false)
         case .templeInterior:
             stampTempleInterior()
+        case .bare:
+            break
         }
     }
 
@@ -135,10 +138,29 @@ class CubeModel {
         }
         // M15.2: a second doorway SOUTH of the plaza — the temple interior (destination id 1;
         // Prop.state carries which world a portal leads to). Overworld only.
+        // M16.1: the temple is a LOCKED, bonded structure — the door tile, its two flanking
+        // pillar tiles, and a ROOT cubie directly beneath the door are one rigid bond. Because
+        // the root lies in the layer below, the start face's own slice twist (Q/E) would tear
+        // the bond and is REFUSED — the temple pins the face until the lock is undone (M16.3).
         let templeRow = min(size - 1, top + h)
-        if templeDoor, let (ci, fi) = faceletAt(face: .positiveZ, row: templeRow, col: left + w / 2) {
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        let doorCol = left + w / 2
+        if templeDoor, let (dci, dfi) = faceletAt(face: .positiveZ, row: templeRow, col: doorCol) {
+            cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1))
+            cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+            var bond: Set<Int> = [dci]
+            for pc in [doorCol - 1, doorCol + 1] where (0..<size).contains(pc) {
+                if let (pci, pfi) = faceletAt(face: .positiveZ, row: templeRow, col: pc) {
+                    cubies[pci].facelets[pfi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+                    bond.insert(pci)
+                }
+            }
+            // The root: the cubie directly beneath the door (+Z face at init: col→x, row→y, z=n−1).
+            if let root = cubies.firstIndex(where: {
+                $0.position == SIMD3<Int32>(Int32(doorCol), Int32(templeRow), Int32(size - 2))
+            }) {
+                bond.insert(root)
+            }
+            addBond(bond)
         }
         // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
         // crowded +Z demo plaza, so it has room to breathe. It sits at the row-0 face edge so an

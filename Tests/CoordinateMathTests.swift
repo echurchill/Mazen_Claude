@@ -203,7 +203,9 @@ struct CoordinateMathTests {
     /// Bandaging (M13): a slice twist is legal iff every bonded group is entirely inside or entirely
     /// outside the rotating slice. A group that straddles the slice would be torn → refused.
     static func testBandagedLegality(size n: Int) {
-        let m = CubeModel(size: n)
+        // A bare world: the overworld stamp now ships with the M16.1 temple bond built in,
+        // so bandaging invariants are tested on an unstamped model.
+        let m = CubeModel(worldScale: WorldScale(cubeSize: n), stamp: .bare)
         // No bonds → every slice is legal.
         for axis in 0..<3 {
             for index in 0..<n {

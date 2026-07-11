@@ -37,6 +37,9 @@ class GameState {
         var speed: Float = 2.5
         var affectedCubies: Set<Int> = []
         var playerCubieIndex: Int = -1
+        /// M16.2: a REFUSED twist — the slice strains a few degrees and springs back (a damped
+        /// wobble); nothing is finalized. The cue that teaches "locked" without a word of UI.
+        var isRefusal = false
 
         // R2.3: the ONE definition of the in-flight twist transform. SceneBuilder, the asset
         // instancer, and the camera all animate off these — previously three hand-copied
@@ -44,8 +47,14 @@ class GameState {
         var axisVector: SIMD3<Float> {
             axis == 0 ? SIMD3(1, 0, 0) : axis == 1 ? SIMD3(0, 1, 0) : SIMD3(0, 0, 1)
         }
-        /// Smoothstep-eased current angle of the in-flight twist.
+        /// Smoothstep-eased current angle of the in-flight twist — or, for a refusal (M16.2),
+        /// a damped wobble in the attempted direction that returns exactly to rest.
         var currentAngle: Float {
+            if isRefusal {
+                let amplitude: Float = 0.06   // ~3.4° of strain
+                let direction: Float = angle < 0 ? -1 : 1
+                return direction * amplitude * sinf(progress * .pi * 3) * (1 - progress)
+            }
             let t = progress * progress * (3 - 2 * progress)
             return angle * t
         }
@@ -142,7 +151,11 @@ class GameState {
             if sliceRotation.progress >= 1.0 {
                 sliceRotation.progress = 1.0
                 sliceRotation.isActive = false
-                finalizeSliceRotation()
+                if sliceRotation.isRefusal {
+                    twistRefused = false   // cue delivered; nothing to finalize
+                } else {
+                    finalizeSliceRotation()
+                }
             }
         }
 
@@ -265,18 +278,25 @@ class GameState {
         guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else { return }
 
         let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
-
-        // M13 bandaging: refuse a twist that would tear a bonded structure. Inert until bonds exist
-        // (canRotateSlice is always true with no bonds). `twistRefused` is the signal a refusal cue
-        // will read + clear once we wire the feedback (shake/tint) — TODO with the user.
-        guard cubeModel.canRotateSlice(axis: axis, index: index) else { twistRefused = true; return }
-
         let angle: Float = clockwise ? -.pi / 2 : .pi / 2
-
         let cubieIndices = cubeModel.cubieIndicesInSlice(axis: axis, index: index)
         var playerCI = -1
         if let (ci, _) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) {
             playerCI = ci
+        }
+
+        // M13 bandaging: a twist that would tear a bonded structure is REFUSED — and the refusal
+        // IS the cue (M16.2): the slice strains against the lock and springs back (the camera
+        // rides the strain), while the bonded structure flares (SceneBuilder). No finalize.
+        guard cubeModel.canRotateSlice(axis: axis, index: index) else {
+            twistRefused = true
+            sliceRotation = SliceRotation(
+                isActive: true, axis: axis, index: index, angle: angle,
+                progress: 0, speed: 4.0,
+                affectedCubies: Set(cubieIndices), playerCubieIndex: playerCI,
+                isRefusal: true
+            )
+            return
         }
 
         sliceRotation = SliceRotation(

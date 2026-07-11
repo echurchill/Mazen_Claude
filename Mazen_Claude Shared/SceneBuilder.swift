@@ -91,6 +91,9 @@ final class SceneBuilder {
         // Precompute the in-flight twist matrix if active (single source: SliceRotation, R2.3)
         let sr = gameState.sliceRotation
         let sliceAnimMatrix: float4x4? = sr.isActive ? sr.currentMatrix : nil
+        // M16.2: while a refused twist strains, the LOCKED structure flares — a red pulse on the
+        // bonded tiles' props (the Player Journey's "glow tracing the structure" image).
+        let refusalGlow: Float = (sr.isActive && sr.isRefusal) ? sinf(sr.progress * .pi) : 0
 
         for face in CubeFace.allCases {
             for row in 0..<model.size {
@@ -175,6 +178,9 @@ final class SceneBuilder {
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             var materialID: UInt32 = 10
+                            if refusalGlow > 0, model.bondedGroups.contains(where: { $0.contains(ci) }) {
+                                color = mix(color, SIMD4(1.0, 0.12, 0.08, 1.0), t: refusalGlow)   // the lock flares
+                            }
                             if prop.kind == .chest && prop.state == 1 { color = SIMD4(0.98, 0.80, 0.30, 1.0) }  // opened / "lit"
                             if prop.kind == .portalLamp {
                                 // TARDIS-style flash: a brief bright pulse each ~1.4 s cycle, else dim. Emissive.
