@@ -31,7 +31,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 
 ## Milestone road to a vertical slice (rough)
 
-M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 the lock→open→enter chain** (the single most important loop) → M17 memory first pass → M18 one small solar system (a few natural worlds) → M19 cozy/feel polish. Details + sequencing in the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md).
+M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 the lock→open→enter chain** (the single most important loop) → M17 memory first pass → M18 freeform movement & solidity → M19 one small solar system (a few natural worlds) → M20 cozy/feel polish. Details + sequencing in the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md).
 
 ## Immediate next actions on resume
 

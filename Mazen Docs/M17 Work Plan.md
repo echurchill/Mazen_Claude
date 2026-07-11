@@ -69,18 +69,18 @@ knowledge-is-transportation pillar, playable.
   (recommended) vs. per-world with sync (not recommended — knowledge that forgets when you
   travel contradicts the pillar).
 - **D3 — First perception change:** known-glyph plaques glow (recommended) vs. something bigger
-  (hidden geometry reveal — defer to M18's authored worlds).
+  (hidden geometry reveal — defer to M19's authored worlds).
 - **D4 — The knowledge gate:** a second knowledge-sealed door on the overworld (recommended) vs.
   re-aiming an EXISTING door (the moon door leads somewhere new once you know the glyph —
   spookier, but changes behavior the player already learned; better saved for when the sky can
   lie in M18).
-- **D5 — Phase 4 (memory surface) now or defer** to M19 polish.
+- **D5 — Phase 4 (memory surface) now or defer** to M20 polish.
 
 ## Risks
 1. **Scope creep into the language system** — one glyph, hand-authored, is the whole vocabulary.
    The forge stays unscheduled.
 2. **The receive beat under-landing** — it's the game's first "wonder" beat; if the humble v1
-   feels flat, note it and move on — presentation polish is M19's job, the *mechanics* are M17's.
+   feels flat, note it and move on — presentation polish is M20's job, the *mechanics* are M17's.
 3. **Knowledge-gate legibility** — a door that opens "by itself" must read as *because I know*,
    not "buggy door": the door's plaque glowing (Phase 2) as you approach is the tell. Watch it
    in the feel pass.

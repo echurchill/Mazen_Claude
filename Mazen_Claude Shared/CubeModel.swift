@@ -223,17 +223,21 @@ class CubeModel {
         }
     }
 
-    /// M16.5 orientation rule (Eddie): a plaque must never face into a wall. Face it along an
-    /// OPEN direction of its tile (preferring the approach side) and stand it back against the
-    /// opposite edge — mounted like a wall plaque, reading into the open space.
+    /// M16.5 placement rules (Eddie): a plaque must never face into a wall, and must never
+    /// stand in the walkway. Face it along an OPEN direction of its tile (preferring the
+    /// approach side), and stand it in a CORNER subcell — the 3×3 path-cross only ever walks
+    /// the centre and edge-centre subcells, so a corner can't block anyone. Of the two corners
+    /// on the edge behind it, hug one with a closed lateral wall when there is one.
     private func glyphPlaque(onTile openings: DirectionMask, preferred: SurfaceDirection) -> Prop {
         let order: [SurfaceDirection] = [preferred, .north, .south, .east, .west]
         let dir = order.first(where: { openings.contains(Self.directionMask($0)) }) ?? preferred
+        let westClosed = !openings.contains(.west)
+        let northClosed = !openings.contains(.north)
         switch dir {
-        case .north: return Prop(kind: .glyph, subRow: 2, subCol: 1, facing: .n)
-        case .south: return Prop(kind: .glyph, subRow: 0, subCol: 1, facing: .s)
-        case .east:  return Prop(kind: .glyph, subRow: 1, subCol: 0, facing: .e)
-        case .west:  return Prop(kind: .glyph, subRow: 1, subCol: 2, facing: .w)
+        case .north: return Prop(kind: .glyph, subRow: 2, subCol: westClosed ? 0 : 2, facing: .n)
+        case .south: return Prop(kind: .glyph, subRow: 0, subCol: westClosed ? 0 : 2, facing: .s)
+        case .east:  return Prop(kind: .glyph, subRow: northClosed ? 0 : 2, subCol: 0, facing: .e)
+        case .west:  return Prop(kind: .glyph, subRow: northClosed ? 0 : 2, subCol: 2, facing: .w)
         }
     }
 
