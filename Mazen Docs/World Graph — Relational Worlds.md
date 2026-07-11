@@ -45,6 +45,16 @@ things its makers would call malfunction and we call time travel.
 - **Story geometry this enables:** standing on ruin-era earth while bloom-era earth hangs in
   the sky (sky edges resolve through the registry too — the sky can show another *time*);
   visiting the moon "again" and finding it younger; the Builders' fate witnessable in strata.
+- **The sky shows another *place* too (Eddie, 2026-07-11).** Not just the counterpart worlds —
+  the **skybox itself** is a registry-resolved view: a world out beyond the rim shows the
+  whole galaxy edge-on in its night sky; a world parked near the Orion Nebula glows with it,
+  *because that's where the Builders pull raw material from.* The sky becomes the game's
+  location (and era) signage — no map UI, you learn to read WHERE and WHEN you are from what
+  hangs overhead. Engineering shape: a per-world sky identity (skybox/celestial dressing) in
+  the world stamp, resolved through the same key machinery — cheap, since interiors already
+  prove the sky pass is per-world. Narrative knife included: a decayed portal that lies about
+  its destination is *betrayed by the sky* — the player who has learned to read it can catch
+  the lie.
 
 ## Open questions
 
