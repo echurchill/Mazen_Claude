@@ -57,6 +57,7 @@ The Garden asks: *what happened to the Builders?* Eddie's musing gives a genuine
 - **What bandaging *means*:** the Builders' locks — ancient mechanisms holding worlds rigid; understanding unbinds them.
 
 ## Still open (for us)
+- ~~**The glyph source**~~ → **answered (2026-07-10):** the Builders are hyper-dimensional; glyphs are **3D shadows of 4D forms** — slice = word, sweep = sentence, 4D rotation = verb; the twist is the 3D step-down of their language. Full model + cautions: [Builder Glyphs — 4D Shadows](Builder%20Glyphs%20—%204D%20Shadows.md).
 - **The minute-to-minute verb** — the exact hands-on action(s). Being teased out in the companion [Player Journey](Player%20Journey%20—%20A%20Session.md).
 - How **memory-editing** actually works as an interaction (a real design problem — high reward, high risk).
 - How much the **selective-forgetting** theme becomes a *mechanic* vs. staying narrative.

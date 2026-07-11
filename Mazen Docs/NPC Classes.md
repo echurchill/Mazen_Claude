@@ -44,6 +44,8 @@ The Builders themselves, or what's left of them. Almost certainly required — t
 
 **Why they matter (design):** carrying **internal, fallible, self-edited** memory, a Builder remnant who half-remembers, contradicts the network, or has *deliberately pruned* something is the **emotional core of "wisdom is curation, not accumulation."** This is where the selective-forgetting theme stops being a mechanic and becomes a **character** — an unreliable narrator whose gaps are meaningful, not bugs.
 
+**Grounding mechanism (2026-07-10, from [Builder Glyphs — 4D Shadows](Builder%20Glyphs%20—%204D%20Shadows.md)):** a Remnant is a persistent **4D structure**; the "being" you meet is its *intersection with your 3D space*, and **different visits intersect different parts of it**. Its fallibility needs no hand-waving — you're never talking to all of it. Background: [The Builders v3 doc](The_Builders_of_Garden_of_Worlds_-_Transcendent_Civilization_v3.docx) ("a conversation with one Builder may involve only a tiny projection of an intellect").
+
 ---
 
 ## Open worms (parked — do NOT investigate yet)
