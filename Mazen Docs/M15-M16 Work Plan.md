@@ -26,7 +26,7 @@ What does *not* come for free (the real M15 work): edge crossings on a concave d
 Replace `worldStack` + the hardcoded `testInterior` with a **registry**: `[(destination, context) : GameState]`, lazy-created, persistent (scars keep). The stack remains navigation *history*; the registry is the *universe*. Counterpart (sky) lookup goes through the same registry — identity-bound edges (earth↔moon) resolve to one instance; divergent edges to variants.
 *Danger:* **Low** (refactor + feature; the moon keeps working exactly as today, now as a registry entry). *Verify:* portal hop earth↔moon unchanged; scars persist across visits; tests green; a second registered destination reachable from a second portal proves the key actually keys.
 
-### Phase 1 — The inverted world type 🔨 (in progress 2026-07-11)
+### Phase 1 — The inverted world type ✅ (2026-07-11 — Eddie verified: edge crossings smooth, "slightly disorienting, I love it"; full interior lap; I-key hop; twist-inside works)
 A per-world `orientation: exterior | interior` (on `WorldScale` or `GameState`) consumed *only* inside `restMatrix`/`inflatedPlacement` (the basis flip above). Interior worlds: `includeCelestials: false`, **no sky pass** (dark clear color for now), fog off, **roundness 0 — deliberately**: interiors are *engineered*, so hard-cubic interiors are the shape-as-meaning dial doing its job (and it defers all inverted-inflation math, possibly forever).
 *Danger:* **Med** — the two known traps: (1) **EdgeCrossing on a concave dihedral** — the face-adjacency table should hold combinatorially (same cube graph), but the camera's corner-rounding slerp was tuned for convex corners; expect a sign/behavior fix at interior edges. (2) **Lighting** — sun direction is meaningless inside; first pass = a fixed warm "lantern" directional + ambient (decision point D2). *Verify:* stand on an interior floor in FP, level horizon; walk across all 6 interior faces incl. edge crossings (the Escher moment: rooms overhead); orbit view of an interior world renders sanely (debug).
 
@@ -34,7 +34,8 @@ A per-world `orientation: exterior | interior` (on `WorldScale` or `GameState`) 
 A small hand-stamped **temple interior** (3³ or 5³ — decision D3) registered as `(temple-interior, from: overworld)`, reached through a portal prop on the overworld. Stamp it sparsely: stone register (existing stone texture), a couple of prop pedestals, one open chamber — legible, not busy.
 *Verify:* the full walk-through: overworld → portal → fade → standing *inside* — look up, see the far wall's maze overhead. Return trip persists scars.
 
-### Phase 3 — Twist while inside
+### Phase 3 — Twist while inside 🔎 (works; percept experiment queued)
+Eddie's observation (2026-07-11): riding your own slice, the static walls sweep on screen and read as "the OTHER slices rotating" (no sky inside → the large visual field wins the motion attribution). **Experiment:** decouple camera position from orientation while riding — position follows the slice exactly, orientation stays world-anchored (or lags) — so the room holds still and *you* feel carried through the arc.
 Slice rotation of the world you're standing in — the *room rearranges around you*. Architecturally this should mostly already work (twist machinery is per-`GameState`; the camera rides via `playerCubieIndex`), but nobody has ever twisted an interior.
 *Verify:* Q/E inside; walls/ceiling sweep past correctly; `.step` scrub looks right; bandaging legality still enforced.
 
@@ -68,7 +69,7 @@ Carve one **hand-authored placeholder glyph** in the Builder-Glyphs *style* (a f
 ## Decision points — ✅ GREENLIT (Eddie, 2026-07-11)
 
 - **D1 — Sequence:** as recommended — M15.0 → M15.1–2 → M16.1–2 early → M15.3 → M16.3–5.
-- **D2 — Interior lighting:** fixed warm lantern-directional + ambient first; revisit after the loop works.
+- **D2 — Interior lighting:** fixed warm lantern-directional + ambient first; revisit after the loop works. *(2026-07-11: Eddie — "a little dim" but hold; revision candidate: **the player carries/IS the light** — an eye-anchored point light with falloff; thematically perfect (carrying light into the Builders' dark) and made for glyph/mote reveal beats.)*
 - **D3 — First interior size: 5³** *(Eddie's call — roomier, more maze inside; overrides the 3³ recommendation).*
 - **D4 — First bonded structure:** a **new temple** prop-cluster on the overworld plaza.
 - **D5 — Registry keys:** adopt the `<destination>-<origin>` convention as the literal key format now.
