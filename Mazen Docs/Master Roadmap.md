@@ -60,19 +60,16 @@ Core visual upgrade **done**: painted hedge/gravel/stone textures via texture ar
 
 ---
 
-## 5. Next — the recommended sequence
+## 5. Next — the recommended sequence *(updated 2026-07-10)*
 
-**Build M11 (Worlds & Portals) next.** It's the highest-leverage move: it simultaneously (a) unblocks *rich* house interiors by moving detail off the cramped cube surface into a properly-scaled interior world, and (b) delivers the moon. One world-transition system serves both — and the architecture (`WorldScale` per-world, `SceneBuilder(gameState:)`, the `interact()` portal hook) was already built for it.
+**M15 + M16 together — the core-loop vertical slice.** Full phased plan awaiting greenlight: [M15-M16 Work Plan](M15-M16%20Work%20Plan.md). In one line: World Registry (route-keyed worlds) → inverted-cube interior world type (a ~one-function basis change thanks to R2's placement consolidation) → first temple interior through a portal → activate M13 bandaging as the verb (bond → refusal cue → understand → unlock) → **twist open → step inside** — the loop that everything else exists to serve.
 
-Suggested order within M11:
-1. **World-switch spine** — an `activeWorld` + a world stack + `enterWorld`/`exitWorld`, with a simple screen-fade transition.
-2. **First interior** — a small hand-built room reached through the house door (proves "bigger on the inside" end-to-end).
-3. **The moon** — as a second world, then its presentation (the **orbital-counterpart "killer visual":** the real other world hanging in the sky, updated live — from the M11 seed).
+*(Historical: the previous recommendation here — "build M11 next" — was followed and delivered: world stack, TARDIS portals, the killer visual. M11's remaining oddments are absorbed: "multiple portal destinations" → the M15 registry; the house interior → an M15 interior world.)*
 
-Then, as separate tracks when desired:
-- **M13 Bandaged Cube** — makes the twist deliberate; pairs with real level design.
-- **M14b Curved Geometry** — ✅ done; remaining polish = per-world authored roundness + sunset tuning.
-- **M12 loose ends** — normal maps / fort multi-texture / bundling — as polish, not blockers.
+Parallel tracks when desired:
+- **M14b polish** — per-world authored roundness + sunset terminator tuning.
+- **M12 loose ends** — normal maps / fort multi-texture / bundling — polish, not blockers.
+- **Glyph forge** spike (see [Builder Glyphs](Builder%20Glyphs%20—%204D%20Shadows.md)) — unscheduled; slots near M16 Phase 5 / M17.
 
 ---
 
