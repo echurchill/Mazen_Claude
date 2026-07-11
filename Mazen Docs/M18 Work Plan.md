@@ -121,17 +121,19 @@ authored world proves all walkable border cells stay one component — no footpr
 tile (opening the grass is what saves it: you detour around any prop through interior grass).
 Tests: +26,836 (footprint tiling + walk-through + per-world connectivity); 172,951 green.
 
-### Phase 3 — Density, pace & open-field tuning (Eddie's phase)
-`d` is already a constant; add a debug key to cycle 9 ↔ 15 (rebuild scene + remap player,
-like the `N` size cycle) and run TWO feel passes. **Maze pass:** stride rhythm, footprint
-fairness around the dials/plaques, grass wandering, diagonal movement (D2). **Open-field
-pass (the one that gates M19):** the `.natural` test stamp at roundness 1.0 — wander the
-sphere in every direction, over the invisible edges, among the trees; does it feel like
-ground, or like a grid with the walls deleted? If 8-way heading is the tell, climb the
-escape-hatch ladder (16-way → free yaw over grid position) before locking anything.
-Lock the default `d`; decide per-world vs global (D4).
+### Phase 3 — Density, pace & open-field tuning (Eddie's phase) — 🔨 density decided (15); open-field pass pending
+**Density call (Eddie, 2026-07-11): 15**, the default for all worlds — "That feels nice"
+walking the maze at ~1.3 m/step (a natural stride), and the maze feel-pass (stride rhythm,
+footprint fairness, grass wandering) passed. The debug 9↔15 cycle key was made moot by
+settling directly on 15, so it wasn't wired. **Remaining — the open-field pass, the one that
+gates M19:** ready to run now — press **B** (the `.natural` wall-less world), raise roundness
+with **=** toward 1.0, and wander the sphere in every direction, over the invisible cube
+edges, around the topiary/obelisk. Does it read as *ground*, or as a grid with the walls
+deleted? If 8-way heading is the tell in the open, climb the escape-hatch ladder (16-way →
+free yaw over grid position) before Phase 4 retires anything. Density scope (D4): global for
+now (one `standGrid`); revisit per-world only if interiors want finer.
 *Danger:* Low to code, **high stakes to judge** — this verdict is what M19 stands on.
-*Verify:* Eddie's verdict on both passes — this phase exists to be played, not coded.
+*Verify:* Eddie's verdict on the open-field pass — this phase exists to be played, not coded.
 
 ### Phase 4 — Sweep & retire assumptions
 HUD shows the finer position; delete the temporary path-cross-equivalence shim from Phase 0;
