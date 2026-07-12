@@ -499,10 +499,13 @@ fragment float4 fragmentShader(
         float3 wp = in.surfacePosition;
         float coarse = fbm(wp.xz * 0.6 + wp.yy * 0.3, 4);              // dusty undulation
         float fine   = fbm(wp.xy * 6.0 + wp.yz * 5.0, 3);             // grain
-        float speck  = valueNoise(wp.xz * 22.0 + wp.yz * 19.0);       // tiny pebbles
+        float micro  = fbm(wp.xy * 16.0 + wp.yz * 14.0, 2);          // fine dust texture
+        float speck  = valueNoise(wp.xz * 22.0 + wp.yz * 19.0);       // scattered pebbles
+        float speck2 = valueNoise(wp.xy * 48.0 + wp.yz * 41.0);      // fine gravel grains
         float pebble = smoothstep(0.72, 0.92, speck) * 0.20 - smoothstep(0.72, 0.92, 1.0 - speck) * 0.12;
+        float grit   = (smoothstep(0.78, 0.95, speck2) - smoothstep(0.78, 0.95, 1.0 - speck2)) * 0.07;
         float tileHue = fract(seedF * 1.618);
-        float shade = clamp(0.30 + 0.26 * coarse + 0.14 * fine + 0.09 * tileHue + pebble, 0.13, 0.9);
+        float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
     } else {

@@ -198,10 +198,17 @@ final class SceneBuilder {
                         let step = model.worldScale.subCellStep
                         for prop in facelet.props {
                             guard let mesh = tileMeshLib.propMesh(kind: prop.kind) else { continue }
-                            // M19: trees & boulders vary in size by `state` (0/1/2), so a stand /
-                            // field reads as many objects, not a row of clones. Trunk matches its tree.
-                            let treeScale: Float = (prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder)
-                                ? [0.7, 1.0, 1.4][max(0, min(2, prop.state))] : 1.0
+                            // M19: trees & boulders vary in size by `state` (0/1/2 = small/med/large)
+                            // AND a per-instance jitter, so a stand / rock field reads as many
+                            // distinct objects, not three repeated sizes. Trunk matches its tree.
+                            var treeScale: Float = 1.0
+                            if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder {
+                                let sizeBase: Float = [0.62, 0.95, 1.45][max(0, min(2, prop.state))]
+                                var sj = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 40503 &+ UInt32(prop.subRow &* 7 &+ prop.subCol)
+                                sj ^= sj >> 13
+                                let jitter = 0.78 + 0.44 * Float(sj & 0xFFFF) / 65535.0   // ×0.78…1.22
+                                treeScale = sizeBase * jitter
+                            }
                             let pm = restM
                                 * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))

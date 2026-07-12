@@ -82,8 +82,12 @@ class CubeModel {
                 for col in 0..<size {
                     if face == .positiveZ && ((row, col) == spawn || (row, col) == portalTile) { continue }
                     guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
+                    let dir = tileDirection(face: face, row: row, col: col)
+                    let boost = cornerBoost(dir)
                     let h = hash(faceIdx * 149 + row, col, row &+ col)
-                    guard h % 100 < 48 else { continue }   // rockier — the reference is a rock field
+                    // Rock fields (patchy) that thicken toward the corners (random thicket).
+                    let rockProb = min(0.92, 0.30 + 0.28 * patchField(dir) + 0.55 * boost)
+                    guard Float(h % 1000) / 1000.0 < rockProb else { continue }
                     cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3)))
                 }
             }
@@ -92,6 +96,32 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
+    }
+
+    /// M19 — the outward unit direction of a tile centre (pre-inflation), for scatter fields.
+    private func tileDirection(face: CubeFace, row: Int, col: Int) -> SIMD3<Float> {
+        let m = restMatrix(face: face, row: row, col: col)
+        let c = SIMD3<Float>(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+        let len = (c.x*c.x + c.y*c.y + c.z*c.z).squareRoot()
+        return len > 1e-5 ? c / len : SIMD3(0, 0, 1)
+    }
+    /// M19 — nearness to the closest of the 8 cube corners (0 away → 1 at a corner). Drives the
+    /// corner-density thicket (Eddie: thicken cover near the glitchy triple-points, kept random).
+    private func cornerBoost(_ dir: SIMD3<Float>) -> Float {
+        let s = 1.0 / Float(3).squareRoot()
+        var best: Float = -1
+        for sx in [-s, s] { for sy in [-s, s] { for sz in [-s, s] {
+            best = max(best, simd_dot(dir, SIMD3(sx, sy, sz)))
+        } } }
+        return Self.smoothstepF(0.80, 0.965, best)
+    }
+    /// M19 — a smooth low-frequency patch field (0…1) over the surface direction, so cover clumps
+    /// into groves / rock fields with open ground between rather than scattering evenly.
+    private func patchField(_ dir: SIMD3<Float>) -> Float {
+        let v = (sinf(dir.x * 3.3 + dir.y * 1.7)
+               + sinf(dir.y * 2.9 - dir.z * 2.1)
+               + sinf(dir.z * 3.1 + dir.x * 1.3)) / 3.0
+        return 0.5 + 0.5 * v
     }
 
     /// M19 — the Natureworld: no maze at all. Every tile is open ground (grass), a winding
@@ -139,24 +169,32 @@ class CubeModel {
             v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
             return v
         }
-        // A mix of cover: mostly conifers, then bushes (topiary) and the odd field rock (boulder),
-        // with open meadow between. One deterministic roll per tile picks which (or nothing).
+        // Cover clumps into groves (patchy forest ↔ open meadow via a smooth patch field) and
+        // thickens toward the eight cube corners (a random thicket that steers the player off the
+        // glitchy triple-points without an obvious ring). Trees, then bushes and the odd field rock.
         for (faceIdx, face) in CubeFace.allCases.enumerated() {
             for row in 0..<size {
                 for col in 0..<size {
                     if face == .positiveZ && ((row, col) == spawn || (row, col) == portalTile) { continue }
                     guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
                     if cubies[ci].facelets[fi].terrain == .water { continue }
+                    let dir = tileDirection(face: face, row: row, col: col)
+                    let boost = cornerBoost(dir)
                     let h = hash(faceIdx * 131 + row, col, row &- col)
-                    let roll = h % 100
-                    let size3 = Int((h >> 8) % 3)                        // 0/1/2 = small/med/large
-                    if roll < 42 {                                       // conifer (trunk + cone)
+                    let rollFrac = Float(h % 1000) / 1000.0
+                    let size3 = Int((h >> 8) % 3)
+                    // Grove where the patch field is high or near a corner; meadow elsewhere.
+                    let treeProb = min(0.95, 0.14 + 0.55 * patchField(dir) + 0.55 * boost)
+                    if rollFrac < treeProb {
                         cubies[ci].facelets[fi].props.append(Prop(kind: .treeTrunk, subRow: 1, subCol: 1, state: size3))
                         cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 1, subCol: 1, state: size3))
-                    } else if roll < 58 {                               // bush
-                        cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 1, subCol: 1))
-                    } else if roll < 66 {                               // a field rock in the grass
-                        cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: size3))
+                    } else {
+                        let r2 = (h >> 12) % 100
+                        if r2 < 20 {
+                            cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 1, subCol: 1))
+                        } else if r2 < 28 {
+                            cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: size3))
+                        }
                     }
                 }
             }
