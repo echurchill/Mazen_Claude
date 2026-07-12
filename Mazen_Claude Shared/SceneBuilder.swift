@@ -218,6 +218,14 @@ final class SceneBuilder {
                                                         : SIMD4(0.52, 0.52, 0.58, 1.0)
                             }
                             if prop.kind == .chest && prop.state == 1 { color = SIMD4(0.98, 0.80, 0.30, 1.0) }  // opened / "lit"
+                            if prop.kind == .tree {
+                                // M19: vary each conifer's green (deep fir → sage) by a per-tile hash,
+                                // so a stand reads as many trees, not one colour stamped everywhere.
+                                var s = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 2654435761
+                                s ^= s >> 15
+                                let f = Float(s & 0xFFFF) / 65535.0
+                                color = mix(SIMD4(0.13, 0.33, 0.15, 1.0), SIMD4(0.31, 0.53, 0.27, 1.0), t: f)
+                            }
                             if prop.kind == .portalLamp {
                                 if model.sealedPortalCubies.contains(ci) {
                                     color = SIMD4(0.10, 0.10, 0.12, 1.0)    // M16.4: sealed — lamp dead

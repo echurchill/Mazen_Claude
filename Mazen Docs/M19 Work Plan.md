@@ -37,7 +37,7 @@ Terrain palette = the new `TerrainKind` (`maze`/`grass`/`water`) per facelet. Th
 *Remaining:* a cleaner authored-roundness home (per-world, not a stamp `if`) when a second
 natural world needs a different value; existing worlds confirmed unaffected (0 default).
 
-### Phase 1 — Natureworld terrain — 🔨 built 2026-07-11, awaiting Eddie's eyes
+### Phase 1 — Natureworld terrain — ✅ verified (Eddie: "Looks good", 2026-07-12); richness pass ongoing
 Built: **grass** ground everywhere (material 14 — the moss texture recoloured to meadow green
 + per-tile hue drift, no walls, full-tile `fieldFloor` mesh); **water** (material 15 — flat
 blue, soft specular + slow shimmer) as a **meandering stream** down the arrival face, *not

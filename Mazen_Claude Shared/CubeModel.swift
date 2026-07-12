@@ -69,19 +69,28 @@ class CubeModel {
         let spawn = (c, c)                 // player starts here (+Z centre) — keep it clear
         let portalTile = (min(size - 1, c + 1), c)
 
-        // A meandering stream down the +Z face: one water tile per row, wiggling around centre.
-        // Water tiles are unwalkable, so the player follows the banks — routing without walls.
-        let wiggle = [0, 1, 1, 0, -1, -1, 0]
-        for r in 0..<size {
-            let wc = min(size - 1, max(0, c + wiggle[r % wiggle.count]))
-            if (r, wc) == spawn || (r, wc) == portalTile { continue }
-            if let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: wc) {
+        func setWater(_ face: CubeFace, _ r: Int, _ cl: Int) {
+            guard (0..<size).contains(r), (0..<size).contains(cl) else { return }
+            if face == .positiveZ && ((r, cl) == spawn || (r, cl) == portalTile) { return }
+            if let (ci, fi) = faceletAt(face: face, row: r, col: cl) {
                 cubies[ci].facelets[fi].terrain = .water
             }
         }
 
+        // A meandering stream down the +Z face: one water tile per row, wiggling around centre.
+        // Water tiles are unwalkable, so the player follows the banks — routing without walls.
+        let wiggle = [0, 1, 1, 0, -1, -1, 0]
+        for r in 0..<size {
+            setWater(.positiveZ, r, min(size - 1, max(0, c + wiggle[r % wiggle.count])))
+        }
+        // A small lake off toward the +Z far corner (away from spawn/portal), fed by the stream —
+        // gives the water some body, not just a thread. Bounds-clamped for small sizes.
+        let lakeR = max(0, c - 2), lakeC = min(size - 1, c + 2)
+        for dr in 0...1 { for dc in 0...1 { setWater(.positiveZ, lakeR + dr, lakeC - dc) } }
+
         // Conifers over the whole planet, in varied sizes — trunk (solid) + cone (crown). Skip
-        // water, the spawn tile, and the portal tile. Deterministic 30% scatter via a spatial hash.
+        // water, the spawn tile, and the portal tile. Deterministic scatter via a spatial hash —
+        // denser (42%) so treed areas read as real stands with meadow gaps, toward the concept image.
         func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
             var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
             v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
@@ -94,7 +103,7 @@ class CubeModel {
                     guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
                     if cubies[ci].facelets[fi].terrain == .water { continue }
                     let h = hash(faceIdx * 131 + row, col, row &- col)
-                    guard h % 100 < 30 else { continue }
+                    guard h % 100 < 42 else { continue }
                     let size3 = Int((h >> 8) % 3)                         // 0/1/2 = small/med/large
                     cubies[ci].facelets[fi].props.append(Prop(kind: .treeTrunk, subRow: 1, subCol: 1, state: size3))
                     cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 1, subCol: 1, state: size3))
