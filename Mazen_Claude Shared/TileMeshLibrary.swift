@@ -15,6 +15,7 @@ class TileMeshLibrary {
     let playerMarker: TileMesh
     let frameMesh: TileMesh
     let celestialCube: TileMesh   // unit cube for the M9 sun/moon bodies
+    let fieldFloor: TileMesh      // M19: a full-tile tessellated ground quad (grass/water — no path split)
     private var floorMeshes: [UInt8: TileMesh] = [:]      // propSpace sub-cells (base ground)
     private var pathFloorMeshes: [UInt8: TileMesh] = [:]  // path-cross sub-cells (paved)
     private var wallMeshes: [UInt8: TileMesh] = [:]
@@ -208,6 +209,20 @@ class TileMeshLibrary {
         let glyphStart = allIndices.count
         Self.addGlyphPlaque(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.glyph.rawValue] = TileMesh(vertexOffset: 0, indexOffset: glyphStart, indexCount: allIndices.count - glyphStart)
+
+        let treeStart = allIndices.count
+        Self.addTree(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.tree.rawValue] = TileMesh(vertexOffset: 0, indexOffset: treeStart, indexCount: allIndices.count - treeStart)
+
+        let trunkStart = allIndices.count
+        Self.addTreeTrunk(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.treeTrunk.rawValue] = TileMesh(vertexOffset: 0, indexOffset: trunkStart, indexCount: allIndices.count - trunkStart)
+
+        // M19: full-tile ground quad for the natural register (grass/water) — tessellated so it
+        // inflates smoothly on the curve, no path-cross split.
+        let fieldStart = allIndices.count
+        Self.addFieldFloor(to: &allVerts, indices: &allIndices, ws: ws)
+        fieldFloor = TileMesh(vertexOffset: 0, indexOffset: fieldStart, indexCount: allIndices.count - fieldStart)
 
         // Celestial bodies (M9): a unit cube, drawn at the sun/moon positions.
         let cubeStart = allIndices.count
@@ -578,6 +593,85 @@ class TileMeshLibrary {
             let j = (i + 1) % 4
             quad(b[i], b[j], t[j], t[i])   // shaft side
             tri(t[i], t[j], apex)          // pyramidion face
+        }
+    }
+
+    /// M19 — a conifer as a stack of two green cones (a fuller silhouette than one), resting just
+    /// above the trunk. Built at a nominal size; SceneBuilder scales per `state` for variety.
+    /// Wound CCW-outward with true slope normals; darker toward the base via AO.
+    private static func addTree(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY + 0.03            // crown starts atop the little trunk
+        let top: Float = 0.42
+        let seg = 10
+        // Two stacked cones: (baseZ, topZ, radius). Upper is narrower — a layered fir.
+        let cones: [(Float, Float, Float)] = [
+            (z0,          z0 + 0.26, 0.15),
+            (z0 + 0.18,   top,       0.10),
+        ]
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            let ao = 0.5 + 0.5 * max(0, min(1, (p.z - z0) / (top - z0)))
+            return MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
+        }
+        for (bz, tz, r) in cones {
+            let apex = SIMD3<Float>(0, 0, tz)
+            for i in 0..<seg {
+                let a0 = 2 * Float.pi * Float(i) / Float(seg)
+                let a1 = 2 * Float.pi * Float(i + 1) / Float(seg)
+                let p0 = SIMD3<Float>(r * cosf(a0), r * sinf(a0), bz)
+                let p1 = SIMD3<Float>(r * cosf(a1), r * sinf(a1), bz)
+                // Slope normal of the cone face (points outward and up).
+                let n = normalize(cross(p1 - p0, apex - p0))
+                let base = UInt32(verts.count)
+                verts.append(contentsOf: [vtx(p0, n), vtx(p1, n), vtx(apex, n)])
+                indices.append(contentsOf: [base + 0, base + 1, base + 2])
+            }
+        }
+    }
+
+    /// M19 — a short brown trunk (a squat octagonal post) under a tree. Its own prop kind so it
+    /// takes the brown instance colour; the tree cone sits on top. This is the solid part.
+    private static func addTreeTrunk(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        let z1 = ws.floorY + 0.06
+        let r: Float = 0.028
+        let seg = 8
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: p.z > z0 + 0.001 ? 1.0 : 0.6)
+        }
+        for i in 0..<seg {
+            let a0 = 2 * Float.pi * Float(i) / Float(seg)
+            let a1 = 2 * Float.pi * Float(i + 1) / Float(seg)
+            let c0 = SIMD3<Float>(cosf(a0), sinf(a0), 0), c1 = SIMD3<Float>(cosf(a1), sinf(a1), 0)
+            let b0 = SIMD3<Float>(r * c0.x, r * c0.y, z0), b1 = SIMD3<Float>(r * c1.x, r * c1.y, z0)
+            let t0 = SIMD3<Float>(r * c0.x, r * c0.y, z1), t1 = SIMD3<Float>(r * c1.x, r * c1.y, z1)
+            let n = normalize(SIMD3<Float>(cosf((a0 + a1) / 2), sinf((a0 + a1) / 2), 0))
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [vtx(b0, n), vtx(b1, n), vtx(t1, n), vtx(t0, n)])
+            indices.append(contentsOf: [base + 0, base + 1, base + 2, base + 0, base + 2, base + 3])
+        }
+    }
+
+    /// M19 — a full-tile ground quad, tessellated like the maze floor (3·floorTess per axis) so
+    /// per-vertex inflation curves it smoothly. UVs continuous. Used for grass and water tiles.
+    private static func addFieldFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let hs = ws.floorHalfSize
+        let z = ws.floorY
+        let n = max(1, ws.floorTess) * 3     // match the maze floor's per-tile vertex density
+        let step = 2 * hs / Float(n)
+        for jr in 0..<n {
+            for jc in 0..<n {
+                let x0 = -hs + Float(jc) * step, x1 = x0 + step
+                let y0 = -hs + Float(jr) * step, y1 = y0 + step
+                func uv(_ x: Float, _ y: Float) -> SIMD2<Float> { SIMD2((x + hs) * ws.uvScale, (y + hs) * ws.uvScale) }
+                let base = UInt32(verts.count)
+                verts.append(contentsOf: [
+                    MazeVertexSwift(position: SIMD3(x0, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y0), aoFactor: 1.0),
+                    MazeVertexSwift(position: SIMD3(x1, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x1, y0), aoFactor: 1.0),
+                    MazeVertexSwift(position: SIMD3(x1, y1, z), normal: SIMD3(0, 0, 1), texCoord: uv(x1, y1), aoFactor: 1.0),
+                    MazeVertexSwift(position: SIMD3(x0, y1, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y1), aoFactor: 1.0),
+                ])
+                indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            }
         }
     }
 

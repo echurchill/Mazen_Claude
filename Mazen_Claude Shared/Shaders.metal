@@ -438,6 +438,25 @@ fragment float4 fragmentShader(
         float moonHL = max(dot(normal, lightDir), 0.0);
         color = in.color.rgb;
         lighting = float3(0.03) + float3(1.05, 1.02, 0.95) * moonHL;
+    } else if (in.materialID == 14) {
+        // M19 grass — the moss/hedge texture recoloured to meadow green, lit + shadowed like a
+        // floor, with a gentle per-tile hue drift so a whole field doesn't read as one flat sheet.
+        float3 moss = diffuseArray.sample(texSampler, in.texCoord, 0).rgb;
+        float luma = dot(moss, float3(0.299, 0.587, 0.114));
+        float3 grass = mix(float3(0.22, 0.42, 0.16), float3(0.42, 0.66, 0.30), luma);
+        float tileHue = fract(seedF * 1.618);
+        grass *= 1.0 + float3(-0.05, 0.05, -0.06) * tileHue;
+        color = grass;
+        lighting = skyAmbient * 0.35 + sunColor * 0.6 * halfLambert * shadowFactor;
+    } else if (in.materialID == 15) {
+        // M19 water — flat blue with a soft specular sheen and a slow shimmer, no texture. Reads
+        // as calm stream/pond; unwalkable in the sim, so it's the natural world's routing.
+        float3 viewDir = normalize(frame.cameraPosition - in.worldPosition);
+        float3 halfVec = normalize(lightDir + viewDir);
+        float spec = pow(max(dot(normal, halfVec), 0.0), 40.0);
+        float shimmer = 0.5 + 0.5 * sin(frame.time * 1.3 + in.worldPosition.x * 5.0 + in.worldPosition.y * 4.0);
+        color = mix(float3(0.10, 0.28, 0.45), float3(0.16, 0.40, 0.58), shimmer);
+        lighting = skyAmbient * 0.4 + sunColor * 0.4 * halfLambert * shadowFactor + float3(spec * 0.6);
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;

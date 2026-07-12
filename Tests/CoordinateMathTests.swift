@@ -190,6 +190,15 @@ struct CoordinateMathTests {
     static func testStandGridCrossing(size n: Int, interior: Bool) {
         let model = CubeModel(worldScale: WorldScale(cubeSize: n, interior: interior), stamp: .natural)
         model.roundness = 0
+        // This test isolates crossing GEOMETRY continuity; strip the natural world's water
+        // (which correctly refuses entry) and props so every seam is genuinely open — the
+        // water-blocks-entry rule is exercised separately in the app, not here.
+        for ci in model.cubies.indices {
+            for fi in model.cubies[ci].facelets.indices {
+                model.cubies[ci].facelets[fi].terrain = .grass
+                model.cubies[ci].facelets[fi].props.removeAll()
+            }
+        }
         let ws = model.worldScale
         let d = ws.standGrid, c = d / 2
         let step = ws.standStep * ws.cellSpacing

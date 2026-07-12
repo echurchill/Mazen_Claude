@@ -162,6 +162,8 @@ struct PlayerState {
         }
 
         guard let (nci, nfi) = cubeModel.faceletAt(face: arrFace, row: arrRow, col: arrCol) else { return }
+        // M19: water is not walkable — you follow the shore around it.
+        guard cubeModel.cubies[nci].facelets[nfi].terrain != .water else { return }
         let arrTile = cubeModel.cubies[nci].facelets[nfi].mazeTile
         let arrProps = cubeModel.cubies[nci].facelets[nfi].props
         let entryDir = arrDir.opposite

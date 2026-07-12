@@ -29,22 +29,28 @@ exist in **multiple era instances** — stamps should be written era-parameteriz
 
 ## Phases
 
-### Phase 0 — World-authoring foundation
-Per-world **authored roundness** finally lands (the long-parked M14b polish item — natural
-worlds ≈ 1.0, home/mech worlds lower); per-world terrain palette (which floor materials a
-world uses); new `WorldStamp` cases. A `.natural` stamp already exists as M18's test world —
-this phase turns it from testbed into authoring surface.
-*Danger:* Low. *Verify:* existing worlds byte-identical at their authored roundness.
+### Phase 0 — World-authoring foundation — ✅ first pass (2026-07-11)
+Per-world **authored roundness** landed as a stamp default (`.natural` → 1.0, set in
+`CubeModel.init`; other worlds unchanged at 0 — Eddie's "natural worlds use roundness 1.0").
+Terrain palette = the new `TerrainKind` (`maze`/`grass`/`water`) per facelet. The `.natural`
+`WorldStamp` graduated from M18 testbed to the authored Natureworld.
+*Remaining:* a cleaner authored-roundness home (per-world, not a stamp `if`) when a second
+natural world needs a different value; existing worlds confirmed unaffected (0 default).
 
-### Phase 1 — Natureworld terrain
-Grass floors everywhere; **water floors** (rivers/lakes) as a floor material whose cells are
-subtracted from the walkability mask — with the maze gone, water becomes the routing (the
-hedge wall's natural-register successor). **Forest clumps**: one footprint cell can draw
-several trees of varied size (render density > collision density — the image's density
-without a mask per trunk). The garden is *looser, not empty*: occasional hedge clusters and
-garden features survive, per the Journey's "more like a garden than a labyrinth."
-*Danger:* Med (first multi-material terrain authoring). *Verify:* wander it — does it read
-as the Natural World image (minus seams)? Water blocks, trees dodge like trees.
+### Phase 1 — Natureworld terrain — 🔨 built 2026-07-11, awaiting Eddie's eyes
+Built: **grass** ground everywhere (material 14 — the moss texture recoloured to meadow green
++ per-tile hue drift, no walls, full-tile `fieldFloor` mesh); **water** (material 15 — flat
+blue, soft specular + slow shimmer) as a **meandering stream** down the arrival face, *not
+walkable* (PlayerState refuses entry — you follow the banks, so water is the routing that
+hedges used to be); **conifers** over the whole planet — a `.tree` prop (two stacked green
+cones) on a solid `.treeTrunk` (brown), scattered ~30% by a deterministic spatial hash, in
+three sizes (state 0/1/2, SceneBuilder scales) so a stand reads as a forest not a row of
+clones. The crown is walk-through (overhangs), the trunk is the solid footprint. Verified:
+build clean, 208,761 headless checks green, natural-render path boots without crash (temp
+boot-into-natural smoke test, reverted). **NOT yet verified: the actual look** — press **B**,
+does it read as the Natural World concept image? *Danger:* Med. *Verify:* Eddie's eyes on B.
+*Deferred to a later pass:* forest **clumps** (several trunks per footprint cell for the
+image's density), and the "looser garden" hedge-cluster mix (this pass is pure natural).
 
 ### Phase 2 — Relief
 Hills via floor-vertex displacement on M14b's tessellated floors, eye-height following the

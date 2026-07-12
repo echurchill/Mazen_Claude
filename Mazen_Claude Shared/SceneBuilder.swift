@@ -53,6 +53,8 @@ final class SceneBuilder {
         .portalLamp:  SIMD4(1.0, 1.0, 1.0, 1.0),     // overridden per-frame by the blink (below)
         .dial:        SIMD4(0.52, 0.52, 0.58, 1.0),  // M16.3 — overridden by state below
         .glyph:       SIMD4(0.68, 0.65, 0.59, 1.0),  // M16.5 — carved stone (lock livery may gild it)
+        .tree:        SIMD4(0.20, 0.44, 0.22, 1.0),  // M19 — conifer green
+        .treeTrunk:   SIMD4(0.34, 0.24, 0.15, 1.0),  // M19 — bark brown
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
@@ -65,6 +67,7 @@ final class SceneBuilder {
     private var mazeWallTiles: [UInt8: [TileEntry]] = [:]
     private var mazePostTiles: [UInt8: [TileEntry]] = [:]
     private var mazePropTiles: [UInt8: [TileEntry]] = [:]
+    private var fieldTiles: [TileEntry] = []   // M19: natural-register ground (grass/water), one shared mesh
 
     /// `worldOffset` pushes the entire built world by an extra transform — used (M11) to hang a
     /// *counterpart* world (the overworld) out in the sky of the world you're standing in, at an
@@ -89,6 +92,7 @@ final class SceneBuilder {
         for key in mazeWallTiles.keys { mazeWallTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazePostTiles.keys { mazePostTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazePropTiles.keys { mazePropTiles[key]?.removeAll(keepingCapacity: true) }
+        fieldTiles.removeAll(keepingCapacity: true)
 
         // Precompute the in-flight twist matrix if active (single source: SliceRotation, R2.3)
         let sr = gameState.sliceRotation
@@ -163,8 +167,20 @@ final class SceneBuilder {
                         }
 
                     case .discovered:
-                        emitMazeTile(facelet, restM: restM, spin: spin,
-                                     roundness: roundness, invHalf: invHalf, tileMeshLib: tileMeshLib)
+                        switch facelet.terrain {
+                        case .maze:
+                            emitMazeTile(facelet, restM: restM, spin: spin,
+                                         roundness: roundness, invHalf: invHalf, tileMeshLib: tileMeshLib)
+                        case .grass, .water:
+                            // M19: a full-tile ground quad, no walls. Grass (mat 14) and water
+                            // (mat 15) share the fieldFloor mesh, so they batch into one draw.
+                            let fieldInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
+                                materialID: facelet.terrain == .water ? 15 : 14,
+                                tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                                styleSeed: facelet.mazeTile.styleSeed,
+                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
+                            fieldTiles.append(TileEntry(instance: fieldInst, mesh: tileMeshLib.fieldFloor))
+                        }
                     }
 
                     // Props (M10 Phase G) — on revealed tiles only. Built on the *rest* matrix and
@@ -175,9 +191,14 @@ final class SceneBuilder {
                         let step = model.worldScale.subCellStep
                         for prop in facelet.props {
                             guard let mesh = tileMeshLib.propMesh(kind: prop.kind) else { continue }
+                            // M19: trees vary in size by `state` (0/1/2 = small/medium/large), so a
+                            // stand reads as a forest, not a row of clones. Trunk matches its tree.
+                            let treeScale: Float = (prop.kind == .tree || prop.kind == .treeTrunk)
+                                ? [0.75, 1.0, 1.35][max(0, min(2, prop.state))] : 1.0
                             let pm = restM
                                 * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
+                                * float4x4.scale(treeScale)
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             var materialID: UInt32 = 10
                             if model.bondedGroups.contains(where: { $0.contains(ci) }) {
@@ -281,6 +302,7 @@ final class SceneBuilder {
             + mazeWallTiles.values.reduce(0) { $0 + $1.count }
             + mazePostTiles.values.reduce(0) { $0 + $1.count }
             + mazePropTiles.values.reduce(0) { $0 + $1.count }
+            + fieldTiles.count
             + opaqueFogTiles.count + dissolveTiles.count + celestialTiles.count
         precondition(totalInstances <= capacity,
                      "SceneBuilder instance overflow: \(totalInstances) > capacity \(capacity) — raise instancesPerTileBudget in Renderer")
@@ -318,6 +340,23 @@ final class SceneBuilder {
                 indexCount: mesh.indexCount,
                 instanceOffset: startIdx,
                 instanceCount: entries.count
+            ))
+        }
+
+        // M19 natural-register ground (grass + water share the fieldFloor mesh; each instance
+        // carries its own materialID 14/15).
+        if !fieldTiles.isEmpty {
+            let mesh = fieldTiles[0].mesh
+            let startIdx = idx
+            for entry in fieldTiles {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: fieldTiles.count
             ))
         }
 

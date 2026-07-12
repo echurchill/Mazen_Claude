@@ -41,6 +41,19 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 - *(Original pre-greenlight note follows for context:)* **the [M15/M16 Work Plan](M15-M16%20Work%20Plan.md)** — drafted 2026-07-10 evening for Eddie's review. Five decision points (D1 sequence, D2 interior lighting, D3 first-interior size, D4 first bonded structure, D5 registry key format), each with a recommendation. First build step on approval: **M15 Phase 0, the World Registry** (route-keyed worlds per the [World Graph](World%20Graph%20—%20Relational%20Worlds.md)).
 - Loose ends that can ride along anytime: M14b polish (per-world authored roundness; sunset terminator tuning), one FP glance at the moon to fully close R2.11's note.
 
+## Where things stand — M18 + M19 first pass (2026-07-11 night)
+
+- **M18 (densified-grid movement & solidity) is DONE & Eddie-verified:** walk anywhere the
+  geometry allows (grass included), never into walls or solid props, across seams/edges/interior
+  mirrors; density **15** (~1.3 m/step). Known limit: cube-corner traversal glitch — accepted,
+  steer around it (see [Known Issues](Known%20Issues.md)).
+- **M19 Natureworld first pass BUILT (awaiting Eddie's eyes):** press **B** — a green planet
+  (roundness 1.0), grass everywhere, a meandering unwalkable **stream**, and **conifers**
+  (cone-on-trunk, three sizes) scattered over the whole sphere. Build clean, 208,761 tests
+  green, boots without crash; the *look* is unverified until Eddie sees it. Next: relief
+  (hills), the Moon world, then wiring the garden into the world graph. Trees-in-clumps and the
+  looser-garden mix are deferred passes.
+
 ## Where things stand (as of 2026-07-10 night)
 
 - **Engine:** M8–M14b done; **R2 refactor DORMANT** — backbone complete (Tier 1, Renderer split into `PipelineFactory`/`TextureLoader`/`AssetRegistry`, size cap 25 + buffer guard, scale-derived fog, 107,366 tests incl. size 25), remaining items trigger-armed in the [R2 tracker](R2%20Shared%20Code%20Refactor%20Plan.md). Fixed this week: E/W-wall black flicker (degenerate TBN), orbit + moon "silver veil" (size-derived fog + sky-object exemption), O(n⁵) startup scan (170ms→7.6ms at 25), Metal-4 attachment residency + redundant state sets (validation run now perfectly clean).

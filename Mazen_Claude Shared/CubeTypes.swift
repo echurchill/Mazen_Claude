@@ -264,17 +264,29 @@ enum PropKind: UInt8 {
     case portalLamp   // the flashing lamp atop the portal (TARDIS-style); rendered emissive + blinking
     case dial         // M16.3: a stone lock-dial; `state` 1 = aligned (gold), 0 = off (grey); interact (F) aligns
     case glyph        // M16.5: a carved Builder-glyph plaque (a frozen 4D cross-section) — presence, not system yet
+    case tree         // M19: a conifer — a green cone; `state` 0/1/2 = small/medium/large (SceneBuilder scales)
+    case treeTrunk    // M19: a short brown trunk under a tree (own kind so it takes the brown colour)
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
-    /// walk-through (stepping onto a portal IS the interaction); everything else is solid
-    /// and removes the stand points under it. (Imported assets: solid for now; a
-    /// mesh-bounds-derived footprint is Phase 3 tuning — the model layer has no mesh here.)
+    /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the
+    /// solid part (its cone crown overhangs, so the crown itself is walk-through);
+    /// everything else is solid and removes the stand points under it. (Imported assets:
+    /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp: return false
+        case .portal, .portalLamp, .tree: return false
         default: return true
         }
     }
+}
+
+/// M19 — what a tile's ground is made of. `maze` is the pastoral hedge world (floor + walls +
+/// paved path, the default everywhere before M19); `grass`/`water` are the natural register:
+/// a full-tile ground quad, no walls. Water is not walkable — you walk the shore around it.
+enum TerrainKind: UInt8 {
+    case maze
+    case grass
+    case water
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.
@@ -326,6 +338,9 @@ struct MazeFacelet {
     var discoveryAmount: Float
     /// Props standing on this tile (M10 Phase G). Empty for most tiles.
     var props: [Prop] = []
+    /// M19 — the tile's ground register. `.maze` (default) keeps the pastoral hedge floor;
+    /// natural worlds set `.grass`/`.water`. Water tiles are not walkable.
+    var terrain: TerrainKind = .maze
 }
 
 struct Cubie {

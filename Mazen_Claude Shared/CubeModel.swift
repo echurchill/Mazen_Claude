@@ -47,38 +47,63 @@ class CubeModel {
             break
         case .natural:
             stampNatural()
+            roundness = 1.0   // M19: natural worlds are planets (Eddie) — authored per-world roundness
         }
     }
 
-    /// M18 Phase 1 — the open-field testbed: every edge of every tile fully open (no hedge
-    /// walls, no gateways — just ground, everywhere, across every face and cube edge), a
-    /// scatter of topiary landmarks so walking has reference points, and the way home. M19
-    /// turns this from testbed into the authored Natureworld (water, trees, relief).
+    /// M19 — the Natureworld: no maze at all. Every tile is open ground (grass), a winding
+    /// stream of unwalkable water threads across the arrival face (the natural world's routing,
+    /// in place of hedges), and conifers scatter over the whole planet in varied sizes. The way
+    /// home is a walk-through portal beside the spawn. (Also the M18 open-field testbed — B key.)
+    /// A small deterministic hash drives the scatter so it's stable across runs without RNG.
     private func stampNatural() {
         let all: DirectionMask = [.north, .east, .south, .west]
         for ci in cubies.indices {
             for fi in cubies[ci].facelets.indices {
                 cubies[ci].facelets[fi].mazeTile.openings = all
                 cubies[ci].facelets[fi].mazeTile.openEdges = all
+                cubies[ci].facelets[fi].terrain = .grass
             }
         }
         let c = size / 2
-        // Landmarks: an off-center ring of topiary around the arrival area, one obelisk
-        // farther out as a horizon reference. Bounds-checked before faceletAt — it indexes
-        // the projection grid directly, so range is the caller's job (at size 3 most of
-        // this ring simply doesn't fit, and that's fine).
-        for (dr, dc) in [(-2, -1), (-1, 2), (1, -2), (2, 1)] {
-            let r = c + dr, cl = c + dc
-            guard (0..<size).contains(r), (0..<size).contains(cl) else { continue }
-            if let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: cl) {
-                cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 1, subCol: 1))
+        let spawn = (c, c)                 // player starts here (+Z centre) — keep it clear
+        let portalTile = (min(size - 1, c + 1), c)
+
+        // A meandering stream down the +Z face: one water tile per row, wiggling around centre.
+        // Water tiles are unwalkable, so the player follows the banks — routing without walls.
+        let wiggle = [0, 1, 1, 0, -1, -1, 0]
+        for r in 0..<size {
+            let wc = min(size - 1, max(0, c + wiggle[r % wiggle.count]))
+            if (r, wc) == spawn || (r, wc) == portalTile { continue }
+            if let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: wc) {
+                cubies[ci].facelets[fi].terrain = .water
             }
         }
-        if let (ci, fi) = faceletAt(face: .negativeZ, row: c, col: c) {
-            cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+
+        // Conifers over the whole planet, in varied sizes — trunk (solid) + cone (crown). Skip
+        // water, the spawn tile, and the portal tile. Deterministic 30% scatter via a spatial hash.
+        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
         }
+        for (faceIdx, face) in CubeFace.allCases.enumerated() {
+            for row in 0..<size {
+                for col in 0..<size {
+                    if face == .positiveZ && ((row, col) == spawn || (row, col) == portalTile) { continue }
+                    guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
+                    if cubies[ci].facelets[fi].terrain == .water { continue }
+                    let h = hash(faceIdx * 131 + row, col, row &- col)
+                    guard h % 100 < 30 else { continue }
+                    let size3 = Int((h >> 8) % 3)                         // 0/1/2 = small/med/large
+                    cubies[ci].facelets[fi].props.append(Prop(kind: .treeTrunk, subRow: 1, subCol: 1, state: size3))
+                    cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 1, subCol: 1, state: size3))
+                }
+            }
+        }
+
         // The way home — a walk-through return portal one tile south of arrival.
-        if let (ci, fi) = faceletAt(face: .positiveZ, row: min(size - 1, c + 1), col: c) {
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: portalTile.0, col: portalTile.1) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
