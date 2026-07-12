@@ -655,27 +655,41 @@ class TileMeshLibrary {
         }
     }
 
-    /// M19 — a moon boulder: a low, squashed, faceted rock. A coarse sphere with a deterministic
-    /// per-vertex radius jitter so it reads as an irregular rock, not a ball. Grey via the instance
-    /// colour; darker toward the base via AO. SceneBuilder scales per `state` for size variety.
+    /// M19 — a moon boulder: an angular rock **settled into the regolith** — only the top shows,
+    /// the bottom is buried (Eddie, from Apollo surface photos). Built as an irregular sphere
+    /// centred at ground level with everything below the surface clamped flat to it, so the rock
+    /// emerges as a dome with a flush base and never pokes below the ground at any angle. Coarse
+    /// facets + per-vertex radius jitter read as a fractured rock, not a ball. Grey via the
+    /// instance colour, darker at the base (contact shadow). SceneBuilder scales per `state`.
     private static func addBoulder(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
-        let rXY: Float = 0.13
-        let rZ: Float = 0.075          // squashed — sits low like a rock
-        let cz = ws.floorY + rZ
-        let nLon = 7, nLat = 5
+        let rXY: Float = 0.11
+        let rZ: Float = 0.10           // full radius; ~half is buried, so the emerged dome ≈ rZ tall
+        let cz = ws.floorY             // centre AT the ground → bottom hemisphere is below it (buried)
+        let nLon = 8, nLat = 6
         func jitter(_ a: Int, _ b: Int) -> Float {
             var v = UInt32(truncatingIfNeeded: a &* 48611 ^ b &* 24989); v ^= v >> 13
-            return 0.82 + 0.30 * Float(v & 0xFF) / 255.0     // 0.82…1.12 radius scale
+            return 0.74 + 0.42 * Float(v & 0xFF) / 255.0     // 0.74…1.16 — angular, not round
         }
         func p(_ lat: Int, _ lon: Int) -> SIMD3<Float> {
             let theta = Float.pi * Float(lat) / Float(nLat)
             let phi = 2 * Float.pi * Float(lon % nLon) / Float(nLon)
             let j = jitter(lat, lon % nLon)
-            return SIMD3(rXY * j * sinf(theta) * cosf(phi), rXY * j * sinf(theta) * sinf(phi), cz + rZ * j * cosf(theta))
+            let z = cz + rZ * j * cosf(theta)
+            // Clamp anything below the surface up onto it — the buried half becomes a flat base.
+            return SIMD3(rXY * j * sinf(theta) * cosf(phi), rXY * j * sinf(theta) * sinf(phi), max(ws.floorY, z))
         }
         func vtx(_ q: SIMD3<Float>) -> MazeVertexSwift {
-            let n = normalize(SIMD3(q.x, q.y, (q.z - cz)))
-            let ao = 0.45 + 0.55 * max(0, min(1, (q.z - ws.floorY) / (2 * rZ)))
+            let dz = q.z - ws.floorY                        // height above the ground
+            let horiz = length(SIMD2(q.x, q.y))
+            let n: SIMD3<Float>
+            if horiz < 1e-5 {
+                n = SIMD3(0, 0, 1)                          // apex / buried centre → up (never zero)
+            } else if dz < 1e-5 {
+                n = normalize(SIMD3(q.x, q.y, 0.35))        // base ring → up-and-out
+            } else {
+                n = normalize(SIMD3(q.x, q.y, dz))          // emerged dome → out along the slope
+            }
+            let ao = 0.4 + 0.6 * max(0, min(1, dz / rZ))
             return MazeVertexSwift(position: q, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
         }
         for lat in 0..<nLat {

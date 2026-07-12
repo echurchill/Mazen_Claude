@@ -81,7 +81,7 @@ class CubeModel {
                     if face == .positiveZ && ((row, col) == spawn || (row, col) == portalTile) { continue }
                     guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
                     let h = hash(faceIdx * 149 + row, col, row &+ col)
-                    guard h % 100 < 38 else { continue }
+                    guard h % 100 < 48 else { continue }   // rockier — the reference is a rock field
                     cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3)))
                 }
             }
