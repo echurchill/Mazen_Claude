@@ -600,42 +600,34 @@ class TileMeshLibrary {
         }
     }
 
-    /// M19 — a small GROVE of conifers baked into one mesh: a tall central fir plus a couple of
-    /// shorter neighbours at a slight offset, so a single tree prop reads as a dense stand (render
-    /// density > collision density — one solid trunk anchors it). SceneBuilder scales per instance.
-    /// Each conifer is a stack of two green cones; wound CCW-outward, darker toward the base via AO.
+    /// M19 — a single conifer: a stack of two green cones, grounded at floorY. Groves are made by
+    /// scattering SEVERAL of these props at random offsets across a tile (CubeModel.stampNatural),
+    /// so every grove is arranged differently. SceneBuilder scales/jitters each per instance.
     private static func addTree(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        let top: Float = 0.42
         let seg = 9
-        // One conifer at tile-local (ox, oy), scaled by s. Grounded at floorY so offset trees
-        // (which have no trunk of their own) don't float.
-        func conifer(_ ox: Float, _ oy: Float, _ s: Float) {
-            let z0 = ws.floorY
-            let top = z0 + 0.42 * s
-            let cones: [(Float, Float, Float)] = [
-                (z0,             z0 + 0.26 * s, 0.15 * s),
-                (z0 + 0.18 * s,  top,           0.10 * s),
-            ]
-            func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
-                let ao = 0.5 + 0.5 * max(0, min(1, (p.z - z0) / (top - z0)))
-                return MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
-            }
-            for (bz, tz, r) in cones {
-                let apex = SIMD3<Float>(ox, oy, tz)
-                for i in 0..<seg {
-                    let a0 = 2 * Float.pi * Float(i) / Float(seg)
-                    let a1 = 2 * Float.pi * Float(i + 1) / Float(seg)
-                    let p0 = SIMD3<Float>(ox + r * cosf(a0), oy + r * sinf(a0), bz)
-                    let p1 = SIMD3<Float>(ox + r * cosf(a1), oy + r * sinf(a1), bz)
-                    let n = normalize(cross(p1 - p0, apex - p0))
-                    let base = UInt32(verts.count)
-                    verts.append(contentsOf: [vtx(p0, n), vtx(p1, n), vtx(apex, n)])
-                    indices.append(contentsOf: [base + 0, base + 1, base + 2])
-                }
+        let cones: [(Float, Float, Float)] = [
+            (z0,          z0 + 0.26, 0.15),
+            (z0 + 0.18,   top,       0.10),
+        ]
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            let ao = 0.5 + 0.5 * max(0, min(1, (p.z - z0) / (top - z0)))
+            return MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
+        }
+        for (bz, tz, r) in cones {
+            let apex = SIMD3<Float>(0, 0, tz)
+            for i in 0..<seg {
+                let a0 = 2 * Float.pi * Float(i) / Float(seg)
+                let a1 = 2 * Float.pi * Float(i + 1) / Float(seg)
+                let p0 = SIMD3<Float>(r * cosf(a0), r * sinf(a0), bz)
+                let p1 = SIMD3<Float>(r * cosf(a1), r * sinf(a1), bz)
+                let n = normalize(cross(p1 - p0, apex - p0))
+                let base = UInt32(verts.count)
+                verts.append(contentsOf: [vtx(p0, n), vtx(p1, n), vtx(apex, n)])
+                indices.append(contentsOf: [base + 0, base + 1, base + 2])
             }
         }
-        conifer(0.0, 0.0, 1.0)          // central (over the trunk)
-        conifer(0.10, 0.06, 0.72)       // neighbour
-        conifer(-0.08, 0.09, 0.60)      // neighbour
     }
 
     /// M19 — a short brown trunk (a squat octagonal post) under a tree. Its own prop kind so it

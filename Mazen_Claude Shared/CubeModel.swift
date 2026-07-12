@@ -85,10 +85,16 @@ class CubeModel {
                     let dir = tileDirection(face: face, row: row, col: col)
                     let boost = cornerBoost(dir)
                     let h = hash(faceIdx * 149 + row, col, row &+ col)
-                    // Rock fields (patchy) that thicken toward the corners (random thicket).
-                    let rockProb = min(0.92, 0.30 + 0.28 * patchField(dir) + 0.55 * boost)
+                    // Rock fields (patchy) that thicken heavily toward the corners (random thicket).
+                    let rockProb = min(0.98, 0.30 + 0.28 * patchField(dir) + 0.90 * boost)
                     guard Float(h % 1000) / 1000.0 < rockProb else { continue }
-                    cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3)))
+                    let ar = Int((h >> 4) % 3), ac = Int((h >> 6) % 3)
+                    cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: ar, subCol: ac, state: Int((h >> 8) % 3)))
+                    // Near a corner, drop a second rock at another cell — a denser rubble thicket.
+                    if boost > 0.4 {
+                        let h2 = hash(faceIdx &* 733 + row, col &* 11, row &+ col &+ 5)
+                        cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: Int(h2 % 3), subCol: Int((h2 / 3) % 3), state: Int((h2 >> 8) % 3)))
+                    }
                 }
             }
         }
@@ -182,18 +188,28 @@ class CubeModel {
                     let boost = cornerBoost(dir)
                     let h = hash(faceIdx * 131 + row, col, row &- col)
                     let rollFrac = Float(h % 1000) / 1000.0
-                    let size3 = Int((h >> 8) % 3)
-                    // Grove where the patch field is high or near a corner; meadow elsewhere.
-                    let treeProb = min(0.95, 0.14 + 0.55 * patchField(dir) + 0.55 * boost)
+                    // Grove where the patch field is high or near a corner; meadow elsewhere. Corner
+                    // cover is heavy (0.9·boost) — a thicket over the glitchy triple-points.
+                    let treeProb = min(0.98, 0.14 + 0.55 * patchField(dir) + 0.90 * boost)
                     if rollFrac < treeProb {
-                        cubies[ci].facelets[fi].props.append(Prop(kind: .treeTrunk, subRow: 1, subCol: 1, state: size3))
-                        cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 1, subCol: 1, state: size3))
+                        // A random grove: several conifers scattered across the tile's cells (denser
+                        // near corners), each a distinct size; one solid trunk anchors it lightly.
+                        let count = 2 + Int(boost * 3.0)          // 2 … ~5 (corners)
+                        for i in 0..<count {
+                            let th = hash(faceIdx &* 991 + row &* 17, col &* 13 &+ i, i &* 7 &+ row &- col)
+                            let ar = Int(th % 3), ac = Int((th / 3) % 3)
+                            let st = Int((th >> 8) % 3)
+                            cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: ar, subCol: ac, state: st))
+                            if i == 0 {   // one solid trunk (keeps collision light while trees spread)
+                                cubies[ci].facelets[fi].props.append(Prop(kind: .treeTrunk, subRow: ar, subCol: ac, state: st))
+                            }
+                        }
                     } else {
                         let r2 = (h >> 12) % 100
                         if r2 < 20 {
                             cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 1, subCol: 1))
                         } else if r2 < 28 {
-                            cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: size3))
+                            cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3)))
                         }
                     }
                 }
