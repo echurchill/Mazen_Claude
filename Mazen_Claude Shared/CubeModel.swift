@@ -585,6 +585,12 @@ class CubeModel {
     /// topology, movement, slice, and bandaging all stay grid-based and untouched.
     var roundness: Float = 0.0
 
+    /// M19 relief — how much the surface rolls into hills, as a fraction of the world radius
+    /// (0 = smooth planet, the default for every world today). Consumed by `inflatedUnitPoint`
+    /// (CPU: camera, rigid seats) and, once wired, `m14bInflate` (GPU: floors, props). Kept 0
+    /// until the GPU half lands so the camera never floats above a flat floor.
+    var reliefAmplitude: Float = 0.0
+
     /// Low-distortion cube→sphere map (the standard "Cobb"/`√` cube-sphere): pushes a point
     /// on the unit cube `[-1,1]³` onto the unit sphere, then blends back toward the flat cube
     /// point by `roundness`. `roundness == 0` returns the point unchanged (no-op fast path).
@@ -598,7 +604,27 @@ class CubeModel {
         let sy = y * (max(0, 1 - (z*z + x*x) / 2 + (z*z * x*x) / 3)).squareRoot()
         let sz = z * (max(0, 1 - (x*x + y*y) / 2 + (x*x * y*y) / 3)).squareRoot()
         let sphere = SIMD3(sx, sy, sz)
-        return p + (sphere - p) * roundness
+        let blended = p + (sphere - p) * roundness
+        // M19 relief (CPU half): push the surface point radially by a smooth height field, so the
+        // ground rolls into hills. amplitude 0 ⇒ exact no-op (all worlds today). The GPU half
+        // (m14bInflate + a FrameUniforms amplitude) is wired with Eddie so the camera-on-ground
+        // match can be eyeballed live. Radial == normal on a sphere (relief worlds are roundness 1).
+        guard reliefAmplitude > 0 else { return blended }
+        let len = (blended.x*blended.x + blended.y*blended.y + blended.z*blended.z).squareRoot()
+        guard len > 1e-5 else { return blended }
+        let dir = blended / len
+        return blended * (1 + reliefAmplitude * Self.reliefHeight(dir))
+    }
+
+    /// M19 relief height field — a smooth sum of sinusoids over the surface *direction* (a unit
+    /// vector), range ≈ [−1, 1]. Because it depends only on direction and is continuous everywhere,
+    /// adjacent tiles' shared-edge points get identical displacement → seams stay continuous by
+    /// construction. **Keep byte-identical to `m14bReliefHeight` in Shaders.metal.**
+    static func reliefHeight(_ dir: SIMD3<Float>) -> Float {
+        let a = sinf(dir.x * 5.1 + dir.y * 2.3)
+        let b = sinf(dir.y * 4.7 - dir.z * 3.1)
+        let c = sinf(dir.z * 5.5 + dir.x * 2.9)
+        return (a + b + c) / 3.0
     }
 
     // MARK: - World matrices

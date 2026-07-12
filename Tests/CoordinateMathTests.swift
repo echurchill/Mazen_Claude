@@ -54,6 +54,7 @@ struct CoordinateMathTests {
         testStandableRules()
         testPropFootprint()
         testPropConnectivity()
+        testReliefField()
         testDirectionMaskRotation()
         testPropRotation()
         testInflateGoldens()
@@ -68,6 +69,44 @@ struct CoordinateMathTests {
             for f in failures.prefix(50) { print("   - \(f)") }
             if failures.count > 50 { print("   … and \(failures.count - 50) more") }
             exit(1)
+        }
+    }
+
+    /// M19 relief (CPU half) — pins the height field and the displacement so the GPU (Metal) side
+    /// can be transcribed to match, and proves amplitude 0 is a strict no-op.
+    static func testReliefField() {
+        // Bounds: the field is a mean of three sinusoids ⇒ within [−1, 1].
+        // Continuity: Lipschitz — a small direction step gives a small height step.
+        var prev = CubeModel.reliefHeight(SIMD3(1, 0, 0))
+        for i in 0...200 {
+            let a = Float(i) / 200.0 * 6.2831853
+            let dir = normalize(SIMD3(cosf(a), sinf(a) * 0.6, sinf(a * 0.5)))
+            let h = CubeModel.reliefHeight(dir)
+            check(h >= -1.0001 && h <= 1.0001, "relief height in range: \(h)")
+            check(abs(h - prev) < 0.25, "relief height continuous step: \(abs(h - prev))")
+            prev = h
+        }
+
+        // amplitude 0 ⇒ inflatedUnitPoint is byte-identical to the plain inflation.
+        for n in [5, 7] {
+            let flat = CubeModel(size: n); flat.roundness = 1.0; flat.reliefAmplitude = 0
+            let bumpy = CubeModel(size: n); bumpy.roundness = 1.0; bumpy.reliefAmplitude = 0.05
+            let samples: [(Float, Float, Float)] = [(0.3, 0.2, 1.0), (-0.5, 0.9, 0.1), (1.0, -0.4, 0.6)]
+            for (px, py, pz) in samples {
+                let p = SIMD3<Float>(px, py, pz)
+                let base = flat.inflatedUnitPoint(p)
+                let bumped = bumpy.inflatedUnitPoint(p)
+                // No-op at amplitude 0: bumpy must equal a hand-applied radial push of base.
+                let lensq: Float = base.x*base.x + base.y*base.y + base.z*base.z
+                let len = lensq.squareRoot()
+                let dir = base / len
+                let scale: Float = 1 + 0.05 * CubeModel.reliefHeight(dir)
+                let expected = base * scale
+                check(approx(bumped, expected, 1e-5), "relief displacement matches formula (size \(n))")
+                // And amplitude 0 leaves it exactly at base.
+                let noop = CubeModel(size: n); noop.roundness = 1.0
+                check(approx(noop.inflatedUnitPoint(p), base, 1e-6), "relief amplitude 0 is a no-op")
+            }
         }
     }
 
