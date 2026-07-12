@@ -228,6 +228,13 @@ final class SceneBuilder {
                                 let f = Float(s & 0xFFFF) / 65535.0
                                 color = mix(SIMD4(0.13, 0.33, 0.15, 1.0), SIMD4(0.31, 0.53, 0.27, 1.0), t: f)
                             }
+                            if prop.kind == .boulder {
+                                // M19: vary each rock's grey (shadowed → sunlit) per the Apollo photos.
+                                var s = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 2246822519
+                                s ^= s >> 13
+                                let g = 0.34 + 0.24 * Float(s & 0xFFFF) / 65535.0
+                                color = SIMD4(g, g, g * 1.03, 1.0)
+                            }
                             if prop.kind == .portalLamp {
                                 if model.sealedPortalCubies.contains(ci) {
                                     color = SIMD4(0.10, 0.10, 0.12, 1.0)    // M16.4: sealed — lamp dead

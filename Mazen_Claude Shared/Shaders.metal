@@ -458,12 +458,17 @@ fragment float4 fragmentShader(
         color = mix(float3(0.10, 0.28, 0.45), float3(0.16, 0.40, 0.58), shimmer);
         lighting = skyAmbient * 0.4 + sunColor * 0.4 * halfLambert * shadowFactor + float3(spec * 0.6);
     } else if (in.materialID == 16) {
-        // M19 regolith — the moon's grey dust. The moss texture desaturated to grey, with a strong
-        // per-tile brightness drift so the surface reads as mottled/pocked, not a flat sheet.
-        float3 tex = diffuseArray.sample(texSampler, in.texCoord, 0).rgb;
-        float luma = dot(tex, float3(0.299, 0.587, 0.114));
+        // M19 regolith — the moon's grey dust, fully procedural (Apollo-photo reference): a dusty
+        // undulation, a finer grain over it, and a sparse speckle of brighter/darker pebbles, so
+        // the ground reads gravelly and mottled rather than a flat grey sheet. Sampled in world
+        // space so detail is continuous across tile seams (no per-tile repetition).
+        float3 wp = in.worldPosition;
+        float coarse = fbm(wp.xz * 0.6 + wp.yy * 0.3, 4);              // dusty undulation
+        float fine   = fbm(wp.xy * 6.0 + wp.yz * 5.0, 3);             // grain
+        float speck  = valueNoise(wp.xz * 22.0 + wp.yz * 19.0);       // tiny pebbles
+        float pebble = smoothstep(0.72, 0.92, speck) * 0.20 - smoothstep(0.72, 0.92, 1.0 - speck) * 0.12;
         float tileHue = fract(seedF * 1.618);
-        float shade = 0.34 + 0.30 * luma + 0.16 * tileHue;   // ~0.34…0.80 grey
+        float shade = clamp(0.30 + 0.26 * coarse + 0.14 * fine + 0.09 * tileHue + pebble, 0.13, 0.9);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
     } else {
