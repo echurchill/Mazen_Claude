@@ -305,6 +305,14 @@ class Renderer: NSObject, MTKViewDelegate {
         }
     }
 
+    /// M19 debug: dial relief (hill amplitude) on the ACTIVE world only, so you can tune the
+    /// world you're standing in (`,` down / `.` up). CPU + GPU read the same `reliefAmplitude`,
+    /// so the camera stays on the ground as it changes.
+    func adjustRelief(_ delta: Float) {
+        let m = gameState.cubeModel
+        m.reliefAmplitude = max(0, min(0.2, m.reliefAmplitude + delta))
+    }
+
     // (M15.2: the old direct-swap interior debug hop is gone — the I key now routes through
     // beginWorldTransition(destinationID: 1), same as walking through the temple portal.)
 
@@ -896,7 +904,7 @@ extension InstanceData {
     init(modelMatrix: matrix_float4x4, baseColor: SIMD4<Float>, materialID: UInt32,
          tileID: UInt32, discoveryAmount: Float, styleSeed: UInt32,
          spinMatrix: matrix_float4x4 = matrix_identity_float4x4,
-         roundness: Float = 0, invHalfExtent: Float = 0) {
+         roundness: Float = 0, invHalfExtent: Float = 0, reliefAmplitude: Float = 0) {
         self.init()
         self.modelMatrix = modelMatrix
         self.baseColor = baseColor
@@ -907,5 +915,6 @@ extension InstanceData {
         self.spinMatrix = spinMatrix
         self.roundness = roundness
         self.invHalfExtent = invHalfExtent
+        self.reliefAmplitude = reliefAmplitude
     }
 }

@@ -68,6 +68,7 @@ typedef struct
     matrix_float4x4 spinMatrix;  // world spin (+ M11 offset) applied AFTER inflation
     float roundness;             // 0 = flat/rigid (default); >0 = per-vertex superellipsoid inflate
     float invHalfExtent;         // 1 / (cubeSize/2) — maps rest world coords to the unit cube
+    float reliefAmplitude;       // M19: 0 = smooth (default); >0 = roll the surface into hills
 } InstanceData;
 
 typedef struct

@@ -178,6 +178,10 @@ class GameViewController: NSViewController {
             renderer.beginWorldTransition(destinationID: 1)
         case 11:      // B — M18 Phase 1 debug: fade into / out of the "natural" open-field world
             renderer.beginWorldTransition(destinationID: 2)
+        case 43:      // , — M19 debug: lower relief (hill amplitude) on the active world
+            renderer.adjustRelief(-0.01)
+        case 47:      // . — M19 debug: raise relief (hill amplitude) on the active world
+            renderer.adjustRelief(0.01)
         case 38:      // J — debug: toggle the idle world spin only (leaves the sun/time moving)
             gs.spinEnabled.toggle()
         case 40:      // K — debug: freeze/unfreeze time *in place* (no reset to noon, unlike Shift+T)

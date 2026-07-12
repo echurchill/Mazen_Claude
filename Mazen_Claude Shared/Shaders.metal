@@ -104,13 +104,27 @@ fragment float4 skyFragmentShader(
 }
 
 // ── M14b per-vertex inflation ─────────────────────────────────
-// Cube→sphere map (Cobb √) blended by roundness; matches CubeModel.inflatedUnitPoint.
-float3 m14bInflate(float3 p, float r) {
+// M19 relief height field — MUST stay byte-identical to CubeModel.reliefHeight (Swift). A smooth
+// sum of sinusoids over the surface direction, range ≈ [-1,1]; continuous ⇒ seams stay continuous.
+float m14bReliefHeight(float3 dir) {
+    float a = sin(dir.x * 5.1 + dir.y * 2.3);
+    float b = sin(dir.y * 4.7 - dir.z * 3.1);
+    float c = sin(dir.z * 5.5 + dir.x * 2.9);
+    return (a + b + c) / 3.0;
+}
+
+// Cube→sphere map (Cobb √) blended by roundness, then M19 relief pushed radially by `amp`.
+// Matches CubeModel.inflatedUnitPoint (incl. the relief branch). amp == 0 ⇒ pure inflation.
+float3 m14bInflate(float3 p, float r, float amp) {
     float x = p.x, y = p.y, z = p.z;
     float sx = x * sqrt(max(0.0, 1.0 - (y*y + z*z) * 0.5 + (y*y * z*z) / 3.0));
     float sy = y * sqrt(max(0.0, 1.0 - (z*z + x*x) * 0.5 + (z*z * x*x) / 3.0));
     float sz = z * sqrt(max(0.0, 1.0 - (x*x + y*y) * 0.5 + (x*x * y*y) / 3.0));
-    return mix(p, float3(sx, sy, sz), r);
+    float3 blended = mix(p, float3(sx, sy, sz), r);
+    if (amp <= 0.0) return blended;
+    float len = length(blended);
+    if (len < 1e-5) return blended;
+    return blended * (1.0 + amp * m14bReliefHeight(blended / len));
 }
 
 struct InflatedVertex { float3 position; float3 normal; float3 tangent; };
@@ -121,7 +135,7 @@ struct InflatedVertex { float3 position; float3 normal; float3 tangent; };
 // footprint-then-extrude split keeps wall tops off the ill-conditioned √ map. (M14b.)
 InflatedVertex m14bTransform(float3 localPos, float3 localNormal,
                              float4x4 modelMatrix, float4x4 spinMatrix,
-                             float roundness, float invHalfExtent) {
+                             float roundness, float invHalfExtent, float reliefAmplitude) {
     InflatedVertex o;
     float3x3 spin3 = float3x3(spinMatrix[0].xyz, spinMatrix[1].xyz, spinMatrix[2].xyz);
     if (roundness <= 0.0) {
@@ -138,12 +152,13 @@ InflatedVertex m14bTransform(float3 localPos, float3 localNormal,
     float3 footFlat = (modelMatrix * float4(localPos.x, localPos.y, 0.0, 1.0)).xyz;
     float h = localPos.z;
     float3 u = footFlat * invHalfExtent;
-    float3 surf = m14bInflate(u, roundness) * H;
+    float3 surf = m14bInflate(u, roundness, reliefAmplitude) * H;
     float3 tHat = normalize(modelMatrix[0].xyz);
     float3 bHat = normalize(modelMatrix[1].xyz);
     float eps = 0.5 * invHalfExtent;
-    float3 dT = m14bInflate(u + tHat * eps, roundness) * H - surf;
-    float3 dB = m14bInflate(u + bHat * eps, roundness) * H - surf;
+    // Finite-difference the surface (relief included) so wall/prop normals follow the hills.
+    float3 dT = m14bInflate(u + tHat * eps, roundness, reliefAmplitude) * H - surf;
+    float3 dB = m14bInflate(u + bHat * eps, roundness, reliefAmplitude) * H - surf;
     float3 nInf = normalize(cross(dT, dB));
     if (dot(nInf, normalize(surf)) < 0.0) nInf = -nInf;
     float3 rightI = normalize(dT - nInf * dot(dT, nInf));
@@ -168,7 +183,7 @@ vertex float4 shadowVertexShader(
     const device MazeVertex& vert = vertices[vertexID];
     const device InstanceData& inst = instances[instanceID];
     InflatedVertex xf = m14bTransform(vert.position, vert.normal, inst.modelMatrix,
-                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent);
+                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude);
     return frame.lightViewProjectionMatrix * float4(xf.position, 1.0);
 }
 
@@ -200,7 +215,7 @@ vertex VertexOut vertexShader(
 
     // M14b: inflate per-vertex when this instance's roundness > 0 (flat/rigid otherwise).
     InflatedVertex xf = m14bTransform(vert.position, vert.normal, inst.modelMatrix,
-                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent);
+                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude);
     float4 worldPos = float4(xf.position, 1.0);
     float3 worldNormal = xf.normal;
 

@@ -48,10 +48,12 @@ class CubeModel {
             break
         case .natural:
             stampNatural()
-            roundness = 1.0   // M19: natural worlds are planets (Eddie) — authored per-world roundness
+            roundness = 1.0         // M19: natural worlds are planets (Eddie) — authored per-world roundness
+            reliefAmplitude = 0.05  // gentle rolling hills (tune live with ,/. )
         case .lunar:
             stampLunar()
-            roundness = 1.0   // M19: the moon is a round grey body, in the sky and underfoot
+            roundness = 1.0         // M19: the moon is a round grey body, in the sky and underfoot
+            reliefAmplitude = 0.06  // the Apollo panoramas show real hills/dunes
         }
     }
 
