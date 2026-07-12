@@ -236,11 +236,15 @@ class GameState {
 
     // MARK: - Discovery
 
-    private func onPlayerArrived() {
+    private func onPlayerArrived(viaMove: Bool = true) {
         // M11.2c: walk-through — stepping onto a portal tile switches worlds (no F). Fires only on a
         // real tile crossing, so it never triggers at spawn while you're already standing on one.
+        // Also NOT on a twist (viaMove == false): a slice that rotates a portal under you must not
+        // teleport you home — you interact with F or walk onto it (Eddie, M19 — the moon's return
+        // portal sits by spawn, so a twist kept landing it under the player).
         // M15.2: the portal's `state` says WHERE it leads (index into Renderer.portalDestinations).
-        if let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
+        if viaMove,
+           let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
            let portal = cubeModel.cubies[pci].facelets[pfi].props.first(where: { $0.kind == .portal }),
            !cubeModel.sealedPortalCubies.contains(pci) {   // M16.4: a sealed door is just a door
             portalRequested = true
@@ -379,7 +383,7 @@ class GameState {
             }
         }
 
-        onPlayerArrived()
+        onPlayerArrived(viaMove: false)   // a twist finalizing must not trigger a walk-through portal
     }
 
     // MARK: - Interaction (M10 Phase G)

@@ -138,7 +138,7 @@ float3 m14bInflate(float3 p, float r, float amp) {
     return blended * (1.0 + amp * m14bReliefHeight(blended / len));
 }
 
-struct InflatedVertex { float3 position; float3 normal; float3 tangent; };
+struct InflatedVertex { float3 position; float3 normal; float3 tangent; float3 surfacePos; };
 
 // Tile-local vertex → world. roundness == 0: exactly modelMatrix * position (spin pre-baked).
 // roundness > 0: inflate the vertex FOOTPRINT (in-plane, height 0) onto the rounded surface in the
@@ -154,6 +154,7 @@ InflatedVertex m14bTransform(float3 localPos, float3 localNormal,
         // (no-op here); the flat floor path passes an un-spun modelMatrix + spinMatrix = spin.
         float3 p = (modelMatrix * float4(localPos, 1.0)).xyz;
         o.position = (spinMatrix * float4(p, 1.0)).xyz;
+        o.surfacePos = p;   // pre-spin → surface-fixed (for procedural ground texture)
         float3x3 nm = float3x3(modelMatrix[0].xyz, modelMatrix[1].xyz, modelMatrix[2].xyz);
         o.normal = normalize(spin3 * (nm * localNormal));
         o.tangent = normalize(spin3 * modelMatrix[0].xyz);
@@ -177,6 +178,7 @@ InflatedVertex m14bTransform(float3 localPos, float3 localNormal,
     float3 posPreSpin = surf + nInf * h;
     float3x3 inflBasis = float3x3(rightI, upI, nInf);
     o.position = (spinMatrix * float4(posPreSpin, 1.0)).xyz;
+    o.surfacePos = posPreSpin;   // pre-spin → surface-fixed (for procedural ground texture)
     o.normal = normalize(spin3 * (inflBasis * localNormal));
     o.tangent = normalize(spin3 * rightI);
     return o;
@@ -205,6 +207,7 @@ struct VertexOut {
     float3 worldNormal;
     float3 worldTangent;   // M14b: inflated surface tangent, for curve-correct TBN
     float3 worldPosition;
+    float3 surfacePosition; // M19: pre-spin position — surface-fixed, for procedural ground texture
     float3 localPosition;
     float2 texCoord;
     float4 color;
@@ -235,6 +238,7 @@ vertex VertexOut vertexShader(
     out.worldNormal = worldNormal;
     out.worldTangent = xf.tangent;
     out.worldPosition = worldPos.xyz;
+    out.surfacePosition = xf.surfacePos;
     out.localPosition = vert.position;
     out.texCoord = vert.texCoord;
     out.color = inst.baseColor;
@@ -466,9 +470,9 @@ fragment float4 fragmentShader(
         lighting = float3(0.03) + float3(1.05, 1.02, 0.95) * moonHL;
     } else if (in.materialID == 14) {
         // M19 grass — low-frequency colour zones (sunny meadow ↔ deep forest floor) sampled in
-        // world space so they drift across tiles, plus fine grain from the moss texture and a
-        // high-freq mottle. Reads as living ground with patches, not one flat green sheet.
-        float3 wp = in.worldPosition;
+        // surface space (pre-spin) so they stay glued to the ground as the world turns, plus fine
+        // grain from the moss texture and a high-freq mottle. Living ground with patches.
+        float3 wp = in.surfacePosition;
         float3 moss = diffuseArray.sample(texSampler, in.texCoord, 0).rgb;
         float luma = dot(moss, float3(0.299, 0.587, 0.114));
         float zone = fbm(wp.xz * 0.5 + wp.yy * 0.25, 3);              // meadow vs forest patches
@@ -484,15 +488,15 @@ fragment float4 fragmentShader(
         float3 viewDir = normalize(frame.cameraPosition - in.worldPosition);
         float3 halfVec = normalize(lightDir + viewDir);
         float spec = pow(max(dot(normal, halfVec), 0.0), 40.0);
-        float shimmer = 0.5 + 0.5 * sin(frame.time * 1.3 + in.worldPosition.x * 5.0 + in.worldPosition.y * 4.0);
+        float shimmer = 0.5 + 0.5 * sin(frame.time * 1.3 + in.surfacePosition.x * 5.0 + in.surfacePosition.y * 4.0);
         color = mix(float3(0.10, 0.28, 0.45), float3(0.16, 0.40, 0.58), shimmer);
         lighting = skyAmbient * 0.4 + sunColor * 0.4 * halfLambert * shadowFactor + float3(spec * 0.6);
     } else if (in.materialID == 16) {
         // M19 regolith — the moon's grey dust, fully procedural (Apollo-photo reference): a dusty
         // undulation, a finer grain over it, and a sparse speckle of brighter/darker pebbles, so
         // the ground reads gravelly and mottled rather than a flat grey sheet. Sampled in world
-        // space so detail is continuous across tile seams (no per-tile repetition).
-        float3 wp = in.worldPosition;
+        // surface space (pre-spin) so it stays glued to the ground as the moon turns.
+        float3 wp = in.surfacePosition;
         float coarse = fbm(wp.xz * 0.6 + wp.yy * 0.3, 4);              // dusty undulation
         float fine   = fbm(wp.xy * 6.0 + wp.yz * 5.0, 3);             // grain
         float speck  = valueNoise(wp.xz * 22.0 + wp.yz * 19.0);       // tiny pebbles

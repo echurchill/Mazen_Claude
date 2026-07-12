@@ -127,18 +127,22 @@ final class SceneBuilder {
 
                     let faceColor = Self.faceColor(face)
 
-                    // Frame rail for every tile — inflated per-vertex (M14b) so the cubie-border
-                    // grid bends with the curved floor instead of cutting across it as flat strips.
-                    let frameInst = InstanceDataSwift(
-                        modelMatrix: restM,
-                        baseColor: SIMD4(0.06, 0.06, 0.08, 1.0),
-                        materialID: 7,
-                        tileID: 0,
-                        discoveryAmount: 1.0,
-                        styleSeed: 0,
-                        spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief
-                    )
-                    frameTiles.append(TileEntry(instance: frameInst, mesh: tileMeshLib.frameMesh))
+                    // Frame rail — the dark cubie-border grid. Only on the engineered maze worlds;
+                    // a natural planet (grass/water/regolith) has no visible cube frame, so skip it
+                    // there — otherwise the dark rails read as black strips on the ground (Eddie,
+                    // M19), the more so as relief lifts them.
+                    if facelet.terrain == .maze {
+                        let frameInst = InstanceDataSwift(
+                            modelMatrix: restM,
+                            baseColor: SIMD4(0.06, 0.06, 0.08, 1.0),
+                            materialID: 7,
+                            tileID: 0,
+                            discoveryAmount: 1.0,
+                            styleSeed: 0,
+                            spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief
+                        )
+                        frameTiles.append(TileEntry(instance: frameInst, mesh: tileMeshLib.frameMesh))
+                    }
 
                     switch facelet.tileState {
                     case .unknown:
