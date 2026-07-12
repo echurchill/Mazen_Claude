@@ -218,6 +218,10 @@ class TileMeshLibrary {
         Self.addTreeTrunk(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.treeTrunk.rawValue] = TileMesh(vertexOffset: 0, indexOffset: trunkStart, indexCount: allIndices.count - trunkStart)
 
+        let boulderStart = allIndices.count
+        Self.addBoulder(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.boulder.rawValue] = TileMesh(vertexOffset: 0, indexOffset: boulderStart, indexCount: allIndices.count - boulderStart)
+
         // M19: full-tile ground quad for the natural register (grass/water) — tessellated so it
         // inflates smoothly on the curve, no path-cross split.
         let fieldStart = allIndices.count
@@ -648,6 +652,39 @@ class TileMeshLibrary {
             let base = UInt32(verts.count)
             verts.append(contentsOf: [vtx(b0, n), vtx(b1, n), vtx(t1, n), vtx(t0, n)])
             indices.append(contentsOf: [base + 0, base + 1, base + 2, base + 0, base + 2, base + 3])
+        }
+    }
+
+    /// M19 — a moon boulder: a low, squashed, faceted rock. A coarse sphere with a deterministic
+    /// per-vertex radius jitter so it reads as an irregular rock, not a ball. Grey via the instance
+    /// colour; darker toward the base via AO. SceneBuilder scales per `state` for size variety.
+    private static func addBoulder(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let rXY: Float = 0.13
+        let rZ: Float = 0.075          // squashed — sits low like a rock
+        let cz = ws.floorY + rZ
+        let nLon = 7, nLat = 5
+        func jitter(_ a: Int, _ b: Int) -> Float {
+            var v = UInt32(truncatingIfNeeded: a &* 48611 ^ b &* 24989); v ^= v >> 13
+            return 0.82 + 0.30 * Float(v & 0xFF) / 255.0     // 0.82…1.12 radius scale
+        }
+        func p(_ lat: Int, _ lon: Int) -> SIMD3<Float> {
+            let theta = Float.pi * Float(lat) / Float(nLat)
+            let phi = 2 * Float.pi * Float(lon % nLon) / Float(nLon)
+            let j = jitter(lat, lon % nLon)
+            return SIMD3(rXY * j * sinf(theta) * cosf(phi), rXY * j * sinf(theta) * sinf(phi), cz + rZ * j * cosf(theta))
+        }
+        func vtx(_ q: SIMD3<Float>) -> MazeVertexSwift {
+            let n = normalize(SIMD3(q.x, q.y, (q.z - cz)))
+            let ao = 0.45 + 0.55 * max(0, min(1, (q.z - ws.floorY) / (2 * rZ)))
+            return MazeVertexSwift(position: q, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
+        }
+        for lat in 0..<nLat {
+            for lon in 0..<nLon {
+                let a = p(lat + 1, lon), b = p(lat + 1, lon + 1), c = p(lat, lon + 1), d = p(lat, lon)
+                let base = UInt32(verts.count)
+                verts.append(contentsOf: [vtx(a), vtx(b), vtx(c), vtx(d)])
+                indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            }
         }
     }
 

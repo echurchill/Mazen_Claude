@@ -8,6 +8,7 @@ enum WorldStamp {
     case templeInterior  // the first hand-stamped interior: central hall, pedestal, return portal
     case bare            // nothing authored — the bare generated maze (tests; procedural worlds later)
     case natural         // M18 Phase 1: no walls anywhere — open ground + a few landmarks (the open-field testbed; M19 grows it into the Natureworld)
+    case lunar           // M19: the Moon — open grey regolith + boulders (grey in the sky, walkable when visited)
 }
 
 class CubeModel {
@@ -48,6 +49,46 @@ class CubeModel {
         case .natural:
             stampNatural()
             roundness = 1.0   // M19: natural worlds are planets (Eddie) — authored per-world roundness
+        case .lunar:
+            stampLunar()
+            roundness = 1.0   // M19: the moon is a round grey body, in the sky and underfoot
+        }
+    }
+
+    /// M19 — the Moon: open grey regolith on every tile (no walls), grey boulders scattered
+    /// across the surface, and a walk-through portal home. Grey in the sky (the killer visual)
+    /// and walkable when visited. Craters (relief bowls) wait on the M19 relief pass.
+    private func stampLunar() {
+        let all: DirectionMask = [.north, .east, .south, .west]
+        for ci in cubies.indices {
+            for fi in cubies[ci].facelets.indices {
+                cubies[ci].facelets[fi].mazeTile.openings = all
+                cubies[ci].facelets[fi].mazeTile.openEdges = all
+                cubies[ci].facelets[fi].terrain = .regolith
+            }
+        }
+        let c = size / 2
+        let spawn = (c, c)
+        let portalTile = (min(size - 1, c + 1), c)
+        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
+        }
+        for (faceIdx, face) in CubeFace.allCases.enumerated() {
+            for row in 0..<size {
+                for col in 0..<size {
+                    if face == .positiveZ && ((row, col) == spawn || (row, col) == portalTile) { continue }
+                    guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
+                    let h = hash(faceIdx * 149 + row, col, row &+ col)
+                    guard h % 100 < 38 else { continue }
+                    cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3)))
+                }
+            }
+        }
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: portalTile.0, col: portalTile.1) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
     }
 

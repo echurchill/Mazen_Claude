@@ -111,6 +111,8 @@ struct CoordinateMathTests {
             ("temple",    .templeInterior, 5, true),
             ("natural",   .natural,       7, false),
             ("natural",   .natural,       3, false),
+            ("lunar",     .lunar,         3, false),
+            ("lunar",     .lunar,         5, false),
         ]
         for (label, stamp, n, interior) in cases {
             let m = CubeModel(worldScale: WorldScale(cubeSize: n, interior: interior), stamp: stamp)

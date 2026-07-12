@@ -203,7 +203,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // The moon world exists from the start (persists across visits) so it can hang in earth's
         // sky — and so any tears you make on it stay put (M11 killer visual). Registered on the
         // identity-bound edge moon-earth (M15.0): the moon you see IS the moon you can visit.
-        let moon = GameState(size: Self.moonWorldSize, name: "moon", stamp: .moonDemo)
+        let moon = GameState(size: Self.moonWorldSize, name: "moon", stamp: .lunar)  // M19: grey regolith moon
         Self.setupInitialDiscovery(gameState: moon)
         worldRegistry.bind(WorldKey(destination: "moon", origin: "earth"), to: moon)
 
@@ -348,7 +348,7 @@ class Renderer: NSObject, MTKViewDelegate {
                     // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
                     w = GameState(size: 7, name: dest, stamp: .natural)
                 default:
-                    w = GameState(size: Self.moonWorldSize, name: dest, stamp: .moonDemo)
+                    w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
                 Self.setupInitialDiscovery(gameState: w)
                 return w

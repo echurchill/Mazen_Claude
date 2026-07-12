@@ -55,6 +55,7 @@ final class SceneBuilder {
         .glyph:       SIMD4(0.68, 0.65, 0.59, 1.0),  // M16.5 — carved stone (lock livery may gild it)
         .tree:        SIMD4(0.20, 0.44, 0.22, 1.0),  // M19 — conifer green
         .treeTrunk:   SIMD4(0.34, 0.24, 0.15, 1.0),  // M19 — bark brown
+        .boulder:     SIMD4(0.44, 0.44, 0.47, 1.0),  // M19 — moon rock grey
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
@@ -171,11 +172,12 @@ final class SceneBuilder {
                         case .maze:
                             emitMazeTile(facelet, restM: restM, spin: spin,
                                          roundness: roundness, invHalf: invHalf, tileMeshLib: tileMeshLib)
-                        case .grass, .water:
-                            // M19: a full-tile ground quad, no walls. Grass (mat 14) and water
-                            // (mat 15) share the fieldFloor mesh, so they batch into one draw.
+                        case .grass, .water, .regolith:
+                            // M19: a full-tile ground quad, no walls. Grass (14) / water (15) /
+                            // regolith (16) share the fieldFloor mesh, so they batch into one draw.
+                            let mat: UInt32 = facelet.terrain == .water ? 15 : (facelet.terrain == .regolith ? 16 : 14)
                             let fieldInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
-                                materialID: facelet.terrain == .water ? 15 : 14,
+                                materialID: mat,
                                 tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
                                 styleSeed: facelet.mazeTile.styleSeed,
                                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf)
@@ -191,10 +193,10 @@ final class SceneBuilder {
                         let step = model.worldScale.subCellStep
                         for prop in facelet.props {
                             guard let mesh = tileMeshLib.propMesh(kind: prop.kind) else { continue }
-                            // M19: trees vary in size by `state` (0/1/2 = small/medium/large), so a
-                            // stand reads as a forest, not a row of clones. Trunk matches its tree.
-                            let treeScale: Float = (prop.kind == .tree || prop.kind == .treeTrunk)
-                                ? [0.75, 1.0, 1.35][max(0, min(2, prop.state))] : 1.0
+                            // M19: trees & boulders vary in size by `state` (0/1/2), so a stand /
+                            // field reads as many objects, not a row of clones. Trunk matches its tree.
+                            let treeScale: Float = (prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder)
+                                ? [0.7, 1.0, 1.4][max(0, min(2, prop.state))] : 1.0
                             let pm = restM
                                 * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))

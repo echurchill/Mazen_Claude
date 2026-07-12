@@ -266,6 +266,7 @@ enum PropKind: UInt8 {
     case glyph        // M16.5: a carved Builder-glyph plaque (a frozen 4D cross-section) — presence, not system yet
     case tree         // M19: a conifer — a green cone; `state` 0/1/2 = small/medium/large (SceneBuilder scales)
     case treeTrunk    // M19: a short brown trunk under a tree (own kind so it takes the brown colour)
+    case boulder      // M19: a grey rock on the moon (regolith); `state` 0/1/2 = small/medium/large
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the
@@ -287,6 +288,7 @@ enum TerrainKind: UInt8 {
     case maze
     case grass
     case water
+    case regolith   // M19 moon — grey dust; walkable like grass, no walls
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.

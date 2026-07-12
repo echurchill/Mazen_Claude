@@ -50,9 +50,13 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 - **M19 Natureworld first pass BUILT (awaiting Eddie's eyes):** press **B** — a green planet
   (roundness 1.0), grass everywhere, a meandering unwalkable **stream**, and **conifers**
   (cone-on-trunk, three sizes) scattered over the whole sphere. Build clean, 208,761 tests
-  green, boots without crash; the *look* is unverified until Eddie sees it. Next: relief
-  (hills), the Moon world, then wiring the garden into the world graph. Trees-in-clumps and the
-  looser-garden mix are deferred passes.
+  green, boots without crash. Eddie confirmed it **looks good** (2026-07-12); a richness pass
+  followed (denser forest, tree-colour variety, a lake).
+- **Moon upgraded to grey regolith (M19 Phase 3 first pass, awaiting eyes):** the sky-moon was a
+  green hedge cube — now open grey regolith + scattered boulders (`.lunar` stamp), fixing the
+  killer visual; also walkable via O. Craters wait on the relief pass.
+- **Next (best with Eddie present):** relief/hills (camera-sits-on-ground needs eyes), then
+  world-graph/sky wiring. Trees-in-clumps and the looser-garden mix are deferred passes.
 
 ## Where things stand (as of 2026-07-10 night)
 

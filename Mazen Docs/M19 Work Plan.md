@@ -59,12 +59,18 @@ riskiest render work in the milestone (displacement must respect tile seams and 
 *Danger:* Med-High. *Verify:* seam-continuity at tile and cube edges with displacement on;
 walk the hills — no floating, no sinking.
 
-### Phase 3 — Moon World
-The moon stops being a hedge demo: regolith floor material, **craters at several scales**
-(relief bowls; where a crater should block, the **rim** is the footprint ring and the bowl
-stays walkable), boulder-field props. Same body language as the Natureworld, in grey.
-*Danger:* Low-Med (reuses Phases 1–2 machinery). *Verify:* the Moon World image test; the
-killer visual still works — the cratered moon turning in the home sky.
+### Phase 3 — Moon World — 🔨 first pass built 2026-07-12 (awaiting Eddie's eyes)
+Built: the moon stops being a hedge demo. New `.lunar` stamp — open grey **regolith** (shader
+material 16: moss texture desaturated to grey with a strong per-tile brightness drift, mottled/
+pocked, no walls), **boulders** scattered ~38% (a squashed faceted grey rock, three sizes via
+`state`, solid), a walk-through portal home, roundness 1.0. The moon world (both the sky
+counterpart AND the O-key visit) now uses `.lunar` — so the **killer visual is fixed**: earth's
+sky showed a *green hedge cube*; it's now a grey moon. Verified: 221,001 headless checks green
+(lunar connectivity added), build clean, lunar render path boots without crash (temp smoke test,
+reverted). **NOT yet visually verified** — Eddie's eyes on the sky-moon + an O-key visit.
+*Deferred to the relief pass:* **craters** (rim rings + bowls need M19 relief); the moon stays
+flat-per-tile for now. Size is still 3³ (coarse — fine as a sky object; a ground revisit may
+want more per the scope steer).
 
 ### Phase 4 — World-graph & sky wiring
 The Natureworld joins the registry as a new destination (the Journey's home world stays the

@@ -457,6 +457,15 @@ fragment float4 fragmentShader(
         float shimmer = 0.5 + 0.5 * sin(frame.time * 1.3 + in.worldPosition.x * 5.0 + in.worldPosition.y * 4.0);
         color = mix(float3(0.10, 0.28, 0.45), float3(0.16, 0.40, 0.58), shimmer);
         lighting = skyAmbient * 0.4 + sunColor * 0.4 * halfLambert * shadowFactor + float3(spec * 0.6);
+    } else if (in.materialID == 16) {
+        // M19 regolith — the moon's grey dust. The moss texture desaturated to grey, with a strong
+        // per-tile brightness drift so the surface reads as mottled/pocked, not a flat sheet.
+        float3 tex = diffuseArray.sample(texSampler, in.texCoord, 0).rgb;
+        float luma = dot(tex, float3(0.299, 0.587, 0.114));
+        float tileHue = fract(seedF * 1.618);
+        float shade = 0.34 + 0.30 * luma + 0.16 * tileHue;   // ~0.34…0.80 grey
+        color = float3(shade, shade, shade * 1.02);
+        lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;
