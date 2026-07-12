@@ -454,14 +454,18 @@ fragment float4 fragmentShader(
         color = in.color.rgb;
         lighting = float3(0.03) + float3(1.05, 1.02, 0.95) * moonHL;
     } else if (in.materialID == 14) {
-        // M19 grass — the moss/hedge texture recoloured to meadow green, lit + shadowed like a
-        // floor, with a gentle per-tile hue drift so a whole field doesn't read as one flat sheet.
+        // M19 grass — low-frequency colour zones (sunny meadow ↔ deep forest floor) sampled in
+        // world space so they drift across tiles, plus fine grain from the moss texture and a
+        // high-freq mottle. Reads as living ground with patches, not one flat green sheet.
+        float3 wp = in.worldPosition;
         float3 moss = diffuseArray.sample(texSampler, in.texCoord, 0).rgb;
         float luma = dot(moss, float3(0.299, 0.587, 0.114));
-        float3 grass = mix(float3(0.22, 0.42, 0.16), float3(0.42, 0.66, 0.30), luma);
-        float tileHue = fract(seedF * 1.618);
-        grass *= 1.0 + float3(-0.05, 0.05, -0.06) * tileHue;
-        color = grass;
+        float zone = fbm(wp.xz * 0.5 + wp.yy * 0.25, 3);              // meadow vs forest patches
+        float3 meadow = float3(0.44, 0.60, 0.24);
+        float3 forest = float3(0.16, 0.35, 0.15);
+        float3 base = mix(forest, meadow, smoothstep(0.25, 0.75, zone));
+        float mottle = fbm(wp.xy * 7.0 + wp.yz * 6.0, 3);            // fine blade grain
+        color = base * (0.82 + 0.32 * luma) * (0.9 + 0.2 * mottle);
         lighting = skyAmbient * 0.35 + sunColor * 0.6 * halfLambert * shadowFactor;
     } else if (in.materialID == 15) {
         // M19 water — flat blue with a soft specular sheen and a slow shimmer, no texture. Reads

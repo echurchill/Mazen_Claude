@@ -139,6 +139,8 @@ class CubeModel {
             v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
             return v
         }
+        // A mix of cover: mostly conifers, then bushes (topiary) and the odd field rock (boulder),
+        // with open meadow between. One deterministic roll per tile picks which (or nothing).
         for (faceIdx, face) in CubeFace.allCases.enumerated() {
             for row in 0..<size {
                 for col in 0..<size {
@@ -146,10 +148,16 @@ class CubeModel {
                     guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
                     if cubies[ci].facelets[fi].terrain == .water { continue }
                     let h = hash(faceIdx * 131 + row, col, row &- col)
-                    guard h % 100 < 42 else { continue }
-                    let size3 = Int((h >> 8) % 3)                         // 0/1/2 = small/med/large
-                    cubies[ci].facelets[fi].props.append(Prop(kind: .treeTrunk, subRow: 1, subCol: 1, state: size3))
-                    cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 1, subCol: 1, state: size3))
+                    let roll = h % 100
+                    let size3 = Int((h >> 8) % 3)                        // 0/1/2 = small/med/large
+                    if roll < 42 {                                       // conifer (trunk + cone)
+                        cubies[ci].facelets[fi].props.append(Prop(kind: .treeTrunk, subRow: 1, subCol: 1, state: size3))
+                        cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 1, subCol: 1, state: size3))
+                    } else if roll < 58 {                               // bush
+                        cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 1, subCol: 1))
+                    } else if roll < 66 {                               // a field rock in the grass
+                        cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: size3))
+                    }
                 }
             }
         }
