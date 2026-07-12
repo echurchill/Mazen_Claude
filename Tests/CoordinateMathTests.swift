@@ -83,7 +83,9 @@ struct CoordinateMathTests {
             let dir = normalize(SIMD3(cosf(a), sinf(a) * 0.6, sinf(a * 0.5)))
             let h = CubeModel.reliefHeight(dir)
             check(h >= -1.0001 && h <= 1.0001, "relief height in range: \(h)")
-            check(abs(h - prev) < 0.25, "relief height continuous step: \(abs(h - prev))")
+            // Continuous (no jumps): a ~1.8° direction step gives a bounded height step. Crater
+            // rims are legitimately steeper than the open sinusoids, hence the 0.45 bound.
+            check(abs(h - prev) < 0.45, "relief height continuous step: \(abs(h - prev))")
             prev = h
         }
 

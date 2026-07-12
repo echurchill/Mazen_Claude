@@ -104,13 +104,24 @@ fragment float4 skyFragmentShader(
 }
 
 // ── M14b per-vertex inflation ─────────────────────────────────
-// M19 relief height field — MUST stay byte-identical to CubeModel.reliefHeight (Swift). A smooth
-// sum of sinusoids over the surface direction, range ≈ [-1,1]; continuous ⇒ seams stay continuous.
+// M19 relief height field — MUST stay byte-identical to CubeModel.reliefHeight (Swift). Rolling
+// hills (sinusoids over the surface direction) + localized bowl dents with a subtle rim (craters
+// on the moon / hollows on earth). Range clamped to [-1,1]; continuous ⇒ seams stay continuous.
 float m14bReliefHeight(float3 dir) {
     float a = sin(dir.x * 5.1 + dir.y * 2.3);
     float b = sin(dir.y * 4.7 - dir.z * 3.1);
     float c = sin(dir.z * 5.5 + dir.x * 2.9);
-    return (a + b + c) / 3.0;
+    float h = (a + b + c) / 3.0 * 0.6;
+    float3 centers[5] = { float3(0.30, 0.80, 0.50), float3(-0.60, 0.20, 0.77),
+                          float3(0.55, -0.50, 0.67), float3(-0.25, -0.70, -0.67),
+                          float3(0.80, 0.35, -0.49) };
+    for (int i = 0; i < 5; i++) {
+        float t = dot(dir, normalize(centers[i]));
+        float bowl = -smoothstep(0.88, 1.0, t);
+        float rim = 0.22 * smoothstep(0.855, 0.885, t) * (1.0 - smoothstep(0.885, 0.915, t));
+        h += bowl * 0.75 + rim;
+    }
+    return clamp(h, -1.0, 1.0);
 }
 
 // Cube→sphere map (Cobb √) blended by roundness, then M19 relief pushed radially by `amp`.

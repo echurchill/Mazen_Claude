@@ -53,7 +53,7 @@ class CubeModel {
         case .lunar:
             stampLunar()
             roundness = 1.0         // M19: the moon is a round grey body, in the sky and underfoot
-            reliefAmplitude = 0.06  // the Apollo panoramas show real hills/dunes
+            reliefAmplitude = 0.08  // deeper than earth so the craters + hills/dunes read (Apollo)
         }
     }
 
@@ -626,15 +626,32 @@ class CubeModel {
         return blended * (1 + reliefAmplitude * Self.reliefHeight(dir))
     }
 
-    /// M19 relief height field — a smooth sum of sinusoids over the surface *direction* (a unit
-    /// vector), range ≈ [−1, 1]. Because it depends only on direction and is continuous everywhere,
-    /// adjacent tiles' shared-edge points get identical displacement → seams stay continuous by
-    /// construction. **Keep byte-identical to `m14bReliefHeight` in Shaders.metal.**
+    /// M19 relief height field — rolling hills (a sum of sinusoids over the surface *direction*)
+    /// PLUS a handful of localized bowl dents with a subtle raised rim: these read as **craters**
+    /// on the grey moon and as gentle **hollows/dells** on the green earth. Depends only on
+    /// direction and is continuous everywhere ⇒ seams stay continuous by construction. Clamped to
+    /// [−1, 1]. **Keep byte-identical to `m14bReliefHeight` in Shaders.metal.**
+    static let craterCenters: [SIMD3<Float>] = [
+        SIMD3(0.30, 0.80, 0.50), SIMD3(-0.60, 0.20, 0.77), SIMD3(0.55, -0.50, 0.67),
+        SIMD3(-0.25, -0.70, -0.67), SIMD3(0.80, 0.35, -0.49)
+    ]
+    static func smoothstepF(_ e0: Float, _ e1: Float, _ x: Float) -> Float {
+        let t = max(0, min(1, (x - e0) / (e1 - e0)))
+        return t * t * (3 - 2 * t)
+    }
     static func reliefHeight(_ dir: SIMD3<Float>) -> Float {
         let a = sinf(dir.x * 5.1 + dir.y * 2.3)
         let b = sinf(dir.y * 4.7 - dir.z * 3.1)
         let c = sinf(dir.z * 5.5 + dir.x * 2.9)
-        return (a + b + c) / 3.0
+        var h = (a + b + c) / 3.0 * 0.6
+        for cc in craterCenters {
+            let n = simd_normalize(cc)
+            let t = simd_dot(dir, n)
+            let bowl = -smoothstepF(0.88, 1.0, t)
+            let rim = 0.22 * smoothstepF(0.855, 0.885, t) * (1.0 - smoothstepF(0.885, 0.915, t))
+            h += bowl * 0.75 + rim
+        }
+        return max(-1, min(1, h))
     }
 
     // MARK: - World matrices
