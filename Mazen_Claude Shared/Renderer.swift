@@ -141,7 +141,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
     /// sub-world a portal simply pops back out; the destination only matters from the root.
-    static let portalDestinations = ["moon", "temple-interior", "natural"]
+    static let portalDestinations = ["moon", "temple-interior", "natural", "garden"]
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -358,6 +358,9 @@ class Renderer: NSObject, MTKViewDelegate {
                 case "natural":
                     // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
                     w = GameState(size: 7, name: dest, stamp: .natural)
+                case "garden":
+                    // M20 first cut — the natural-maze hybrid garden (V key).
+                    w = GameState(size: 7, name: dest, stamp: .gardenMaze)
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }

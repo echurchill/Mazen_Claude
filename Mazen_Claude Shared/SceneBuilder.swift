@@ -130,8 +130,9 @@ final class SceneBuilder {
                     // Frame rail — the dark cubie-border grid. Only on the engineered maze worlds;
                     // a natural planet (grass/water/regolith) has no visible cube frame, so skip it
                     // there — otherwise the dark rails read as black strips on the ground (Eddie,
-                    // M19), the more so as relief lifts them.
-                    if facelet.terrain == .maze {
+                    // M19), the more so as relief lifts them. Also skipped for a natural-dressed
+                    // maze (the M20 garden — a hedge maze on a green planet).
+                    if facelet.terrain == .maze && !model.naturalDressing {
                         let frameInst = InstanceDataSwift(
                             modelMatrix: restM,
                             baseColor: SIMD4(0.06, 0.06, 0.08, 1.0),
@@ -159,7 +160,8 @@ final class SceneBuilder {
                     case .adjacent:
                         // Revealed maze geometry + the dissolve fog that is still burning off it.
                         emitMazeTile(facelet, restM: restM, spin: spin,
-                                     roundness: roundness, invHalf: invHalf, relief: relief, tileMeshLib: tileMeshLib)
+                                     roundness: roundness, invHalf: invHalf, relief: relief,
+                                     naturalDressing: model.naturalDressing, tileMeshLib: tileMeshLib)
                         let fogInst = InstanceDataSwift(
                             modelMatrix: matrix,
                             baseColor: faceColor * 0.9,
@@ -176,7 +178,8 @@ final class SceneBuilder {
                         switch facelet.terrain {
                         case .maze:
                             emitMazeTile(facelet, restM: restM, spin: spin,
-                                         roundness: roundness, invHalf: invHalf, relief: relief, tileMeshLib: tileMeshLib)
+                                         roundness: roundness, invHalf: invHalf, relief: relief,
+                                         naturalDressing: model.naturalDressing, tileMeshLib: tileMeshLib)
                         case .grass, .water, .regolith:
                             // M19: a full-tile ground quad, no walls. Grass (14) / water (15) /
                             // regolith (16) share the fieldFloor mesh, so they batch into one draw.
@@ -529,23 +532,35 @@ final class SceneBuilder {
     /// into their instancing buckets. Shared by the `.adjacent` and `.discovered` tile states
     /// (R2.2: previously two hand-maintained copies that had to be edited in lockstep).
     private func emitMazeTile(_ facelet: MazeFacelet, restM: float4x4, spin: float4x4,
-                              roundness: Float, invHalf: Float, relief: Float, tileMeshLib: TileMeshLibrary) {
+                              roundness: Float, invHalf: Float, relief: Float, naturalDressing: Bool,
+                              tileMeshLib: TileMeshLibrary) {
         let openings = facelet.mazeTile.openings
         let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
         let uvT = facelet.mazeTile.uvTurns
         let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)
-        // Floor: inflated per-vertex (rest matrix + roundness + relief).
-        let floorInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-            materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
-            styleSeed: facelet.mazeTile.styleSeed,
-            spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
-        mazeFloorTiles[key, default: []].append(TileEntry(instance: floorInst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
-        if let pfm = tileMeshLib.pathFloorMesh(for: openings, uvTurns: uvT) {
-            let pathInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
-                materialID: 9, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+        if naturalDressing {
+            // M20 natural-maze hybrid (garden): keep the hedge walls/posts below, but floor the
+            // whole tile in grass (material 14, the full fieldFloor) instead of the paved maze
+            // floor + path-cross — a hedge garden on a green planet.
+            let grass = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
+                materialID: 14, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
                 styleSeed: facelet.mazeTile.styleSeed,
                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
-            mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
+            fieldTiles.append(TileEntry(instance: grass, mesh: tileMeshLib.fieldFloor))
+        } else {
+            // Floor: inflated per-vertex (rest matrix + roundness + relief).
+            let floorInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
+                materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                styleSeed: facelet.mazeTile.styleSeed,
+                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
+            mazeFloorTiles[key, default: []].append(TileEntry(instance: floorInst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
+            if let pfm = tileMeshLib.pathFloorMesh(for: openings, uvTurns: uvT) {
+                let pathInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
+                    materialID: 9, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                    styleSeed: facelet.mazeTile.styleSeed,
+                    spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
+                mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
+            }
         }
         // Wall/post: inflate per-vertex (M14b Phase 2) — footprint + extrude along the
         // curved normal, so hedges stand up from the curved floor instead of levering.

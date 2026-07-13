@@ -9,6 +9,7 @@ enum WorldStamp {
     case bare            // nothing authored — the bare generated maze (tests; procedural worlds later)
     case natural         // M18 Phase 1: no walls anywhere — open ground + a few landmarks (the open-field testbed; M19 grows it into the Natureworld)
     case lunar           // M19: the Moon — open grey regolith + boulders (grey in the sky, walkable when visited)
+    case gardenMaze      // M20 first cut: a hedge maze on a green planet — grass floors, some trees, roundness (the Journey garden)
 }
 
 class CubeModel {
@@ -54,6 +55,46 @@ class CubeModel {
             stampLunar()
             roundness = 1.0         // M19: the moon is a round grey body, in the sky and underfoot
             reliefAmplitude = 0.08  // deeper than earth so the craters + hills/dunes read (Apollo)
+        case .gardenMaze:
+            stampGardenMaze()
+            naturalDressing = true
+            roundness = 1.0         // a round hedged planet
+        }
+    }
+
+    /// M20 first cut — the Journey **garden**: the base generated maze (hedge paths, dead-ends,
+    /// twistable slices — the beats need a maze) DRESSED natural: grass floors (via
+    /// `naturalDressing`), a scatter of trees among the hedges, roundness 1. A loose garden, not a
+    /// labyrinth, per the script — so open a few interior blocks into small clearings. Rough first
+    /// cut to react to; NOT the authored Journey layout. Reached via the debug key.
+    private func stampGardenMaze() {
+        let n = size
+        let c = n / 2
+        // Loosen the maze into a garden: a central clearing + two smaller ones (open interior edges).
+        stampRoom(face: .positiveZ, top: max(0, c - 1), left: max(0, c - 1), height: min(3, n), width: min(3, n))
+        // A light scatter of trees among the hedges — non-solid (pure dressing for this first cut),
+        // in a corner sub-cell so they sit beside the paths, not on them.
+        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
+        }
+        let portalTile = (min(n - 1, c + 1), c)
+        for (faceIdx, face) in CubeFace.allCases.enumerated() {
+            for row in 0..<n {
+                for col in 0..<n {
+                    if face == .positiveZ && ((row, col) == (c, c) || (row, col) == portalTile) { continue }
+                    guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
+                    let h = hash(faceIdx * 137 + row, col, row &+ col)
+                    guard h % 100 < 22 else { continue }
+                    cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 0, subCol: 0, state: Int((h >> 8) % 3)))
+                }
+            }
+        }
+        // The way home — a walk-through return portal beside the spawn.
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: portalTile.0, col: portalTile.1) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
     }
 
@@ -648,6 +689,11 @@ class CubeModel {
     /// hard-cubic. Only the *render geometry* (tile centers + basis) is remapped; the maze
     /// topology, movement, slice, and bandaging all stay grid-based and untouched.
     var roundness: Float = 0.0
+
+    /// M20 first cut — the natural-maze hybrid flag: this world is a real hedge maze (walls,
+    /// gateways, twistable) but dressed natural — grass floors instead of paved, no dark cube
+    /// frame. SceneBuilder reads it. Default false ⇒ maze worlds render byte-identically.
+    var naturalDressing = false
 
     /// M19 relief — how much the surface rolls into hills, as a fraction of the world radius
     /// (0 = smooth planet, the default for every world today). Consumed by `inflatedUnitPoint`

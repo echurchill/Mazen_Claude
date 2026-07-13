@@ -178,6 +178,8 @@ class GameViewController: NSViewController {
             renderer.beginWorldTransition(destinationID: 1)
         case 11:      // B — M18 Phase 1 debug: fade into / out of the "natural" open-field world
             renderer.beginWorldTransition(destinationID: 2)
+        case 9:       // V — M20 first cut: fade into / out of the natural-maze "garden" hybrid
+            renderer.beginWorldTransition(destinationID: 3)
         case 43:      // , — M19 debug: lower relief (hill amplitude) on the active world
             renderer.adjustRelief(-0.01)
         case 47:      // . — M19 debug: raise relief (hill amplitude) on the active world
