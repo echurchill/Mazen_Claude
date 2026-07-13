@@ -38,6 +38,102 @@ must visibly change register once the memory is held: planted-row alignment reve
 one authored mound with machinery showing — M19's D4 single hill), and **pacing/comfort**
 work (the interior gravity flip needs the gentle transition the script's holes-list demands).
 
+## Golden Thread Prototype — the ordered build (2026-07-13)
+
+*The "golden thread" is the thinnest end-to-end playable version of the whole script — every
+beat present and connected, none of it polished. Its purpose is to prove the loop plays and to
+concentrate risk on the few real inventions. Key finding: **the middle of the script (0:09→0:15,
+lock → refusal → dials → unlock → twist-open → step-inside) is already a built and Eddie-verified
+loop** — it lives on the dev overworld today. So the thread is mostly (a) **re-stage that spine
+onto the garden**, (b) build a **front** (home → garden → first-twist-as-teaching), (c) build the
+**back** (memory → re-see → new arch), where nearly all genuine invention sits.*
+
+**Tags:** `[have]` = compose/author existing verified systems · `[glue]` = small new code/art ·
+`[INVENT]` = a genuinely new system. Each step notes its **prototype-minimal** form.
+
+### Prerequisite spike — the natural-maze hybrid *(do first; the one unproven "have")*
+The garden is a **hedge maze *on* a natural planet** — hedge paths / dead-ends / twistable slices
+dressed with grass floors, trees, roundness 1. Every other "have" is verified; this combination
+never has been (worlds are maze *or* nature so far). `[glue]` — a grass-floored maze terrain +
+M19 tree scatter on maze tiles. **Validate before trusting the garden.** (Tracked in memory.)
+
+### Arc 1 — FRONT (0:00–0:08): threshold, arrival, the first twist
+1. **Home clearing** — a small, calm, sparse pastoral world with one discoverable arch. `[have]`
+   (maze/overworld register, purpose-built). *Min:* a few tiles, one arch, nothing else.
+2. **Stone-arch portal look** — portals read as an arch, not the police box. `[glue]`. *Min:* a
+   simpler arch mesh (or recolour) — swap the visual only, machinery unchanged.
+3. **Home → garden wiring** — arch routes to the garden via the registry. `[have]`.
+4. **Garden world** — the natural-maze hybrid from the spike, authored as a loose garden with a
+   dead-end that a twist opens. `[have]` once the spike lands. *Min:* a handful of hedge tiles +
+   one authored twist that clears a dead end.
+5. **Counterpart sky** — home turning overhead in the garden. `[have]`.
+6. **Seam-groove affordance** — the subtle floor marking that teaches "this slice turns," no UI.
+   `[INVENT]` (small, load-bearing). *Min:* a decal on the twistable seam tiles.
+
+### Arc 2 — SPINE (0:09–0:15): re-stage the verified lock→enter loop onto the garden
+7. **Temple on a garden slice** — a bonded structure that refuses the twist (refusal wobble + red
+   flare). `[have]` (M16). *Min:* reuse the exact overworld temple bond, placed in the garden.
+8. **Four indicator points on the temple** reflecting the four dials' states (3 steady, 1 flicker).
+   `[glue]` — dial-state data exists; show it as lights on the structure.
+9. **Clue slab** — a fallen slab carved "four dots, three filled." `[glue]` — plaque system + new
+   clue art. *Min:* one plaque with a static four-dot diagram.
+10. **Four dials, one hidden** — three pre-aligned, one in a hedge-spiral; aligning it releases the
+    bond. `[have]` (M16.3). *Min:* four dials, one off, placed by hand.
+11. **Mossy-stone temple dressing** — not gold dev props. `[glue]` — art/dressing (defer-able).
+12. **Twist open + the peel** — the unlocked slice twists the structure open. Door-unseal `[have]`;
+    the visible **peel** (stone splits/peels) `[INVENT]` (medium, most stubbable). *Min:* door
+    lights and opens simply; full peel later.
+13. **Step inside → inverted interior** — swap to the temple-interior world. `[have]` (M15).
+14. **Gravity-flip entry comfort** — arrival orientation + fade so the flip reads as wonder, not
+    nausea. `[glue]` (interior + per-face up already work; this is transition polish).
+15. **Interior dressing** — hollow chamber, shaft of light, the pedestal. `[have]` (dress the
+    existing templeInterior stamp).
+
+### Arc 3 — BACK (0:22–0:30): the memory, the re-see, the choice *(the invention cluster)*
+16. **PlayerKnowledge** — player-global knowledge that crosses worlds (can't live in a per-world
+    `GameState`). `[INVENT]` (M17 Phase 0; foundational, low-risk — **build first in this arc**;
+    the rest of the arc hangs off it). *Min:* a single "has-temple-memory" flag on a
+    Renderer-level object beside the world registry.
+17. **Mote on the pedestal** — new prop. `[glue]`. *Min:* a small glowing prop.
+18. **Receive-a-memory beat** — reaching the mote plays a short "through a Builder's eyes" vision;
+    sets the knowledge flag. `[INVENT]` (the first wonder beat; new presentation). *Min:* a slow
+    warm flash + the mote drifting into the camera (M17 D1 "humble v1").
+19. **The re-see / perception change** — back outside, the world visibly changes: hedges show
+    planted rows, a hill opens to reveal a buried machine. `[INVENT]` (**the signature mechanic**;
+    a render-hook keyed to PlayerKnowledge + authored reveals). *Min:* **one** authored reveal
+    (e.g., a single hill that opens to a machine when the flag is set).
+20. **Knowledge-gated arch** — a dark portal at the garden's edge that lights *because* you now
+    know. `[INVENT]` (small — a portal inert until the flag is set). *Min:* the arch lamp lights +
+    the portal activates when the flag flips.
+21. **The choice** — new arch → a stub next-world, or home; no prompt. `[have]` + a placeholder
+    destination. *Min:* both portals live; the new one leads to a bare stub world.
+
+### Build order (recommended)
+**Spike the natural-maze hybrid → Arc 2 first** (re-stage the proven spine onto the garden — fast,
+high-confidence, gives a playable core immediately) → **Arc 1** (wrap the front around it) →
+**Arc 3** (the inventions, PlayerKnowledge first). Doing the proven spine early means the thread is
+*playable* long before the hard back-half, and each invention gets tested against a real game.
+
+### Inventions, ranked (with their prototype-minimal form)
+1. **Re-see / perception change** — big, the game's whole point; *min:* one authored hill reveal.
+2. **Receive-a-memory beat** — first wonder beat; *min:* a warm flash + drifting mote.
+3. **PlayerKnowledge** — the cross-world substrate (1),(2),(4) need; *min:* one flag. Build first.
+4. **Knowledge-gated portal** — *min:* arch lights when the flag is set.
+5. **Seam-groove affordance** — *min:* a decal on twistable seams.
+6. **Structure peel-open** — most stubbable; *min:* door opens simply.
+
+Everything else is **composition + authoring** of verified systems — above all the entire
+lock→dials→unlock→enter spine. The prototype ships *minimal* versions of all six inventions, which
+collapses the real risk to two design problems worth prototyping with care: **the receive beat**
+and **the one re-see reveal**.
+
+### Golden-thread risks
+- **Natural-maze hybrid unproven** — the prerequisite spike; if it fights us, the garden's whole
+  register is at stake. Do it first.
+- **Legibility** (the script's own hardest problem) — "this lock needs *understanding X*" with no
+  UI. Not a system to invent; a target only a fresh-eyes playtest confirms (see Phase 4 below).
+- **Invention creep** — hold each invention to its prototype-minimal form; depth is post-thread.
+
 ## Phases
 
 ### Phase 0 — Paper edit
