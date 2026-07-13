@@ -55,6 +55,7 @@ struct CoordinateMathTests {
         testPropFootprint()
         testPropConnectivity()
         testReliefField()
+        testPlayerKnowledge()
         testDirectionMaskRotation()
         testPropRotation()
         testInflateGoldens()
@@ -70,6 +71,45 @@ struct CoordinateMathTests {
             if failures.count > 50 { print("   … and \(failures.count - 50) more") }
             exit(1)
         }
+    }
+
+    /// M17 Phase 0 — the player-global knowledge container: memories, glyphs, and the attunement
+    /// gradient with its never-fully-clear ceiling.
+    static func testPlayerKnowledge() {
+        let k = PlayerKnowledge()
+        check(k.isEmpty, "fresh knowledge is empty")
+        check(!k.hasMemory("temple") && !k.knows(glyph: "mark") && k.attunement(family: "cube") == 0,
+              "fresh knowledge queries are all negative/zero")
+
+        // Memories: receive returns true only the first time; then hasMemory holds.
+        check(k.receive(memory: "temple"), "first receive is new")
+        check(!k.receive(memory: "temple"), "second receive is not new (idempotent)")
+        check(k.hasMemory("temple") && !k.hasMemory("moon"), "hasMemory tracks exactly what was received")
+        check(!k.isEmpty, "knowledge is no longer empty after a receive")
+
+        // Glyphs: learn is idempotent; queries are exact.
+        k.learn(glyph: "temple-mark"); k.learn(glyph: "temple-mark")
+        check(k.knows(glyph: "temple-mark") && !k.knows(glyph: "unknown"), "knows tracks learned glyphs")
+
+        // Attunement: rises with learning, monotone, clamped to [0, ceiling], never reaching 1.
+        let fam = "hypercube"
+        var last = k.attunement(family: fam)
+        check(last == 0, "attunement starts at 0")
+        for _ in 0..<50 {
+            k.attune(family: fam, by: 0.1)
+            let now = k.attunement(family: fam)
+            check(now >= last, "attunement is monotone non-decreasing")
+            check(now <= PlayerKnowledge.attunementCeiling + 1e-6, "attunement never exceeds the ceiling")
+            last = now
+        }
+        check(abs(last - PlayerKnowledge.attunementCeiling) < 1e-6, "attunement saturates AT the ceiling")
+        check(PlayerKnowledge.attunementCeiling < 1.0, "the ceiling is below full clarity (never fully understand)")
+        // A negative nudge floors at 0, doesn't go negative.
+        let fam2 = "twospots"
+        k.attune(family: fam2, by: -5)
+        check(k.attunement(family: fam2) == 0, "attunement floors at 0")
+        // Families are independent.
+        check(k.attunement(family: fam) > 0 && k.attunement(family: "untouched") == 0, "per-family attunement is independent")
     }
 
     /// M19 relief (CPU half) — pins the height field and the displacement so the GPU (Metal) side

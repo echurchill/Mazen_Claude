@@ -128,6 +128,9 @@ class Renderer: NSObject, MTKViewDelegate {
     /// `(destination, origin)`, lazily created, persistent — scars keep. The stack above is the
     /// navigation *history*; this is the *universe*. Sky/counterpart lookups resolve through it.
     let worldRegistry = WorldRegistry()
+    /// M17 Phase 0 — the player's cross-world knowledge (memories, glyphs, attunement). Held here,
+    /// outside the world stack, so it persists across every portal. Inert until a beat uses it.
+    let playerKnowledge = PlayerKnowledge()
 
     // M11.2b world-transition fade: swap the active world at the midpoint of a quick fade-to-black.
     private enum TransitionPhase { case none, fadingOut, fadingIn }
