@@ -1,0 +1,1696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Computational Caustic Projection</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;max-width:736px;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Computational Caustic Projection" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Computational Caustic Projection&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(--background) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: light-dark(rgb(255 255 255), rgb(24 24 24));
+  --foreground: light-dark(rgb(26 28 31), rgb(255 255 255));
+  --card: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --card-foreground: var(--foreground);
+  --popover: light-dark(rgb(255 255 255), rgb(45 45 45));
+  --popover-foreground: var(--foreground);
+  --primary: light-dark(rgb(51 156 255), rgb(131 195 255));
+  --primary-foreground: light-dark(rgb(255 255 255), rgb(13 13 13));
+  --secondary: light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: light-dark(
+    rgb(26 28 31 / 49.4%),
+    rgb(255 255 255 / 49.8%)
+  );
+  --accent: light-dark(rgb(229 242 255), rgb(13 39 63));
+  --accent-foreground: var(--primary);
+  --destructive: light-dark(rgb(226 85 7), rgb(255 133 73));
+  --border: light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%));
+  --input: light-dark(
+    rgb(26 28 31 / 11.8%),
+    color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+  );
+  --ring: light-dark(rgb(51 156 255), rgb(131 195 255 / 76%));
+  --font-size-base: 14px;
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: 12.5px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+  --color-background-primary: var(--background);
+  --color-text-primary: var(--foreground);
+  --color-border-secondary: var(--border);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--viz-font-weight-medium);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+    [aria-pressed=&quot;true&quot;],
+    [aria-selected=&quot;true&quot;],
+    .is-selected
+  ) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div id=&quot;ccp-simulation&quot; class=&quot;ccp-simulation&quot;&gt;
+  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Caustic simulation controls&quot;&gt;
+    &lt;label class=&quot;form-label&quot;&gt;
+      Target
+      &lt;select id=&quot;ccp-target&quot; class=&quot;form-select&quot;&gt;
+        &lt;option value=&quot;c&quot;&gt;Letter C&lt;/option&gt;
+        &lt;option value=&quot;ring&quot;&gt;Ring&lt;/option&gt;
+        &lt;option value=&quot;focus&quot;&gt;Focus&lt;/option&gt;
+        &lt;option value=&quot;double&quot;&gt;Two spots&lt;/option&gt;
+        &lt;option value=&quot;triple&quot;&gt;Three spots&lt;/option&gt;
+        &lt;option value=&quot;quad&quot;&gt;Four spots&lt;/option&gt;
+        &lt;option value=&quot;infinity&quot;&gt;Infinity&lt;/option&gt;
+        &lt;option value=&quot;stickman&quot;&gt;Stick man&lt;/option&gt;
+        &lt;option value=&quot;triangle&quot;&gt;Triangle&lt;/option&gt;
+        &lt;option value=&quot;planet&quot;&gt;Planet&lt;/option&gt;
+        &lt;option value=&quot;solar&quot;&gt;Solar system&lt;/option&gt;
+        &lt;option value=&quot;box&quot;&gt;Box&lt;/option&gt;
+        &lt;option value=&quot;tesseract&quot;&gt;Flattened tesseract&lt;/option&gt;
+        &lt;option value=&quot;star&quot;&gt;Star&lt;/option&gt;
+        &lt;option value=&quot;heart&quot;&gt;Heart&lt;/option&gt;
+        &lt;option value=&quot;spiral&quot;&gt;Spiral&lt;/option&gt;
+        &lt;option value=&quot;wave&quot;&gt;Wave&lt;/option&gt;
+      &lt;/select&gt;
+    &lt;/label&gt;
+    &lt;label class=&quot;form-label&quot;&gt;
+      Cells per side &lt;span id=&quot;ccp-cells-value&quot;&gt;34&lt;/span&gt;
+      &lt;input id=&quot;ccp-cells&quot; class=&quot;form-range&quot; type=&quot;range&quot; min=&quot;18&quot; max=&quot;54&quot; step=&quot;4&quot; value=&quot;34&quot;&gt;
+    &lt;/label&gt;
+    &lt;label class=&quot;form-label&quot;&gt;
+      Deflection &lt;span id=&quot;ccp-deflection-value&quot;&gt;1.0x&lt;/span&gt;
+      &lt;input id=&quot;ccp-deflection&quot; class=&quot;form-range&quot; type=&quot;range&quot; min=&quot;0.25&quot; max=&quot;1.5&quot; step=&quot;0.05&quot; value=&quot;1&quot;&gt;
+    &lt;/label&gt;
+    &lt;label class=&quot;form-check form-switch&quot;&gt;
+      &lt;input id=&quot;ccp-rays&quot; class=&quot;form-check-input&quot; type=&quot;checkbox&quot; checked&gt;
+      &lt;span class=&quot;form-check-label&quot;&gt;Rays&lt;/span&gt;
+    &lt;/label&gt;
+  &lt;/div&gt;
+  &lt;canvas id=&quot;ccp-canvas&quot; class=&quot;ccp-canvas&quot; role=&quot;img&quot; aria-label=&quot;Simulation of a computational caustic plate redirecting uniform light into a projected caustic pattern.&quot;&gt;&lt;/canvas&gt;
+  &lt;div id=&quot;ccp-status&quot; class=&quot;text-small text-muted&quot; aria-live=&quot;polite&quot;&gt;&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;style&gt;
+  #ccp-simulation {
+    width: 100%;
+    color: var(--foreground);
+  }
+
+  #ccp-simulation .viz-controls {
+    margin-bottom: 12px;
+  }
+
+  #ccp-simulation .form-label {
+    min-width: 150px;
+  }
+
+  #ccp-simulation .ccp-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1.72;
+    border-radius: 8px;
+  }
+
+  #ccp-simulation #ccp-status {
+    margin-top: 8px;
+  }
+
+  @media (max-width: 520px) {
+    #ccp-simulation .ccp-canvas {
+      aspect-ratio: 0.82;
+    }
+  }
+&lt;/style&gt;
+
+&lt;script&gt;
+(() =&gt; {
+  const root = document.getElementById(&quot;ccp-simulation&quot;);
+  const canvas = document.getElementById(&quot;ccp-canvas&quot;);
+  const ctx = canvas.getContext(&quot;2d&quot;);
+  const targetControl = document.getElementById(&quot;ccp-target&quot;);
+  const cellsControl = document.getElementById(&quot;ccp-cells&quot;);
+  const deflectionControl = document.getElementById(&quot;ccp-deflection&quot;);
+  const raysControl = document.getElementById(&quot;ccp-rays&quot;);
+  const cellsValue = document.getElementById(&quot;ccp-cells-value&quot;);
+  const deflectionValue = document.getElementById(&quot;ccp-deflection-value&quot;);
+  const status = document.getElementById(&quot;ccp-status&quot;);
+  const transitionMs = 2000;
+  const reduceMotion = window.matchMedia(&quot;(prefers-reduced-motion: reduce)&quot;);
+  const colorProbe = document.createElement(&quot;span&quot;);
+  colorProbe.setAttribute(&quot;aria-hidden&quot;, &quot;true&quot;);
+  colorProbe.style.cssText = &quot;position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;&quot;;
+  root.appendChild(colorProbe);
+  let displayedMapping = null;
+  let displayedKind = targetControl.value;
+  let transition = null;
+  let animationFrame = null;
+
+  function cssColor(name, fallback, property = &quot;color&quot;) {
+    colorProbe.style.color = &quot;&quot;;
+    colorProbe.style.backgroundColor = &quot;&quot;;
+    colorProbe.style[property] = `var(${name})`;
+    const value = getComputedStyle(colorProbe)[property];
+    return value &amp;&amp; value !== &quot;rgba(0, 0, 0, 0)&quot; ? value : fallback;
+  }
+
+  function rand(seed) {
+    let t = seed + 0x6D2B79F5;
+    return () =&gt; {
+      t += 0x6D2B79F5;
+      let x = Math.imul(t ^ t &gt;&gt;&gt; 15, 1 | t);
+      x ^= x + Math.imul(x ^ x &gt;&gt;&gt; 7, 61 | x);
+      return ((x ^ x &gt;&gt;&gt; 14) &gt;&gt;&gt; 0) / 4294967296;
+    };
+  }
+
+  function hashTarget(name) {
+    let h = 2166136261;
+    for (const ch of name) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    return h &gt;&gt;&gt; 0;
+  }
+
+  function morton(x, y) {
+    let answer = 0;
+    for (let i = 0; i &lt; 10; i += 1) {
+      answer |= ((x &gt;&gt; i) &amp; 1) &lt;&lt; (2 * i);
+      answer |= ((y &gt;&gt; i) &amp; 1) &lt;&lt; (2 * i + 1);
+    }
+    return answer;
+  }
+
+  function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+  }
+
+  function jitterPoint(x, y, random, amount) {
+    const a = random() * Math.PI * 2;
+    const r = (random() - 0.5) * amount;
+    return { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r };
+  }
+
+  function linePoint(x1, y1, x2, y2, random, amount = 0.025) {
+    const t = random();
+    return jitterPoint(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, random, amount);
+  }
+
+  function ellipsePoint(cx, cy, rx, ry, random, amount = 0.022, start = 0, span = Math.PI * 2) {
+    const a = start + random() * span;
+    return jitterPoint(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, random, amount);
+  }
+
+  function polylinePoint(points, random, amount = 0.022) {
+    const lengths = [];
+    let total = 0;
+    for (let i = 1; i &lt; points.length; i += 1) {
+      const dx = points[i].x - points[i - 1].x;
+      const dy = points[i].y - points[i - 1].y;
+      const length = Math.hypot(dx, dy);
+      lengths.push(length);
+      total += length;
+    }
+
+    let walk = random() * total;
+    for (let i = 0; i &lt; lengths.length; i += 1) {
+      if (walk &lt;= lengths[i]) {
+        const t = lengths[i] ? walk / lengths[i] : 0;
+        return jitterPoint(
+          points[i].x + (points[i + 1].x - points[i].x) * t,
+          points[i].y + (points[i + 1].y - points[i].y) * t,
+          random,
+          amount
+        );
+      }
+      walk -= lengths[i];
+    }
+    const last = points[points.length - 1];
+    return jitterPoint(last.x, last.y, random, amount);
+  }
+
+  function starPoints() {
+    const points = [];
+    for (let i = 0; i &lt;= 8; i += 1) {
+      const a = -Math.PI / 2 + i * Math.PI / 4;
+      const r = i % 2 === 0 ? 0.32 : 0.12;
+      points.push({ x: 0.5 + Math.cos(a) * r, y: 0.5 + Math.sin(a) * r });
+    }
+    return points;
+  }
+
+  function targetPoint(kind, random) {
+    if (kind === &quot;focus&quot;) {
+      const a = random() * Math.PI * 2;
+      const r = Math.sqrt(random()) * 0.075;
+      return { x: 0.5 + Math.cos(a) * r, y: 0.5 + Math.sin(a) * r };
+    }
+
+    if (kind === &quot;ring&quot;) {
+      const a = random() * Math.PI * 2;
+      const r = 0.305 + (random() - 0.5) * 0.055;
+      return { x: 0.5 + Math.cos(a) * r, y: 0.5 + Math.sin(a) * r };
+    }
+
+    if (kind === &quot;double&quot;) {
+      const left = random() &lt; 0.5;
+      const a = random() * Math.PI * 2;
+      const r = Math.sqrt(random()) * 0.09;
+      return { x: (left ? 0.36 : 0.64) + Math.cos(a) * r, y: 0.5 + Math.sin(a) * r };
+    }
+
+    if (kind === &quot;triple&quot;) {
+      const centers = [
+        { x: 0.5, y: 0.31 },
+        { x: 0.34, y: 0.62 },
+        { x: 0.66, y: 0.62 }
+      ];
+      const center = centers[Math.floor(random() * centers.length)];
+      const a = random() * Math.PI * 2;
+      const r = Math.sqrt(random()) * 0.07;
+      return { x: center.x + Math.cos(a) * r, y: center.y + Math.sin(a) * r };
+    }
+
+    if (kind === &quot;quad&quot;) {
+      const centers = [
+        { x: 0.36, y: 0.36 },
+        { x: 0.64, y: 0.36 },
+        { x: 0.36, y: 0.64 },
+        { x: 0.64, y: 0.64 }
+      ];
+      const center = centers[Math.floor(random() * centers.length)];
+      const a = random() * Math.PI * 2;
+      const r = Math.sqrt(random()) * 0.065;
+      return { x: center.x + Math.cos(a) * r, y: center.y + Math.sin(a) * r };
+    }
+
+    if (kind === &quot;infinity&quot;) {
+      const t = random() * Math.PI * 2;
+      const s = Math.sin(t);
+      const c = Math.cos(t);
+      const d = 1 + s * s;
+      return jitterPoint(0.5 + c / d * 0.38, 0.5 + s * c / d * 0.42, random, 0.026);
+    }
+
+    if (kind === &quot;stickman&quot;) {
+      const pick = random();
+      if (pick &lt; 0.22) return ellipsePoint(0.5, 0.27, 0.085, 0.085, random, 0.018);
+      if (pick &lt; 0.42) return linePoint(0.5, 0.36, 0.5, 0.59, random);
+      if (pick &lt; 0.56) return linePoint(0.5, 0.43, 0.34, 0.52, random);
+      if (pick &lt; 0.7) return linePoint(0.5, 0.43, 0.66, 0.52, random);
+      if (pick &lt; 0.85) return linePoint(0.5, 0.59, 0.37, 0.76, random);
+      return linePoint(0.5, 0.59, 0.63, 0.76, random);
+    }
+
+    if (kind === &quot;triangle&quot;) {
+      return polylinePoint([
+        { x: 0.5, y: 0.2 },
+        { x: 0.22, y: 0.75 },
+        { x: 0.78, y: 0.75 },
+        { x: 0.5, y: 0.2 }
+      ], random, 0.025);
+    }
+
+    if (kind === &quot;planet&quot;) {
+      if (random() &lt; 0.58) return ellipsePoint(0.5, 0.5, 0.19, 0.19, random, 0.02);
+      const t = random() * Math.PI * 2;
+      const x = 0.5 + Math.cos(t) * 0.36;
+      const y = 0.5 + Math.sin(t) * 0.105 + Math.cos(t) * 0.035;
+      return jitterPoint(x, y, random, 0.018);
+    }
+
+    if (kind === &quot;solar&quot;) {
+      const pick = random();
+      if (pick &lt; 0.16) return ellipsePoint(0.5, 0.5, 0.055, 0.055, random, 0.018);
+      if (pick &lt; 0.42) return ellipsePoint(0.5, 0.5, 0.16, 0.08, random, 0.016);
+      if (pick &lt; 0.68) return ellipsePoint(0.5, 0.5, 0.25, 0.125, random, 0.016);
+      if (pick &lt; 0.9) return ellipsePoint(0.5, 0.5, 0.34, 0.17, random, 0.016);
+      const planets = [
+        { x: 0.66, y: 0.5, r: 0.028 },
+        { x: 0.31, y: 0.59, r: 0.032 },
+        { x: 0.79, y: 0.39, r: 0.024 }
+      ];
+      const planet = planets[Math.floor(random() * planets.length)];
+      return ellipsePoint(planet.x, planet.y, planet.r, planet.r, random, 0.014);
+    }
+
+    if (kind === &quot;box&quot;) {
+      const front = [
+        { x: 0.31, y: 0.35 },
+        { x: 0.63, y: 0.35 },
+        { x: 0.63, y: 0.67 },
+        { x: 0.31, y: 0.67 },
+        { x: 0.31, y: 0.35 }
+      ];
+      const back = [
+        { x: 0.43, y: 0.24 },
+        { x: 0.75, y: 0.24 },
+        { x: 0.75, y: 0.56 },
+        { x: 0.63, y: 0.67 }
+      ];
+      const connectors = [
+        { x: 0.31, y: 0.35 },
+        { x: 0.43, y: 0.24 },
+        { x: 0.75, y: 0.24 },
+        { x: 0.63, y: 0.35 },
+        { x: 0.75, y: 0.56 },
+        { x: 0.63, y: 0.67 },
+        { x: 0.31, y: 0.67 },
+        { x: 0.43, y: 0.56 }
+      ];
+      if (random() &lt; 0.55) return polylinePoint(front, random, 0.02);
+      if (random() &lt; 0.65) return polylinePoint(back, random, 0.02);
+      return polylinePoint(connectors, random, 0.02);
+    }
+
+    if (kind === &quot;tesseract&quot;) {
+      const outer = [
+        { x: 0.18, y: 0.18 },
+        { x: 0.82, y: 0.18 },
+        { x: 0.82, y: 0.82 },
+        { x: 0.18, y: 0.82 },
+        { x: 0.18, y: 0.18 }
+      ];
+      const inner = [
+        { x: 0.36, y: 0.36 },
+        { x: 0.64, y: 0.36 },
+        { x: 0.64, y: 0.64 },
+        { x: 0.36, y: 0.64 },
+        { x: 0.36, y: 0.36 }
+      ];
+      const mid = [
+        { x: 0.5, y: 0.25 },
+        { x: 0.75, y: 0.5 },
+        { x: 0.5, y: 0.75 },
+        { x: 0.25, y: 0.5 },
+        { x: 0.5, y: 0.25 }
+      ];
+      const spokes = [
+        { x: 0.18, y: 0.18 },
+        { x: 0.36, y: 0.36 },
+        { x: 0.82, y: 0.18 },
+        { x: 0.64, y: 0.36 },
+        { x: 0.82, y: 0.82 },
+        { x: 0.64, y: 0.64 },
+        { x: 0.18, y: 0.82 },
+        { x: 0.36, y: 0.64 },
+        { x: 0.18, y: 0.18 }
+      ];
+      const pick = random();
+      if (pick &lt; 0.34) return polylinePoint(outer, random, 0.018);
+      if (pick &lt; 0.58) return polylinePoint(inner, random, 0.018);
+      if (pick &lt; 0.78) return polylinePoint(mid, random, 0.018);
+      return polylinePoint(spokes, random, 0.018);
+    }
+
+    if (kind === &quot;star&quot;) {
+      return polylinePoint(starPoints(), random, 0.024);
+    }
+
+    if (kind === &quot;heart&quot;) {
+      const t = random() * Math.PI * 2;
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      return jitterPoint(0.5 + x * 0.018, 0.54 - y * 0.018, random, 0.023);
+    }
+
+    if (kind === &quot;spiral&quot;) {
+      const t = 0.45 + random() * Math.PI * 4.7;
+      const r = 0.023 * t;
+      return jitterPoint(0.5 + Math.cos(t) * r, 0.5 + Math.sin(t) * r, random, 0.018);
+    }
+
+    if (kind === &quot;wave&quot;) {
+      const x = 0.16 + random() * 0.68;
+      const y = 0.5 + Math.sin((x - 0.16) / 0.68 * Math.PI * 4) * 0.17;
+      return jitterPoint(x, y, random, 0.025);
+    }
+
+    const a = 0.28 * Math.PI + random() * 1.44 * Math.PI;
+    const r = 0.305 + (random() - 0.5) * 0.065;
+    return { x: 0.55 + Math.cos(a) * r, y: 0.5 + Math.sin(a) * r };
+  }
+
+  function buildMapping(kind, n) {
+    const random = rand(hashTarget(kind) + n * 97);
+    const sources = [];
+    const targets = [];
+
+    for (let y = 0; y &lt; n; y += 1) {
+      for (let x = 0; x &lt; n; x += 1) {
+        const sx = (x + 0.5) / n;
+        const sy = (y + 0.5) / n;
+        sources.push({ x: sx, y: sy, order: morton(Math.floor(sx * 1023), Math.floor(sy * 1023)) });
+        const t = targetPoint(kind, random);
+        targets.push({ x: t.x, y: t.y, order: morton(Math.floor(t.x * 1023), Math.floor(t.y * 1023)) });
+      }
+    }
+
+    sources.sort((a, b) =&gt; a.order - b.order);
+    targets.sort((a, b) =&gt; a.order - b.order);
+    return sources.map((source, i) =&gt; ({ source, target: targets[i] }));
+  }
+
+  function setCanvasSize() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    const width = Math.max(320, Math.round(rect.width));
+    const height = Math.round(width / (width &lt; 520 ? 0.82 : 1.72));
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    canvas.style.height = `${height}px`;
+    return { width, height };
+  }
+
+  function drawArrow(x1, y1, x2, y2, size) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - Math.cos(angle - 0.55) * size, y2 - Math.sin(angle - 0.55) * size);
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - Math.cos(angle + 0.55) * size, y2 - Math.sin(angle + 0.55) * size);
+    ctx.stroke();
+  }
+
+  function drawRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function panelCoord(rect, point) {
+    return {
+      x: rect.x + point.x * rect.size,
+      y: rect.y + point.y * rect.size
+    };
+  }
+
+  function easeInOut(t) {
+    return t &lt; 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function interpolateMapping(from, to, t) {
+    const length = Math.min(from.length, to.length);
+    const mapping = [];
+    for (let i = 0; i &lt; length; i += 1) {
+      mapping.push({
+        source: to[i].source,
+        target: {
+          x: from[i].target.x + (to[i].target.x - from[i].target.x) * t,
+          y: from[i].target.y + (to[i].target.y - from[i].target.y) * t
+        }
+      });
+    }
+    return mapping;
+  }
+
+  function getRenderState(now) {
+    const n = Number(cellsControl.value);
+    if (!displayedMapping || displayedMapping.length !== n * n) {
+      displayedMapping = buildMapping(targetControl.value, n);
+      displayedKind = targetControl.value;
+      transition = null;
+    }
+
+    if (!transition) {
+      return { mapping: displayedMapping, progress: 1, transitioning: false };
+    }
+
+    const raw = clamp((now - transition.start) / transition.duration, 0, 1);
+    const progress = easeInOut(raw);
+    const mapping = interpolateMapping(transition.from, transition.to, progress);
+    if (raw &gt;= 1) {
+      displayedMapping = transition.to;
+      displayedKind = transition.toKind;
+      transition = null;
+      return { mapping: displayedMapping, progress: 1, transitioning: false };
+    }
+    return { mapping, progress, transitioning: true, toKind: transition.toKind };
+  }
+
+  function scheduleDraw() {
+    if (animationFrame) return;
+    animationFrame = requestAnimationFrame((now) =&gt; {
+      animationFrame = null;
+      draw(now);
+      if (transition) scheduleDraw();
+    });
+  }
+
+  function snapshotMapping(now) {
+    return getRenderState(now).mapping.map((ray) =&gt; ({
+      source: ray.source,
+      target: { x: ray.target.x, y: ray.target.y }
+    }));
+  }
+
+  function startTargetTransition() {
+    const n = Number(cellsControl.value);
+    const nextKind = targetControl.value;
+    const nextMapping = buildMapping(nextKind, n);
+    const now = performance.now();
+    const fromMapping = snapshotMapping(now);
+
+    if (reduceMotion.matches || !fromMapping.length || fromMapping.length !== nextMapping.length) {
+      transition = null;
+      displayedMapping = nextMapping;
+      displayedKind = nextKind;
+      draw(now);
+      return;
+    }
+
+    transition = {
+      from: fromMapping,
+      to: nextMapping,
+      toKind: nextKind,
+      start: now,
+      duration: transitionMs
+    };
+    displayedKind = nextKind;
+    scheduleDraw();
+  }
+
+  function rebuildMapping() {
+    if (animationFrame) {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+    }
+    transition = null;
+    displayedMapping = buildMapping(targetControl.value, Number(cellsControl.value));
+    displayedKind = targetControl.value;
+    draw(performance.now());
+  }
+
+  function draw(now = performance.now()) {
+    const n = Number(cellsControl.value);
+    const deflection = Number(deflectionControl.value);
+    const renderState = getRenderState(now);
+    const current = renderState.mapping;
+    cellsValue.textContent = String(n);
+    deflectionValue.textContent = `${deflection.toFixed(2).replace(/0$/, &quot;&quot;)}x`;
+
+    const { width, height } = setCanvasSize();
+    const bg = cssColor(&quot;--background&quot;, &quot;rgb(255, 255, 255)&quot;, &quot;backgroundColor&quot;);
+    const fg = cssColor(&quot;--foreground&quot;, &quot;rgb(26, 28, 31)&quot;);
+    const muted = cssColor(&quot;--muted-foreground&quot;, &quot;rgba(26, 28, 31, 0.55)&quot;);
+    const border = cssColor(&quot;--border&quot;, &quot;rgba(26, 28, 31, 0.12)&quot;);
+    const primary = cssColor(&quot;--viz-series-1&quot;, &quot;rgb(51, 156, 255)&quot;);
+    const secondary = cssColor(&quot;--viz-series-2&quot;, &quot;rgb(243, 136, 59)&quot;);
+    const accent = cssColor(&quot;--accent&quot;, &quot;rgb(229, 242, 255)&quot;, &quot;backgroundColor&quot;);
+
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+    ctx.font = &quot;500 13px system-ui, -apple-system, BlinkMacSystemFont, sans-serif&quot;;
+    ctx.textBaseline = &quot;alphabetic&quot;;
+
+    const stack = width &lt; 520;
+    const margin = stack ? 22 : 28;
+    const labelGap = 24;
+    const size = stack
+      ? Math.min(width - margin * 2, (height - margin * 2 - 78) / 2)
+      : Math.min((width - margin * 3) / 2, height - margin * 2 - labelGap);
+    const plate = stack
+      ? { x: (width - size) / 2, y: margin + labelGap, size }
+      : { x: margin, y: margin + labelGap, size };
+    const screen = stack
+      ? { x: (width - size) / 2, y: plate.y + size + 58, size }
+      : { x: width - margin - size, y: margin + labelGap, size };
+
+    ctx.fillStyle = fg;
+    ctx.fillText(&quot;computed caustic plate&quot;, plate.x, plate.y - 9);
+    ctx.fillText(&quot;screen intensity&quot;, screen.x, screen.y - 9);
+
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    drawRoundedRect(plate.x, plate.y, plate.size, plate.size, 8);
+    ctx.stroke();
+    drawRoundedRect(screen.x, screen.y, screen.size, screen.size, 8);
+    ctx.stroke();
+
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.18;
+    drawRoundedRect(plate.x, plate.y, plate.size, plate.size, 8);
+    ctx.fill();
+    drawRoundedRect(screen.x, screen.y, screen.size, screen.size, 8);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    drawRoundedRect(screen.x, screen.y, screen.size, screen.size, 8);
+    ctx.clip();
+    ctx.globalCompositeOperation = &quot;source-over&quot;;
+    ctx.fillStyle = primary;
+    for (const ray of current) {
+      const p = panelCoord(screen, {
+        x: clamp(0.5 + (ray.target.x - 0.5) * deflection, 0.02, 0.98),
+        y: clamp(0.5 + (ray.target.y - 0.5) * deflection, 0.02, 0.98)
+      });
+      ctx.globalAlpha = n &gt; 42 ? 0.045 : 0.065;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(1.5, screen.size / n * 0.55), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowColor = primary;
+    ctx.shadowBlur = Math.max(6, screen.size * 0.028);
+    ctx.globalAlpha = 0.2;
+    for (let i = 0; i &lt; current.length; i += Math.max(1, Math.floor(current.length / 220))) {
+      const ray = current[i];
+      const p = panelCoord(screen, {
+        x: clamp(0.5 + (ray.target.x - 0.5) * deflection, 0.02, 0.98),
+        y: clamp(0.5 + (ray.target.y - 0.5) * deflection, 0.02, 0.98)
+      });
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(3, screen.size / n), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+    const step = Math.max(2, Math.floor(n / 11));
+    ctx.save();
+    drawRoundedRect(plate.x, plate.y, plate.size, plate.size, 8);
+    ctx.clip();
+    ctx.strokeStyle = secondary;
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = 0.72;
+    for (let i = 0; i &lt; current.length; i += 1) {
+      const sx = Math.floor(current[i].source.x * n);
+      const sy = Math.floor(current[i].source.y * n);
+      if (sx % step || sy % step) continue;
+      const a = panelCoord(plate, current[i].source);
+      const dx = (current[i].target.x - current[i].source.x) * deflection;
+      const dy = (current[i].target.y - current[i].source.y) * deflection;
+      const len = Math.min(plate.size / n * 2.2, 13);
+      const mag = Math.max(0.001, Math.hypot(dx, dy));
+      drawArrow(a.x - dx / mag * len * 0.35, a.y - dy / mag * len * 0.35, a.x + dx / mag * len * 0.65, a.y + dy / mag * len * 0.65, 3.5);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    if (raysControl.checked) {
+      const samples = [];
+      const stride = Math.max(1, Math.floor(current.length / (stack ? 42 : 58)));
+      for (let i = Math.floor(stride / 2); i &lt; current.length; i += stride) samples.push(current[i]);
+      ctx.strokeStyle = primary;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.22;
+      for (const ray of samples) {
+        const a = panelCoord(plate, ray.source);
+        const b = panelCoord(screen, {
+          x: clamp(0.5 + (ray.target.x - 0.5) * deflection, 0.02, 0.98),
+          y: clamp(0.5 + (ray.target.y - 0.5) * deflection, 0.02, 0.98)
+        });
+        ctx.beginPath();
+        if (stack) {
+          ctx.moveTo(a.x, a.y);
+          ctx.bezierCurveTo(a.x, a.y + 26, b.x, b.y - 26, b.x, b.y);
+        } else {
+          ctx.moveTo(a.x, a.y);
+          ctx.bezierCurveTo(a.x + 36, a.y, b.x - 36, b.y, b.x, b.y);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.fillStyle = muted;
+    ctx.font = &quot;400 12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif&quot;;
+    if (stack) {
+      ctx.fillText(&quot;uniform light in&quot;, plate.x, plate.y + plate.size + 20);
+      ctx.fillText(&quot;designed rays out&quot;, screen.x, screen.y + screen.size + 20);
+    } else {
+      ctx.fillText(&quot;uniform light in&quot;, plate.x, plate.y + plate.size + 20);
+      ctx.fillText(&quot;designed rays out&quot;, screen.x, screen.y + screen.size + 20);
+    }
+
+    const rayCount = n * n;
+    const name = targetControl.options[targetControl.selectedIndex].text;
+    status.textContent = renderState.transitioning
+      ? `${rayCount.toLocaleString()} computed micro-prisms are morphing toward ${name.toLowerCase()} over 2 seconds.`
+      : `${rayCount.toLocaleString()} computed micro-prisms map a flat beam into ${name.toLowerCase()} on the screen.`;
+  }
+
+  targetControl.addEventListener(&quot;input&quot;, startTargetTransition);
+  cellsControl.addEventListener(&quot;input&quot;, rebuildMapping);
+  deflectionControl.addEventListener(&quot;input&quot;, () =&gt; {
+    draw(performance.now());
+    if (transition) scheduleDraw();
+  });
+  raysControl.addEventListener(&quot;change&quot;, () =&gt; draw(performance.now()));
+  window.addEventListener(&quot;resize&quot;, () =&gt; draw(performance.now()));
+  draw();
+})();
+&lt;/script&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handleLeave = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+</body>
+</html>
