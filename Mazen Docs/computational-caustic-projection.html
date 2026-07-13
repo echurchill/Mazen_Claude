@@ -766,6 +766,8 @@ html&gt;body{padding:0}&lt;/style&gt;
         &lt;option value=&quot;solar&quot;&gt;Solar system&lt;/option&gt;
         &lt;option value=&quot;box&quot;&gt;Box&lt;/option&gt;
         &lt;option value=&quot;tesseract&quot;&gt;Flattened tesseract&lt;/option&gt;
+        &lt;option value=&quot;tardis&quot;&gt;UK police box&lt;/option&gt;
+        &lt;option value=&quot;obelisk&quot;&gt;Obelisk&lt;/option&gt;
         &lt;option value=&quot;star&quot;&gt;Star&lt;/option&gt;
         &lt;option value=&quot;heart&quot;&gt;Heart&lt;/option&gt;
         &lt;option value=&quot;spiral&quot;&gt;Spiral&lt;/option&gt;
@@ -1098,6 +1100,94 @@ html&gt;body{padding:0}&lt;/style&gt;
       if (pick &lt; 0.58) return polylinePoint(inner, random, 0.018);
       if (pick &lt; 0.78) return polylinePoint(mid, random, 0.018);
       return polylinePoint(spokes, random, 0.018);
+    }
+
+    if (kind === &quot;tardis&quot;) {
+      const body = [
+        { x: 0.32, y: 0.22 },
+        { x: 0.68, y: 0.22 },
+        { x: 0.72, y: 0.78 },
+        { x: 0.28, y: 0.78 },
+        { x: 0.32, y: 0.22 }
+      ];
+      const roof = [
+        { x: 0.35, y: 0.16 },
+        { x: 0.65, y: 0.16 },
+        { x: 0.68, y: 0.22 },
+        { x: 0.32, y: 0.22 },
+        { x: 0.35, y: 0.16 }
+      ];
+      const sign = [
+        { x: 0.34, y: 0.28 },
+        { x: 0.66, y: 0.28 },
+        { x: 0.66, y: 0.33 },
+        { x: 0.34, y: 0.33 },
+        { x: 0.34, y: 0.28 }
+      ];
+      const centerLine = [
+        { x: 0.5, y: 0.33 },
+        { x: 0.5, y: 0.78 }
+      ];
+      const panels = [
+        { x: 0.35, y: 0.38 },
+        { x: 0.47, y: 0.38 },
+        { x: 0.47, y: 0.52 },
+        { x: 0.35, y: 0.52 },
+        { x: 0.35, y: 0.38 },
+        { x: 0.53, y: 0.38 },
+        { x: 0.65, y: 0.38 },
+        { x: 0.65, y: 0.52 },
+        { x: 0.53, y: 0.52 },
+        { x: 0.53, y: 0.38 },
+        { x: 0.35, y: 0.58 },
+        { x: 0.47, y: 0.58 },
+        { x: 0.47, y: 0.72 },
+        { x: 0.35, y: 0.72 },
+        { x: 0.35, y: 0.58 },
+        { x: 0.53, y: 0.58 },
+        { x: 0.65, y: 0.58 },
+        { x: 0.65, y: 0.72 },
+        { x: 0.53, y: 0.72 },
+        { x: 0.53, y: 0.58 }
+      ];
+      const lamp = [
+        { x: 0.46, y: 0.14 },
+        { x: 0.54, y: 0.14 },
+        { x: 0.54, y: 0.16 },
+        { x: 0.46, y: 0.16 },
+        { x: 0.46, y: 0.14 }
+      ];
+      const pick = random();
+      if (pick &lt; 0.34) return polylinePoint(body, random, 0.018);
+      if (pick &lt; 0.48) return polylinePoint(roof, random, 0.016);
+      if (pick &lt; 0.6) return polylinePoint(sign, random, 0.014);
+      if (pick &lt; 0.7) return polylinePoint(centerLine, random, 0.016);
+      if (pick &lt; 0.93) return polylinePoint(panels, random, 0.014);
+      return polylinePoint(lamp, random, 0.012);
+    }
+
+    if (kind === &quot;obelisk&quot;) {
+      const needle = [
+        { x: 0.5, y: 0.12 },
+        { x: 0.37, y: 0.78 },
+        { x: 0.63, y: 0.78 },
+        { x: 0.5, y: 0.12 }
+      ];
+      const center = [
+        { x: 0.5, y: 0.12 },
+        { x: 0.5, y: 0.78 }
+      ];
+      const base = [
+        { x: 0.31, y: 0.78 },
+        { x: 0.69, y: 0.78 },
+        { x: 0.72, y: 0.84 },
+        { x: 0.28, y: 0.84 },
+        { x: 0.31, y: 0.78 }
+      ];
+      const pick = random();
+      if (pick &lt; 0.7) return polylinePoint(needle, random, 0.018);
+      if (pick &lt; 0.84) return polylinePoint(center, random, 0.015);
+      return polylinePoint(base, random, 0.018);
     }
 
     if (kind === &quot;star&quot;) {
