@@ -91,6 +91,28 @@ discrimination requirement** — at full attunement, different words must still 
 the sharp target must be iconic/memorable. So the forge's job narrows: author plates whose
 *fully-attuned* projection is a distinct, glanceable silhouette; the gradient handles the rest.
 
+### The forge tool as a living vocabulary sketchpad (Eddie, ongoing)
+
+[computational-caustic-projection.html](computational-caustic-projection.html) is where Eddie is
+**accreting the symbol vocabulary** — targets so far include the game's own iconography (the
+police-box **portal**, the **obelisk**) alongside two-spots / star / solar-system / ringed-planet.
+More symbols get added over time to think the glyph concept through. Two things this surfaces:
+
+- **The world is the Rosetta stone.** Glyphs that project *things the player has seen* (a portal, an
+  obelisk, a ringed planet) teach the first "words" diegetically — the payoff is "that shape is a
+  *thing I know*." The language's vocabulary literally is the world's contents.
+- **Two registers — pictograms vs. the abstract grammar** (design question, held not decided). The
+  tool's symbols are **pictograms** (the caustic *shows a thing*); the canon's grammar is
+  *transformation* (slice=word, sweep=sentence, rotation=verb — abstract forms whose meaning is
+  learned). Not in conflict: concrete pictograms can be the **nouns** the player reads first (the
+  on-ramp), abstract slice-forms the harder **verbs** later. The comprehension gradient rides this —
+  first you make out concrete depictions, only later grasp the abstract relations between them.
+  Each added symbol also quietly probes the **discrimination ceiling** (do two symbols caustic into
+  distinguishable images at full attunement, or collide into similar blobs?).
+
+*When the symbol set grows enough that a pattern emerges (which shapes stay crisp, which collide,
+which feel noun vs. verb), fold a short "vocabulary findings" note in here.*
+
 ### Forge / runtime split (keep the hard solve offline)
 
 - **Offline — the forge:** the expensive *inverse* solve (target image → deflection field) is that
