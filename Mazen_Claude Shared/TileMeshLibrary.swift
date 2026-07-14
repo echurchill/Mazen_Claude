@@ -224,7 +224,14 @@ class TileMeshLibrary {
 
         let foliageStart = allIndices.count
         Self.addFoliageCard(to: &allVerts, indices: &allIndices, ws: ws)
-        propMeshes[PropKind.foliageCard.rawValue] = TileMesh(vertexOffset: 0, indexOffset: foliageStart, indexCount: allIndices.count - foliageStart)
+        let foliageMesh = TileMesh(vertexOffset: 0, indexOffset: foliageStart, indexCount: allIndices.count - foliageStart)
+        propMeshes[PropKind.foliageCard.rawValue] = foliageMesh
+        propMeshes[PropKind.greeneryCard.rawValue] = foliageMesh   // M20: greenery reuses the crossed-card mesh
+
+        // M20: a taller crossed card for the WenrexaTrees billboard sprites (portrait aspect).
+        let treeBBStart = allIndices.count
+        Self.addFoliageCard(to: &allVerts, indices: &allIndices, ws: ws, height: 1.4, halfWidth: 0.5)
+        propMeshes[PropKind.treeBillboard.rawValue] = TileMesh(vertexOffset: 0, indexOffset: treeBBStart, indexCount: allIndices.count - treeBBStart)
 
         // M19: full-tile ground quad for the natural register (grass/water) — tessellated so it
         // inflates smoothly on the curve, no path-cross split.
@@ -639,10 +646,11 @@ class TileMeshLibrary {
     /// with the alpha-cutout foliage material (17), which discards the gaps in a leaf mask — so
     /// this reads as leaves, not solid quads. UVs 0..1 per card (a real leaf texture drops straight
     /// in later; for now the mask is procedural). Rises from the floor; SceneBuilder scales it.
-    private static func addFoliageCard(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+    private static func addFoliageCard(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale,
+                                       height: Float = 0.40, halfWidth: Float = 0.16) {
         let z0 = ws.floorY
-        let h: Float = 0.40           // card height (bush/small-tree)
-        let hw: Float = 0.16          // half-width
+        let h = height                // card height (bush/small-tree)
+        let hw = halfWidth            // half-width
         let cards = 3
         func quad(_ ax: Float, _ ay: Float) {
             // A vertical card spanning [-hw,hw] along (ax,ay), from z0 to z0+h. Emit both windings.

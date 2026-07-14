@@ -257,6 +257,8 @@ fragment float4 fragmentShader(
     depth2d<float> shadowMap [[texture(TextureIndexShadowMap)]],
     texture2d<float> assetDiffuse [[texture(TextureIndexAssetDiffuse)]],
     texture2d_array<float> leafTex [[texture(TextureIndexLeaf)]],
+    texture2d_array<float> greeneryTex [[texture(TextureIndexGreenery)]],
+    texture2d_array<float> treeTex [[texture(TextureIndexTreeSprite)]],
     sampler texSampler [[sampler(0)]]
 ) {
     float3 lightDir = normalize(frame.lightDirection);
@@ -529,6 +531,22 @@ fragment float4 fragmentShader(
             color = in.color.rgb * (0.6 + 0.55 * clump);
         }
         lighting = skyAmbient * 0.40 + sunColor * 0.55 * twoSided * shadowFactor;
+    } else if (in.materialID == 18) {
+        // M20 misc-greenery card (fern/flower/plant) — already-alpha RGBA, styleSeed = slice.
+        if (frame.greeneryLoaded > 0.5) {
+            float4 g = greeneryTex.sample(texSampler, in.texCoord, in.styleSeed % greeneryTex.get_array_size());
+            if (g.a < 0.5) discard_fragment();
+            color = g.rgb;
+        } else { color = in.color.rgb; }
+        lighting = skyAmbient * 0.42 + sunColor * 0.55 * (abs(dot(normal, lightDir)) * 0.5 + 0.5) * shadowFactor;
+    } else if (in.materialID == 19) {
+        // M20 WenrexaTrees billboard sprite — already-alpha RGBA, styleSeed = slice.
+        if (frame.treeSpriteLoaded > 0.5) {
+            float4 t = treeTex.sample(texSampler, in.texCoord, in.styleSeed % treeTex.get_array_size());
+            if (t.a < 0.5) discard_fragment();
+            color = t.rgb;
+        } else { color = in.color.rgb; }
+        lighting = skyAmbient * 0.42 + sunColor * 0.55 * (abs(dot(normal, lightDir)) * 0.5 + 0.5) * shadowFactor;
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;

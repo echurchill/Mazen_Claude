@@ -206,13 +206,20 @@ final class SceneBuilder {
                             // AND a per-instance jitter, so a stand / rock field reads as many
                             // distinct objects, not three repeated sizes. Trunk matches its tree.
                             var treeScale: Float = 1.0
-                            if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder || prop.kind == .foliageCard {
+                            if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder
+                                || prop.kind == .foliageCard || prop.kind == .greeneryCard || prop.kind == .treeBillboard {
                                 var sj = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 40503 &+ UInt32(prop.subRow &* 7 &+ prop.subCol)
                                 sj ^= sj >> 13
                                 let jitter = 0.78 + 0.44 * Float(sj & 0xFFFF) / 65535.0   // ×0.78…1.22
-                                // trees/boulders: `state` = size bucket. foliage: `state` = leaf
-                                // slice (not size), so size is jitter-only.
-                                let sizeBase: Float = prop.kind == .foliageCard ? 0.95 : [0.62, 0.95, 1.45][max(0, min(2, prop.state))]
+                                // trees/boulders: `state` = size bucket. foliage/greenery/tree-sprite:
+                                // `state` = texture slice (not size), so size is a per-kind base × jitter.
+                                let sizeBase: Float
+                                switch prop.kind {
+                                case .foliageCard:  sizeBase = 0.95
+                                case .greeneryCard: sizeBase = 0.6
+                                case .treeBillboard: sizeBase = 1.0     // mesh is already tall
+                                default:            sizeBase = [0.62, 0.95, 1.45][max(0, min(2, prop.state))]
+                                }
                                 treeScale = sizeBase * jitter
                             }
                             let pm = restM
@@ -263,6 +270,13 @@ final class SceneBuilder {
                                 s ^= s >> 15
                                 color = mix(SIMD4(0.18, 0.38, 0.16, 1.0), SIMD4(0.34, 0.55, 0.26, 1.0),
                                             t: Float(s & 0xFFFF) / 65535.0)
+                            }
+                            if prop.kind == .greeneryCard || prop.kind == .treeBillboard {
+                                // M20: misc_greenery (18) / WenrexaTrees (19). `state` = array slice;
+                                // full-colour sprites, so no tint.
+                                materialID = prop.kind == .greeneryCard ? 18 : 19
+                                propStyleSeed = UInt32(max(0, prop.state))
+                                color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .portalLamp {
                                 if model.sealedPortalCubies.contains(ci) {

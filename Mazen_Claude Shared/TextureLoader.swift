@@ -170,4 +170,41 @@ enum TextureLoader {
         }
         return loaded > 0 ? texture : nil
     }
+
+    /// M20 — an array of already-alpha PNGs (misc_greenery, WenrexaTrees) into `size²` slices. Each
+    /// source is fitted **preserving aspect** and centred (transparent padding), so portrait
+    /// sprites aren't squished; the transparent margin is discarded by the cutout material. A
+    /// missing file leaves its slice transparent, never a crash.
+    static func loadRGBAArray(device: MTLDevice, urls: [URL], size: Int = 512) -> MTLTexture? {
+        guard !urls.isEmpty else { return nil }
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type2DArray
+        desc.pixelFormat = .rgba8Unorm_srgb
+        desc.width = size; desc.height = size
+        desc.arrayLength = urls.count
+        desc.storageMode = .shared; desc.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        texture.label = "FoliageArray"
+        let bpr = size * 4, bpi = bpr * size
+        let rgb = CGColorSpaceCreateDeviceRGB()
+        var loaded = 0
+        for (i, url) in urls.enumerated() {
+            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else {
+                NSLog("Foliage png missing: %@", url.path); continue
+            }
+            var px = [UInt8](repeating: 0, count: bpi)   // transparent padding
+            guard let ctx = CGContext(data: &px, width: size, height: size, bitsPerComponent: 8,
+                                      bytesPerRow: bpr, space: rgb,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+            let w = CGFloat(img.width), h = CGFloat(img.height)
+            let scale = min(CGFloat(size) / w, CGFloat(size) / h)
+            let fw = w * scale, fh = h * scale
+            ctx.draw(img, in: CGRect(x: (CGFloat(size) - fw) / 2, y: (CGFloat(size) - fh) / 2, width: fw, height: fh))
+            texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: size, height: size, depth: 1)),
+                            mipmapLevel: 0, slice: i, withBytes: px, bytesPerRow: bpr, bytesPerImage: bpi)
+            loaded += 1
+        }
+        return loaded > 0 ? texture : nil
+    }
 }

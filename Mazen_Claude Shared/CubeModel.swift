@@ -69,16 +69,20 @@ class CubeModel {
     /// laid out in a documented order (see Gallery Layout doc) so assets can be evaluated in near-
     /// isolation. The debug HUD (H) names the item on the player's tile. Sealed + region-revealed
     /// like the entry world. Catalog order = the grid reading order (row-major, near row first).
-    static let galleryCatalog: [(PropKind, Int)] = [
-        (.topiary, 0), (.obelisk, 0), (.chest, 0), (.dial, 0), (.dial, 1),
-        (.glyph, 0), (.tree, 0), (.tree, 1), (.tree, 2), (.treeTrunk, 0),
-        (.boulder, 0), (.boulder, 1), (.boulder, 2),
-        (.foliageCard, 0), (.foliageCard, 1), (.foliageCard, 2), (.foliageCard, 3),
-        (.foliageCard, 4), (.foliageCard, 5), (.foliageCard, 6), (.foliageCard, 7),
-    ]
+    static let galleryCatalog: [(PropKind, Int)] = {
+        var c: [(PropKind, Int)] = [
+            (.topiary, 0), (.obelisk, 0), (.chest, 0), (.dial, 0), (.dial, 1),
+            (.glyph, 0), (.tree, 0), (.tree, 1), (.tree, 2), (.treeTrunk, 0),
+            (.boulder, 0), (.boulder, 1), (.boulder, 2),
+        ]
+        c += (0..<8).map { (.foliageCard, $0) }      // 8 LeafSet bushes
+        c += (0..<22).map { (.greeneryCard, $0) }    // 22 misc_greenery plants
+        c += (0..<27).map { (.treeBillboard, $0) }   // 27 WenrexaTrees sprites
+        return c
+    }()
     private func stampGallery() {
         let n = size, c = n / 2
-        let cols = 5
+        let cols = 8
         let catalog = Self.galleryCatalog
         let rows = (catalog.count + cols - 1) / cols
         let gTop = max(1, c - rows), gLeft = max(1, c - cols / 2)     // grid sits just north of spawn

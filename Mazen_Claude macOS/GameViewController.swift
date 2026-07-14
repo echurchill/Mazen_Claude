@@ -83,10 +83,16 @@ class GameViewController: NSViewController {
             let props = gs.cubeModel.cubies[ci].facelets[fi].props.filter { $0.kind != .portalLamp }
             if !props.isEmpty {
                 here = props.map { p -> String in
-                    if p.kind == .foliageCard, Renderer.leafSets.indices.contains(p.state) {
-                        return "foliageCard → \(Renderer.leafSets[p.state]) (slice \(p.state))"
+                    switch p.kind {
+                    case .foliageCard where Renderer.leafSets.indices.contains(p.state):
+                        return "\(Renderer.leafSets[p.state]) (bush slice \(p.state))"
+                    case .greeneryCard where Renderer.greenerySets.indices.contains(p.state):
+                        return "\(Renderer.greenerySets[p.state]) (greenery slice \(p.state))"
+                    case .treeBillboard where Renderer.treeSprites.indices.contains(p.state):
+                        return "WenrexaTree \(Renderer.treeSprites[p.state]) (tree slice \(p.state))"
+                    default:
+                        return "\(p.kind)" + (p.state != 0 ? " [state \(p.state)]" : "")
                     }
-                    return "\(p.kind)" + (p.state != 0 ? " [state \(p.state)]" : "")
                 }.joined(separator: ", ")
             }
         }

@@ -43,9 +43,33 @@ grid from its near-left corner (r = 0 nearest).
 *(The single source of truth is `CubeModel.galleryCatalog`; this table mirrors it. The `Here:`
 HUD line is authoritative if they ever drift.)*
 
+## What's in it now (2026-07-14)
+The catalog (`CubeModel.galleryCatalog`, 8 columns, near row first) holds **70 items**:
+- **Props** (13): topiary, obelisk, chest, dial ×2 states, glyph, tree ×3 sizes, treeTrunk,
+  boulder ×3 sizes.
+- **Leaf bushes** (8) — the LeafSet slices (`Renderer.leafSets`), material 17.
+- **misc_greenery** (22) — fern/flower/plant cards (`Renderer.greenerySets`), material 18.
+- **WenrexaTrees** (27) — billboard sprites `01`–`27` (`Renderer.treeSprites`), material 19.
+
+The **HUD (H) `Here:` line names each** exactly — e.g. `vegetation_fern_08 (greenery slice 4)`,
+`WenrexaTree 12 (tree slice 11)`, `LeafSet022 (bush slice 4)`. **That is the name to give me** for
+a keep/drop/replace decision.
+
+## Naming for replacements
+Walk the grid, and for each natural-world layer tell me by the HUD name what to use:
+- **bushes** → which LeafSet(s)
+- **undergrowth** → which `vegetation_*` greenery cards
+- **trees** → which WenrexaTree numbers (and/or the procedural cones / imported pinetree)
+Then I'll swap the natural/garden worlds' scatter to your picks.
+
+## Known first-pass caveats (polish after you pick)
+- Sprites are **fitted into a square slice, centred** (transparent padding) — a tall tree may sit
+  a bit high / not perfectly grounded; orientation is untested (if any render upside-down, it's a
+  one-line UV flip). All rendered on the crossed-card mesh, not yet camera-facing billboards.
+- Cutout is a hard alpha-test at 0.5 (slightly aliased edges); shadow pass still casts quad-ish
+  shadows. Both improve once the winners are chosen.
+
 ## Growing it
-As new asset layers land, append to `CubeModel.galleryCatalog` and they appear in the grid
-automatically (and the HUD names them). Planned next: **misc_greenery** undergrowth cards,
-**WenrexaTrees** billboard sprites, the **pinetree** imported model, and a row of **hedge-texture**
-wall segments (para pack). The world is size 15, flat (roundness 0), sealed + region-revealed, so
-it stays a clean isolated showroom.
+Append to `CubeModel.galleryCatalog`; items appear automatically and the HUD names them. World is
+size 25, flat (roundness 0), sealed + region-revealed — a clean isolated showroom. Still to add
+when wanted: the **pinetree** imported model and a row of **hedge-texture** wall segments (para).

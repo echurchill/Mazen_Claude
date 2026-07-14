@@ -91,6 +91,18 @@ class Renderer: NSObject, MTKViewDelegate {
     /// per bush via `styleSeed % leafSetCount`, so bushes vary.
     static let leafSets = ["LeafSet004", "LeafSet010", "LeafSet014", "LeafSet017",
                            "LeafSet022", "LeafSet023", "LeafSet024", "LeafSet030"]
+    var greeneryArray: MTLTexture?   // M20: misc_greenery card array (RGBA); slice per plant
+    var treeSpriteArray: MTLTexture? // M20: WenrexaTrees billboard-sprite array (RGBA); slice per tree
+    /// misc_greenery card filenames (order = slice index; also the HUD name).
+    static let greenerySets = [
+        "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
+        "vegetation_fern_08", "vegetation_grass_card_03", "vegetation_leaf_dandelion_03", "vegetation_leaf_dry_01",
+        "vegetation_leaf_maple_01", "vegetation_smallplant_03", "vegetation_smallplant_21", "vegetation_strawberry_01",
+        "vegetation_strawberry_03", "vegetation_strawberry_04", "vegetation_sunflower_03", "vegetation_tree_branch_10",
+        "vegetation_tree_branch_14", "vegetation_tree_branch_16b", "vegetation_tree_branch_17", "vegetation_tree_branch_25",
+        "vegetation_tree_branch_30", "vegetation_tree_seed_01"]
+    /// WenrexaTrees sprite filenames "01".."27" (order = slice index).
+    static let treeSprites = (1...27).map { String(format: "%02d", $0) }
     var normalArray: MTLTexture!
     var skyboxTexture: MTLTexture!
     var shadowMapTexture: MTLTexture!
@@ -171,7 +183,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.maxBufferBindCount = 4
         self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
-        argDesc.maxTextureBindCount = 6   // 0..3 maze/shadow + 4 = M12 asset diffuse + 5 = M20 leaf atlas
+        argDesc.maxTextureBindCount = 8   // +6 greenery +7 tree-sprite arrays (M20)
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
@@ -232,6 +244,12 @@ class Renderer: NSObject, MTKViewDelegate {
             return (URL(fileURLWithPath: "\(dir)_Color.png"), URL(fileURLWithPath: "\(dir)_Opacity.png"))
         }
         self.leafArray = TextureLoader.loadCutoutArray(device: device, sets: leafSetPairs)
+        // M20: misc_greenery (fern/flower/plant cards) + WenrexaTrees (billboard sprites) — already
+        // alpha PNGs, fitted into square array slices.
+        self.greeneryArray = TextureLoader.loadRGBAArray(device: device,
+            urls: Renderer.greenerySets.map { URL(fileURLWithPath: "\(modelsRoot)/misc_greenery/\($0).png") })
+        self.treeSpriteArray = TextureLoader.loadRGBAArray(device: device,
+            urls: Renderer.treeSprites.map { URL(fileURLWithPath: "\(modelsRoot)/WenrexaTrees/\($0).png") }, size: 384)
         self.texSampler = PipelineFactory.makeSampler(device: device)
 
         // Per-frame buffers. R2.16: a tile emits SEVERAL instances (frame rail + floor + path-cross
@@ -279,6 +297,8 @@ class Renderer: NSObject, MTKViewDelegate {
         if let n = self.normalArray { rs.addAllocation(n) }
         if let s = self.skyboxTexture { rs.addAllocation(s) }
         if let lf = self.leafArray { rs.addAllocation(lf) }
+        if let g = self.greeneryArray { rs.addAllocation(g) }
+        if let t = self.treeSpriteArray { rs.addAllocation(t) }
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
@@ -378,8 +398,9 @@ class Renderer: NSObject, MTKViewDelegate {
                     // (Eddie). The stamp reveals ONLY that region, so DON'T reveal-all here.
                     w = GameState(size: 25, name: dest, stamp: .gardenMaze)
                 case "gallery":
-                    // M20 dev tool — flat prop/foliage grid (Y key). Stamp does its own partial reveal.
-                    w = GameState(size: 15, name: dest, stamp: .gallery)
+                    // M20 dev tool — flat prop/foliage grid (Y key). Size 25 to fit the full catalog
+                    // (props + 8 bushes + 22 greenery + 27 tree sprites). Stamp partial-reveals.
+                    w = GameState(size: 25, name: dest, stamp: .gallery)
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
@@ -576,7 +597,9 @@ class Renderer: NSObject, MTKViewDelegate {
             fogFar: fogFar,
             orbitBlend: isOrbit ? 1 : 0,
             skyDistance: skyDistance,
-            leafLoaded: leafArray != nil ? 1 : 0
+            leafLoaded: leafArray != nil ? 1 : 0,
+            greeneryLoaded: greeneryArray != nil ? 1 : 0,
+            treeSpriteLoaded: treeSpriteArray != nil ? 1 : 0
         )
     }
 
@@ -791,6 +814,8 @@ class Renderer: NSObject, MTKViewDelegate {
         if let n = normalArray { fragmentArgTable.setTexture(n.gpuResourceID, index: TextureIndex.normalArray.rawValue) }
         if let sb = skyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
         if let lf = leafArray { fragmentArgTable.setTexture(lf.gpuResourceID, index: TextureIndex.leaf.rawValue) }
+        if let g = greeneryArray { fragmentArgTable.setTexture(g.gpuResourceID, index: TextureIndex.greenery.rawValue) }
+        if let t = treeSpriteArray { fragmentArgTable.setTexture(t.gpuResourceID, index: TextureIndex.treeSprite.rawValue) }
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
         // Keep the asset-diffuse slot bound to a valid texture for the maze draws (they don't
         // sample it, but the shader declares it); the prop loop rebinds it per-prop below.
