@@ -86,12 +86,16 @@ class CubeModel {
     /// the rest are singletons pending his mapping. (Slice = filename−1: "01"→0 … "27"→26.)
     static let treeGroups: [[Int]] = {
         var g: [[Int]] = [
-            [23, 24, 25, 26],   // filenames 24–27: one Tall Purple tree
-            [0, 1, 2],          // filenames 1–3: one Wide Purple tree
-            [11, 10, 9],        // filenames 12,11,10: one Dead tree
+            [23, 24, 25, 26],   // filenames 24–27: Tall Purple
+            [0, 1, 2],          // filenames 1–3: Wide Purple
+            [11, 10, 9],        // filenames 12,11,10: Dead
+            [7, 8, 17, 5],      // filenames 8,9,18,6: Orange
+            [20, 21, 22],       // filenames 21–23: Dark Red
+            [6, 16],            // filenames 7,17: Tall Green
+            [12, 13],           // filenames 13,14: Dark Green
         ]
         let used = Set(g.flatMap { $0 })
-        for i in 0..<27 where !used.contains(i) { g.append([i]) }   // ungrouped sprites → single-view
+        for i in 0..<27 where !used.contains(i) { g.append([i]) }   // ungrouped (4,5,15,16,19,20) → single-view
         return g
     }()
 

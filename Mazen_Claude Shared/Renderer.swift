@@ -264,7 +264,8 @@ class Renderer: NSObject, MTKViewDelegate {
         self.greeneryArray = TextureLoader.loadRGBAArray(device: device,
             urls: Renderer.greenerySets.map { URL(fileURLWithPath: "\(modelsRoot)/misc_greenery/\($0).png") })
         self.treeSpriteArray = TextureLoader.loadRGBAArray(device: device,
-            urls: Renderer.treeSprites.map { URL(fileURLWithPath: "\(modelsRoot)/WenrexaTrees/\($0).png") }, size: 384)
+            urls: Renderer.treeSprites.map { URL(fileURLWithPath: "\(modelsRoot)/WenrexaTrees/\($0).png") },
+            size: 384, centerOnTrunk: true)
         self.texSampler = PipelineFactory.makeSampler(device: device)
 
         // Per-frame buffers. R2.16: a tile emits SEVERAL instances (frame rail + floor + path-cross

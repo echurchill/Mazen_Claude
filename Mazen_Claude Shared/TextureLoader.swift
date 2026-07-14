@@ -175,7 +175,7 @@ enum TextureLoader {
     /// source is fitted **preserving aspect** and centred (transparent padding), so portrait
     /// sprites aren't squished; the transparent margin is discarded by the cutout material. A
     /// missing file leaves its slice transparent, never a crash.
-    static func loadRGBAArray(device: MTLDevice, urls: [URL], size: Int = 512) -> MTLTexture? {
+    static func loadRGBAArray(device: MTLDevice, urls: [URL], size: Int = 512, centerOnTrunk: Bool = false) -> MTLTexture? {
         guard !urls.isEmpty else { return nil }
         let desc = MTLTextureDescriptor()
         desc.textureType = .type2DArray
@@ -187,6 +187,25 @@ enum TextureLoader {
         texture.label = "FoliageArray"
         let bpr = size * 4, bpi = bpr * size
         let rgb = CGColorSpaceCreateDeviceRGB()
+
+        /// The horizontal centre (native px) of the opaque content in the bottom band — i.e. the
+        /// trunk. So intersecting tree cards can share the trunk axis instead of the image centre.
+        func trunkX(_ img: CGImage) -> CGFloat {
+            let nw = img.width, nh = img.height, nbpr = nw * 4
+            var npx = [UInt8](repeating: 0, count: nbpr * nh)
+            guard let nctx = CGContext(data: &npx, width: nw, height: nh, bitsPerComponent: 8, bytesPerRow: nbpr,
+                                       space: rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return CGFloat(nw) / 2 }
+            nctx.draw(img, in: CGRect(x: 0, y: 0, width: nw, height: nh))
+            var minx = nw, maxx = -1
+            for row in 0..<max(1, nh / 12) {          // buffer row 0 = image bottom (the base)
+                for x in 0..<nw where npx[(row * nw + x) * 4 + 3] > 40 {
+                    if x < minx { minx = x }; if x > maxx { maxx = x }
+                }
+            }
+            return maxx >= minx ? CGFloat(minx + maxx) / 2 : CGFloat(nw) / 2
+        }
+
         var loaded = 0
         for (i, url) in urls.enumerated() {
             guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -200,10 +219,11 @@ enum TextureLoader {
             let w = CGFloat(img.width), h = CGFloat(img.height)
             let scale = min(CGFloat(size) / w, CGFloat(size) / h)
             let fw = w * scale, fh = h * scale
-            // BOTTOM-align (CG y=0 = the card base), centred horizontally — so a plant/tree sits ON
-            // the ground regardless of its source aspect ratio (centring would float non-portrait
-            // sprites by half their vertical padding, an amount that varies per sprite).
-            ctx.draw(img, in: CGRect(x: (CGFloat(size) - fw) / 2, y: 0, width: fw, height: fh))
+            // BOTTOM-align (CG y=0 = card base) so it sits on the ground regardless of source aspect.
+            // Horizontally: centre the TRUNK (its detected base) on the slice centre when
+            // centerOnTrunk (so intersecting tree cards share the trunk axis); else centre the image.
+            let xoff = centerOnTrunk ? (CGFloat(size) / 2 - trunkX(img) * scale) : (CGFloat(size) - fw) / 2
+            ctx.draw(img, in: CGRect(x: xoff, y: 0, width: fw, height: fh))
             texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: size, height: size, depth: 1)),
                             mipmapLevel: 0, slice: i, withBytes: px, bytesPerRow: bpr, bytesPerImage: bpi)
             loaded += 1
