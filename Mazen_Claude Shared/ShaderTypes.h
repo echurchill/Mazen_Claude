@@ -25,6 +25,7 @@ typedef NS_ENUM(EnumBackingType, TextureIndex)
     TextureIndexSkybox       = 2,
     TextureIndexShadowMap    = 3,
     TextureIndexAssetDiffuse = 4,   // M12: imported prop's diffuse texture
+    TextureIndexLeaf         = 5,   // M20: leaf atlas (RGB colour + opacity in alpha) for cutout foliage
 };
 
 typedef struct
@@ -51,6 +52,7 @@ typedef struct
     float orbitBlend;            // 1 = orbit camera (stone ground base), 0 = first-person (gravel)
     float skyDistance;           // beyond this, geometry is a SKY object (the counterpart world in
                                  // the sky) — outside the local atmosphere, so it takes no fog
+    float leafLoaded;            // M20: 1 = a real leaf atlas is bound (sample it), 0 = fall back to the procedural mask
 } FrameUniforms;
 
 typedef struct

@@ -256,6 +256,7 @@ fragment float4 fragmentShader(
     texture2d_array<float> normalArray [[texture(TextureIndexNormalArray)]],
     depth2d<float> shadowMap [[texture(TextureIndexShadowMap)]],
     texture2d<float> assetDiffuse [[texture(TextureIndexAssetDiffuse)]],
+    texture2d<float> leafTex [[texture(TextureIndexLeaf)]],
     sampler texSampler [[sampler(0)]]
 ) {
     float3 lightDir = normalize(frame.lightDirection);
@@ -509,17 +510,23 @@ fragment float4 fragmentShader(
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
     } else if (in.materialID == 17) {
-        // M20 alpha-cutout foliage card. PLACEHOLDER leaf mask (procedural) until a real leaf
-        // texture with alpha drops in — then this samples the texture's alpha instead. Discard the
-        // gaps so a flat card reads as leaves. Two-sided lighting (foliage is lit from either side).
-        float2 uv = in.texCoord;
-        float2 p = uv - 0.5;
-        float radial = length(p * float2(1.0, 1.25));               // rounded, slightly tall
-        float clump = fbm(uv * 5.0 + float2(seedF, -seedF), 3);    // leafy clumps/holes
-        float mask = (1.0 - smoothstep(0.34, 0.5, radial)) * smoothstep(0.34, 0.56, clump);
-        if (mask < 0.22) discard_fragment();
-        float twoSided = abs(dot(normal, lightDir)) * 0.5 + 0.5;    // lit from either face
-        color = in.color.rgb * (0.6 + 0.55 * clump);               // depth from the clump noise
+        // M20 alpha-cutout foliage card. Sample the real leaf atlas (RGB colour + opacity in alpha)
+        // when one is bound; else fall back to a procedural leaf mask. Discard the gaps so a flat
+        // card reads as leaves. Two-sided lighting (foliage is lit from either face).
+        float twoSided = abs(dot(normal, lightDir)) * 0.5 + 0.5;
+        if (frame.leafLoaded > 0.5) {
+            float4 leaf = leafTex.sample(texSampler, in.texCoord);
+            if (leaf.a < 0.5) discard_fragment();
+            color = leaf.rgb * (0.82 + 0.45 * in.color.g);        // atlas colour, subtle per-bush brightness
+        } else {
+            float2 uv = in.texCoord;
+            float2 p = uv - 0.5;
+            float radial = length(p * float2(1.0, 1.25));
+            float clump = fbm(uv * 5.0 + float2(seedF, -seedF), 3);
+            float mask = (1.0 - smoothstep(0.34, 0.5, radial)) * smoothstep(0.34, 0.56, clump);
+            if (mask < 0.22) discard_fragment();
+            color = in.color.rgb * (0.6 + 0.55 * clump);
+        }
         lighting = skyAmbient * 0.40 + sunColor * 0.55 * twoSided * shadowFactor;
     } else {
         color = in.color.rgb;

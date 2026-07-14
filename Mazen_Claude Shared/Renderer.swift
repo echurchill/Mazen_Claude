@@ -86,6 +86,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     var tileMeshLib: TileMeshLibrary
     var diffuseArray: MTLTexture!
+    var leafTexture: MTLTexture?   // M20: composed leaf atlas (RGB + opacity), nil ⇒ procedural foliage fallback
     var normalArray: MTLTexture!
     var skyboxTexture: MTLTexture!
     var shadowMapTexture: MTLTexture!
@@ -166,7 +167,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.maxBufferBindCount = 4
         self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
-        argDesc.maxTextureBindCount = 5   // 0..3 maze/shadow + 4 = M12 asset diffuse
+        argDesc.maxTextureBindCount = 6   // 0..3 maze/shadow + 4 = M12 asset diffuse + 5 = M20 leaf atlas
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
@@ -219,6 +220,13 @@ class Renderer: NSObject, MTKViewDelegate {
         self.normalArray = TextureLoader.loadTextureArray(device: device,
             names: ["hedge_nor", "gravel_nor", "stone_nor"], srgb: false)
         self.skyboxTexture = TextureLoader.loadTexture2D(device: device, name: "skybox", srgb: true)
+        // M20: the alpha-cutout leaf atlas (ambientCG LeafSet024 — Color + Opacity composed to RGBA).
+        // Dev absolute path like the other imported assets; bundle for shipping later.
+        let leafDir = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models/LeafSet024_1K-PNG"
+        self.leafTexture = TextureLoader.loadCutoutTexture(
+            device: device,
+            colorURL: URL(fileURLWithPath: "\(leafDir)/LeafSet024_1K-PNG_Color.png"),
+            opacityURL: URL(fileURLWithPath: "\(leafDir)/LeafSet024_1K-PNG_Opacity.png"))
         self.texSampler = PipelineFactory.makeSampler(device: device)
 
         // Per-frame buffers. R2.16: a tile emits SEVERAL instances (frame rail + floor + path-cross
@@ -265,6 +273,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let d = self.diffuseArray { rs.addAllocation(d) }
         if let n = self.normalArray { rs.addAllocation(n) }
         if let s = self.skyboxTexture { rs.addAllocation(s) }
+        if let lf = self.leafTexture { rs.addAllocation(lf) }
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
@@ -558,7 +567,8 @@ class Renderer: NSObject, MTKViewDelegate {
             fogNear: fogNear,
             fogFar: fogFar,
             orbitBlend: isOrbit ? 1 : 0,
-            skyDistance: skyDistance
+            skyDistance: skyDistance,
+            leafLoaded: leafTexture != nil ? 1 : 0
         )
     }
 
@@ -772,6 +782,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let d = diffuseArray { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.diffuseArray.rawValue) }
         if let n = normalArray { fragmentArgTable.setTexture(n.gpuResourceID, index: TextureIndex.normalArray.rawValue) }
         if let sb = skyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
+        if let lf = leafTexture { fragmentArgTable.setTexture(lf.gpuResourceID, index: TextureIndex.leaf.rawValue) }
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
         // Keep the asset-diffuse slot bound to a valid texture for the maze draws (they don't
         // sample it, but the shader declares it); the prop loop rebinds it per-prop below.

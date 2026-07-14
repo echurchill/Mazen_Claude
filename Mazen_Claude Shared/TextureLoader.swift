@@ -124,4 +124,43 @@ enum TextureLoader {
                         mipmapLevel: 0, withBytes: pixels, bytesPerRow: bytesPerRow)
         return texture
     }
+
+    /// M20 — compose an alpha-cutout leaf texture from an ambientCG-style pair: RGB from the Color
+    /// map, alpha from the separate grayscale Opacity map. (RGBA sRGB; alpha stays linear for the
+    /// discard threshold. Not premultiplied — alpha-test doesn't blend, so it uses RGB as-is.)
+    static func loadCutoutTexture(device: MTLDevice, colorURL: URL, opacityURL: URL) -> MTLTexture? {
+        guard let cSrc = CGImageSourceCreateWithURL(colorURL as CFURL, nil),
+              let color = CGImageSourceCreateImageAtIndex(cSrc, 0, nil) else {
+            NSLog("Leaf colour not found/decodable: %@", colorURL.path); return nil
+        }
+        let w = color.width, h = color.height
+        let bpr = w * 4
+        var pixels = [UInt8](repeating: 255, count: bpr * h)
+        let rgb = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8,
+                                  bytesPerRow: bpr, space: rgb,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.draw(color, in: CGRect(x: 0, y: 0, width: w, height: h))
+        // Opacity → alpha (its red channel; the map is grayscale so any channel works).
+        if let oSrc = CGImageSourceCreateWithURL(opacityURL as CFURL, nil),
+           let opacity = CGImageSourceCreateImageAtIndex(oSrc, 0, nil),
+           opacity.width == w, opacity.height == h {
+            var op = [UInt8](repeating: 255, count: bpr * h)
+            if let octx = CGContext(data: &op, width: w, height: h, bitsPerComponent: 8, bytesPerRow: bpr,
+                                    space: rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+                octx.draw(opacity, in: CGRect(x: 0, y: 0, width: w, height: h))
+                for i in 0..<(w * h) { pixels[i * 4 + 3] = op[i * 4] }
+            }
+        } else {
+            NSLog("Leaf opacity missing/size-mismatched (%@) — leaf will render fully opaque", opacityURL.path)
+        }
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm_srgb, width: w, height: h, mipmapped: false)
+        desc.storageMode = .shared
+        desc.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        texture.label = colorURL.deletingLastPathComponent().lastPathComponent
+        texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: w, height: h, depth: 1)),
+                        mipmapLevel: 0, withBytes: pixels, bytesPerRow: bpr)
+        return texture
+    }
 }
