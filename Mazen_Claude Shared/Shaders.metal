@@ -533,16 +533,20 @@ fragment float4 fragmentShader(
         lighting = skyAmbient * 0.40 + sunColor * 0.55 * twoSided * shadowFactor;
     } else if (in.materialID == 18) {
         // M20 misc-greenery card (fern/flower/plant) — already-alpha RGBA, styleSeed = slice.
+        // V-flipped: CGImage rows load top-down but Metal samples v=0 at top, so uncorrected sprites
+        // render upside-down (invisible on the symmetric leaf atlas, obvious on a plant).
         if (frame.greeneryLoaded > 0.5) {
-            float4 g = greeneryTex.sample(texSampler, in.texCoord, in.styleSeed % greeneryTex.get_array_size());
+            float2 uv = float2(in.texCoord.x, 1.0 - in.texCoord.y);
+            float4 g = greeneryTex.sample(texSampler, uv, in.styleSeed % greeneryTex.get_array_size());
             if (g.a < 0.5) discard_fragment();
             color = g.rgb;
         } else { color = in.color.rgb; }
         lighting = skyAmbient * 0.42 + sunColor * 0.55 * (abs(dot(normal, lightDir)) * 0.5 + 0.5) * shadowFactor;
     } else if (in.materialID == 19) {
-        // M20 WenrexaTrees billboard sprite — already-alpha RGBA, styleSeed = slice.
+        // M20 WenrexaTrees billboard sprite — already-alpha RGBA, styleSeed = slice. V-flipped (see 18).
         if (frame.treeSpriteLoaded > 0.5) {
-            float4 t = treeTex.sample(texSampler, in.texCoord, in.styleSeed % treeTex.get_array_size());
+            float2 uv = float2(in.texCoord.x, 1.0 - in.texCoord.y);
+            float4 t = treeTex.sample(texSampler, uv, in.styleSeed % treeTex.get_array_size());
             if (t.a < 0.5) discard_fragment();
             color = t.rgb;
         } else { color = in.color.rgb; }
