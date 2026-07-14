@@ -200,7 +200,10 @@ enum TextureLoader {
             let w = CGFloat(img.width), h = CGFloat(img.height)
             let scale = min(CGFloat(size) / w, CGFloat(size) / h)
             let fw = w * scale, fh = h * scale
-            ctx.draw(img, in: CGRect(x: (CGFloat(size) - fw) / 2, y: (CGFloat(size) - fh) / 2, width: fw, height: fh))
+            // BOTTOM-align (CG y=0 = the card base), centred horizontally — so a plant/tree sits ON
+            // the ground regardless of its source aspect ratio (centring would float non-portrait
+            // sprites by half their vertical padding, an amount that varies per sprite).
+            ctx.draw(img, in: CGRect(x: (CGFloat(size) - fw) / 2, y: 0, width: fw, height: fh))
             texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: size, height: size, depth: 1)),
                             mipmapLevel: 0, slice: i, withBytes: px, bytesPerRow: bpr, bytesPerImage: bpi)
             loaded += 1

@@ -228,9 +228,11 @@ class TileMeshLibrary {
         propMeshes[PropKind.foliageCard.rawValue] = foliageMesh
         propMeshes[PropKind.greeneryCard.rawValue] = foliageMesh   // M20: greenery reuses the crossed-card mesh
 
-        // M20: a taller crossed card for the WenrexaTrees billboard sprites (portrait aspect).
+        // M20: a tall SINGLE card for the WenrexaTrees billboard sprites — a whole-tree sprite on a
+        // 3-way cross shows three offset (often leaning) trunks; one card reads cleanly. (Not yet
+        // camera-facing — fine for the front-viewed gallery; true billboarding is a later step.)
         let treeBBStart = allIndices.count
-        Self.addFoliageCard(to: &allVerts, indices: &allIndices, ws: ws, height: 1.4, halfWidth: 0.5)
+        Self.addFoliageCard(to: &allVerts, indices: &allIndices, ws: ws, height: 1.4, halfWidth: 0.5, cards: 1)
         propMeshes[PropKind.treeBillboard.rawValue] = TileMesh(vertexOffset: 0, indexOffset: treeBBStart, indexCount: allIndices.count - treeBBStart)
 
         // M19: full-tile ground quad for the natural register (grass/water) — tessellated so it
@@ -647,11 +649,10 @@ class TileMeshLibrary {
     /// this reads as leaves, not solid quads. UVs 0..1 per card (a real leaf texture drops straight
     /// in later; for now the mask is procedural). Rises from the floor; SceneBuilder scales it.
     private static func addFoliageCard(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale,
-                                       height: Float = 0.40, halfWidth: Float = 0.16) {
+                                       height: Float = 0.40, halfWidth: Float = 0.16, cards: Int = 3) {
         let z0 = ws.floorY
         let h = height                // card height (bush/small-tree)
         let hw = halfWidth            // half-width
-        let cards = 3
         func quad(_ ax: Float, _ ay: Float) {
             // A vertical card spanning [-hw,hw] along (ax,ay), from z0 to z0+h. Emit both windings.
             let x0 = -ax * hw, y0 = -ay * hw
