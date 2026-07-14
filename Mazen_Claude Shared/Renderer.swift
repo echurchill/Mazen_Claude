@@ -93,6 +93,11 @@ class Renderer: NSObject, MTKViewDelegate {
                            "LeafSet022", "LeafSet023", "LeafSet024", "LeafSet030"]
     var greeneryArray: MTLTexture?   // M20: misc_greenery card array (RGBA); slice per plant
     var treeSpriteArray: MTLTexture? // M20: WenrexaTrees billboard-sprite array (RGBA); slice per tree
+    /// A 1×1 `type2DArray` placeholder bound to the leaf/greenery/tree-sprite slots when their real
+    /// array is nil. The fragment shader declares those textures unconditionally, so Metal API
+    /// Validation (Xcode's Run) aborts the first draw if a declared slot is never set — even though
+    /// the `*Loaded` flags mean it is never sampled. This keeps every declared slot legally bound.
+    var placeholderArray: MTLTexture!
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
         "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
@@ -262,6 +267,19 @@ class Renderer: NSObject, MTKViewDelegate {
             urls: Renderer.treeSprites.map { URL(fileURLWithPath: "\(modelsRoot)/WenrexaTrees/\($0).png") },
             size: 384, centerOnTrunk: true)
         self.texSampler = PipelineFactory.makeSampler(device: device)
+        // A 1×1 array-texture placeholder for the unconditionally-declared foliage slots (see the
+        // `placeholderArray` doc comment). Never sampled — just keeps the binding legal.
+        let phDesc = MTLTextureDescriptor()
+        phDesc.textureType = .type2DArray
+        phDesc.pixelFormat = .rgba8Unorm_srgb
+        phDesc.width = 1; phDesc.height = 1; phDesc.arrayLength = 1
+        phDesc.storageMode = .shared; phDesc.usage = .shaderRead
+        self.placeholderArray = device.makeTexture(descriptor: phDesc)
+        self.placeholderArray.label = "FoliagePlaceholder"
+        self.placeholderArray.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                                        size: MTLSize(width: 1, height: 1, depth: 1)),
+                                      mipmapLevel: 0, slice: 0,
+                                      withBytes: [UInt8](repeating: 0, count: 4), bytesPerRow: 4, bytesPerImage: 4)
 
         // Per-frame buffers. R2.16: a tile emits SEVERAL instances (frame rail + floor + path-cross
         // + wall + posts; adjacent tiles add dissolve-fog layers; plus props/marker/celestials), so
@@ -310,6 +328,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let lf = self.leafArray { rs.addAllocation(lf) }
         if let g = self.greeneryArray { rs.addAllocation(g) }
         if let t = self.treeSpriteArray { rs.addAllocation(t) }
+        rs.addAllocation(self.placeholderArray)
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
@@ -831,9 +850,12 @@ class Renderer: NSObject, MTKViewDelegate {
         if let d = diffuseArray { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.diffuseArray.rawValue) }
         if let n = normalArray { fragmentArgTable.setTexture(n.gpuResourceID, index: TextureIndex.normalArray.rawValue) }
         if let sb = skyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
-        if let lf = leafArray { fragmentArgTable.setTexture(lf.gpuResourceID, index: TextureIndex.leaf.rawValue) }
-        if let g = greeneryArray { fragmentArgTable.setTexture(g.gpuResourceID, index: TextureIndex.greenery.rawValue) }
-        if let t = treeSpriteArray { fragmentArgTable.setTexture(t.gpuResourceID, index: TextureIndex.treeSprite.rawValue) }
+        // Every declared foliage slot must be bound even when its asset array is nil (the shader's
+        // `*Loaded` flags gate sampling, but Metal validation still requires a bound texture) — fall
+        // back to the 1×1 placeholder array so the first draw doesn't abort under Xcode's validation.
+        fragmentArgTable.setTexture((leafArray ?? placeholderArray).gpuResourceID, index: TextureIndex.leaf.rawValue)
+        fragmentArgTable.setTexture((greeneryArray ?? placeholderArray).gpuResourceID, index: TextureIndex.greenery.rawValue)
+        fragmentArgTable.setTexture((treeSpriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.treeSprite.rawValue)
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
         // Keep the asset-diffuse slot bound to a valid texture for the maze draws (they don't
         // sample it, but the shader declares it); the prop loop rebinds it per-prop below.
