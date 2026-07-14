@@ -188,8 +188,10 @@ enum TextureLoader {
         let bpr = size * 4, bpi = bpr * size
         let rgb = CGColorSpaceCreateDeviceRGB()
 
-        /// The horizontal centre (native px) of the opaque content in the bottom band — i.e. the
-        /// trunk. So intersecting tree cards can share the trunk axis instead of the image centre.
+        /// The horizontal centre (native px) of the trunk: scan UP from the image bottom to the
+        /// first opaque rows (the trunk base) and centre on those, so intersecting tree cards share
+        /// the trunk axis rather than the canopy centre. NOTE: in this CGBitmapContext the buffer's
+        /// row 0 is the image TOP, so the image bottom is the LAST rows — scan those.
         func trunkX(_ img: CGImage) -> CGFloat {
             let nw = img.width, nh = img.height, nbpr = nw * 4
             var npx = [UInt8](repeating: 0, count: nbpr * nh)
@@ -197,11 +199,19 @@ enum TextureLoader {
                                        space: rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
             else { return CGFloat(nw) / 2 }
             nctx.draw(img, in: CGRect(x: 0, y: 0, width: nw, height: nh))
-            var minx = nw, maxx = -1
-            for row in 0..<max(1, nh / 12) {          // buffer row 0 = image bottom (the base)
+            var minx = nw, maxx = -1, contentRows = 0
+            var row = nh - 1                              // image bottom
+            while row >= 0 {
+                var rmin = nw, rmax = -1
                 for x in 0..<nw where npx[(row * nw + x) * 4 + 3] > 40 {
-                    if x < minx { minx = x }; if x > maxx { maxx = x }
+                    if x < rmin { rmin = x }; if x > rmax { rmax = x }
                 }
+                if rmax >= rmin {                         // this row has trunk-base content
+                    minx = min(minx, rmin); maxx = max(maxx, rmax)
+                    contentRows += 1
+                    if contentRows >= max(3, nh / 24) { break }   // enough base rows to centre the trunk
+                }
+                row -= 1
             }
             return maxx >= minx ? CGFloat(minx + maxx) / 2 : CGFloat(nw) / 2
         }
