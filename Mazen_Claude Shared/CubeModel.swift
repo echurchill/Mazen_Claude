@@ -162,10 +162,17 @@ class CubeModel {
     func stampGalleryImports(_ states: [Int]) {
         guard !states.isEmpty else { return }
         let n = size, c = n / 2
-        let row = min(n - 2, c + 3)                 // a dedicated strip, a clear gap south of the grid
         let span = states.count
         let left = max(1, c - span / 2)
         let cLo = max(0, left - 1), cHi = min(n - 1, left + span)
+        // One CONTIGUOUS open rectangle from the catalog room's south row (c+1) down to a strip floor,
+        // fully walkable and OPEN on top so it fuses with the spawn room. It must NOT funnel through
+        // the single centre tile — the return portal sits at (c+1, c), and stepping onto a portal
+        // teleports you home, so a 1-wide corridor there made the models unreachable (Eddie). A wide
+        // walkway lets you reach the models via any column and step *around* the portal.
+        let top = c + 1
+        let bot = min(n - 1, c + 4)                 // strip floor
+        let row = min(bot - 1, c + 3)               // the model row (a walkable rank on each side)
         let all: DirectionMask = [.north, .east, .south, .west]
         func reveal(_ r: Int, _ col: Int, _ op: DirectionMask) {
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { return }
@@ -175,19 +182,28 @@ class CubeModel {
             cubies[ci].facelets[fi].tileState = .discovered
             cubies[ci].facelets[fi].discoveryAmount = 1.0
         }
-        // The eval strip (row-1 … row+1): walkable so the player can circle each model.
-        for r in (row - 1)...min(n - 1, row + 1) {
+        for r in top...bot {
             for col in cLo...cHi {
                 var op = all
-                if r == row + 1 { op.remove(.south) }
+                if r == bot { op.remove(.south) }   // seal the far edge; top stays open toward spawn
                 if col == cLo { op.remove(.west) }
                 if col == cHi { op.remove(.east) }
                 reveal(r, col, op)
             }
         }
-        // A 1-wide corridor down the centre from the portal row to the strip, so it's reachable.
-        for r in (c + 1)...(row - 1) { reveal(r, c, all) }
-        // One model per cell across the strip's centre row.
+        // The return portal (stampGallery put it at (c+1, c), directly south of spawn) now sits right
+        // on the spawn→models path — you'd teleport home the instant you walked toward them. Move it
+        // (and its lamp) to a far corner of the new walkway: still an obvious "step here to leave",
+        // but off the direct path. The exact portal prop is preserved (its state = destination).
+        if let (spci, spfi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c),
+           let (dsci, dsfi) = faceletAt(face: .positiveZ, row: bot, col: cLo) {
+            let moved = cubies[spci].facelets[spfi].props.filter { $0.kind == .portal || $0.kind == .portalLamp }
+            if !moved.isEmpty {
+                cubies[spci].facelets[spfi].props.removeAll { $0.kind == .portal || $0.kind == .portalLamp }
+                cubies[dsci].facelets[dsfi].props.append(contentsOf: moved)
+            }
+        }
+        // One model per cell across the model row.
         for (i, state) in states.enumerated() {
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: row, col: left + i) else { continue }
             cubies[ci].facelets[fi].props.append(
