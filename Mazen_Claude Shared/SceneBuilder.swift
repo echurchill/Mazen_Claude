@@ -148,6 +148,9 @@ final class SceneBuilder {
 
                     switch facelet.tileState {
                     case .unknown:
+                        // M20: a no-fog world (gallery) simply doesn't draw the unexplored tiles —
+                        // no fog wall, just open sky beyond the revealed area.
+                        if model.noFog { break }
                         let inst = InstanceDataSwift(
                             modelMatrix: matrix,
                             baseColor: faceColor * 0.9,

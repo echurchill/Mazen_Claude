@@ -62,6 +62,7 @@ class CubeModel {
             roundness = 1.0         // a round hedged planet
         case .gallery:
             stampGallery()          // flat (roundness stays 0) so each item reads in isolation
+            noFog = true            // a showroom, not a story world — no fog
         }
     }
 
@@ -767,6 +768,11 @@ class CubeModel {
     /// gateways, twistable) but dressed natural — grass floors instead of paved, no dark cube
     /// frame. SceneBuilder reads it. Default false ⇒ maze worlds render byte-identically.
     var naturalDressing = false
+
+    /// M20 — suppress ALL fog for this world (both the unknown-tile fog cubes and the distance
+    /// fog): a dev/showroom world (the gallery) shouldn't have atmosphere. Fog is opt-out — only
+    /// worlds that use it for the story/discovery keep it (Eddie: fog off unless it serves a world).
+    var noFog = false
 
     /// M19 relief — how much the surface rolls into hills, as a fraction of the world radius
     /// (0 = smooth planet, the default for every world today). Consumed by `inflatedUnitPoint`

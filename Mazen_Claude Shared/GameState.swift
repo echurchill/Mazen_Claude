@@ -138,6 +138,10 @@ class GameState {
                 if camera.mode == .firstPerson { steerToLook() }
                 player.tryMoveForward(cubeModel: cubeModel)
             } else if backwardHeld {
+                // Steer to look FIRST, same as forward — else backward moves opposite the stale
+                // discrete facing (which lags the camera after mouselook), so S sometimes went the
+                // wrong way (Eddie). Now it always moves directly away from where you're looking.
+                if camera.mode == .firstPerson { steerToLook() }
                 player.tryMoveBackward(cubeModel: cubeModel)
             }
         }

@@ -587,9 +587,10 @@ class Renderer: NSObject, MTKViewDelegate {
         let isOrbit = gameState.camera.mode == .orbit
         let halfDiagonal = 1.7320508 * ws.faceDistance
         let camDist = simd_length(framePose.position)
-        // Interior worlds (M15.1): no atmosphere yet — fog off (pushed past everything).
-        let fogNear: Float = interior ? 1e6 : (isOrbit ? camDist + halfDiagonal : 1.0)
-        let fogFar: Float = interior ? 2e6 : (isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5)
+        // Interior worlds (M15.1) and no-fog worlds (M20 gallery): fog off (pushed past everything).
+        let noFog = interior || gameState.cubeModel.noFog
+        let fogNear: Float = noFog ? 1e6 : (isOrbit ? camDist + halfDiagonal : 1.0)
+        let fogFar: Float = noFog ? 2e6 : (isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5)
         // Everything local lies within camDist + halfDiagonal of the camera (the far corner of the
         // active world); beyond that is SKY — the counterpart world hanging up there — which sits
         // outside the local atmosphere and must not take fog (from FP it was reading as a silver
