@@ -305,6 +305,9 @@ struct Prop {
     var facing: Heading8 = .n
     /// Free-form per-prop state (e.g. chest open = 1 / closed = 0).
     var state: Int = 0
+    /// M20 — extra rotation about the vertical axis, in degrees (on top of `facing`). Lets several
+    /// billboard cards of ONE tree intersect at even angles (a multi-view "billboard cloud"). 0 = none.
+    var viewAngle: Float = 0
 
     /// M18 Phase 2 — does this prop remove stand cell (subRow, subCol) of a `grid`×`grid`
     /// tile? A solid prop occupies the k×k stand block of its author sub-cell (author grid

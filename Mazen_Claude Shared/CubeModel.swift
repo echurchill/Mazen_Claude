@@ -78,14 +78,41 @@ class CubeModel {
         ]
         c += (0..<8).map { (.foliageCard, $0) }      // 8 LeafSet bushes
         c += (0..<22).map { (.greeneryCard, $0) }    // 22 misc_greenery plants
-        c += (0..<27).map { (.treeBillboard, $0) }   // 27 WenrexaTrees sprites
         return c
     }()
+
+    /// M20 — WenrexaTrees grouped into single trees rendered as **intersecting billboard cards**
+    /// (each entry = the sprite slices, in view order, that form one tree). Eddie's groupings so far;
+    /// the rest are singletons pending his mapping. (Slice = filename−1: "01"→0 … "27"→26.)
+    static let treeGroups: [[Int]] = {
+        var g: [[Int]] = [
+            [23, 24, 25, 26],   // filenames 24–27: one Tall Purple tree
+            [0, 1, 2],          // filenames 1–3: one Wide Purple tree
+            [11, 10, 9],        // filenames 12,11,10: one Dead tree
+        ]
+        let used = Set(g.flatMap { $0 })
+        for i in 0..<27 where !used.contains(i) { g.append([i]) }   // ungrouped sprites → single-view
+        return g
+    }()
+
+    /// Place one WenrexaTrees "tree" (a group of view-slices) as intersecting billboard cards at a
+    /// tile — the cards share the centre and fan out by even angles so the tree reads from any side.
+    private func placeTreeGroup(_ slices: [Int], face: CubeFace, row: Int, col: Int) {
+        guard let (ci, fi) = faceletAt(face: face, row: row, col: col), !slices.isEmpty else { return }
+        let n = slices.count
+        for (i, slice) in slices.enumerated() {
+            // Spread over 180° (cards are double-sided, so 180° covers all directions).
+            let angle = Float(i) * 180.0 / Float(n)
+            cubies[ci].facelets[fi].props.append(Prop(kind: .treeBillboard, subRow: 1, subCol: 1, state: slice, viewAngle: angle))
+        }
+    }
     private func stampGallery() {
         let n = size, c = n / 2
         let cols = 8
         let catalog = Self.galleryCatalog
-        let rows = (catalog.count + cols - 1) / cols
+        let groups = Self.treeGroups
+        let total = catalog.count + groups.count                     // single items + one cell per tree group
+        let rows = (total + cols - 1) / cols
         let gTop = max(1, c - rows), gLeft = max(1, c - cols / 2)     // grid sits just north of spawn
         let rLo = gTop - 1, rHi = min(n - 1, c + 1)
         let cLo = gLeft - 1, cHi = min(n - 1, gLeft + cols)
@@ -105,10 +132,15 @@ class CubeModel {
                 cubies[ci].facelets[fi].discoveryAmount = 1.0
             }
         }
+        func cell(_ k: Int) -> (Int, Int) { (gTop + k / cols, gLeft + k % cols) }
         for (k, item) in catalog.enumerated() {
-            let gr = gTop + k / cols, gc = gLeft + k % cols
+            let (gr, gc) = cell(k)
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
             cubies[ci].facelets[fi].props.append(Prop(kind: item.0, subRow: 1, subCol: 1, facing: .s, state: item.1))
+        }
+        for (j, group) in groups.enumerated() {   // WenrexaTrees, each group = one intersecting-card tree
+            let (gr, gc) = cell(catalog.count + j)
+            placeTreeGroup(group, face: .positiveZ, row: gr, col: gc)
         }
         // Return portal beside the spawn (the player spawns at the face centre, facing the grid).
         if let (ci, fi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c) {
