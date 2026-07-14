@@ -359,12 +359,14 @@ class Renderer: NSObject, MTKViewDelegate {
                     // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
                     w = GameState(size: 7, name: dest, stamp: .natural)
                 case "garden":
-                    // M20 first cut — the natural-maze hybrid garden (V key).
-                    w = GameState(size: 7, name: dest, stamp: .gardenMaze)
+                    // M20 — the entry world: size 25 so the local surface reads flat (little
+                    // apparent curvature), with the natural-maze confined to a sealed entry region
+                    // (Eddie). The stamp reveals ONLY that region, so DON'T reveal-all here.
+                    w = GameState(size: 25, name: dest, stamp: .gardenMaze)
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
-                Self.setupInitialDiscovery(gameState: w)
+                if dest != "garden" { Self.setupInitialDiscovery(gameState: w) }
                 return w
             }
             enterWorld(world)

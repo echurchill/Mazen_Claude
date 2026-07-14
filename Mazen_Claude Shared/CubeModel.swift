@@ -62,32 +62,51 @@ class CubeModel {
         }
     }
 
-    /// M20 first cut — the Journey **garden**: the base generated maze (hedge paths, dead-ends,
-    /// twistable slices — the beats need a maze) DRESSED natural: grass floors (via
-    /// `naturalDressing`), a scatter of trees among the hedges, roundness 1. A loose garden, not a
-    /// labyrinth, per the script — so open a few interior blocks into small clearings. Rough first
-    /// cut to react to; NOT the authored Journey layout. Reached via the debug key.
+    /// M20 — the Journey **entry world**: a large world (size 25 → local surface reads nearly
+    /// flat, little apparent curvature, Eddie) whose natural-maze garden is only a **bounded entry
+    /// region**, SEALED so the player can't wander off into the unauthored rest, and the rest left
+    /// **undiscovered** (fog) so it isn't seen or rendered. Inside the region: the generated hedge
+    /// maze (paths, dead-ends, twistable slices) dressed natural (grass, foliage) via
+    /// `naturalDressing`; a clearing at spawn; the way home. Rough first cut to react to.
     private func stampGardenMaze() {
         let n = size
         let c = n / 2
-        // Loosen the maze into a garden: a central clearing + two smaller ones (open interior edges).
-        stampRoom(face: .positiveZ, top: max(0, c - 1), left: max(0, c - 1), height: min(3, n), width: min(3, n))
-        // A light scatter of trees among the hedges — non-solid (pure dressing for this first cut),
-        // in a corner sub-cell so they sit beside the paths, not on them.
+        let R = 5                                   // entry region half-extent → an (2R+1)² garden
+        let rLo = max(0, c - R), rHi = min(n - 1, c + R)
+        let cLo = max(0, c - R), cHi = min(n - 1, c + R)
+        let portalTile = (min(rHi, c + 1), c)
+
+        // A clearing at spawn (room to get bearings) — done BEFORE sealing so it can't reopen the wall.
+        stampRoom(face: .positiveZ, top: max(rLo, c - 1), left: max(cLo, c - 1), height: 3, width: 3)
+
         func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
             var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
             v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
             return v
         }
-        let portalTile = (min(n - 1, c + 1), c)
-        for (faceIdx, face) in CubeFace.allCases.enumerated() {
-            for row in 0..<n {
-                for col in 0..<n {
-                    if face == .positiveZ && ((row, col) == (c, c) || (row, col) == portalTile) { continue }
-                    guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
-                    let h = hash(faceIdx * 137 + row, col, row &+ col)
-                    guard h % 100 < 22 else { continue }
-                    cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 0, subCol: 0, state: Int((h >> 8) % 3)))
+
+        for r in rLo...rHi {
+            for col in cLo...cHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                // SEAL: close every region-boundary edge that leads outside, so there's no escape.
+                var op = cubies[ci].facelets[fi].mazeTile.openings
+                if r == rLo { op.remove(.north) }
+                if r == rHi { op.remove(.south) }
+                if col == cLo { op.remove(.west) }
+                if col == cHi { op.remove(.east) }
+                cubies[ci].facelets[fi].mazeTile.openings = op
+                // REVEAL only the region (the rest of the world stays .unknown ⇒ fog, unseen).
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+                // Foliage — non-solid dressing (the hedges do the blocking): leafy card bushes and
+                // the odd conifer, off the paths. Skip spawn + portal tiles.
+                if (r, col) == (c, c) || (r, col) == portalTile { continue }
+                let h = hash(r * 37, col, r &+ col)
+                let roll = h % 100
+                if roll < 30 {
+                    cubies[ci].facelets[fi].props.append(Prop(kind: .foliageCard, subRow: 0, subCol: 0, state: Int((h >> 8) % 3)))
+                } else if roll < 44 {
+                    cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 2, subCol: 2, state: Int((h >> 8) % 3)))
                 }
             }
         }
