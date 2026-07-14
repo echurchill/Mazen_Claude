@@ -77,7 +77,7 @@ final class SceneBuilder {
     /// its own tiny sun/moon along. Both default to the identity/normal single-world render.
     func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer,
                worldOffset: float4x4 = matrix_identity_float4x4, includeCelestials: Bool = true,
-               includeMoon: Bool = true) -> SceneDrawData {
+               includeMoon: Bool = true, sunOverride: SIMD3<Float>? = nil) -> SceneDrawData {
         let model = gameState.cubeModel
         // Fold the offset into the spin so every tile/wall/prop/player-marker matrix (all built as
         // `spin * …`) is pushed out together — one injection point for the whole world.
@@ -332,7 +332,10 @@ final class SceneBuilder {
         // Skipped for a counterpart world (M11) — it shouldn't carry its own sun/moon into the sky.
         if includeCelestials {
             let cs = gameState.celestialSystem
-            let sunPos = cs.sunPosition(time: gameState.time)
+            let timeSunPos = cs.sunPosition(time: gameState.time)
+            // Shift+T noon-lock: draw the sun overhead too (same distance), so the visible sun
+            // matches the overhead light instead of sitting low while the ground reads as noon.
+            let sunPos = sunOverride.map { $0 * simd_length(timeSunPos) } ?? timeSunPos
             let sunMat = float4x4.translation(sunPos.x, sunPos.y, sunPos.z) * float4x4.scale(cs.sunSize)
             celestialTiles.append(TileEntry(
                 instance: InstanceDataSwift(modelMatrix: sunMat, baseColor: SIMD4(1.0, 0.93, 0.65, 1.0),

@@ -102,13 +102,14 @@ class GameViewController: NSViewController {
             Camera: %@  Cube: %dx%dx%d
             Frame: %.1f ms  (%.0f fps)
             Twist(G): %@   World(O): %@
-            Roundness(-/=): %.1f   Matte(M): %@
+            Roundness(-/=): %.1f   Matte(M): %@   Noon(⇧T): %@
             """,
             "\(gs.player.face)", gs.player.row, gs.player.col, "\(gs.player.facing)",
             here,
             gs.camera.mode == .orbit ? "orbit" : "FP", gs.cubeModel.size, gs.cubeModel.size, gs.cubeModel.size,
             gs.avgFrameTimeMs, fps, pacing, world, gs.cubeModel.roundness,
-            (renderer?.debugPlainShading ?? false) ? "ON" : "off")
+            (renderer?.debugPlainShading ?? false) ? "ON" : "off",
+            (renderer?.sunNoonLock ?? false) ? "ON" : "off")
         debugLabel?.stringValue = text
     }
 
@@ -159,10 +160,9 @@ class GameViewController: NSViewController {
             gs.startSliceRotation(clockwise: false)
         case 3:       // F — interact with a prop on the current tile
             gs.interact()
-        case 17:      // T — time-scale 1x→8x→60x;  Shift+T — freeze at high noon (stable light)
+        case 17:      // T — time-scale 1x→8x→60x;  Shift+T — toggle "noon at the player" sun-lock
             if event.modifierFlags.contains(.shift) {
-                gs.time = 0          // sun overhead at noon (spin + moon also reset to start)
-                gs.timeScale = 0     // and stop, for predictable time/light
+                renderer.sunNoonLock.toggle()   // sun pinned straight overhead the player, always
             } else {
                 let scales: [Float] = [1, 8, 60]
                 let idx = scales.firstIndex(of: gs.timeScale) ?? 0

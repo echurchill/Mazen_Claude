@@ -165,6 +165,21 @@ class Renderer: NSObject, MTKViewDelegate {
     /// Debug: render the maze as flat matte grey (no texture, normal map, or fog) so the raw
     /// geometry — e.g. M14 roundness — is legible. Toggled with `M`.
     var debugPlainShading = false
+    /// Debug (Shift+T): pin the sun directly overhead the player's current surface point every
+    /// frame — perpetual local noon, wherever the player stands. Even top light for evaluating
+    /// assets. Exterior worlds only (interiors have their own lantern).
+    var sunNoonLock = false
+
+    /// The overhead (local-up) direction over the player in rendered/world space, when noon-lock is
+    /// on — the spun surface normal at the player's tile. `nil` when off / interior (normal sun).
+    private func noonSunDirection() -> SIMD3<Float>? {
+        guard sunNoonLock, !gameState.worldScale.interior else { return nil }
+        let p = gameState.player
+        let m = gameState.cubeModel.inflatedPlacement(face: p.face, row: p.row, col: p.col, localX: 0, localY: 0)
+        let n = SIMD3<Float>(m.columns.2.x, m.columns.2.y, m.columns.2.z)
+        let s = gameState.worldSpinMatrix() * SIMD4<Float>(n.x, n.y, n.z, 0)
+        return simd_normalize(SIMD3<Float>(s.x, s.y, s.z))
+    }
 
     let sceneBuilder = SceneBuilder()
 
@@ -504,7 +519,8 @@ class Renderer: NSObject, MTKViewDelegate {
             ? sceneBuilder.buildSingleTile(tileMeshLib: tileMeshLib, instanceBuffer: buffer)
             : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer,
                                  includeCelestials: !interior,
-                                 includeMoon: counterpart == nil)
+                                 includeMoon: counterpart == nil,
+                                 sunOverride: noonSunDirection())
         opaqueDrawCalls = result.opaque
         translucentDrawCalls = result.translucent
         wallDrawCallRange = result.wallRange
@@ -546,8 +562,9 @@ class Renderer: NSObject, MTKViewDelegate {
         // M15.1 (D2): interior worlds have no sun — a fixed warm "lantern" directional instead
         // (mild positive y so the warm low-sun tint stays subtle; revisit after the loop works).
         let interior = gameState.worldScale.interior
-        let lightDir = interior ? normalize(SIMD3<Float>(0.35, 0.55, 0.75))
-                                : cs.sunDirection(time: gameState.time)
+        // Shift+T noon-lock: sun straight overhead the player (else the normal time-of-day sun).
+        let lightDir = noonSunDirection()
+            ?? (interior ? normalize(SIMD3<Float>(0.35, 0.55, 0.75)) : cs.sunDirection(time: gameState.time))
         let moonDir = cs.moonDirection(time: gameState.time)
         let shadowDir = lightDir.y > -0.05 ? lightDir : (moonDir.y > 0.05 ? moonDir : lightDir)
         let lightPos = shadowDir * ws.lightDistance
