@@ -222,6 +222,10 @@ class TileMeshLibrary {
         Self.addBoulder(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.boulder.rawValue] = TileMesh(vertexOffset: 0, indexOffset: boulderStart, indexCount: allIndices.count - boulderStart)
 
+        let foliageStart = allIndices.count
+        Self.addFoliageCard(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.foliageCard.rawValue] = TileMesh(vertexOffset: 0, indexOffset: foliageStart, indexCount: allIndices.count - foliageStart)
+
         // M19: full-tile ground quad for the natural register (grass/water) — tessellated so it
         // inflates smoothly on the curve, no path-cross split.
         let fieldStart = allIndices.count
@@ -627,6 +631,43 @@ class TileMeshLibrary {
                 verts.append(contentsOf: [vtx(p0, n), vtx(p1, n), vtx(apex, n)])
                 indices.append(contentsOf: [base + 0, base + 1, base + 2])
             }
+        }
+    }
+
+    /// M20 — a leafy bush/tree as crossed **billboard cards**: 3 vertical quads at 60° apart,
+    /// each emitted DOUBLE-SIDED (front + back winding) so both faces light correctly. Rendered
+    /// with the alpha-cutout foliage material (17), which discards the gaps in a leaf mask — so
+    /// this reads as leaves, not solid quads. UVs 0..1 per card (a real leaf texture drops straight
+    /// in later; for now the mask is procedural). Rises from the floor; SceneBuilder scales it.
+    private static func addFoliageCard(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        let h: Float = 0.40           // card height (bush/small-tree)
+        let hw: Float = 0.16          // half-width
+        let cards = 3
+        func quad(_ ax: Float, _ ay: Float) {
+            // A vertical card spanning [-hw,hw] along (ax,ay), from z0 to z0+h. Emit both windings.
+            let x0 = -ax * hw, y0 = -ay * hw
+            let x1 =  ax * hw, y1 =  ay * hw
+            let n = normalize(SIMD3<Float>(-ay, ax, 0))     // card face normal (in-plane, horizontal)
+            func v(_ x: Float, _ y: Float, _ z: Float, _ u: Float, _ vv: Float, _ nn: SIMD3<Float>) -> MazeVertexSwift {
+                MazeVertexSwift(position: SIMD3(x, y, z), normal: nn, texCoord: SIMD2(u, vv), aoFactor: 0.6 + 0.4 * ((z - z0) / h))
+            }
+            // Front face (normal n), CCW.
+            var base = UInt32(verts.count)
+            verts.append(contentsOf: [
+                v(x0, y0, z0, 0, 0, n), v(x1, y1, z0, 1, 0, n), v(x1, y1, z0 + h, 1, 1, n), v(x0, y0, z0 + h, 0, 1, n),
+            ])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            // Back face (normal -n), reversed winding.
+            base = UInt32(verts.count)
+            verts.append(contentsOf: [
+                v(x0, y0, z0, 0, 0, -n), v(x0, y0, z0 + h, 0, 1, -n), v(x1, y1, z0 + h, 1, 1, -n), v(x1, y1, z0, 1, 0, -n),
+            ])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        for i in 0..<cards {
+            let a = Float.pi * Float(i) / Float(cards)      // 0, 60, 120°
+            quad(cosf(a), sinf(a))
         }
     }
 

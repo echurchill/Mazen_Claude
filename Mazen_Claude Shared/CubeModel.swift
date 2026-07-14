@@ -247,8 +247,8 @@ class CubeModel {
                         }
                     } else {
                         let r2 = (h >> 12) % 100
-                        if r2 < 20 {
-                            cubies[ci].facelets[fi].props.append(Prop(kind: .topiary, subRow: 1, subCol: 1))
+                        if r2 < 20 {   // leafy bush — M20 alpha-cutout foliage card
+                            cubies[ci].facelets[fi].props.append(Prop(kind: .foliageCard, subRow: 1, subCol: 1, state: Int((h >> 10) % 3)))
                         } else if r2 < 28 {
                             cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3)))
                         }

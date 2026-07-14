@@ -508,6 +508,19 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 17) {
+        // M20 alpha-cutout foliage card. PLACEHOLDER leaf mask (procedural) until a real leaf
+        // texture with alpha drops in — then this samples the texture's alpha instead. Discard the
+        // gaps so a flat card reads as leaves. Two-sided lighting (foliage is lit from either side).
+        float2 uv = in.texCoord;
+        float2 p = uv - 0.5;
+        float radial = length(p * float2(1.0, 1.25));               // rounded, slightly tall
+        float clump = fbm(uv * 5.0 + float2(seedF, -seedF), 3);    // leafy clumps/holes
+        float mask = (1.0 - smoothstep(0.34, 0.5, radial)) * smoothstep(0.34, 0.56, clump);
+        if (mask < 0.22) discard_fragment();
+        float twoSided = abs(dot(normal, lightDir)) * 0.5 + 0.5;    // lit from either face
+        color = in.color.rgb * (0.6 + 0.55 * clump);               // depth from the clump noise
+        lighting = skyAmbient * 0.40 + sunColor * 0.55 * twoSided * shadowFactor;
     } else {
         color = in.color.rgb;
         lighting = skyAmbient * 0.25 + sunColor * 0.75 * halfLambert * shadowFactor;

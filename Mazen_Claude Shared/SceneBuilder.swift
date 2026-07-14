@@ -56,6 +56,7 @@ final class SceneBuilder {
         .tree:        SIMD4(0.20, 0.44, 0.22, 1.0),  // M19 — conifer green
         .treeTrunk:   SIMD4(0.34, 0.24, 0.15, 1.0),  // M19 — bark brown
         .boulder:     SIMD4(0.44, 0.44, 0.47, 1.0),  // M19 — moon rock grey
+        .foliageCard: SIMD4(0.26, 0.46, 0.22, 1.0),  // M20 — leafy green (alpha-cutout card)
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
@@ -205,7 +206,7 @@ final class SceneBuilder {
                             // AND a per-instance jitter, so a stand / rock field reads as many
                             // distinct objects, not three repeated sizes. Trunk matches its tree.
                             var treeScale: Float = 1.0
-                            if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder {
+                            if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder || prop.kind == .foliageCard {
                                 let sizeBase: Float = [0.62, 0.95, 1.45][max(0, min(2, prop.state))]
                                 var sj = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 40503 &+ UInt32(prop.subRow &* 7 &+ prop.subCol)
                                 sj ^= sj >> 13
@@ -249,6 +250,14 @@ final class SceneBuilder {
                                 s ^= s >> 13
                                 let g = 0.34 + 0.24 * Float(s & 0xFFFF) / 65535.0
                                 color = SIMD4(g, g, g * 1.03, 1.0)
+                            }
+                            if prop.kind == .foliageCard {
+                                // M20: alpha-cutout foliage material (17); vary the green per bush.
+                                materialID = 17
+                                var s = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 668265263
+                                s ^= s >> 15
+                                color = mix(SIMD4(0.18, 0.38, 0.16, 1.0), SIMD4(0.34, 0.55, 0.26, 1.0),
+                                            t: Float(s & 0xFFFF) / 65535.0)
                             }
                             if prop.kind == .portalLamp {
                                 if model.sealedPortalCubies.contains(ci) {

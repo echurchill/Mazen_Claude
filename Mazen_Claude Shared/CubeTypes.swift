@@ -267,6 +267,7 @@ enum PropKind: UInt8 {
     case tree         // M19: a conifer — a green cone; `state` 0/1/2 = small/medium/large (SceneBuilder scales)
     case treeTrunk    // M19: a short brown trunk under a tree (own kind so it takes the brown colour)
     case boulder      // M19: a grey rock on the moon (regolith); `state` 0/1/2 = small/medium/large
+    case foliageCard  // M20: a leafy bush/tree — crossed billboard cards, alpha-cutout foliage (material 17); `state` 0/1/2 = size
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the
@@ -275,7 +276,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree: return false
+        case .portal, .portalLamp, .tree, .foliageCard: return false
         default: return true
         }
     }
