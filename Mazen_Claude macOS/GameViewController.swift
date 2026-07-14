@@ -96,6 +96,9 @@ class GameViewController: NSViewController {
                         return "\(Renderer.greenerySets[p.state]) (greenery slice \(p.state))"
                     case .treeBillboard where Renderer.treeSprites.indices.contains(p.state):
                         return "WenrexaTree \(Renderer.treeSprites[p.state]) (tree slice \(p.state))"
+                    case .importedAsset where renderer.importedProps.indices.contains(p.state):
+                        let m = renderer.importedProps[p.state]
+                        return m.name.isEmpty ? "importedAsset [\(p.state)]" : m.name
                     default:
                         return "\(p.kind)" + (p.state != 0 ? " [state \(p.state)]" : "")
                     }

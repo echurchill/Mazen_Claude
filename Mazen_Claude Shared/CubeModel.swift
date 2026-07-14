@@ -70,16 +70,14 @@ class CubeModel {
     /// laid out in a documented order (see Gallery Layout doc) so assets can be evaluated in near-
     /// isolation. The debug HUD (H) names the item on the player's tile. Sealed + region-revealed
     /// like the entry world. Catalog order = the grid reading order (row-major, near row first).
-    static let galleryCatalog: [(PropKind, Int)] = {
-        var c: [(PropKind, Int)] = [
-            (.topiary, 0), (.obelisk, 0), (.chest, 0), (.dial, 0), (.dial, 1),
-            (.glyph, 0), (.tree, 0), (.tree, 1), (.tree, 2), (.treeTrunk, 0),
-            (.boulder, 0), (.boulder, 1), (.boulder, 2),
-        ]
-        c += (0..<8).map { (.foliageCard, $0) }      // 8 LeafSet bushes
-        c += (0..<22).map { (.greeneryCard, $0) }    // 22 misc_greenery plants
-        return c
-    }()
+    // (LeafSet bushes + misc_greenery cards were removed from the gallery when Eddie deleted those
+    //  asset folders — they'd only render as blank fallback cells now. Repoint here if new card
+    //  assets land; the .foliageCard / .greeneryCard prop kinds + shader materials still exist.)
+    static let galleryCatalog: [(PropKind, Int)] = [
+        (.topiary, 0), (.obelisk, 0), (.chest, 0), (.dial, 0), (.dial, 1),
+        (.glyph, 0), (.tree, 0), (.tree, 1), (.tree, 2), (.treeTrunk, 0),
+        (.boulder, 0), (.boulder, 1), (.boulder, 2),
+    ]
 
     /// M20 — WenrexaTrees grouped into single trees rendered as **intersecting billboard cards**
     /// (each entry = the sprite slices, in view order, that form one tree). Eddie's groupings so far;
@@ -154,6 +152,46 @@ class CubeModel {
         if let (ci, fi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        }
+    }
+
+    /// M20 proof — lay `.importedAsset` eval cells (3D models) in their own revealed strip just SOUTH
+    /// of the catalog grid, connected to the spawn by a short corridor so the player can walk down to
+    /// them. `states` are registry indices into `Renderer.importedProps`; the Renderer owns those
+    /// indices, so it calls this after the gallery world is built.
+    func stampGalleryImports(_ states: [Int]) {
+        guard !states.isEmpty else { return }
+        let n = size, c = n / 2
+        let row = min(n - 2, c + 3)                 // a dedicated strip, a clear gap south of the grid
+        let span = states.count
+        let left = max(1, c - span / 2)
+        let cLo = max(0, left - 1), cHi = min(n - 1, left + span)
+        let all: DirectionMask = [.north, .east, .south, .west]
+        func reveal(_ r: Int, _ col: Int, _ op: DirectionMask) {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { return }
+            cubies[ci].facelets[fi].mazeTile.openings = op
+            cubies[ci].facelets[fi].mazeTile.openEdges = op
+            cubies[ci].facelets[fi].terrain = .grass
+            cubies[ci].facelets[fi].tileState = .discovered
+            cubies[ci].facelets[fi].discoveryAmount = 1.0
+        }
+        // The eval strip (row-1 … row+1): walkable so the player can circle each model.
+        for r in (row - 1)...min(n - 1, row + 1) {
+            for col in cLo...cHi {
+                var op = all
+                if r == row + 1 { op.remove(.south) }
+                if col == cLo { op.remove(.west) }
+                if col == cHi { op.remove(.east) }
+                reveal(r, col, op)
+            }
+        }
+        // A 1-wide corridor down the centre from the portal row to the strip, so it's reachable.
+        for r in (c + 1)...(row - 1) { reveal(r, c, all) }
+        // One model per cell across the strip's centre row.
+        for (i, state) in states.enumerated() {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: row, col: left + i) else { continue }
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .importedAsset, subRow: 1, subCol: 1, facing: .s, state: state))
         }
     }
 

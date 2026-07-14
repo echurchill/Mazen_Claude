@@ -9,6 +9,8 @@ struct ImportedProp {
     let faceOffset: (row: Int, col: Int)   // tile offset from the +Z face centre
     let target: Float                       // fit the widest dimension to this many units
     let yUp: Bool                           // OBJ kits import Y-up; USD props Z-up
+    var name: String = ""                   // gallery HUD label
+    var galleryOnly: Bool = false           // skip the overworld decoration stamp (eval-grid props)
 }
 
 /// One piece of the imported modular house, positioned in a quarter's tile-local frame
@@ -64,6 +66,26 @@ enum AssetRegistry {
             loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  1), 0.28),   // moved off the temple-door path (Eddie)
         ].compactMap { $0 }
 
+        // M20 proof pass — a sampling of the Quaternius Ultimate Stylized Nature Pack (CC0) loaded
+        // straight from its OBJ/ folder. Flat-gray geometry only (no textures wired yet), gallery-only
+        // so they don't clutter the overworld — the point is to eyeball the low-poly shapes/orientation.
+        func loadNature(_ file: String, _ label: String, _ target: Float) -> ImportedProp? {
+            let dir = "Quaternius Ultimate Stylized Nature Pack/OBJ"
+            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(dir)/\(file).obj"), device: device) else {
+                print("[AssetRegistry] nature prop FAILED: \(file)"); return nil
+            }
+            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: target, yUp: true,
+                                name: label, galleryOnly: true)
+        }
+        let nature: [ImportedProp] = [
+            loadNature("BirchTree_1",    "Quaternius BirchTree_1",  0.90),
+            loadNature("Bush_Large",     "Quaternius Bush_Large",   0.45),
+            loadNature("Rock_1",         "Quaternius Rock_1",       0.40),
+            loadNature("Grass_Large",    "Quaternius Grass_Large",  0.35),
+            loadNature("Flower_1_Clump", "Quaternius Flower_1_Clump", 0.35),
+            loadNature("Plant_1",        "Quaternius Plant_1",      0.35),
+        ].compactMap { $0 }
+
         // M12-E: imported modular house. Load the kit's solid-colour OBJ pieces and assemble one
         // canonical quarter (authored for facing.n — two outer walls on the −X/−Y tile edges +
         // floor). The four `.houseCorner` props stamped in CubeModel place/orient the quarters and
@@ -79,7 +101,7 @@ enum AssetRegistry {
         } else {
             print("[AssetRegistry] house kit FAILED to load")
         }
-        return (props, house, houseDoor)
+        return (props + nature, house, houseDoor)
     }
 
     /// Stamp the imported decorations into a world as `.importedAsset` Props (one per registry entry,
@@ -88,6 +110,7 @@ enum AssetRegistry {
     static func stamp(_ props: [ImportedProp], into gs: GameState) {
         let n = gs.cubeModel.size
         for (assetID, p) in props.enumerated() {
+            if p.galleryOnly { continue }   // eval-grid props are placed only in the gallery world
             let row = n / 2 + p.faceOffset.row
             let col = n / 2 + p.faceOffset.col
             if let (ci, fi) = gs.cubeModel.faceletAt(face: .positiveZ, row: row, col: col) {

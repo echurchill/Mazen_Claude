@@ -254,15 +254,10 @@ class Renderer: NSObject, MTKViewDelegate {
         // M20: the alpha-cutout leaf array — one downsampled slice per ambientCG LeafSet (Color +
         // Opacity composed to RGBA), so bushes vary. Dev absolute paths; bundle for shipping later.
         let modelsRoot = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models"
-        let leafSetPairs = Renderer.leafSets.map { name -> (color: URL, opacity: URL) in
-            let dir = "\(modelsRoot)/\(name)_1K-PNG/\(name)_1K-PNG"
-            return (URL(fileURLWithPath: "\(dir)_Color.png"), URL(fileURLWithPath: "\(dir)_Opacity.png"))
-        }
-        self.leafArray = TextureLoader.loadCutoutArray(device: device, sets: leafSetPairs)
-        // M20: misc_greenery (fern/flower/plant cards) + WenrexaTrees (billboard sprites) — already
-        // alpha PNGs, fitted into square array slices.
-        self.greeneryArray = TextureLoader.loadRGBAArray(device: device,
-            urls: Renderer.greenerySets.map { URL(fileURLWithPath: "\(modelsRoot)/misc_greenery/\($0).png") })
+        // LeafSets + misc_greenery asset folders were removed (Eddie) — leave these arrays nil so the
+        // foliage materials fall back gracefully. Repoint here if new card assets land.
+        self.leafArray = nil
+        self.greeneryArray = nil
         self.treeSpriteArray = TextureLoader.loadRGBAArray(device: device,
             urls: Renderer.treeSprites.map { URL(fileURLWithPath: "\(modelsRoot)/WenrexaTrees/\($0).png") },
             size: 384, centerOnTrunk: true)
@@ -415,8 +410,12 @@ class Renderer: NSObject, MTKViewDelegate {
                     w = GameState(size: 25, name: dest, stamp: .gardenMaze)
                 case "gallery":
                     // M20 dev tool — flat prop/foliage grid (Y key). Size 25 to fit the full catalog
-                    // (props + 8 bushes + 22 greenery + 27 tree sprites). Stamp partial-reveals.
+                    // (props + tree sprites). Stamp partial-reveals.
                     w = GameState(size: 25, name: dest, stamp: .gallery)
+                    // Append the imported 3D models (Quaternius proof) as their own eval strip — the
+                    // Renderer owns the registry indices, so it stamps them after the world is built.
+                    let importStates = importedProps.enumerated().filter { $0.element.galleryOnly }.map { $0.offset }
+                    w.cubeModel.stampGalleryImports(importStates)
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
