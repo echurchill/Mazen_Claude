@@ -251,13 +251,16 @@ final class SceneBuilder {
                                 let g = 0.34 + 0.24 * Float(s & 0xFFFF) / 65535.0
                                 color = SIMD4(g, g, g * 1.03, 1.0)
                             }
+                            var propStyleSeed: UInt32 = 0
                             if prop.kind == .foliageCard {
-                                // M20: alpha-cutout foliage material (17); vary the green per bush.
+                                // M20: alpha-cutout foliage material (17). Pick a LeafSet slice per
+                                // bush (styleSeed → array slice in the shader), and vary the green.
                                 materialID = 17
-                                var s = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 668265263
+                                var s = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 668265263 &+ UInt32(prop.subRow &* 5 &+ prop.subCol)
                                 s ^= s >> 15
+                                propStyleSeed = s % 997          // large; shader does % arraySize
                                 color = mix(SIMD4(0.18, 0.38, 0.16, 1.0), SIMD4(0.34, 0.55, 0.26, 1.0),
-                                            t: Float(s & 0xFFFF) / 65535.0)
+                                            t: Float((s >> 8) & 0xFFFF) / 65535.0)
                             }
                             if prop.kind == .portalLamp {
                                 if model.sealedPortalCubies.contains(ci) {
@@ -271,7 +274,7 @@ final class SceneBuilder {
                                 }
                             }
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
-                                materialID: materialID, tileID: 0, discoveryAmount: 1.0, styleSeed: 0,
+                                materialID: materialID, tileID: 0, discoveryAmount: 1.0, styleSeed: propStyleSeed,
                                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
                         }

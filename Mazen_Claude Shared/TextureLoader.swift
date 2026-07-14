@@ -125,42 +125,49 @@ enum TextureLoader {
         return texture
     }
 
-    /// M20 — compose an alpha-cutout leaf texture from an ambientCG-style pair: RGB from the Color
-    /// map, alpha from the separate grayscale Opacity map. (RGBA sRGB; alpha stays linear for the
-    /// discard threshold. Not premultiplied — alpha-test doesn't blend, so it uses RGB as-is.)
-    static func loadCutoutTexture(device: MTLDevice, colorURL: URL, opacityURL: URL) -> MTLTexture? {
-        guard let cSrc = CGImageSourceCreateWithURL(colorURL as CFURL, nil),
-              let color = CGImageSourceCreateImageAtIndex(cSrc, 0, nil) else {
-            NSLog("Leaf colour not found/decodable: %@", colorURL.path); return nil
-        }
-        let w = color.width, h = color.height
-        let bpr = w * 4
-        var pixels = [UInt8](repeating: 255, count: bpr * h)
-        let rgb = CGColorSpaceCreateDeviceRGB()
-        guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8,
-                                  bytesPerRow: bpr, space: rgb,
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        ctx.draw(color, in: CGRect(x: 0, y: 0, width: w, height: h))
-        // Opacity → alpha (its red channel; the map is grayscale so any channel works).
-        if let oSrc = CGImageSourceCreateWithURL(opacityURL as CFURL, nil),
-           let opacity = CGImageSourceCreateImageAtIndex(oSrc, 0, nil),
-           opacity.width == w, opacity.height == h {
-            var op = [UInt8](repeating: 255, count: bpr * h)
-            if let octx = CGContext(data: &op, width: w, height: h, bitsPerComponent: 8, bytesPerRow: bpr,
-                                    space: rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
-                octx.draw(opacity, in: CGRect(x: 0, y: 0, width: w, height: h))
-                for i in 0..<(w * h) { pixels[i * 4 + 3] = op[i * 4] }
-            }
-        } else {
-            NSLog("Leaf opacity missing/size-mismatched (%@) — leaf will render fully opaque", opacityURL.path)
-        }
-        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm_srgb, width: w, height: h, mipmapped: false)
-        desc.storageMode = .shared
-        desc.usage = .shaderRead
+    /// M20 — an alpha-cutout leaf **array**: one slice per ambientCG-style Color+Opacity pair
+    /// (RGB from Color, alpha from the grayscale Opacity), so bushes can vary by sampling different
+    /// slices. Downsampled to `size`² (512 default — cards are small on screen, keeps memory sane).
+    /// RGBA sRGB; alpha stays linear for the discard threshold; not premultiplied (alpha-test, no
+    /// blend). A slice whose files are missing stays white (fallback), never a crash.
+    static func loadCutoutArray(device: MTLDevice, sets: [(color: URL, opacity: URL)], size: Int = 512) -> MTLTexture? {
+        guard !sets.isEmpty else { return nil }
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type2DArray
+        desc.pixelFormat = .rgba8Unorm_srgb
+        desc.width = size; desc.height = size
+        desc.arrayLength = sets.count
+        desc.storageMode = .shared; desc.usage = .shaderRead
         guard let texture = device.makeTexture(descriptor: desc) else { return nil }
-        texture.label = colorURL.deletingLastPathComponent().lastPathComponent
-        texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: w, height: h, depth: 1)),
-                        mipmapLevel: 0, withBytes: pixels, bytesPerRow: bpr)
-        return texture
+        texture.label = "LeafArray"
+
+        let bpr = size * 4, bpi = bpr * size
+        let rgb = CGColorSpaceCreateDeviceRGB()
+        func draw(_ url: URL) -> [UInt8]? {
+            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
+            var px = [UInt8](repeating: 255, count: bpi)
+            guard let ctx = CGContext(data: &px, width: size, height: size, bitsPerComponent: 8,
+                                      bytesPerRow: bpr, space: rgb,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+            ctx.draw(img, in: CGRect(x: 0, y: 0, width: size, height: size))   // scales to `size`
+            return px
+        }
+
+        var loaded = 0
+        for (i, set) in sets.enumerated() {
+            guard var pixels = draw(set.color) else {
+                NSLog("Leaf colour missing: %@", set.color.path); continue
+            }
+            if let op = draw(set.opacity) {
+                for p in 0..<(size * size) { pixels[p * 4 + 3] = op[p * 4] }
+            } else {
+                NSLog("Leaf opacity missing (%@) — slice %d fully opaque", set.opacity.path, i)
+            }
+            texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: size, height: size, depth: 1)),
+                            mipmapLevel: 0, slice: i, withBytes: pixels, bytesPerRow: bpr, bytesPerImage: bpi)
+            loaded += 1
+        }
+        return loaded > 0 ? texture : nil
     }
 }

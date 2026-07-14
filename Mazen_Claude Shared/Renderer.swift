@@ -86,7 +86,11 @@ class Renderer: NSObject, MTKViewDelegate {
 
     var tileMeshLib: TileMeshLibrary
     var diffuseArray: MTLTexture!
-    var leafTexture: MTLTexture?   // M20: composed leaf atlas (RGB + opacity), nil ⇒ procedural foliage fallback
+    var leafArray: MTLTexture?     // M20: leaf-atlas array (a slice per LeafSet), nil ⇒ procedural foliage fallback
+    /// The LeafSets composed into `leafArray` (order = slice index). SceneBuilder picks a slice
+    /// per bush via `styleSeed % leafSetCount`, so bushes vary.
+    static let leafSets = ["LeafSet004", "LeafSet010", "LeafSet014", "LeafSet017",
+                           "LeafSet022", "LeafSet023", "LeafSet024", "LeafSet030"]
     var normalArray: MTLTexture!
     var skyboxTexture: MTLTexture!
     var shadowMapTexture: MTLTexture!
@@ -220,13 +224,14 @@ class Renderer: NSObject, MTKViewDelegate {
         self.normalArray = TextureLoader.loadTextureArray(device: device,
             names: ["hedge_nor", "gravel_nor", "stone_nor"], srgb: false)
         self.skyboxTexture = TextureLoader.loadTexture2D(device: device, name: "skybox", srgb: true)
-        // M20: the alpha-cutout leaf atlas (ambientCG LeafSet024 — Color + Opacity composed to RGBA).
-        // Dev absolute path like the other imported assets; bundle for shipping later.
-        let leafDir = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models/LeafSet024_1K-PNG"
-        self.leafTexture = TextureLoader.loadCutoutTexture(
-            device: device,
-            colorURL: URL(fileURLWithPath: "\(leafDir)/LeafSet024_1K-PNG_Color.png"),
-            opacityURL: URL(fileURLWithPath: "\(leafDir)/LeafSet024_1K-PNG_Opacity.png"))
+        // M20: the alpha-cutout leaf array — one downsampled slice per ambientCG LeafSet (Color +
+        // Opacity composed to RGBA), so bushes vary. Dev absolute paths; bundle for shipping later.
+        let modelsRoot = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models"
+        let leafSetPairs = Renderer.leafSets.map { name -> (color: URL, opacity: URL) in
+            let dir = "\(modelsRoot)/\(name)_1K-PNG/\(name)_1K-PNG"
+            return (URL(fileURLWithPath: "\(dir)_Color.png"), URL(fileURLWithPath: "\(dir)_Opacity.png"))
+        }
+        self.leafArray = TextureLoader.loadCutoutArray(device: device, sets: leafSetPairs)
         self.texSampler = PipelineFactory.makeSampler(device: device)
 
         // Per-frame buffers. R2.16: a tile emits SEVERAL instances (frame rail + floor + path-cross
@@ -273,7 +278,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let d = self.diffuseArray { rs.addAllocation(d) }
         if let n = self.normalArray { rs.addAllocation(n) }
         if let s = self.skyboxTexture { rs.addAllocation(s) }
-        if let lf = self.leafTexture { rs.addAllocation(lf) }
+        if let lf = self.leafArray { rs.addAllocation(lf) }
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
@@ -568,7 +573,7 @@ class Renderer: NSObject, MTKViewDelegate {
             fogFar: fogFar,
             orbitBlend: isOrbit ? 1 : 0,
             skyDistance: skyDistance,
-            leafLoaded: leafTexture != nil ? 1 : 0
+            leafLoaded: leafArray != nil ? 1 : 0
         )
     }
 
@@ -782,7 +787,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let d = diffuseArray { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.diffuseArray.rawValue) }
         if let n = normalArray { fragmentArgTable.setTexture(n.gpuResourceID, index: TextureIndex.normalArray.rawValue) }
         if let sb = skyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
-        if let lf = leafTexture { fragmentArgTable.setTexture(lf.gpuResourceID, index: TextureIndex.leaf.rawValue) }
+        if let lf = leafArray { fragmentArgTable.setTexture(lf.gpuResourceID, index: TextureIndex.leaf.rawValue) }
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
         // Keep the asset-diffuse slot bound to a valid texture for the maze draws (they don't
         // sample it, but the shader declares it); the prop loop rebinds it per-prop below.

@@ -256,7 +256,7 @@ fragment float4 fragmentShader(
     texture2d_array<float> normalArray [[texture(TextureIndexNormalArray)]],
     depth2d<float> shadowMap [[texture(TextureIndexShadowMap)]],
     texture2d<float> assetDiffuse [[texture(TextureIndexAssetDiffuse)]],
-    texture2d<float> leafTex [[texture(TextureIndexLeaf)]],
+    texture2d_array<float> leafTex [[texture(TextureIndexLeaf)]],
     sampler texSampler [[sampler(0)]]
 ) {
     float3 lightDir = normalize(frame.lightDirection);
@@ -515,7 +515,8 @@ fragment float4 fragmentShader(
         // card reads as leaves. Two-sided lighting (foliage is lit from either face).
         float twoSided = abs(dot(normal, lightDir)) * 0.5 + 0.5;
         if (frame.leafLoaded > 0.5) {
-            float4 leaf = leafTex.sample(texSampler, in.texCoord);
+            uint slice = in.styleSeed % leafTex.get_array_size();  // per-bush LeafSet (styleSeed = slice)
+            float4 leaf = leafTex.sample(texSampler, in.texCoord, slice);
             if (leaf.a < 0.5) discard_fragment();
             color = leaf.rgb * (0.82 + 0.45 * in.color.g);        // atlas colour, subtle per-bush brightness
         } else {
