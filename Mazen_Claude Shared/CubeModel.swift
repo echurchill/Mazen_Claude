@@ -10,6 +10,7 @@ enum WorldStamp {
     case natural         // M18 Phase 1: no walls anywhere — open ground + a few landmarks (the open-field testbed; M19 grows it into the Natureworld)
     case lunar           // M19: the Moon — open grey regolith + boulders (grey in the sky, walkable when visited)
     case gardenMaze      // M20 first cut: a hedge maze on a green planet — grass floors, some trees, roundness (the Journey garden)
+    case gallery         // M20 dev tool: a flat grid of every prop/foliage variant, one per cell, for isolated evaluation
 }
 
 class CubeModel {
@@ -59,6 +60,55 @@ class CubeModel {
             stampGardenMaze()
             naturalDressing = true
             roundness = 1.0         // a round hedged planet
+        case .gallery:
+            stampGallery()          // flat (roundness stays 0) so each item reads in isolation
+        }
+    }
+
+    /// M20 dev tool — the **gallery**: a flat grass grid with one prop/foliage variant per cell,
+    /// laid out in a documented order (see Gallery Layout doc) so assets can be evaluated in near-
+    /// isolation. The debug HUD (H) names the item on the player's tile. Sealed + region-revealed
+    /// like the entry world. Catalog order = the grid reading order (row-major, near row first).
+    static let galleryCatalog: [(PropKind, Int)] = [
+        (.topiary, 0), (.obelisk, 0), (.chest, 0), (.dial, 0), (.dial, 1),
+        (.glyph, 0), (.tree, 0), (.tree, 1), (.tree, 2), (.treeTrunk, 0),
+        (.boulder, 0), (.boulder, 1), (.boulder, 2),
+        (.foliageCard, 0), (.foliageCard, 1), (.foliageCard, 2), (.foliageCard, 3),
+        (.foliageCard, 4), (.foliageCard, 5), (.foliageCard, 6), (.foliageCard, 7),
+    ]
+    private func stampGallery() {
+        let n = size, c = n / 2
+        let cols = 5
+        let catalog = Self.galleryCatalog
+        let rows = (catalog.count + cols - 1) / cols
+        let gTop = max(1, c - rows), gLeft = max(1, c - cols / 2)     // grid sits just north of spawn
+        let rLo = gTop - 1, rHi = min(n - 1, c + 1)
+        let cLo = gLeft - 1, cHi = min(n - 1, gLeft + cols)
+        let all: DirectionMask = [.north, .east, .south, .west]
+        for r in rLo...rHi {
+            for col in cLo...cHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                var op = all
+                if r == rLo { op.remove(.north) }
+                if r == rHi { op.remove(.south) }
+                if col == cLo { op.remove(.west) }
+                if col == cHi { op.remove(.east) }
+                cubies[ci].facelets[fi].mazeTile.openings = op
+                cubies[ci].facelets[fi].mazeTile.openEdges = op
+                cubies[ci].facelets[fi].terrain = .grass
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+            }
+        }
+        for (k, item) in catalog.enumerated() {
+            let gr = gTop + k / cols, gc = gLeft + k % cols
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
+            cubies[ci].facelets[fi].props.append(Prop(kind: item.0, subRow: 1, subCol: 1, facing: .s, state: item.1))
+        }
+        // Return portal beside the spawn (the player spawns at the face centre, facing the grid).
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
     }
 
@@ -266,8 +316,8 @@ class CubeModel {
                         }
                     } else {
                         let r2 = (h >> 12) % 100
-                        if r2 < 20 {   // leafy bush — M20 alpha-cutout foliage card
-                            cubies[ci].facelets[fi].props.append(Prop(kind: .foliageCard, subRow: 1, subCol: 1, state: Int((h >> 10) % 3)))
+                        if r2 < 20 {   // leafy bush — M20 alpha-cutout foliage card; state = LeafSet slice
+                            cubies[ci].facelets[fi].props.append(Prop(kind: .foliageCard, subRow: 1, subCol: 1, state: Int((h >> 10) % 8)))
                         } else if r2 < 28 {
                             cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3)))
                         }

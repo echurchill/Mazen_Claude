@@ -77,14 +77,29 @@ class GameViewController: NSViewController {
         }
         let depth = renderer?.worldStack.count ?? 1
         let world = depth > 1 ? "interior (depth \(depth))" : "overworld"
+        // "Here:" — name the prop(s) on the player's tile (the gallery / asset-eval readout).
+        var here = "—"
+        if let (ci, fi) = gs.cubeModel.faceletAt(face: gs.player.face, row: gs.player.row, col: gs.player.col) {
+            let props = gs.cubeModel.cubies[ci].facelets[fi].props.filter { $0.kind != .portalLamp }
+            if !props.isEmpty {
+                here = props.map { p -> String in
+                    if p.kind == .foliageCard, Renderer.leafSets.indices.contains(p.state) {
+                        return "foliageCard → \(Renderer.leafSets[p.state]) (slice \(p.state))"
+                    }
+                    return "\(p.kind)" + (p.state != 0 ? " [state \(p.state)]" : "")
+                }.joined(separator: ", ")
+            }
+        }
         let text = String(format: """
             Face: %@  Pos: (%d,%d)  Dir: %@
+            Here: %@
             Camera: %@  Cube: %dx%dx%d
             Frame: %.1f ms  (%.0f fps)
             Twist(G): %@   World(O): %@
             Roundness(-/=): %.1f   Matte(M): %@
             """,
             "\(gs.player.face)", gs.player.row, gs.player.col, "\(gs.player.facing)",
+            here,
             gs.camera.mode == .orbit ? "orbit" : "FP", gs.cubeModel.size, gs.cubeModel.size, gs.cubeModel.size,
             gs.avgFrameTimeMs, fps, pacing, world, gs.cubeModel.roundness,
             (renderer?.debugPlainShading ?? false) ? "ON" : "off")
@@ -180,6 +195,8 @@ class GameViewController: NSViewController {
             renderer.beginWorldTransition(destinationID: 2)
         case 9:       // V — M20 first cut: fade into / out of the natural-maze "garden" hybrid
             renderer.beginWorldTransition(destinationID: 3)
+        case 16:      // Y — M20 dev tool: fade into / out of the prop/foliage gallery
+            renderer.beginWorldTransition(destinationID: 4)
         case 43:      // , — M19 debug: lower relief (hill amplitude) on the active world
             renderer.adjustRelief(-0.01)
         case 47:      // . — M19 debug: raise relief (hill amplitude) on the active world

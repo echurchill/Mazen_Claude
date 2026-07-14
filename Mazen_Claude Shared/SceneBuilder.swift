@@ -207,10 +207,12 @@ final class SceneBuilder {
                             // distinct objects, not three repeated sizes. Trunk matches its tree.
                             var treeScale: Float = 1.0
                             if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder || prop.kind == .foliageCard {
-                                let sizeBase: Float = [0.62, 0.95, 1.45][max(0, min(2, prop.state))]
                                 var sj = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 40503 &+ UInt32(prop.subRow &* 7 &+ prop.subCol)
                                 sj ^= sj >> 13
                                 let jitter = 0.78 + 0.44 * Float(sj & 0xFFFF) / 65535.0   // ×0.78…1.22
+                                // trees/boulders: `state` = size bucket. foliage: `state` = leaf
+                                // slice (not size), so size is jitter-only.
+                                let sizeBase: Float = prop.kind == .foliageCard ? 0.95 : [0.62, 0.95, 1.45][max(0, min(2, prop.state))]
                                 treeScale = sizeBase * jitter
                             }
                             let pm = restM
@@ -253,14 +255,14 @@ final class SceneBuilder {
                             }
                             var propStyleSeed: UInt32 = 0
                             if prop.kind == .foliageCard {
-                                // M20: alpha-cutout foliage material (17). Pick a LeafSet slice per
-                                // bush (styleSeed → array slice in the shader), and vary the green.
+                                // M20: alpha-cutout foliage material (17). `state` = the LeafSet slice
+                                // (styleSeed → array slice in the shader); vary the green per bush.
                                 materialID = 17
-                                var s = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 668265263 &+ UInt32(prop.subRow &* 5 &+ prop.subCol)
+                                propStyleSeed = UInt32(max(0, prop.state))
+                                var s = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 668265263
                                 s ^= s >> 15
-                                propStyleSeed = s % 997          // large; shader does % arraySize
                                 color = mix(SIMD4(0.18, 0.38, 0.16, 1.0), SIMD4(0.34, 0.55, 0.26, 1.0),
-                                            t: Float((s >> 8) & 0xFFFF) / 65535.0)
+                                            t: Float(s & 0xFFFF) / 65535.0)
                             }
                             if prop.kind == .portalLamp {
                                 if model.sealedPortalCubies.contains(ci) {

@@ -146,7 +146,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
     /// sub-world a portal simply pops back out; the destination only matters from the root.
-    static let portalDestinations = ["moon", "temple-interior", "natural", "garden"]
+    static let portalDestinations = ["moon", "temple-interior", "natural", "garden", "gallery"]
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -377,10 +377,13 @@ class Renderer: NSObject, MTKViewDelegate {
                     // apparent curvature), with the natural-maze confined to a sealed entry region
                     // (Eddie). The stamp reveals ONLY that region, so DON'T reveal-all here.
                     w = GameState(size: 25, name: dest, stamp: .gardenMaze)
+                case "gallery":
+                    // M20 dev tool — flat prop/foliage grid (Y key). Stamp does its own partial reveal.
+                    w = GameState(size: 15, name: dest, stamp: .gallery)
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
-                if dest != "garden" { Self.setupInitialDiscovery(gameState: w) }
+                if dest != "garden" && dest != "gallery" { Self.setupInitialDiscovery(gameState: w) }
                 return w
             }
             enterWorld(world)
