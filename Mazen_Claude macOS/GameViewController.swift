@@ -81,7 +81,13 @@ class GameViewController: NSViewController {
         var here = "—"
         if let (ci, fi) = gs.cubeModel.faceletAt(face: gs.player.face, row: gs.player.row, col: gs.player.col) {
             let props = gs.cubeModel.cubies[ci].facelets[fi].props.filter { $0.kind != .portalLamp }
-            if !props.isEmpty {
+            let treeStates = props.filter { $0.kind == .treeBillboard }.map { $0.state }
+            if !treeStates.isEmpty,
+               let gi = CubeModel.treeGroups.firstIndex(where: { Set($0) == Set(treeStates) }) {
+                // A composite WenrexaTrees tree: show its name + member filenames.
+                let files = treeStates.sorted().map { String($0 + 1) }.joined(separator: ",")
+                here = "\(CubeModel.treeGroupNames[gi]) tree (WenrexaTrees \(files))"
+            } else if !props.isEmpty {
                 here = props.map { p -> String in
                     switch p.kind {
                     case .foliageCard where Renderer.leafSets.indices.contains(p.state):

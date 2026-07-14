@@ -92,9 +92,15 @@ class CubeModel {
         [20, 21, 22],       // filenames 21–23: Dark Red
         [6, 16],            // filenames 7,17: Tall Green
         [12, 13],           // filenames 13,14: Dark Green
-        [3, 4],             // filenames 4,5
-        [18, 19],           // filenames 19,20
+        [3, 4],             // filenames 4,5:  Red Tree
+        [18, 19],           // filenames 19,20: Dark Yellow
         // filenames 15,16 (slices 14,15) intentionally omitted — bad-looking, deleted (Eddie).
+    ]
+
+    /// Display names for `treeGroups` (same order). Shown in the gallery HUD.
+    static let treeGroupNames = [
+        "Tall Purple", "Wide Purple", "Dead", "Orange", "Dark Red",
+        "Tall Green", "Dark Green", "Red Tree", "Dark Yellow",
     ]
 
     /// Place one WenrexaTrees "tree" (a group of view-slices) as intersecting billboard cards at a
