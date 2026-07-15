@@ -2,6 +2,7 @@ import Foundation
 import Metal
 import simd
 import ImageIO   // CGImageSource — probing a texture PNG for an alpha channel (cutout detection)
+import ModelIO
 
 /// One sub-mesh's resolved diffuse + whether it needs alpha-cutout (its PNG carries an alpha
 /// channel — Quaternius leaves/flowers do; rock/grass don't). Drives materialID 20 vs 11.
@@ -106,48 +107,41 @@ enum AssetRegistry {
             loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  1), 0.28),   // moved off the temple-door path (Eddie)
         ].compactMap { $0 }
 
-        // M20 — a sampling of the Quaternius Ultimate Stylized Nature Pack (CC0), loaded straight from
-        // its OBJ/ folder (no conversion needed). Gallery-only so they don't clutter the overworld.
-        //
-        // Texturing: the pack's `.mtl` files ship NO `map_Kd` — just a flat grey `Kd`. Quaternius
-        // instead expects the material NAME to name the texture ("BirchTree_Bark" →
-        // Textures/BirchTree_Bark.png), so resolve each sub-mesh's texture by its material name and
-        // hand them over per-sub-mesh (a tree = bark + leaves, two different maps). Textures are
-        // shared across models (many trees reuse one leaf map), so cache by name. A name that has no
-        // matching PNG just falls back to that sub-mesh's flat colour.
+        // M20 — a sampling of the Quaternius Ultimate Stylized Nature Pack (CC0). Gallery-only, so
+        // they don't clutter the overworld. See `loadNature` for why these come from USD, not OBJ.
         let natureDir = "Quaternius Ultimate Stylized Nature Pack"
         var texCache: [String: SubmeshMaterial] = [:]
-        /// Resolve a texture by name, noting whether its PNG carries alpha — leaves/flowers do and
-        /// must be cut out (Eddie: "they are not transparent"); rock/grass don't. A file with an
-        /// all-opaque alpha channel is harmless: the cutout threshold simply never fires.
-        func natureTexture(_ materialName: String) -> SubmeshMaterial? {
-            guard !materialName.isEmpty else { return nil }
-            if let hit = texCache[materialName] { return hit.diffuse == nil ? nil : hit }
-            let url = URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/Textures/\(materialName).png")
+        /// Load a texture the USD itself bound, noting whether it needs alpha-cutout. Cached — many
+        /// models share one leaf/flower map.
+        func natureTexture(_ url: URL) -> SubmeshMaterial {
+            if let hit = texCache[url.path] { return hit }
             let tex = TextureLoader.loadTextureFromFile(url: url, device: device, srgb: true)
             let mat = SubmeshMaterial(diffuse: tex, cutout: tex != nil && Self.usesAlpha(url))
-            texCache[materialName] = mat
-            return tex == nil ? nil : mat
+            texCache[url.path] = mat
+            return mat
         }
-        // `fallbackTex` names the texture for models the name-match can't resolve — the convention
-        // isn't universal: Rock_1's material is "Rock" but the file is "Rocks.png", and Grass_Large's
-        // material is Blender's unnamed default "None". Only needed for those exceptions.
-        func loadNature(_ file: String, _ label: String, _ target: Float, fallbackTex: String? = nil) -> ImportedProp? {
-            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/OBJ/\(file).obj"), device: device) else {
+        /// Loaded from USD (exported from the pack's per-model .blend files via Blender), NOT the
+        /// shipped OBJ. The OBJ/MTL is the pack's lossiest export: it carries no `map_Kd`, so we had
+        /// to guess textures by material name plus a hand-written exception table (Rock→"Rocks.png",
+        /// Blender's unnamed "None"→"Grass.png"), and it collapsed some multi-material models. The
+        /// USD carries a real UsdPreviewSurface material→texture binding that ModelIO resolves to an
+        /// absolute URL — so the asset tells us its texture and all that guessing is gone.
+        /// Z-up (Blender's axes, like our other USD props) ⇒ yUp: false.
+        func loadNature(_ file: String, _ label: String, _ target: Float) -> ImportedProp? {
+            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/USD/\(file).usdc"), device: device) else {
                 print("[AssetRegistry] nature prop FAILED: \(file)"); return nil
             }
             let mats = mesh.submeshes.map { sm in
-                natureTexture(sm.materialName) ?? fallbackTex.flatMap { natureTexture($0) }
-                    ?? SubmeshMaterial(diffuse: nil, cutout: false)
+                sm.baseColorURL.map { natureTexture($0) } ?? SubmeshMaterial(diffuse: nil, cutout: false)
             }
-            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: target, yUp: true,
+            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: target, yUp: false,
                                 name: label, galleryOnly: true, submeshMaterials: mats)
         }
         let nature: [ImportedProp] = [
             loadNature("BirchTree_1",    "Quaternius BirchTree_1",  0.90),
             loadNature("Bush_Large",     "Quaternius Bush_Large",   0.45),
-            loadNature("Rock_1",         "Quaternius Rock_1",       0.40, fallbackTex: "Rocks"),
-            loadNature("Grass_Large",    "Quaternius Grass_Large",  0.35, fallbackTex: "Grass"),
+            loadNature("Rock_1",         "Quaternius Rock_1",       0.40),
+            loadNature("Grass_Large",    "Quaternius Grass_Large",  0.35),
             loadNature("Flower_1_Clump", "Quaternius Flower_1_Clump", 0.35),
             loadNature("Plant_1",        "Quaternius Plant_1",      0.35),
         ].compactMap { $0 }

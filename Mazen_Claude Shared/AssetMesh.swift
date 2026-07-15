@@ -8,9 +8,13 @@ struct AssetSubmesh {
     let indexOffset: Int   // element offset into the mesh's index buffer
     let indexCount: Int
     let color: SIMD4<Float>
-    /// The `.mtl` material name (e.g. "BirchTree_Bark"). Packs like Quaternius ship no `map_Kd`
-    /// and instead expect the material NAME to select the texture file — see AssetRegistry.
+    /// The material name (e.g. "BirchTree_Bark").
     let materialName: String
+    /// The material's base-colour texture, as bound BY THE ASSET. USD carries a real
+    /// material→texture binding (UsdPreviewSurface) and ModelIO resolves it to an absolute file
+    /// URL; OBJ/MTL generally doesn't (Quaternius ships no `map_Kd`), so this is nil there and the
+    /// caller must fall back to matching on `materialName`.
+    let baseColorURL: URL?
 }
 
 /// A 3D model imported from a USD or OBJ file via ModelIO (M12). Geometry is packed into the
@@ -82,7 +86,8 @@ final class AssetMesh {
                 default: break
                 }
                 subs.append(AssetSubmesh(indexOffset: start, indexCount: indices.count - start,
-                                         color: Self.materialColor(sm), materialName: sm.material?.name ?? ""))
+                                         color: Self.materialColor(sm), materialName: sm.material?.name ?? "",
+                                         baseColorURL: sm.material?.property(with: .baseColor)?.urlValue))
             }
         }
 
