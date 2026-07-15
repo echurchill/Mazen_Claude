@@ -50,33 +50,10 @@ enum AssetRegistry {
     /// equally in the catalogue. (The birch was hand-tuned to 0.9 and looked right — this matches it.)
     static let galleryTarget: Float = 0.85
 
-    /// Does this texture actually USE its alpha — i.e. does it need cutout?
-    ///
-    /// The presence of an alpha channel proves nothing: Quaternius' `BirchTree_Bark.png` carries a
-    /// fully-opaque one, so testing the channel alone would push solid bark down the cutout path
-    /// (defeating early-Z, and masking real problems as we scale to the rest of the pack). So decode
-    /// and look for genuinely transparent texels. Run once per unique texture, then cached.
-    static func usesAlpha(_ url: URL) -> Bool {
-        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return false }
-        switch img.alphaInfo {
-        case .first, .last, .premultipliedFirst, .premultipliedLast: break
-        default: return false            // no alpha channel at all — nothing to cut out
-        }
-        let w = img.width, h = img.height
-        guard w > 0, h > 0 else { return false }
-        var buf = [UInt8](repeating: 0, count: w * h * 4)
-        let ok: Bool = buf.withUnsafeMutableBytes { raw -> Bool in
-            guard let ctx = CGContext(data: raw.baseAddress, width: w, height: h, bitsPerComponent: 8,
-                                      bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
-            ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
-            return true
-        }
-        guard ok else { return false }
-        for i in stride(from: 3, to: buf.count, by: 4) where buf[i] < 128 { return true }
-        return false
-    }
+    // (Cutout detection — "does this texture actually USE its alpha?" — lives in
+    //  TextureLoader.loadAssetTexture now, sharing the load's single decode. The criterion is
+    //  unchanged: any texel below the 0.5 threshold; a merely-present-but-opaque alpha channel,
+    //  like BirchTree_Bark.png's, stays on the opaque fast path.)
 
     /// Load the whole registry: decoration props + the two house-quarter assemblies.
     /// (Dev absolute path — these get bundled for shipping later; see roadmap "shipping hygiene".)
@@ -114,19 +91,6 @@ enum AssetRegistry {
         // M20 — a sampling of the Quaternius Ultimate Stylized Nature Pack (CC0). Gallery-only, so
         // they don't clutter the overworld. See `loadNature` for why these come from USD, not OBJ.
         let natureDir = "Quaternius Ultimate Stylized Nature Pack"
-        var texCache: [String: SubmeshMaterial] = [:]
-        /// Load a texture the USD itself bound, noting whether it needs alpha-cutout. Cached — many
-        /// models share one leaf/flower map.
-        func natureTexture(_ url: URL) -> SubmeshMaterial {
-            if let hit = texCache[url.path] { return hit }
-            // Decide cutout FIRST: the loader needs it, because a cut-out texture must be
-            // un-premultiplied and colour-dilated (see TextureLoader.loadTextureFromFile).
-            let isCutout = Self.usesAlpha(url)
-            let tex = TextureLoader.loadTextureFromFile(url: url, device: device, srgb: true, cutout: isCutout)
-            let mat = SubmeshMaterial(diffuse: tex, cutout: tex != nil && isCutout)
-            texCache[url.path] = mat
-            return mat
-        }
         /// Loaded from USD (exported from the pack's per-model .blend files via Blender), NOT the
         /// shipped OBJ. The OBJ/MTL is the pack's lossiest export: it carries no `map_Kd`, so we had
         /// to guess textures by material name plus a hand-written exception table (Rock→"Rocks.png",
@@ -135,27 +99,35 @@ enum AssetRegistry {
         /// absolute URL — so the asset tells us its texture and all that guessing is gone.
         /// Z-up (Blender's axes, like our other USD props) ⇒ yUp: false.
         ///
-        /// Every model is normalised to the same `galleryTarget` rather than kept at true relative
-        /// scale: this is a catalogue, so each one should read equally well (at true scale a flower
-        /// next to a birch is a speck). Real relative size is the *world's* job, not the gallery's.
-        func loadNature(_ file: String) -> ImportedProp? {
-            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/USD/\(file).usdc"), device: device) else {
-                print("[AssetRegistry] nature prop FAILED: \(file)"); return nil
-            }
-            let mats = mesh.submeshes.map { sm in
-                sm.baseColorURL.map { natureTexture($0) } ?? SubmeshMaterial(diffuse: nil, cutout: false)
-            }
-            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget, yUp: false,
-                                name: "Quaternius \(file)", galleryOnly: true, submeshMaterials: mats)
-        }
-        // Load EVERY exported model, enumerated from disk so the gallery tracks the USD folder
-        // without a hand-maintained list (re-run Tools/export_quaternius_usd.py to refresh it).
+        /// Meshes first, then every texture the USDs bind loaded CONCURRENTLY: decode + cutout prep
+        /// is CPU-bound and per-texture independent, and serially it dominated a Debug boot.
         let usdDir = "\(modelsRoot)/\(natureDir)/USD"
         let natureFiles = ((try? FileManager.default.contentsOfDirectory(atPath: usdDir)) ?? [])
             .filter { $0.hasSuffix(".usdc") }
             .map { String($0.dropLast(5)) }
             .sorted()
-        let nature: [ImportedProp] = natureFiles.compactMap { loadNature($0) }
+        let meshes: [(file: String, mesh: AssetMesh)] = natureFiles.compactMap { f in
+            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(usdDir)/\(f).usdc"), device: device) else {
+                print("[AssetRegistry] nature prop FAILED: \(f)"); return nil
+            }
+            return (f, mesh)
+        }
+        let uniqueTexURLs = Array(Set(meshes.flatMap { $0.mesh.submeshes.compactMap { $0.baseColorURL } }))
+        var matByPath = [String: SubmeshMaterial](minimumCapacity: uniqueTexURLs.count)
+        let matLock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: uniqueTexURLs.count) { k in
+            let url = uniqueTexURLs[k]
+            let loaded = TextureLoader.loadAssetTexture(url: url, device: device, srgb: true)
+            let mat = SubmeshMaterial(diffuse: loaded?.texture, cutout: loaded?.cutout ?? false)
+            matLock.lock(); matByPath[url.path] = mat; matLock.unlock()
+        }
+        let nature: [ImportedProp] = meshes.map { file, mesh in
+            let mats = mesh.submeshes.map { sm in
+                sm.baseColorURL.flatMap { matByPath[$0.path] } ?? SubmeshMaterial(diffuse: nil, cutout: false)
+            }
+            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget, yUp: false,
+                                name: "Quaternius \(file)", galleryOnly: true, submeshMaterials: mats)
+        }
         if nature.count != natureFiles.count {
             print("[AssetRegistry] nature: \(nature.count)/\(natureFiles.count) models loaded")
         }

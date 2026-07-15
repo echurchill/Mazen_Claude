@@ -101,82 +101,201 @@ enum TextureLoader {
 
     /// M12: load a texture from an arbitrary file URL (imported model textures live outside
     /// the bundle). CGImageSource decodes JPG/PNG all the same.
-    ///
-    /// `cutout` is for alpha-tested foliage. It does two things a plain load must not:
+    static func loadTextureFromFile(url: URL, device: MTLDevice, srgb: Bool) -> MTLTexture? {
+        guard let (pixels, w, h) = decodeRGBA(url) else { return nil }
+        return makeTexture(device: device, srgb: srgb, pixels: pixels, w: w, h: h, label: url.lastPathComponent)
+    }
+
+    /// M20: the loader for imported-asset textures — decodes ONCE, detects whether the alpha
+    /// channel is genuinely used (any texel below the 0.5 cutout threshold), and if so prepares the
+    /// pixels for alpha-testing:
     ///  1. UN-PREMULTIPLIES. CoreGraphics only offers premultiplied 8-bit RGBA, but the shader
     ///     reads `.rgb` as a straight colour, so premultiplied texels would darken toward the edges.
     ///  2. DILATES the colour outward under the transparent texels. Quaternius' leaf PNGs store pure
     ///     WHITE beneath alpha 0; the bilinear filter blends across the alpha boundary, so any edge
     ///     texel that survives the cutout would drag that white in as a fringe. Bleeding the leaf
     ///     colour outward means the filter only ever mixes leaf with leaf.
-    static func loadTextureFromFile(url: URL, device: MTLDevice, srgb: Bool, cutout: Bool = false) -> MTLTexture? {
+    /// (Detection used to be a separate full decode of the same PNG — merged here for boot time.)
+    static func loadAssetTexture(url: URL, device: MTLDevice, srgb: Bool) -> (texture: MTLTexture, cutout: Bool)? {
+        // Decode + cutout prep never changes for a given source file, so the processed RGBA is
+        // cached as a sidecar blob (keyed on the source's mtime+size): every boot after the first
+        // is a plain read + GPU upload instead of PNG decode + un-premultiply + dilate.
+        if let (pixels, w, h, cutout) = readPixelCache(url),
+           let tex = makeTexture(device: device, srgb: srgb, pixels: pixels, w: w, h: h, label: url.lastPathComponent) {
+            return (tex, cutout)
+        }
+        guard var (pixels, w, h) = decodeRGBA(url) else { return nil }
+        // Same criterion the shader's discard uses: any texel below half-alpha.
+        let cutout = pixels.withUnsafeBufferPointer { buf -> Bool in
+            let p = buf.baseAddress!
+            for i in stride(from: 3, to: buf.count, by: 4) where p[i] < 128 { return true }
+            return false
+        }
+        if cutout { unpremultiplyAndDilate(&pixels, width: w, height: h) }
+        writePixelCache(url, pixels: pixels, w: w, h: h, cutout: cutout)
+        guard let tex = makeTexture(device: device, srgb: srgb, pixels: pixels, w: w, h: h, label: url.lastPathComponent) else { return nil }
+        return (tex, cutout)
+    }
+
+    // ── Processed-pixel sidecar cache ────────────────────────────
+    // Format: 6 little-endian Int64s (magic, version, width, height, cutoutFlag, sourceKey)
+    // followed by the raw RGBA bytes. `sourceKey` folds the source file's mtime + size, so a
+    // re-exported texture invalidates its cache automatically. Lives in a `.rgba-cache` dir next
+    // to the textures (inside the gitignored pack). Any read failure ⇒ full pipeline, never a crash.
+    private static let pixelCacheMagic: Int64 = 0x4D5A_5445_5843_4831   // "MZTEXCH1"
+    private static let pixelCacheVersion: Int64 = 1
+
+    private static func pixelCacheURL(_ url: URL) -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(".rgba-cache/\(url.lastPathComponent).rgba")
+    }
+
+    private static func sourceKey(_ url: URL) -> Int64? {
+        guard let a = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = a[.size] as? Int64,
+              let mtime = a[.modificationDate] as? Date else { return nil }
+        return size &* 31 &+ Int64(mtime.timeIntervalSince1970)
+    }
+
+    private static func readPixelCache(_ url: URL) -> (pixels: [UInt8], w: Int, h: Int, cutout: Bool)? {
+        guard let key = sourceKey(url),
+              let data = try? Data(contentsOf: pixelCacheURL(url)), data.count > 48 else { return nil }
+        let header = data.prefix(48).withUnsafeBytes { $0.bindMemory(to: Int64.self) }
+        let (magic, version, w64, h64, cut, srcKey) = (header[0], header[1], header[2], header[3], header[4], header[5])
+        let w = Int(w64), h = Int(h64)
+        guard magic == pixelCacheMagic, version == pixelCacheVersion, srcKey == key,
+              w > 0, h > 0, data.count == 48 + w * h * 4 else { return nil }
+        return ([UInt8](data.dropFirst(48)), w, h, cut != 0)
+    }
+
+    private static func writePixelCache(_ url: URL, pixels: [UInt8], w: Int, h: Int, cutout: Bool) {
+        guard let key = sourceKey(url) else { return }
+        let dst = pixelCacheURL(url)
+        try? FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var header: [Int64] = [pixelCacheMagic, pixelCacheVersion, Int64(w), Int64(h), cutout ? 1 : 0, key]
+        var data = Data(bytes: &header, count: 48)
+        data.append(contentsOf: pixels)
+        try? data.write(to: dst)
+    }
+
+    /// Decode any CGImageSource-readable file to straight RGBA8 bytes.
+    /// The buffer starts TRANSPARENT (0), never opaque white: `draw` composites source-over, so a
+    /// white-filled buffer silently replaced every transparent texel with opaque white — destroying
+    /// the alpha channel outright (every foliage texture arrived minAlpha=255, the cutout could
+    /// never fire, and the leaf PNGs' white background rendered as solid white between the leaves).
+    private static func decodeRGBA(_ url: URL) -> (pixels: [UInt8], w: Int, h: Int)? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             NSLog("Asset texture not found/decodable: %@", url.path)
             return nil
         }
         let w = cgImage.width, h = cgImage.height
-        let bytesPerRow = w * 4
+        guard w > 0, h > 0 else { return nil }
+        var pixels = [UInt8](repeating: 0, count: w * 4 * h)
+        let ok = pixels.withUnsafeMutableBytes { raw -> Bool in
+            guard let ctx = CGContext(data: raw.baseAddress, width: w, height: h, bitsPerComponent: 8,
+                                      bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        return ok ? (pixels, w, h) : nil
+    }
+
+    private static func makeTexture(device: MTLDevice, srgb: Bool, pixels: [UInt8], w: Int, h: Int, label: String) -> MTLTexture? {
         let desc = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: srgb ? .rgba8Unorm_srgb : .rgba8Unorm, width: w, height: h, mipmapped: false)
         desc.storageMode = .shared
         desc.usage = .shaderRead
         guard let texture = device.makeTexture(descriptor: desc) else { return nil }
-        texture.label = url.lastPathComponent
-        // Start TRANSPARENT, not opaque white. `draw` composites source-over, so a white-filled
-        // buffer silently replaced every transparent texel with opaque white — destroying the alpha
-        // channel outright (every foliage texture arrived minAlpha=255, so the cutout could never
-        // fire and the leaf PNG's white background rendered as solid white between the leaves).
-        var pixels = [UInt8](repeating: 0, count: bytesPerRow * h)
-        guard let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8,
-                                  bytesPerRow: bytesPerRow, space: CGColorSpaceCreateDeviceRGB(),
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
-        if cutout { unpremultiplyAndDilate(&pixels, width: w, height: h) }
+        texture.label = label
         texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: w, height: h, depth: 1)),
-                        mipmapLevel: 0, withBytes: pixels, bytesPerRow: bytesPerRow)
+                        mipmapLevel: 0, withBytes: pixels, bytesPerRow: w * 4)
         return texture
     }
 
-    /// Un-premultiply, then bleed colour outward into the transparent texels (see `loadTextureFromFile`).
+    /// Un-premultiply, then bleed colour outward into the transparent texels (see `loadAssetTexture`).
     /// Four passes is plenty: these textures are not mipmapped, so bilinear only ever reaches one
     /// texel past an edge. Alpha is left exactly as-is — only the hidden RGB changes, so the cutout
     /// silhouette is untouched.
+    ///
+    /// FRONTIER-based, through unsafe buffers: dilation only ever does work at the alpha boundary
+    /// ring, so each pass walks just the current frontier (boundary texels) instead of re-scanning
+    /// the whole image with 9-neighbour gathers. The naive full-image version cost ~44 s of a 48 s
+    /// boot across the foliage textures in a Debug build (bounds-checked array indexing, -Onone);
+    /// this is the same result at a tiny fraction of the texel visits.
     private static func unpremultiplyAndDilate(_ px: inout [UInt8], width w: Int, height h: Int) {
-        for i in stride(from: 0, to: px.count, by: 4) {
-            let a = px[i + 3]
-            guard a > 0, a < 255 else { continue }
-            let inv = 255.0 / Double(a)
-            px[i]     = UInt8(min(255, Double(px[i]) * inv))
-            px[i + 1] = UInt8(min(255, Double(px[i + 1]) * inv))
-            px[i + 2] = UInt8(min(255, Double(px[i + 2]) * inv))
-        }
-        // `filled` tracks which texels carry a real colour; transparent ones get one from a
-        // neighbour, spreading outward a texel per pass.
-        var filled = [Bool](repeating: false, count: w * h)
-        for p in 0..<(w * h) { filled[p] = px[p * 4 + 3] > 0 }
-        for _ in 0..<4 {
-            var next = filled
-            for y in 0..<h {
-                for x in 0..<w {
-                    let p = y * w + x
-                    if filled[p] { continue }
-                    var r = 0, g = 0, b = 0, n = 0
-                    for dy in -1...1 {
-                        for dx in -1...1 {
-                            let nx = x + dx, ny = y + dy
-                            guard nx >= 0, nx < w, ny >= 0, ny < h else { continue }
-                            let q = ny * w + nx
-                            guard filled[q] else { continue }
-                            r += Int(px[q * 4]); g += Int(px[q * 4 + 1]); b += Int(px[q * 4 + 2]); n += 1
+        let count = w * h
+        var filled = [Bool](repeating: false, count: count)
+        var queued = [Bool](repeating: false, count: count)
+        px.withUnsafeMutableBufferPointer { pb in
+            let p = pb.baseAddress!
+            filled.withUnsafeMutableBufferPointer { fb in
+                let f = fb.baseAddress!
+                // One linear pass: un-premultiply partial-alpha texels, note which carry colour.
+                for i in 0..<count {
+                    let a = p[i * 4 + 3]
+                    f[i] = a > 0
+                    if a > 0 && a < 255 {
+                        let inv = 255.0 / Double(a)
+                        p[i * 4]     = UInt8(min(255.0, Double(p[i * 4]) * inv))
+                        p[i * 4 + 1] = UInt8(min(255.0, Double(p[i * 4 + 1]) * inv))
+                        p[i * 4 + 2] = UInt8(min(255.0, Double(p[i * 4 + 2]) * inv))
+                    }
+                }
+                queued.withUnsafeMutableBufferPointer { qb in
+                    let q = qb.baseAddress!
+                    // Initial frontier: every transparent texel touching a filled one.
+                    var frontier: [Int32] = []
+                    for y in 0..<h {
+                        for x in 0..<w {
+                            let i = y * w + x
+                            if f[i] { continue }
+                            var touches = false
+                            for ny in max(0, y - 1)...min(h - 1, y + 1) where !touches {
+                                for nx in max(0, x - 1)...min(w - 1, x + 1) where f[ny * w + nx] {
+                                    touches = true; break
+                                }
+                            }
+                            if touches { frontier.append(Int32(i)) }
                         }
                     }
-                    guard n > 0 else { continue }
-                    px[p * 4] = UInt8(r / n); px[p * 4 + 1] = UInt8(g / n); px[p * 4 + 2] = UInt8(b / n)
-                    next[p] = true          // colour only — alpha stays 0, so it is still cut out
+                    for _ in 0..<4 {
+                        if frontier.isEmpty { break }
+                        // Gather from OLD-filled only (commit after the pass), so each pass grows
+                        // the colour skirt by exactly one texel — same result as the full scan.
+                        var newly: [Int32] = []
+                        for i32 in frontier {
+                            let i = Int(i32)
+                            let x = i % w, y = i / w
+                            var r = 0, g = 0, b = 0, n = 0
+                            for ny in max(0, y - 1)...min(h - 1, y + 1) {
+                                for nx in max(0, x - 1)...min(w - 1, x + 1) {
+                                    let j = ny * w + nx
+                                    if f[j] { r += Int(p[j * 4]); g += Int(p[j * 4 + 1]); b += Int(p[j * 4 + 2]); n += 1 }
+                                }
+                            }
+                            guard n > 0 else { continue }
+                            p[i * 4] = UInt8(r / n); p[i * 4 + 1] = UInt8(g / n); p[i * 4 + 2] = UInt8(b / n)
+                            newly.append(i32)   // colour only — alpha stays 0, still cut out
+                        }
+                        for i32 in newly { f[Int(i32)] = true }
+                        // Next frontier: still-unfilled neighbours of the newly coloured texels.
+                        var next: [Int32] = []
+                        for i32 in newly {
+                            let i = Int(i32)
+                            let x = i % w, y = i / w
+                            for ny in max(0, y - 1)...min(h - 1, y + 1) {
+                                for nx in max(0, x - 1)...min(w - 1, x + 1) {
+                                    let j = ny * w + nx
+                                    if !f[j] && !q[j] { q[j] = true; next.append(Int32(j)) }
+                                }
+                            }
+                        }
+                        for i32 in next { q[Int(i32)] = false }   // reset the dedup marks for reuse
+                        frontier = next
+                    }
                 }
             }
-            filled = next
         }
     }
 
