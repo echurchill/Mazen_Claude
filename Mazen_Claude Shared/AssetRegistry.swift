@@ -46,9 +46,11 @@ enum AssetRegistry {
     static let houseQuarterWidth: Float = 1.0
     static let houseWallHeight: Float = 0.30
 
-    /// Gallery normalisation: every Quaternius model is fitted to this many units, so each one reads
-    /// equally in the catalogue. (The birch was hand-tuned to 0.9 and looked right — this matches it.)
-    static let galleryTarget: Float = 0.85
+    /// World units per model-metre for the Quaternius pack — ONE scale shared by every model, so
+    /// they keep their TRUE relative sizes (a birch towers over a flower clump). Eddie is judging
+    /// whether the pack hangs together as a set, which normalising each model to a uniform size
+    /// would hide. Calibrated so the birch lands at ~0.85 units, the size it was hand-tuned to.
+    static let natureScale: Float = 0.156
 
     /// Does this texture actually USE its alpha — i.e. does it need cutout?
     ///
@@ -132,9 +134,10 @@ enum AssetRegistry {
         /// absolute URL — so the asset tells us its texture and all that guessing is gone.
         /// Z-up (Blender's axes, like our other USD props) ⇒ yUp: false.
         ///
-        /// Every model is normalised to the same `galleryTarget` rather than kept at true relative
-        /// scale: this is a catalogue, so each one should read equally well (at true scale a flower
-        /// next to a birch is a speck). Real relative size is the *world's* job, not the gallery's.
+        /// Models keep their TRUE relative sizes: `target` fits the widest dimension, so asking for
+        /// `maxDim * natureScale` makes the fitted scale come out as exactly `natureScale` for every
+        /// model. The pack is authored in metres, so trees tower and ground cover stays low —
+        /// which is the point when judging whether the set hangs together.
         func loadNature(_ file: String) -> ImportedProp? {
             guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/USD/\(file).usdc"), device: device) else {
                 print("[AssetRegistry] nature prop FAILED: \(file)"); return nil
@@ -142,7 +145,9 @@ enum AssetRegistry {
             let mats = mesh.submeshes.map { sm in
                 sm.baseColorURL.map { natureTexture($0) } ?? SubmeshMaterial(diffuse: nil, cutout: false)
             }
-            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget, yUp: false,
+            let maxDim = max(mesh.size.x, max(mesh.size.y, mesh.size.z))
+            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0),
+                                target: maxDim * Self.natureScale, yUp: false,
                                 name: "Quaternius \(file)", galleryOnly: true, submeshMaterials: mats)
         }
         // Load EVERY exported model, enumerated from disk so the gallery tracks the USD folder
