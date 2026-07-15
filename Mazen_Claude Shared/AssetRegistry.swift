@@ -119,8 +119,11 @@ enum AssetRegistry {
         /// models share one leaf/flower map.
         func natureTexture(_ url: URL) -> SubmeshMaterial {
             if let hit = texCache[url.path] { return hit }
-            let tex = TextureLoader.loadTextureFromFile(url: url, device: device, srgb: true)
-            let mat = SubmeshMaterial(diffuse: tex, cutout: tex != nil && Self.usesAlpha(url))
+            // Decide cutout FIRST: the loader needs it, because a cut-out texture must be
+            // un-premultiplied and colour-dilated (see TextureLoader.loadTextureFromFile).
+            let isCutout = Self.usesAlpha(url)
+            let tex = TextureLoader.loadTextureFromFile(url: url, device: device, srgb: true, cutout: isCutout)
+            let mat = SubmeshMaterial(diffuse: tex, cutout: tex != nil && isCutout)
             texCache[url.path] = mat
             return mat
         }
