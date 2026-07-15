@@ -1,8 +1,9 @@
 # Builder Glyphs — 4D Shadows (design capture)
 
 *Captured 2026-07-10 from a design conversation with Eddie. Answers the open "glyph source" question from the language keystone thread (see [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) §Live design questions). Background source: [The Builders of Garden of Worlds — Transcendent Civilization v3](The_Builders_of_Garden_of_Worlds_-_Transcendent_Civilization_v3.docx) (Eddie + ChatGPT — potential background material, not canon-as-is). Status: **adopted as the working glyph model**; rendering model = **caustic projection + a
-comprehension gradient** (2026-07-13, see that section); prototype ("glyph forge" + caustic
-plaque spike) unscheduled.*
+comprehension gradient** (2026-07-13, see that section); message bundling = **the frame cube is the
+cartouche; the vase is a sentence made solid** (2026-07-15, see that section). Spike re-scoped from
+the caustic plaque to **the plinth** (the M16 lock's tutorial), in progress.*
 
 ## The premise
 
@@ -126,13 +127,128 @@ which feel noun vs. verb), fold a short "vocabulary findings" note in here.*
   glyphs (rotate the plate → the caustic responds in real time); precomputed flipbook textures for
   ambient ones.
 
-### Scoped spike — the caustic plaque (self-contained, low-risk)
-A Metal shader that forward-projects one authored deflection field onto a plane, morphs between two
-fields, and blurs by an attunement value — rendered onto an in-game **glyph plaque** (a plate that
-casts a shifting caustic on the surface behind it). Proves the runtime path, the morph, and the
-comprehension-gradient look without touching the inverse solver. Port the tool's source→target
-mapping as the offline precompute. **Eddie: this is a "very important aspect" that will need real
-prototyping to feel right.**
+## The cartouche — the frame cube (Eddie, 2026-07-15)
+
+Second tool, in this folder: [caustic-frame-cube.html](caustic-frame-cube.html). It takes a series
+of caustic shapes and **lofts them into a single solid**: 10 keyframe glyphs
+(`box, focus, star, double, ring, triple, planet, spiral, solar, stickman`), 20 lerped frames per
+transition → **181 transparent 512² slices** stacked along Z inside a rotatable **wireframe cube**.
+From the side it reads as a **vase**; from above, a **layered stack of glyphs**.
+
+**The cartouche is the FRAME.** This answers the open "how do you bundle symbols into a
+cartouche/sentence" question — and the answer isn't a symbol. An Egyptian cartouche is the
+*enclosing loop* that declares "these marks are one name, read together." The wireframe cube does
+exactly that job: it bounds the stack and says *this is one message*. (Eddie's hand-bent wire cube
+is that frame in the flesh.)
+
+**The vase is the sentence made solid.** The [grammar table](#the-generator--grammar-falls-out-of-the-geometry)
+already had cross-section = word, sweep = sentence. The frame cube **freezes the sweep along an
+axis**: the vase's horizontal cross-sections *are* the words; the vase *is* the sentence. No canon
+revision — the same grammar, rendered as an object you can hold.
+
+**Therefore reading = a light plane sweeping the vase.** Decoding is illumination at successive
+heights — literally taking cross-sections. The late-game decoder tool doesn't merely *use* the
+grammar, it **is** the grammar. Cheap, too: the runtime already forward-projects a field; the tool
+only animates which frame is lit.
+
+**Plinth and vase are ONE system at two message lengths.** Plinth = 1 layer (a word). Vase = 181 (a
+story). Same object, same shader; length is the only variable.
+
+**Emergent — the silhouette is a signature.** A vase's profile is the *envelope of its word
+sequence*, so **different messages make different vase shapes**: readable at distance before a
+single glyph resolves, and a free discrimination layer ("the pottery style IS the sentence").
+Corollary: if all vases look alike, all messages are too similar.
+
+### The first Builder text (the tool's sequence, glossed by Eddie)
+
+| glyph | role |
+|---|---|
+| `focus` + `star` | quantifier + noun — *a star* |
+| `double`, `ring`, `triple`, `planet` | *2 planets, 3 ringed planets* |
+| `spiral` | **verb** — *swirled together* |
+| `solar` | result — *into a solar system* |
+| `stickman` | subject — *where a person / humanity lives* |
+
+Opening quantifier-noun pairs, a verb, a result, an inhabitant: **syntax, not a slideshow.** And
+it's a **creation story** — the Builders' account of assembling this solar system, ending in *where
+humanity lives*. The game's central reveal (natural surface → engineered truth) stated as plain fact
+on a vase the player walks past in world 1 and cannot read for twenty hours.
+
+It also validates ["the world is the Rosetta stone"](#the-forge-tool-as-a-living-vocabulary-sketchpad-eddie-ongoing)
+hard: **every noun in that sentence is visible in the sky** — the star, the planets, the ringed
+planet, the solar system, the player themselves. The vocabulary *is* the world's contents.
+
+> **Provenance note (Eddie, 2026-07-15):** the leading `box` glyph was **an accident** — left in the
+> tool's code, with the "start of memory" prose retro-fitted to it. Not canon. The idea it
+> accidentally suggested is worth keeping as a **candidate, clearly unproven**: that the first glyph
+> is a **type marker** declaring the message's genre (`box` = memory/story; its absence =
+> instruction). The plinth messages below carry bare marks with no `box`, so the distinction is
+> already implicit in the design if we want it. Eddie's call; don't treat it as decided.
+
+**The swirl is not a placeholder.** It appears in the vase sentence (*swirled together → a solar
+system*) and on the portal plinth (*swirl → you twist → a portal*). Same verb, different object:
+**turn/combine to produce.** That consistency across contexts is what makes a generative system feel
+real rather than a cipher table — and it lands exactly on the grammar's **4D rotation = verb** row: a
+verb drawn as the operation it names. We already have the "Q glyph"; stop looking for one.
+
+**The dots quietly resolve the gradient-vs-tutorial tension.** The [comprehension gradient](#the-comprehension-gradient--mushy-is-the-mechanic-not-the-bug-eddies-key-reframe)
+says early = mushy blobs, but a tutorial must be legible — those fight. Except **a mushy dot is
+still a dot**: counting survives arbitrary defocus. So the first words read at *zero* attunement
+without weakening the gradient, and it's diegetically right (numerals are what real decipherment
+cracks first). Generalised rule: **choose blur-robust shapes for the first words** and the gradient
+costs nothing. Watch `focus`/`double`/`planet`/`star` though — all blob-space; *star vs planet* is
+where the [discrimination ceiling](#legibility--the-honest-caution) bites first.
+
+## The plinth — the tutorial puzzle (Eddie, 2026-07-15)
+
+The plinth (a trapezoidal base with a lit disc on top, casting a caustic) **replaces the
+`glyphPlaque`** and stands beside each switch. It maps onto the M16 lock we already have, with no
+mechanic changes:
+
+| existing | plinth says |
+|---|---|
+| four `.dial`s in the garden's diagonal quarters (M16.3) | **1, 2, 3, 4 dots** — one ordinal each |
+| all dials aligned ⇒ the temple's bond dissolves (M16.3) | portal plinth: blank → **swirl** |
+| a twist of the unlocked door's slice swings it open (M16.4) | player twists (Q) → portal plinth shows the **portal** |
+
+**Why this is the whole language in miniature.** The switch plinths teach `focus`/`double`/`triple`
+— *the exact morphemes the vase sentence needs*. The player learns "two dots = two" on switch 2 in
+world 1; twenty hours later that same glyph reads **"2 planets"** on a vase. The tutorial isn't
+adjacent to the dictionary, it **is** the dictionary entry — the Rosetta closing for free.
+
+And the portal plinth **teaches a verb by consequence, with no UI text**: the glyph names the
+action, you perform it, the glyph updates to the result. "Understanding rewrites perception" as a
+tutorial loop.
+
+**Open question (Eddie):** numbering the dials 1–4 implies an *order*, but M16.3 currently ships
+three pre-aligned and one off ("find the pattern and act once"). So the ordinals are, today,
+teaching-only. Either is fine — but if the numbers should mean "press in sequence", that's a real
+puzzle change, not a label change. **Not decided.**
+
+## The vase archive (Eddie, 2026-07-15)
+
+Vases scattered around the worlds, meaningless on sight; late-game the player gets the decoder tool
+and **goes back** to read the Builders' whole story. Two constraints this needs:
+
+- **Placement scattered, content AUTHORED.** Found out of order, the archive must be *assembled* —
+  curation becomes the literal reading mechanic ("wisdom is curation" as verb, not moral). But
+  procedurally generated vase content would be **noise**, and noise is load-bearing elsewhere (the
+  lost stratum is precisely the stuff you can't grep) — don't let accidental noise blur a real
+  distinction.
+- **Findability.** "Go back to them" only works if the player can: either a journal logs vases as
+  you pass, or they sit at memorable landmarks. Otherwise the late game is a wander.
+
+### Scoped spike — the plinth (supersedes the caustic-plaque spike)
+The plinth is a **cheaper first step** than the previously scoped plaque and de-risks the same
+render path on the tutorial: one static field, forward-projected, **no morph and no blur required**
+to ship the first version; the switch-state → glyph swap is just swapping fields. The morph and the
+attunement blur then land on the same shader as upgrades, and the vase is that shader with a long
+field sequence and a moving light plane.
+
+Note the tutorial symbols (1–4 dots, swirl) are simple enough that **their caustics need no inverse
+solve at all** — a target point-set splatted as soft blobs is the forge's own poor-man's transport,
+minus the solver. Blob radius then *is* the sharpness dial, so the comprehension gradient falls out
+for free. **Eddie: this is a "very important aspect" that will need real prototyping to feel right.**
 
 ## Prototype path (cheap)
 
