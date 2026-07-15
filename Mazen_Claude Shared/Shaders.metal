@@ -461,6 +461,13 @@ fragment float4 fragmentShader(
         // M12-C: imported prop with its own diffuse texture, lit + shadowed like the maze.
         color = assetDiffuse.sample(texSampler, in.texCoord).rgb;
         lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
+    } else if (in.materialID == 20) {
+        // M20: imported sub-mesh whose diffuse carries alpha (Quaternius leaves/flowers) — cut it
+        // out so foliage reads as leaves instead of solid quads. Otherwise identical to 11.
+        float4 texel = assetDiffuse.sample(texSampler, in.texCoord);
+        if (texel.a < 0.5) discard_fragment();
+        color = texel.rgb;
+        lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
     } else if (in.materialID == 12) {
         // Sun — emissive, unlit (M9). Kept out of the fog below so it stays bright.
         color = in.color.rgb;

@@ -319,7 +319,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // Residency set
         let resDesc = MTLResidencySetDescriptor()
         resDesc.initialCapacity = 9 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count
-            + loadedProps.count * 3 + loadedProps.reduce(0) { $0 + $1.submeshDiffuse.count }
+            + loadedProps.count * 3 + loadedProps.reduce(0) { $0 + $1.submeshMaterials.count }
         let rs = try! device.makeResidencySet(descriptor: resDesc)
         rs.addAllocation(tileMeshLib.vertexBuffer)
         rs.addAllocation(tileMeshLib.indexBuffer)
@@ -337,7 +337,7 @@ class Renderer: NSObject, MTKViewDelegate {
         for p in loadedProps {
             rs.addAllocation(p.mesh.vertexBuffer); rs.addAllocation(p.mesh.indexBuffer)
             if let d = p.diffuse { rs.addAllocation(d) }
-            for t in p.submeshDiffuse { if let t { rs.addAllocation(t) } }   // per-sub-mesh maps
+            for m in p.submeshMaterials { if let t = m.diffuse { rs.addAllocation(t) } }   // per-sub-mesh maps
         }
         for buf in assetBufs { rs.addAllocation(buf) }
         rs.commit()
@@ -669,20 +669,22 @@ class Renderer: NSObject, MTKViewDelegate {
         var inst = 0
 
         // Emit one flat-colour sub-mesh or a whole textured mesh at `m`.
-        func emit(_ mesh: AssetMesh, _ m: float4x4, diffuse: MTLTexture?, submeshDiffuse: [MTLTexture?] = []) {
+        func emit(_ mesh: AssetMesh, _ m: float4x4, diffuse: MTLTexture?, submeshMaterials: [SubmeshMaterial] = []) {
             // Per-sub-mesh textures (a Quaternius tree: bark map + leaf map). One draw per sub-mesh,
             // each binding its own diffuse; a sub-mesh with no texture keeps its flat `Kd` colour.
-            if !submeshDiffuse.isEmpty {
+            // A diffuse carrying alpha (leaves/flowers) uses the cutout material (20) instead of 11.
+            if !submeshMaterials.isEmpty {
                 for (i, sm) in mesh.submeshes.enumerated() {
                     guard inst < cap else { return }
-                    let tex = i < submeshDiffuse.count ? submeshDiffuse[i] : nil
+                    let mat = i < submeshMaterials.count ? submeshMaterials[i] : SubmeshMaterial(diffuse: nil, cutout: false)
+                    let matID: UInt32 = mat.diffuse == nil ? 10 : (mat.cutout ? 20 : 11)
                     ptr[inst] = InstanceDataSwift(modelMatrix: m,
-                                                  baseColor: tex != nil ? SIMD4(1, 1, 1, 1) : sm.color,
-                                                  materialID: tex != nil ? 11 : 10,
+                                                  baseColor: mat.diffuse != nil ? SIMD4(1, 1, 1, 1) : sm.color,
+                                                  materialID: matID,
                                                   tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
                     assetDrawCmds.append(AssetDrawCmd(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer,
                                                       indexOffset: sm.indexOffset, indexCount: sm.indexCount,
-                                                      instanceIndex: inst, diffuse: tex))
+                                                      instanceIndex: inst, diffuse: mat.diffuse))
                     inst += 1
                 }
                 return
@@ -733,7 +735,7 @@ class Renderer: NSObject, MTKViewDelegate {
                             let ty = p.yUp ? c.z * fs : -c.y * fs
                             let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs
                             let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
-                            emit(p.mesh, m, diffuse: p.diffuse, submeshDiffuse: p.submeshDiffuse)
+                            emit(p.mesh, m, diffuse: p.diffuse, submeshMaterials: p.submeshMaterials)
                         case .houseCorner:
                             let assembly = prop.facing == .s ? houseAssemblyDoor : houseAssembly
                             for piece in assembly { emit(piece.mesh, tileM * piece.local, diffuse: nil) }

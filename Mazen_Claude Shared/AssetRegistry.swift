@@ -1,6 +1,14 @@
 import Foundation
 import Metal
 import simd
+import ImageIO   // CGImageSource — probing a texture PNG for an alpha channel (cutout detection)
+
+/// One sub-mesh's resolved diffuse + whether it needs alpha-cutout (its PNG carries an alpha
+/// channel — Quaternius leaves/flowers do; rock/grass don't). Drives materialID 20 vs 11.
+struct SubmeshMaterial {
+    let diffuse: MTLTexture?
+    let cutout: Bool
+}
 
 /// One imported model placed on the cube (M12-D asset registry).
 struct ImportedProp {
@@ -11,10 +19,10 @@ struct ImportedProp {
     let yUp: Bool                           // OBJ kits import Y-up; USD props Z-up
     var name: String = ""                   // gallery HUD label
     var galleryOnly: Bool = false           // skip the overworld decoration stamp (eval-grid props)
-    /// Per-sub-mesh diffuse, parallel to `mesh.submeshes` — for kits whose sub-meshes each want a
+    /// Per-sub-mesh material, parallel to `mesh.submeshes` — for kits whose sub-meshes each want a
     /// DIFFERENT texture (a Quaternius tree = bark + leaves). Empty ⇒ use `diffuse` / flat colours.
-    /// A nil entry falls back to that sub-mesh's flat `Kd` colour.
-    var submeshDiffuse: [MTLTexture?] = []
+    /// A nil diffuse falls back to that sub-mesh's flat `Kd` colour.
+    var submeshMaterials: [SubmeshMaterial] = []
 }
 
 /// One piece of the imported modular house, positioned in a quarter's tile-local frame
@@ -36,6 +44,34 @@ enum AssetRegistry {
     /// `houseWallHeight` is the wall height in tile-Z (the procedural hip roof rests on top of it).
     static let houseQuarterWidth: Float = 1.0
     static let houseWallHeight: Float = 0.30
+
+    /// Does this texture actually USE its alpha — i.e. does it need cutout?
+    ///
+    /// The presence of an alpha channel proves nothing: Quaternius' `BirchTree_Bark.png` carries a
+    /// fully-opaque one, so testing the channel alone would push solid bark down the cutout path
+    /// (defeating early-Z, and masking real problems as we scale to the rest of the pack). So decode
+    /// and look for genuinely transparent texels. Run once per unique texture, then cached.
+    static func usesAlpha(_ url: URL) -> Bool {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return false }
+        switch img.alphaInfo {
+        case .first, .last, .premultipliedFirst, .premultipliedLast: break
+        default: return false            // no alpha channel at all — nothing to cut out
+        }
+        let w = img.width, h = img.height
+        guard w > 0, h > 0 else { return false }
+        var buf = [UInt8](repeating: 0, count: w * h * 4)
+        let ok: Bool = buf.withUnsafeMutableBytes { raw -> Bool in
+            guard let ctx = CGContext(data: raw.baseAddress, width: w, height: h, bitsPerComponent: 8,
+                                      bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard ok else { return false }
+        for i in stride(from: 3, to: buf.count, by: 4) where buf[i] < 128 { return true }
+        return false
+    }
 
     /// Load the whole registry: decoration props + the two house-quarter assemblies.
     /// (Dev absolute path — these get bundled for shipping later; see roadmap "shipping hygiene".)
@@ -80,14 +116,18 @@ enum AssetRegistry {
         // shared across models (many trees reuse one leaf map), so cache by name. A name that has no
         // matching PNG just falls back to that sub-mesh's flat colour.
         let natureDir = "Quaternius Ultimate Stylized Nature Pack"
-        var texCache: [String: MTLTexture?] = [:]
-        func natureTexture(_ materialName: String) -> MTLTexture? {
+        var texCache: [String: SubmeshMaterial] = [:]
+        /// Resolve a texture by name, noting whether its PNG carries alpha — leaves/flowers do and
+        /// must be cut out (Eddie: "they are not transparent"); rock/grass don't. A file with an
+        /// all-opaque alpha channel is harmless: the cutout threshold simply never fires.
+        func natureTexture(_ materialName: String) -> SubmeshMaterial? {
             guard !materialName.isEmpty else { return nil }
-            if let hit = texCache[materialName] { return hit }
+            if let hit = texCache[materialName] { return hit.diffuse == nil ? nil : hit }
             let url = URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/Textures/\(materialName).png")
             let tex = TextureLoader.loadTextureFromFile(url: url, device: device, srgb: true)
-            texCache[materialName] = tex
-            return tex
+            let mat = SubmeshMaterial(diffuse: tex, cutout: tex != nil && Self.usesAlpha(url))
+            texCache[materialName] = mat
+            return tex == nil ? nil : mat
         }
         // `fallbackTex` names the texture for models the name-match can't resolve — the convention
         // isn't universal: Rock_1's material is "Rock" but the file is "Rocks.png", and Grass_Large's
@@ -96,11 +136,12 @@ enum AssetRegistry {
             guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/OBJ/\(file).obj"), device: device) else {
                 print("[AssetRegistry] nature prop FAILED: \(file)"); return nil
             }
-            let texes = mesh.submeshes.map { sm in
+            let mats = mesh.submeshes.map { sm in
                 natureTexture(sm.materialName) ?? fallbackTex.flatMap { natureTexture($0) }
+                    ?? SubmeshMaterial(diffuse: nil, cutout: false)
             }
             return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: target, yUp: true,
-                                name: label, galleryOnly: true, submeshDiffuse: texes)
+                                name: label, galleryOnly: true, submeshMaterials: mats)
         }
         let nature: [ImportedProp] = [
             loadNature("BirchTree_1",    "Quaternius BirchTree_1",  0.90),
