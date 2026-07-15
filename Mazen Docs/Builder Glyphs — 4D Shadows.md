@@ -2,8 +2,9 @@
 
 *Captured 2026-07-10 from a design conversation with Eddie. Answers the open "glyph source" question from the language keystone thread (see [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) §Live design questions). Background source: [The Builders of Garden of Worlds — Transcendent Civilization v3](The_Builders_of_Garden_of_Worlds_-_Transcendent_Civilization_v3.docx) (Eddie + ChatGPT — potential background material, not canon-as-is). Status: **adopted as the working glyph model**; rendering model = **caustic projection + a
 comprehension gradient** (2026-07-13, see that section); message bundling = **the frame cube is the
-cartouche; the vase is a sentence made solid** (2026-07-15, see that section). Spike re-scoped from
-the caustic plaque to **the plinth** (the M16 lock's tutorial), in progress.*
+cartouche; the vase is a sentence made solid** (2026-07-15, see that section); the plinth is a
+**waldo for the world** (2026-07-15 — mechanism, not signage). Spike re-scoped from the caustic
+plaque to **the plinth** (the M16 lock's tutorial): first cut landed 2026-07-15 (M21), unreviewed.*
 
 ## The premise
 
@@ -224,6 +225,72 @@ tutorial loop.
 three pre-aligned and one off ("find the pattern and act once"). So the ordinals are, today,
 teaching-only. Either is fine — but if the numbers should mean "press in sequence", that's a real
 puzzle change, not a label change. **Not decided.**
+
+## The plinth is a WALDO for the world (Eddie, 2026-07-15)
+
+Eddie's reframe: the plinth isn't signage, it's **mechanism** — a master–slave remote manipulator.
+(A *waldo*: Heinlein's 1942 novella, whose protagonist is too weak to touch the world and builds
+remote hands he drives from a harness; engineers took the word and built the real thing — Goertz's
+hot-cell manipulators at Argonne, reaching through a shielded wall so the operator stays safe
+behind it. Defining traits: **correspondence**, **force reflection**, **scaling**.)
+
+**The sign becomes the switch.** The swirl means *turn/combine to produce* — and it's engraved on
+the very thing you turn. The glyph doesn't describe a verb happening elsewhere; it **labels its own
+control**. Language and mechanism collapse into one object, which is how real interfaces earn their
+symbols.
+
+**The force reflection already exists.** M16.2 — the slice strains against the lock and springs back
+(camera wobble), "the cue that teaches *locked* without a word of UI." That *is* bilateral force
+reflection, the defining waldo trait: the world pushes back through the control. Already shipped;
+the plinth only gives that resistance a body to travel through.
+
+**Scaling is the thesis, not a detail.** A waldo exists so a small gesture moves what the operator
+couldn't. A finite hand turning a world is the game's own claim about limitation ("the player's
+limitation is the searchlight") stated as hardware. It also rhymes with the
+[step-down thesis](#the-generator--grammar-falls-out-of-the-geometry) — face:cube :: cube:tesseract —
+a waldo is *literally* a step-down device.
+
+**Every waldo implies an ABSENT OPERATOR.** A control surface is evidence that someone isn't here.
+Plinths scattered across the worlds are a landscape of abandoned controls — the **lost stratum
+stated in hardware** rather than lore. Same move as the vases (the archive was always there,
+unreadable), but for *mechanism* rather than *message*.
+
+It also fits the Builders' ethic without being told to: **hidden-by-ethics** gives a control surface
+that looks like landscape furniture; **restraint over omnipotence** gives hands sized for *us*, not
+for them.
+
+### Who is operating whom — hold BOTH (not to be resolved)
+
+| reading | the plinth is… |
+|---|---|
+| the player reaches into a world too big for them | **the player's** waldo |
+| something finite is being reached *through* | the player is **the Builders'** waldo |
+
+The endgame seed (last section) — the created reminding the creators, the introduction composed in
+the glyph language the player learned — makes the second reading land hard. Note the
+inversion: Heinlein's Waldo is a mind too **weak** to touch the world; the Builders are minds too
+**large** to. Same device, opposite direction.
+
+### Taxonomy — keep these honest
+
+| | what it is | what it must NEVER do |
+|---|---|---|
+| **vase** | a word / a record | control something |
+| **plinth** | a hand / a control | tell a story |
+
+The Builders left both *words* and *hands*. Blur them and each stops meaning anything.
+
+### OPEN QUESTION — does a twist require a plinth? (Eddie to answer)
+
+Today Q/E twists anywhere. If waldoes **gate** it, every twist becomes *located and authored* — you
+may only turn the world where the Builders left a handle. Strongly in-theme, but a real loss of
+freedom, and **M18/M20 both assume free twisting**. Not decided; Eddie is deciding later.
+
+*Claude's proposal, for consideration only:* **the plinth is training wheels.** Early you can only
+twist at a Builder's handle — you need their hands; as attunement rises you reach directly and twist
+anywhere. That makes the [comprehension gradient](#the-comprehension-gradient--mushy-is-the-mechanic-not-the-bug-eddies-key-reframe)
+pay out **mechanically** rather than only visually: understanding rewrites *capability*, not just
+perception. The first world's door plinth is already where that lesson belongs.
 
 ## The vase archive (Eddie, 2026-07-15)
 
