@@ -89,6 +89,25 @@ enum PipelineFactory {
         return try! compiler.makeRenderPipelineState(descriptor: shadowPipeDesc)
     }
 
+    /// M20 — alpha-tested shadow pipeline for cut-out foliage (adds a fragment stage that discards
+    /// transparent texels). Kept separate from the depth-only pipeline above so only the handful of
+    /// cut-out sub-meshes pay for a fragment shader; everything else keeps the fast path.
+    static func makeShadowCutoutPipeline(compiler: MTL4Compiler, library: MTLLibrary) -> MTLRenderPipelineState {
+        let vert = MTL4LibraryFunctionDescriptor()
+        vert.library = library
+        vert.name = "shadowCutoutVertexShader"
+        let frag = MTL4LibraryFunctionDescriptor()
+        frag.library = library
+        frag.name = "shadowCutoutFragmentShader"
+
+        let desc = MTL4RenderPipelineDescriptor()
+        desc.label = "ShadowCutoutPipeline"
+        desc.rasterSampleCount = 1
+        desc.vertexFunctionDescriptor = vert
+        desc.fragmentFunctionDescriptor = frag
+        return try! compiler.makeRenderPipelineState(descriptor: desc)
+    }
+
     /// Shadow map texture (2048×2048 — keeps texel density up as the ortho volume
     /// grows with cube size; a 9-face jamb/wall is only a few texels at 1024).
     static func makeShadowMap(device: MTLDevice) -> MTLTexture {

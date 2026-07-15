@@ -29,6 +29,7 @@ struct AssetDrawCmd {
     let indexCount: Int
     let instanceIndex: Int
     let diffuse: MTLTexture?
+    var cutout: Bool = false    // diffuse is a cut-out ⇒ alpha-test it in the shadow pass too
 }
 
 class Renderer: NSObject, MTKViewDelegate {
@@ -80,6 +81,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var skyPipelineState: MTLRenderPipelineState
     var fadePipelineState: MTLRenderPipelineState   // M11.2b world-transition fade overlay
     var shadowPipelineState: MTLRenderPipelineState
+    var shadowCutoutPipelineState: MTLRenderPipelineState   // M20: alpha-tested shadows for foliage
     var depthState: MTLDepthStencilState
     var depthStateNoWrite: MTLDepthStencilState
     var depthStateAlways: MTLDepthStencilState
@@ -228,6 +230,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.fadePipelineState = PipelineFactory.makeFadePipeline(compiler: compiler, library: library,
                                                                   sampleCount: sampleCount, colorFormat: colorFormat)
         self.shadowPipelineState = PipelineFactory.makeShadowPipeline(compiler: compiler, library: library)
+        self.shadowCutoutPipelineState = PipelineFactory.makeShadowCutoutPipeline(compiler: compiler, library: library)
         self.shadowMapTexture = PipelineFactory.makeShadowMap(device: device)
         let depthStates = PipelineFactory.makeDepthStates(device: device)
         self.depthState = depthStates.write
@@ -684,7 +687,7 @@ class Renderer: NSObject, MTKViewDelegate {
                                                   tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
                     assetDrawCmds.append(AssetDrawCmd(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer,
                                                       indexOffset: sm.indexOffset, indexCount: sm.indexCount,
-                                                      instanceIndex: inst, diffuse: mat.diffuse))
+                                                      instanceIndex: inst, diffuse: mat.diffuse, cutout: mat.cutout))
                     inst += 1
                 }
                 return
@@ -830,9 +833,29 @@ class Renderer: NSObject, MTKViewDelegate {
                 )
             }
             // M12: imported props cast shadows too (each draw = its own vertex + uint32 range).
+            // M20: a cut-out sub-mesh (foliage) swaps to the alpha-tested shadow pipeline, so its
+            // shadow follows the leaf silhouette instead of the solid card/blob it's painted on.
+            // Only those draws pay for a fragment stage; the rest stay on the depth-only pipeline.
             if !assetDrawCmds.isEmpty {
                 vertexArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+                var cutoutActive = false
+                var fragTableBound = false
                 for cmd in assetDrawCmds {
+                    let needCutout = cmd.cutout && cmd.diffuse != nil
+                    if needCutout && !fragTableBound {
+                        // Bound lazily: with no cut-out draws the shadow pass never needs a fragment
+                        // argument table at all.
+                        if let s = texSampler { fragmentArgTable.setSamplerState(s.gpuResourceID, index: 0) }
+                        shadowEncoder.setArgumentTable(fragmentArgTable, stages: .fragment)
+                        fragTableBound = true
+                    }
+                    if needCutout != cutoutActive {
+                        shadowEncoder.setRenderPipelineState(needCutout ? shadowCutoutPipelineState : shadowPipelineState)
+                        cutoutActive = needCutout
+                    }
+                    if needCutout, let d = cmd.diffuse {
+                        fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue)
+                    }
                     vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
                     shadowEncoder.drawIndexedPrimitives(
                         primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,

@@ -200,6 +200,40 @@ vertex float4 shadowVertexShader(
     return frame.lightViewProjectionMatrix * float4(xf.position, 1.0);
 }
 
+// M20 — alpha-tested shadow variant, for imported sub-meshes whose diffuse is a cut-out (foliage).
+// The plain shadow pass is depth-only, so cut-out leaves cast the shadow of their SOLID geometry —
+// a leaf card throws a rectangle. These two carry the UV through and discard the same texels the
+// scene pass does (material 20), so the shadow matches the silhouette you actually see.
+struct ShadowCutoutOut {
+    float4 position [[position]];
+    float2 texCoord;
+};
+
+vertex ShadowCutoutOut shadowCutoutVertexShader(
+    uint vertexID [[vertex_id]],
+    uint instanceID [[instance_id]],
+    const device MazeVertex* vertices [[buffer(BufferIndexVertices)]],
+    const device FrameUniforms& frame [[buffer(BufferIndexFrameUniforms)]],
+    const device InstanceData* instances [[buffer(BufferIndexInstances)]]
+) {
+    const device MazeVertex& vert = vertices[vertexID];
+    const device InstanceData& inst = instances[instanceID];
+    InflatedVertex xf = m14bTransform(vert.position, vert.normal, inst.modelMatrix,
+                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude);
+    ShadowCutoutOut out;
+    out.position = frame.lightViewProjectionMatrix * float4(xf.position, 1.0);
+    out.texCoord = vert.texCoord;
+    return out;
+}
+
+fragment void shadowCutoutFragmentShader(
+    ShadowCutoutOut in [[stage_in]],
+    texture2d<float> assetDiffuse [[texture(TextureIndexAssetDiffuse)]],
+    sampler texSampler [[sampler(0)]]
+) {
+    if (assetDiffuse.sample(texSampler, in.texCoord).a < 0.5) discard_fragment();
+}
+
 // ── Scene pass ─────────────────────────────────────────────────
 
 struct VertexOut {
