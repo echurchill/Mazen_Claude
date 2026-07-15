@@ -46,6 +46,10 @@ enum AssetRegistry {
     static let houseQuarterWidth: Float = 1.0
     static let houseWallHeight: Float = 0.30
 
+    /// Gallery normalisation: every Quaternius model is fitted to this many units, so each one reads
+    /// equally in the catalogue. (The birch was hand-tuned to 0.9 and looked right — this matches it.)
+    static let galleryTarget: Float = 0.85
+
     /// Does this texture actually USE its alpha — i.e. does it need cutout?
     ///
     /// The presence of an alpha channel proves nothing: Quaternius' `BirchTree_Bark.png` carries a
@@ -127,24 +131,31 @@ enum AssetRegistry {
         /// USD carries a real UsdPreviewSurface material→texture binding that ModelIO resolves to an
         /// absolute URL — so the asset tells us its texture and all that guessing is gone.
         /// Z-up (Blender's axes, like our other USD props) ⇒ yUp: false.
-        func loadNature(_ file: String, _ label: String, _ target: Float) -> ImportedProp? {
+        ///
+        /// Every model is normalised to the same `galleryTarget` rather than kept at true relative
+        /// scale: this is a catalogue, so each one should read equally well (at true scale a flower
+        /// next to a birch is a speck). Real relative size is the *world's* job, not the gallery's.
+        func loadNature(_ file: String) -> ImportedProp? {
             guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/USD/\(file).usdc"), device: device) else {
                 print("[AssetRegistry] nature prop FAILED: \(file)"); return nil
             }
             let mats = mesh.submeshes.map { sm in
                 sm.baseColorURL.map { natureTexture($0) } ?? SubmeshMaterial(diffuse: nil, cutout: false)
             }
-            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: target, yUp: false,
-                                name: label, galleryOnly: true, submeshMaterials: mats)
+            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget, yUp: false,
+                                name: "Quaternius \(file)", galleryOnly: true, submeshMaterials: mats)
         }
-        let nature: [ImportedProp] = [
-            loadNature("BirchTree_1",    "Quaternius BirchTree_1",  0.90),
-            loadNature("Bush_Large",     "Quaternius Bush_Large",   0.45),
-            loadNature("Rock_1",         "Quaternius Rock_1",       0.40),
-            loadNature("Grass_Large",    "Quaternius Grass_Large",  0.35),
-            loadNature("Flower_1_Clump", "Quaternius Flower_1_Clump", 0.35),
-            loadNature("Plant_1",        "Quaternius Plant_1",      0.35),
-        ].compactMap { $0 }
+        // Load EVERY exported model, enumerated from disk so the gallery tracks the USD folder
+        // without a hand-maintained list (re-run Tools/export_quaternius_usd.py to refresh it).
+        let usdDir = "\(modelsRoot)/\(natureDir)/USD"
+        let natureFiles = ((try? FileManager.default.contentsOfDirectory(atPath: usdDir)) ?? [])
+            .filter { $0.hasSuffix(".usdc") }
+            .map { String($0.dropLast(5)) }
+            .sorted()
+        let nature: [ImportedProp] = natureFiles.compactMap { loadNature($0) }
+        if nature.count != natureFiles.count {
+            print("[AssetRegistry] nature: \(nature.count)/\(natureFiles.count) models loaded")
+        }
 
         // M12-E: imported modular house. Load the kit's solid-colour OBJ pieces and assemble one
         // canonical quarter (authored for facing.n — two outer walls on the −X/−Y tile edges +

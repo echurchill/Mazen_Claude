@@ -162,18 +162,17 @@ class CubeModel {
     func stampGalleryImports(_ states: [Int]) {
         guard !states.isEmpty else { return }
         let n = size, c = n / 2
-        let span = states.count
-        let left = max(1, c - span / 2)
-        let cLo = max(0, left - 1), cHi = min(n - 1, left + span)
-        // One CONTIGUOUS open rectangle from the catalog room's south row (c+1) down to a strip floor,
-        // fully walkable and OPEN on top so it fuses with the spawn room. It must NOT funnel through
-        // the single centre tile — the return portal sits at (c+1, c), and stepping onto a portal
-        // teleports you home, so a 1-wide corridor there made the models unreachable (Eddie). A wide
-        // walkway lets you reach the models via any column and step *around* the portal.
-        let top = c + 1
-        let bot = min(n - 1, c + 4)                 // strip floor
-        let row = min(bot - 1, c + 3)               // the model row (a walkable rank on each side)
-        let all: DirectionMask = [.north, .east, .south, .west]
+        // Lay the models on a grid with an EMPTY COLUMN between neighbours, forming north–south
+        // aisles: you walk an aisle and the models line both sides, each read in near-isolation
+        // (they're solid props, so you walk *to* them, not through). Rows are adjacent — a prop only
+        // blocks the middle third of its tile, so rows stay passable.
+        let colsN = 11                                    // 11 aisled columns × 6 rows = 66 slots ≥ 63
+        let rowsN = (states.count + colsN - 1) / colsN
+        let left = max(1, c - (colsN - 1))                // model columns: left, left+2, … (span 2n-1)
+        let cLo = max(0, left - 1), cHi = min(n - 1, left + 2 * (colsN - 1) + 1)
+        let top = c + 1                                   // the catalog room's south row — the join
+        let firstRow = top + 1
+        let bot = min(n - 1, firstRow + rowsN)            // a walkable rank past the last model row
         func reveal(_ r: Int, _ col: Int, _ op: DirectionMask) {
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { return }
             cubies[ci].facelets[fi].mazeTile.openings = op
@@ -182,19 +181,28 @@ class CubeModel {
             cubies[ci].facelets[fi].tileState = .discovered
             cubies[ci].facelets[fi].discoveryAmount = 1.0
         }
+        func discovered(_ r: Int, _ col: Int) -> Bool {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { return false }
+            return cubies[ci].facelets[fi].tileState == .discovered
+        }
+        func inBlock(_ r: Int, _ col: Int) -> Bool { r >= top && r <= bot && col >= cLo && col <= cHi }
+        // Open an edge only where it leads somewhere real: inside the block, or (along the top rank)
+        // into the already-revealed catalog room. Never open into an unrevealed tile — the block is
+        // wider than the catalog, so most of its top rank must stay sealed against the fog.
         for r in top...bot {
             for col in cLo...cHi {
-                var op = all
-                if r == bot { op.remove(.south) }   // seal the far edge; top stays open toward spawn
-                if col == cLo { op.remove(.west) }
-                if col == cHi { op.remove(.east) }
+                var op: DirectionMask = []
+                if inBlock(r - 1, col) || discovered(r - 1, col) { op.insert(.north) }
+                if inBlock(r + 1, col) { op.insert(.south) }
+                if inBlock(r, col - 1) { op.insert(.west) }
+                if inBlock(r, col + 1) { op.insert(.east) }
                 reveal(r, col, op)
             }
         }
         // The return portal (stampGallery put it at (c+1, c), directly south of spawn) now sits right
         // on the spawn→models path — you'd teleport home the instant you walked toward them. Move it
-        // (and its lamp) to a far corner of the new walkway: still an obvious "step here to leave",
-        // but off the direct path. The exact portal prop is preserved (its state = destination).
+        // (and its lamp) to a far corner of the walkway: still an obvious "step here to leave", but
+        // off the direct path. The exact portal prop is preserved (its state = destination).
         if let (spci, spfi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c),
            let (dsci, dsfi) = faceletAt(face: .positiveZ, row: bot, col: cLo) {
             let moved = cubies[spci].facelets[spfi].props.filter { $0.kind == .portal || $0.kind == .portalLamp }
@@ -203,9 +211,11 @@ class CubeModel {
                 cubies[dsci].facelets[dsfi].props.append(contentsOf: moved)
             }
         }
-        // One model per cell across the model row.
+        // One model per grid cell, spaced two columns apart so the aisles stay open.
         for (i, state) in states.enumerated() {
-            guard let (ci, fi) = faceletAt(face: .positiveZ, row: row, col: left + i) else { continue }
+            let gr = firstRow + i / colsN
+            let gc = left + 2 * (i % colsN)
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .importedAsset, subRow: 1, subCol: 1, facing: .s, state: state))
         }
