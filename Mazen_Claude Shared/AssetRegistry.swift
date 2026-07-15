@@ -11,6 +11,10 @@ struct ImportedProp {
     let yUp: Bool                           // OBJ kits import Y-up; USD props Z-up
     var name: String = ""                   // gallery HUD label
     var galleryOnly: Bool = false           // skip the overworld decoration stamp (eval-grid props)
+    /// Per-sub-mesh diffuse, parallel to `mesh.submeshes` — for kits whose sub-meshes each want a
+    /// DIFFERENT texture (a Quaternius tree = bark + leaves). Empty ⇒ use `diffuse` / flat colours.
+    /// A nil entry falls back to that sub-mesh's flat `Kd` colour.
+    var submeshDiffuse: [MTLTexture?] = []
 }
 
 /// One piece of the imported modular house, positioned in a quarter's tile-local frame
@@ -66,22 +70,43 @@ enum AssetRegistry {
             loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  1), 0.28),   // moved off the temple-door path (Eddie)
         ].compactMap { $0 }
 
-        // M20 proof pass — a sampling of the Quaternius Ultimate Stylized Nature Pack (CC0) loaded
-        // straight from its OBJ/ folder. Flat-gray geometry only (no textures wired yet), gallery-only
-        // so they don't clutter the overworld — the point is to eyeball the low-poly shapes/orientation.
-        func loadNature(_ file: String, _ label: String, _ target: Float) -> ImportedProp? {
-            let dir = "Quaternius Ultimate Stylized Nature Pack/OBJ"
-            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(dir)/\(file).obj"), device: device) else {
+        // M20 — a sampling of the Quaternius Ultimate Stylized Nature Pack (CC0), loaded straight from
+        // its OBJ/ folder (no conversion needed). Gallery-only so they don't clutter the overworld.
+        //
+        // Texturing: the pack's `.mtl` files ship NO `map_Kd` — just a flat grey `Kd`. Quaternius
+        // instead expects the material NAME to name the texture ("BirchTree_Bark" →
+        // Textures/BirchTree_Bark.png), so resolve each sub-mesh's texture by its material name and
+        // hand them over per-sub-mesh (a tree = bark + leaves, two different maps). Textures are
+        // shared across models (many trees reuse one leaf map), so cache by name. A name that has no
+        // matching PNG just falls back to that sub-mesh's flat colour.
+        let natureDir = "Quaternius Ultimate Stylized Nature Pack"
+        var texCache: [String: MTLTexture?] = [:]
+        func natureTexture(_ materialName: String) -> MTLTexture? {
+            guard !materialName.isEmpty else { return nil }
+            if let hit = texCache[materialName] { return hit }
+            let url = URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/Textures/\(materialName).png")
+            let tex = TextureLoader.loadTextureFromFile(url: url, device: device, srgb: true)
+            texCache[materialName] = tex
+            return tex
+        }
+        // `fallbackTex` names the texture for models the name-match can't resolve — the convention
+        // isn't universal: Rock_1's material is "Rock" but the file is "Rocks.png", and Grass_Large's
+        // material is Blender's unnamed default "None". Only needed for those exceptions.
+        func loadNature(_ file: String, _ label: String, _ target: Float, fallbackTex: String? = nil) -> ImportedProp? {
+            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(natureDir)/OBJ/\(file).obj"), device: device) else {
                 print("[AssetRegistry] nature prop FAILED: \(file)"); return nil
             }
+            let texes = mesh.submeshes.map { sm in
+                natureTexture(sm.materialName) ?? fallbackTex.flatMap { natureTexture($0) }
+            }
             return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: target, yUp: true,
-                                name: label, galleryOnly: true)
+                                name: label, galleryOnly: true, submeshDiffuse: texes)
         }
         let nature: [ImportedProp] = [
             loadNature("BirchTree_1",    "Quaternius BirchTree_1",  0.90),
             loadNature("Bush_Large",     "Quaternius Bush_Large",   0.45),
-            loadNature("Rock_1",         "Quaternius Rock_1",       0.40),
-            loadNature("Grass_Large",    "Quaternius Grass_Large",  0.35),
+            loadNature("Rock_1",         "Quaternius Rock_1",       0.40, fallbackTex: "Rocks"),
+            loadNature("Grass_Large",    "Quaternius Grass_Large",  0.35, fallbackTex: "Grass"),
             loadNature("Flower_1_Clump", "Quaternius Flower_1_Clump", 0.35),
             loadNature("Plant_1",        "Quaternius Plant_1",      0.35),
         ].compactMap { $0 }

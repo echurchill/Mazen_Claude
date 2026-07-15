@@ -8,6 +8,9 @@ struct AssetSubmesh {
     let indexOffset: Int   // element offset into the mesh's index buffer
     let indexCount: Int
     let color: SIMD4<Float>
+    /// The `.mtl` material name (e.g. "BirchTree_Bark"). Packs like Quaternius ship no `map_Kd`
+    /// and instead expect the material NAME to select the texture file — see AssetRegistry.
+    let materialName: String
 }
 
 /// A 3D model imported from a USD or OBJ file via ModelIO (M12). Geometry is packed into the
@@ -78,7 +81,8 @@ final class AssetMesh {
                 case .uint32: for j in 0..<sm.indexCount { indices.append(base + ip.load(fromByteOffset: j * 4, as: UInt32.self)) }
                 default: break
                 }
-                subs.append(AssetSubmesh(indexOffset: start, indexCount: indices.count - start, color: Self.materialColor(sm)))
+                subs.append(AssetSubmesh(indexOffset: start, indexCount: indices.count - start,
+                                         color: Self.materialColor(sm), materialName: sm.material?.name ?? ""))
             }
         }
 
