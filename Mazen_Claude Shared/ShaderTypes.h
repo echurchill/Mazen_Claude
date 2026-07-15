@@ -28,6 +28,7 @@ typedef NS_ENUM(EnumBackingType, TextureIndex)
     TextureIndexLeaf         = 5,   // M20: leaf-atlas array (RGB + composed opacity) for cutout bushes
     TextureIndexGreenery     = 6,   // M20: misc-greenery card array (RGBA) — ferns/flowers/plants
     TextureIndexTreeSprite   = 7,   // M20: WenrexaTrees billboard-sprite array (RGBA)
+    TextureIndexCaustic      = 8,   // M21: Builder-glyph caustic symbols (r8 intensity array)
 };
 
 typedef struct

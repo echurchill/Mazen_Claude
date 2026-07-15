@@ -100,6 +100,8 @@ class Renderer: NSObject, MTKViewDelegate {
     /// Validation (Xcode's Run) aborts the first draw if a declared slot is never set — even though
     /// the `*Loaded` flags mean it is never sampled. This keeps every declared slot legally bound.
     var placeholderArray: MTLTexture!
+    /// M21: Builder-glyph caustic symbols (r8 intensity array); slice = Prop.state. Generated, not loaded.
+    var causticArray: MTLTexture!
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
         "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
@@ -205,7 +207,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.maxBufferBindCount = 4
         self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
-        argDesc.maxTextureBindCount = 8   // +6 greenery +7 tree-sprite arrays (M20)
+        argDesc.maxTextureBindCount = 9   // +6 greenery +7 tree-sprite arrays (M20), +8 caustic symbols (M21)
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
@@ -269,6 +271,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.treeSpriteArray = TextureLoader.loadRGBAArray(device: device,
             urls: Renderer.treeSprites.map { URL(fileURLWithPath: "\(modelsRoot)/WenrexaTrees/\($0).png") },
             size: 384, centerOnTrunk: true)
+        self.causticArray = TextureLoader.makeCausticArray(device: device)
         self.texSampler = PipelineFactory.makeSampler(device: device)
         // A 1×1 array-texture placeholder for the unconditionally-declared foliage slots (see the
         // `placeholderArray` doc comment). Never sampled — just keeps the binding legal.
@@ -333,6 +336,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let g = self.greeneryArray { rs.addAllocation(g) }
         if let t = self.treeSpriteArray { rs.addAllocation(t) }
         rs.addAllocation(self.placeholderArray)
+        if let c = self.causticArray { rs.addAllocation(c) }
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
@@ -900,6 +904,7 @@ class Renderer: NSObject, MTKViewDelegate {
         fragmentArgTable.setTexture((leafArray ?? placeholderArray).gpuResourceID, index: TextureIndex.leaf.rawValue)
         fragmentArgTable.setTexture((greeneryArray ?? placeholderArray).gpuResourceID, index: TextureIndex.greenery.rawValue)
         fragmentArgTable.setTexture((treeSpriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.treeSprite.rawValue)
+        fragmentArgTable.setTexture((causticArray ?? placeholderArray).gpuResourceID, index: TextureIndex.caustic.rawValue)
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
         // Keep the asset-diffuse slot bound to a valid texture for the maze draws (they don't
         // sample it, but the shader declares it); the prop loop rebinds it per-prop below.

@@ -299,6 +299,113 @@ enum TextureLoader {
         }
     }
 
+    // MARK: - M21 Builder glyphs (caustic symbols)
+
+    /// The plinth vocabulary. Slice index = `Prop.state`, so the order is load-bearing:
+    /// 1–4 are the ordinals the four M16.3 dials are labelled with, and they are the SAME morphemes
+    /// the vase sentence uses for "2 planets / 3 ringed planets" — the tutorial is the dictionary
+    /// entry (see Mazen Docs/Builder Glyphs — 4D Shadows.md).
+    enum CausticSymbol: Int, CaseIterable {
+        case blank = 0, one, two, three, four, swirl, portal
+
+        /// Target points in a centred [-1,1] square — what the caustic concentrates light into.
+        /// Deliberately blob-space: a mushy dot is still a dot, so these read at zero attunement.
+        var targets: [SIMD2<Float>] {
+            switch self {
+            case .blank: return []
+            case .one:   return [SIMD2(0, 0)]
+            case .two:   return [SIMD2(-0.34, 0), SIMD2(0.34, 0)]
+            case .three: return [SIMD2(0, 0.38), SIMD2(-0.34, -0.22), SIMD2(0.34, -0.22)]
+            case .four:  return [SIMD2(-0.32, 0.32), SIMD2(0.32, 0.32), SIMD2(-0.32, -0.32), SIMD2(0.32, -0.32)]
+            case .swirl:
+                // The verb: "turn / combine to produce". Drawn as the operation it names — an
+                // Archimedean spiral, sampled evenly so the blobs read as one sweeping stroke.
+                return (0..<44).map { i in
+                    let t = Float(i) / 43.0
+                    let a = t * .pi * 3.4, r = 0.10 + t * 0.74
+                    return SIMD2(cos(a) * r, sin(a) * r)
+                }
+            case .portal:
+                // The police-box portal — a thing the player has SEEN, so it teaches diegetically
+                // ("the world is the Rosetta stone"). Silhouette only: posts, roof, lamp, and two
+                // window bands; at plinth size the interior detail would collide into mush anyway.
+                var p: [SIMD2<Float>] = []
+                let x0: Float = -0.42, x1: Float = 0.42, yb: Float = -0.86, yt: Float = 0.62
+                for i in 0...13 {                                   // the two uprights
+                    let y = yb + (yt - yb) * Float(i) / 13.0
+                    p.append(SIMD2(x0, y)); p.append(SIMD2(x1, y))
+                }
+                for i in 0...6 {                                    // base and lintel
+                    let x = x0 + (x1 - x0) * Float(i) / 6.0
+                    p.append(SIMD2(x, yb)); p.append(SIMD2(x, yt))
+                }
+                for i in 1...5 {                                    // the roof taper
+                    let t = Float(i) / 5.0
+                    let x = (x0 + 0.06) * (1 - t) + 0 * t
+                    p.append(SIMD2(x, yt + 0.10 * t)); p.append(SIMD2(-x, yt + 0.10 * t))
+                }
+                p.append(SIMD2(0, yt + 0.20))                       // the lamp on top
+                for i in 0...4 {                                    // the window band
+                    let x = x0 + (x1 - x0) * Float(i) / 4.0
+                    p.append(SIMD2(x, 0.30))
+                }
+                return p
+            }
+        }
+    }
+
+    /// Build the caustic symbol array — one slice per `CausticSymbol`, `Prop.state` selects it.
+    ///
+    /// This is the forge's poor-man's transport MINUS the inverse solve: the tutorial symbols are
+    /// simple enough that splatting soft blobs at the target points IS the caustic (that's what the
+    /// HTML tool's Morton-sorted cells produce anyway). `sharpness` is the blob radius and therefore
+    /// the comprehension-gradient dial for free — small = crisp, large = the alien mush. Stored as
+    /// single-channel intensity; the shader tints it.
+    static func makeCausticArray(device: MTLDevice, size: Int = 128, sharpness: Float = 0.5) -> MTLTexture? {
+        let syms = CausticSymbol.allCases
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type2DArray
+        desc.pixelFormat = .r8Unorm            // intensity only — light, not colour
+        desc.width = size; desc.height = size
+        desc.arrayLength = syms.count
+        desc.storageMode = .shared; desc.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        texture.label = "CausticSymbols"
+
+        // Blob radius in texels: the gradient dial. Interpolated so 0 = mush, 1 = tight.
+        let radius = Float(size) * (0.16 - 0.10 * max(0, min(1, sharpness)))
+        let inv = 1.0 / max(radius, 1)
+        let reach = Int(radius * 2.2)
+        for (slice, sym) in syms.enumerated() {
+            var px = [UInt8](repeating: 0, count: size * size)
+            var acc = [Float](repeating: 0, count: size * size)
+            for t in sym.targets {
+                // [-1,1] → texel space (y flipped: texture v runs down).
+                let cx = (t.x * 0.5 + 0.5) * Float(size - 1)
+                let cy = (1 - (t.y * 0.5 + 0.5)) * Float(size - 1)
+                let x0 = max(0, Int(cx) - reach), x1 = min(size - 1, Int(cx) + reach)
+                let y0 = max(0, Int(cy) - reach), y1 = min(size - 1, Int(cy) + reach)
+                guard x0 <= x1, y0 <= y1 else { continue }
+                for y in y0...y1 {
+                    for x in x0...x1 {
+                        let dx = (Float(x) - cx) * inv, dy = (Float(y) - cy) * inv
+                        let d2 = dx * dx + dy * dy
+                        guard d2 < 4.84 else { continue }
+                        // Gaussian-ish falloff; blobs ADD, so overlaps brighten — the piled-up
+                        // look real caustics have where rays converge.
+                        acc[y * size + x] += exp(-d2 * 1.9)
+                    }
+                }
+            }
+            for i in 0..<acc.count { px[i] = UInt8(max(0, min(255, acc[i] * 235))) }
+            texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                              size: MTLSize(width: size, height: size, depth: 1)),
+                            mipmapLevel: 0, slice: slice, withBytes: px,
+                            bytesPerRow: size, bytesPerImage: size * size)
+        }
+        return texture
+    }
+
     /// M20 — an alpha-cutout leaf **array**: one slice per ambientCG-style Color+Opacity pair
     /// (RGB from Color, alpha from the grayscale Opacity), so bushes can vary by sampling different
     /// slices. Downsampled to `size`² (512 default — cards are small on screen, keeps memory sane).

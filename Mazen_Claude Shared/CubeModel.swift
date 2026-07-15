@@ -546,8 +546,12 @@ class CubeModel {
             // M16.5: the lock speaks — a carved tesseract-shadow plaque on the door tile (bonded,
             // so the lock livery gilds it and refusals flare it), oriented to face the open
             // approach — never a wall (Eddie).
+            // M21: the door plinth — the language's first VERB, taught by consequence. It starts
+            // blank; aligning the last dial makes it show the swirl ("turn/combine to produce"), and
+            // the twist that swings the door open makes it show the portal. GameState drives the
+            // state; no UI text anywhere. (Mazen Docs/Builder Glyphs — 4D Shadows.md)
             let doorOpenings = cubies[dci].facelets[dfi].mazeTile.openings
-            cubies[dci].facelets[dfi].props.append(glyphPlaque(onTile: doorOpenings, preferred: .north))
+            cubies[dci].facelets[dfi].props.append(plinth(onTile: doorOpenings, preferred: .north, symbol: 0))
             var bond: Set<Int> = [dci]
             for pc in [doorCol - 1, doorCol + 1] where (0..<size).contains(pc) {
                 if let (pci, pfi) = faceletAt(face: .positiveZ, row: templeRow, col: pc) {
@@ -573,21 +577,24 @@ class CubeModel {
             // the composable glyph grammar is M17's.
             let cc = size / 2
             let spread = min(3, size / 2)
-            let dialSpots: [(Int, Int, Heading8, Int)] = [
-                (cc - spread, cc - spread, .n, 1),
-                (cc - spread, cc + spread, .n, 1),
-                (cc + spread, cc - spread, .n, 1),
-                (cc + spread, cc + spread, .e, 0),
+            // (row, col, facing, aligned, ordinal) — the ordinal is the plinth's glyph, 1…4.
+            let dialSpots: [(Int, Int, Heading8, Int, Int)] = [
+                (cc - spread, cc - spread, .n, 1, 1),
+                (cc - spread, cc + spread, .n, 1, 2),
+                (cc + spread, cc - spread, .n, 1, 3),
+                (cc + spread, cc + spread, .e, 0, 4),
             ]
-            for (r, c2, f, st) in dialSpots {
+            for (r, c2, f, st, ordinal) in dialSpots {
                 if let (ci2, fi2) = faceletAt(face: .positiveZ, row: r, col: c2) {
                     cubies[ci2].facelets[fi2].props.append(Prop(kind: .dial, subRow: 1, subCol: 1, facing: f, state: st))
-                    // M16.5: the same mark beside every dial — the association between the four
-                    // dials and the locked temple, said in the Builders' language, not in words.
-                    // Oriented to an open direction (preferring toward the plaza), never a wall.
+                    // M21: a plinth beside each dial, carrying its ORDINAL (1,2,3,4) — replacing
+                    // M16.5's identical mark. These are the same morphemes the Builder vase sentence
+                    // uses ("2 planets", "3 ringed planets"), so the tutorial IS the dictionary
+                    // entry. Oriented to an open direction (preferring the plaza), never a wall.
                     let dialOpenings = cubies[ci2].facelets[fi2].mazeTile.openings
                     let towardPlaza: SurfaceDirection = r < cc ? .south : .north
-                    cubies[ci2].facelets[fi2].props.append(glyphPlaque(onTile: dialOpenings, preferred: towardPlaza))
+                    cubies[ci2].facelets[fi2].props.append(
+                        plinth(onTile: dialOpenings, preferred: towardPlaza, symbol: ordinal))
                 }
             }
         }
@@ -623,6 +630,22 @@ class CubeModel {
     /// approach side), and stand it in a CORNER subcell — the 3×3 path-cross only ever walks
     /// the centre and edge-centre subcells, so a corner can't block anyone. Of the two corners
     /// on the edge behind it, hug one with a closed lateral wall when there is one.
+    /// M21 — place a Builder plinth on an open side of the tile (never against a wall), carrying
+    /// `symbol` (a TextureLoader.CausticSymbol raw value) lit on its top face. Mirrors
+    /// `glyphPlaque`'s siting rules; the plinth supersedes it beside the M16 lock.
+    private func plinth(onTile openings: DirectionMask, preferred: SurfaceDirection, symbol: Int) -> Prop {
+        let order: [SurfaceDirection] = [preferred, .north, .south, .east, .west]
+        let dir = order.first(where: { openings.contains(Self.directionMask($0)) }) ?? preferred
+        let westClosed = !openings.contains(.west)
+        let northClosed = !openings.contains(.north)
+        switch dir {
+        case .north: return Prop(kind: .plinth, subRow: 2, subCol: westClosed ? 0 : 2, facing: .n, state: symbol)
+        case .south: return Prop(kind: .plinth, subRow: 0, subCol: westClosed ? 0 : 2, facing: .s, state: symbol)
+        case .east:  return Prop(kind: .plinth, subRow: northClosed ? 0 : 2, subCol: 0, facing: .e, state: symbol)
+        case .west:  return Prop(kind: .plinth, subRow: northClosed ? 0 : 2, subCol: 2, facing: .w, state: symbol)
+        }
+    }
+
     private func glyphPlaque(onTile openings: DirectionMask, preferred: SurfaceDirection) -> Prop {
         let order: [SurfaceDirection] = [preferred, .north, .south, .east, .west]
         let dir = order.first(where: { openings.contains(Self.directionMask($0)) }) ?? preferred

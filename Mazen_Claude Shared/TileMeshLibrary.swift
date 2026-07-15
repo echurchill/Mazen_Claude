@@ -210,6 +210,10 @@ class TileMeshLibrary {
         Self.addGlyphPlaque(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.glyph.rawValue] = TileMesh(vertexOffset: 0, indexOffset: glyphStart, indexCount: allIndices.count - glyphStart)
 
+        let plinthStart = allIndices.count
+        Self.addPlinth(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.plinth.rawValue] = TileMesh(vertexOffset: 0, indexOffset: plinthStart, indexCount: allIndices.count - plinthStart)
+
         let treeStart = allIndices.count
         Self.addTree(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.tree.rawValue] = TileMesh(vertexOffset: 0, indexOffset: treeStart, indexCount: allIndices.count - treeStart)
@@ -845,6 +849,40 @@ class TileMeshLibrary {
     /// as raised linework. The language's first public appearance — presence, not system (see
     /// `Mazen Docs/Builder Glyphs — 4D Shadows.md`). All linework is double-sided, so winding
     /// never hides a stroke.
+    /// M21 — the Builder plinth: a tapered stone block with the glyph lit on its TOP face
+    /// (Eddie: "just a single symbol engraved into the top"). Replaces the glyph plaque beside the
+    /// M16.3 dials and by the temple door.
+    ///
+    /// UV convention carries the material split, so one prop mesh needs one material: the top face
+    /// is UV-mapped [0,1]² and the sides/base are flagged **(-1,-1)**. The fragment shader reads
+    /// stone wherever u < 0 and the caustic symbol otherwise — no second draw, no second mesh.
+    private static func addPlinth(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        let h: Float = 0.30                    // waist-high: readable looking down, doesn't block sightlines
+        let rb: Float = 0.20, rt: Float = 0.13 // the taper — a wide plinth base narrowing to the lit top
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: uv, aoFactor: ao)
+        }
+        let stoneUV = SIMD2<Float>(-1, -1)     // the "this is stone, not glyph" flag
+        // Four tapered sides. AO darkens the base so the plinth sits into the ground.
+        let b = [SIMD3<Float>(-rb, -rb, z0), SIMD3<Float>(rb, -rb, z0), SIMD3<Float>(rb, rb, z0), SIMD3<Float>(-rb, rb, z0)]
+        let t = [SIMD3<Float>(-rt, -rt, z0 + h), SIMD3<Float>(rt, -rt, z0 + h), SIMD3<Float>(rt, rt, z0 + h), SIMD3<Float>(-rt, rt, z0 + h)]
+        for i in 0..<4 {
+            let j = (i + 1) % 4
+            let n = normalize(cross(b[j] - b[i], t[i] - b[i]))
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [vtx(b[i], n, stoneUV, 0.62), vtx(b[j], n, stoneUV, 0.62),
+                                      vtx(t[j], n, stoneUV, 0.95), vtx(t[i], n, stoneUV, 0.95)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        // The top face — the plate. UV [0,1]² so the caustic symbol lands square on it.
+        let up = SIMD3<Float>(0, 0, 1)
+        let base = UInt32(verts.count)
+        verts.append(contentsOf: [vtx(t[0], up, SIMD2(0, 1), 1.0), vtx(t[1], up, SIMD2(1, 1), 1.0),
+                                  vtx(t[2], up, SIMD2(1, 0), 1.0), vtx(t[3], up, SIMD2(0, 0), 1.0)])
+        indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+    }
+
     private static func addGlyphPlaque(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {

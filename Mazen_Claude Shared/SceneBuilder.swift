@@ -53,6 +53,7 @@ final class SceneBuilder {
         .portalLamp:  SIMD4(1.0, 1.0, 1.0, 1.0),     // overridden per-frame by the blink (below)
         .dial:        SIMD4(0.52, 0.52, 0.58, 1.0),  // M16.3 — overridden by state below
         .glyph:       SIMD4(0.68, 0.65, 0.59, 1.0),  // M16.5 — carved stone (lock livery may gild it)
+        .plinth:      SIMD4(1.0, 1.0, 1.0, 1.0),     // M21 — material 21 does the colouring itself
         .tree:        SIMD4(0.20, 0.44, 0.22, 1.0),  // M19 — conifer green
         .treeTrunk:   SIMD4(0.34, 0.24, 0.15, 1.0),  // M19 — bark brown
         .boulder:     SIMD4(0.44, 0.44, 0.47, 1.0),  // M19 — moon rock grey
@@ -278,6 +279,13 @@ final class SceneBuilder {
                                 // M20: misc_greenery (18) / WenrexaTrees (19). `state` = array slice;
                                 // full-colour sprites, so no tint.
                                 materialID = prop.kind == .greeneryCard ? 18 : 19
+                                propStyleSeed = UInt32(max(0, prop.state))
+                                color = SIMD4(1, 1, 1, 1)
+                            }
+                            if prop.kind == .plinth {
+                                // M21: the Builder plinth — material 21 reads stone vs glyph from the
+                                // mesh's UV flag; `state` selects the caustic symbol slice.
+                                materialID = 21
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }

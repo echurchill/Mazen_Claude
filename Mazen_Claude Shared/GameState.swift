@@ -349,11 +349,14 @@ class GameState {
         // M16.4: the opening — a completed twist of an UNLOCKED sealed door's slice swings it
         // open: the door lights up and becomes a portal. (Still bonded ⇒ the twist was refused
         // long before we got here, so checking "no bond" is enough.)
+        var opened = false
         for ci in sliceRotation.affectedCubies where cubeModel.sealedPortalCubies.contains(ci) {
             if !cubeModel.bondedGroups.contains(where: { $0.contains(ci) }) {
                 cubeModel.sealedPortalCubies.remove(ci)
+                opened = true
             }
         }
+        if opened { updateDoorPlinths() }    // the twist swings it open ⇒ the plinth shows the portal
 
         if playerCI >= 0 {
             let cubie = cubeModel.cubies[playerCI]
@@ -404,6 +407,28 @@ class GameState {
     /// A portal takes priority (stepping "through the door" switches worlds); otherwise chests
     /// toggle open ↔ closed. This is the dispatch point where a lever would trigger a slice
     /// rotation, etc.
+    /// M21 — the door plinth speaks the lock's state, and only ever says it in glyphs (no UI text).
+    /// blank → **swirl** once the bond dissolves ("turn/combine to produce" — the verb naming the
+    /// twist M16.4 requires) → **portal** once that twist has swung the door open. The plinth lives
+    /// on the door tile, so it's found by looking for a plinth sharing a tile with a portal.
+    /// (Mazen Docs/Builder Glyphs — 4D Shadows.md)
+    private func updateDoorPlinths() {
+        let unlocked = cubeModel.bondedGroups.isEmpty
+        for ci in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[ci].facelets.indices {
+                let props = cubeModel.cubies[ci].facelets[fi].props
+                guard props.contains(where: { $0.kind == .portal }),
+                      let pi = props.firstIndex(where: { $0.kind == .plinth }) else { continue }
+                let opened = !cubeModel.sealedPortalCubies.contains(ci)
+                // 6 = portal, 5 = swirl, 0 = blank (TextureLoader.CausticSymbol).
+                let symbol = opened ? 6 : (unlocked ? 5 : 0)
+                if cubeModel.cubies[ci].facelets[fi].props[pi].state != symbol {
+                    cubeModel.cubies[ci].facelets[fi].props[pi].state = symbol
+                }
+            }
+        }
+    }
+
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props
@@ -420,7 +445,10 @@ class GameState {
             if cubeModel.cubies[ci].facelets[fi].props[di].state == 0 {
                 cubeModel.cubies[ci].facelets[fi].props[di].state = 1
                 cubeModel.cubies[ci].facelets[fi].props[di].facing = .n
-                if allDialsAligned() { cubeModel.bondedGroups.removeAll() }
+                if allDialsAligned() {
+                    cubeModel.bondedGroups.removeAll()
+                    updateDoorPlinths()      // the bond dissolves ⇒ the door plinth shows the swirl
+                }
             }
             return
         }

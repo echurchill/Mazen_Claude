@@ -270,6 +270,8 @@ enum PropKind: UInt8 {
     case foliageCard  // M20: a leafy bush — crossed cards, alpha-cutout leaf array (material 17); `state` = LeafSet slice
     case greeneryCard // M20: an undergrowth plant (fern/flower/…) — misc-greenery array (material 18); `state` = slice
     case treeBillboard // M20: a WenrexaTrees billboard sprite — tree array (material 19); `state` = slice
+    case plinth       // M21: a Builder plinth — a tapered stone with a caustic glyph lit on its top face.
+                      // `state` = TextureLoader.CausticSymbol (0 blank, 1-4 ordinals, 5 swirl, 6 portal).
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the

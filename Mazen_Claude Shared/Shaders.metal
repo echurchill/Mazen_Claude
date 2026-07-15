@@ -293,6 +293,7 @@ fragment float4 fragmentShader(
     texture2d_array<float> leafTex [[texture(TextureIndexLeaf)]],
     texture2d_array<float> greeneryTex [[texture(TextureIndexGreenery)]],
     texture2d_array<float> treeTex [[texture(TextureIndexTreeSprite)]],
+    texture2d_array<float> causticTex [[texture(TextureIndexCaustic)]],
     sampler texSampler [[sampler(0)]]
 ) {
     float3 lightDir = normalize(frame.lightDirection);
@@ -495,6 +496,22 @@ fragment float4 fragmentShader(
         // M12-C: imported prop with its own diffuse texture, lit + shadowed like the maze.
         color = assetDiffuse.sample(texSampler, in.texCoord).rgb;
         lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
+    } else if (in.materialID == 21) {
+        // M21 — the Builder plinth. The mesh flags its own split via UV: u < 0 is the tapered
+        // stone body, otherwise it's the top face carrying the caustic glyph. `styleSeed` picks the
+        // symbol slice (Prop.state), so one mesh + one material serves every plinth in the world.
+        if (in.texCoord.x < 0.0) {
+            color = float3(0.62, 0.60, 0.55);                       // carved stone, same register as the plaque
+            lighting = skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor;
+        } else {
+            float glyph = causticTex.sample(texSampler, in.texCoord, in.styleSeed % causticTex.get_array_size()).r;
+            // The caustic is LIGHT, not paint: it adds over the plate rather than replacing it, so
+            // where no rays land you still read the stone underneath.
+            float3 plate = float3(0.34, 0.38, 0.44);
+            float3 lit = plate * (skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor);
+            color = lit + float3(0.30, 0.62, 1.00) * glyph * 1.9;    // the Builders' blue
+            lighting = float3(1.0);                                  // already lit — don't double-light
+        }
     } else if (in.materialID == 20) {
         // M20: imported sub-mesh whose diffuse carries alpha (Quaternius leaves/flowers) — cut it
         // out so foliage reads as leaves instead of solid quads. Otherwise identical to 11.
