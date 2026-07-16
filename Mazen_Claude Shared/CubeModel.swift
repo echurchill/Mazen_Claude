@@ -77,6 +77,10 @@ class CubeModel {
         (.topiary, 0), (.obelisk, 0), (.chest, 0), (.dial, 0), (.dial, 1),
         (.glyph, 0), (.tree, 0), (.tree, 1), (.tree, 2), (.treeTrunk, 0),
         (.boulder, 0), (.boulder, 1), (.boulder, 2),
+        // M16.6: every Builder-plinth glyph, so it can be evaluated up close in isolation
+        // (state = TextureLoader.CausticSymbol: 0 blank, 1–4 ordinals, 5 swirl, 6 portal).
+        (.plinth, 0), (.plinth, 1), (.plinth, 2), (.plinth, 3),
+        (.plinth, 4), (.plinth, 5), (.plinth, 6),
     ]
 
     /// M20 — WenrexaTrees grouped into single trees rendered as **intersecting billboard cards**
@@ -553,11 +557,12 @@ class CubeModel {
             //
             // Placed on the plaza tile just NORTH of the door — in front of the portal, toward the
             // plaza (Eddie, 2026-07-16) — NOT on the door tile itself, because that's a walk-through
-            // portal you'd trigger just by stepping up to read it. Seated at that tile's south
-            // sub-cell (nearest the door). Falls back onto the door tile if the cube is too small to
-            // have a tile north.
+            // portal you'd trigger just by stepping up to read it. Seated at that tile's NORTH
+            // sub-cell — the side the player approaches from, so you walk right up to it (its own
+            // solid body must not be between you and the disc). Falls back onto the door tile if the
+            // cube is too small to have a tile north.
             if templeRow - 1 >= 0, let (mci, mfi) = faceletAt(face: .positiveZ, row: templeRow - 1, col: doorCol) {
-                cubies[mci].facelets[mfi].props.append(Prop(kind: .plinth, subRow: 0, subCol: 1, facing: .s, state: 0))
+                cubies[mci].facelets[mfi].props.append(Prop(kind: .plinth, subRow: 2, subCol: 1, facing: .n, state: 0))
             } else {
                 let doorOpenings = cubies[dci].facelets[dfi].mazeTile.openings
                 cubies[dci].facelets[dfi].props.append(plinth(onTile: doorOpenings, preferred: .north, symbol: 0))
