@@ -306,7 +306,7 @@ enum TextureLoader {
     /// the vase sentence uses for "2 planets / 3 ringed planets" — the tutorial is the dictionary
     /// entry (see Mazen Docs/Builder Glyphs — 4D Shadows.md).
     enum CausticSymbol: Int, CaseIterable {
-        case blank = 0, one, two, three, four, swirl, portal, square
+        case blank = 0, one, two, three, four, swirl, portal, square, threeOfFour, fourFilled
 
         /// Target points in a centred [-1,1] square — what the caustic concentrates light into.
         /// Deliberately blob-space: a mushy dot is still a dot, so these read at zero attunement.
@@ -364,6 +364,17 @@ enum TextureLoader {
                     p.append(SIMD2(s, t)); p.append(SIMD2(-s, t))   // right + left edges
                 }
                 return p
+            case .threeOfFour:
+                // The door plinth's lock-progress display: three filled dots + one HOLLOW ring (the
+                // dial that's still off). Reads as "three done, one missing". (M16.6, Eddie.)
+                var p: [SIMD2<Float>] = [SIMD2(-0.32, 0.32), SIMD2(0.32, 0.32), SIMD2(-0.32, -0.32)]
+                let cx: Float = 0.32, cy: Float = -0.32, r: Float = 0.18
+                for k in 0..<8 { let a = Float(k) / 8 * 2 * .pi; p.append(SIMD2(cx + cos(a) * r, cy + sin(a) * r)) }
+                return p
+            case .fourFilled:
+                // All four dials aligned — the ring fills in. Distinct medium-blob slice (not the big
+                // dial-ordinal `four`) so it transitions cleanly from `threeOfFour` on the plinth.
+                return [SIMD2(-0.32, 0.32), SIMD2(0.32, 0.32), SIMD2(-0.32, -0.32), SIMD2(0.32, -0.32)]
             }
         }
 
@@ -373,9 +384,10 @@ enum TextureLoader {
         /// gradient will drive globally later — the tutorial is the crisp end.)
         var blobScale: Float {
             switch self {
-            case .swirl, .portal: return 0.5
-            case .square:         return 0.57
-            default:              return 1.0   // blank / 1–4 ordinals: bold soft blobs
+            case .swirl, .portal:            return 0.5
+            case .square:                    return 0.57
+            case .threeOfFour, .fourFilled:  return 0.5   // medium so the hollow ring reads
+            default:                         return 1.0   // blank / 1–4 ordinals: bold soft blobs
             }
         }
     }

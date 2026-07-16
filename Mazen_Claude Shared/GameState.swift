@@ -96,6 +96,10 @@ class GameState {
         cubeModel = CubeModel(worldScale: ws, stamp: stamp)
         player = PlayerState(size: size, standGrid: ws.standGrid)
         if verboseDebugLog { printMazeDebug(face: player.face) }
+        // Seed the door plinth's initial glyph from the freshly-stamped lock state (three-of-four
+        // while three dials are pre-aligned) — otherwise it stays blank until the first dial is
+        // touched. No-op in worlds without a temple door.
+        updateDoorPlinths()
     }
 
     func printMazeDebug(face: CubeFace) {
@@ -432,14 +436,16 @@ class GameState {
                       cubeModel.cubies[pci].facelets[pfi].props.contains(where: { $0.kind == .portal && $0.state == 1 })
                 else { continue }
                 let opened = !cubeModel.sealedPortalCubies.contains(pci)
-                let wantCylinder = unlocked && !opened      // the alignment cylinder lives in the swirl phase
-                // The plinth disc: portal once opened, else BLANK — while unlocked the cylinder covers
-                // the disc and carries the swirl on its own top (Eddie), so the disc stays dark.
-                let symbol = opened ? 6 : 0
+                // M16.6 (Eddie): the plinth is the lock's PROGRESS DISPLAY — three filled dots + one
+                // hollow ring while a dial is still off, all four filled once the lock is undone
+                // (ready to turn), the portal glyph once opened. The alignment cylinder is NOT spawned
+                // here; it rises only when the player engages the READY plinth with F (see interact).
+                let symbol = opened ? TextureLoader.CausticSymbol.portal.rawValue
+                                    : (unlocked ? TextureLoader.CausticSymbol.fourFilled.rawValue
+                                                : TextureLoader.CausticSymbol.threeOfFour.rawValue)
                 // The plinth is on a tile ADJACENT to the door. A twist rotates the +Z face, so which
-                // neighbour it's on changes — search all four (+ the door tile) so we still find it
-                // after the door-opening twist (else the cylinder never retracts). Only the door
-                // plinth is adjacent to the door portal; the dials sit in the far corners.
+                // neighbour it's on changes — search all four (+ the door tile). Only the door plinth
+                // is adjacent to the door portal; the dials sit in the far corners.
                 for (nr, nc) in [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1), (r, c)] {
                     guard let (ci, fi) = cubeModel.faceletAt(face: .positiveZ, row: nr, col: nc),
                           let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .plinth })
@@ -447,15 +453,8 @@ class GameState {
                     if cubeModel.cubies[ci].facelets[fi].props[pi].state != symbol {
                         cubeModel.cubies[ci].facelets[fi].props[pi].state = symbol
                     }
-                    // M16.6 Phase 2: grow / retract the alignment cylinder (the "turn the world" waldo)
-                    // on the plinth's own tile, co-located with the disc.
-                    let plinthProp = cubeModel.cubies[ci].facelets[fi].props[pi]
-                    let hasCylinder = cubeModel.cubies[ci].facelets[fi].props.contains { $0.kind == .alignmentCylinder }
-                    if wantCylinder && !hasCylinder {
-                        cubeModel.cubies[ci].facelets[fi].props.append(
-                            Prop(kind: .alignmentCylinder, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
-                                 facing: plinthProp.facing, state: TextureLoader.CausticSymbol.swirl.rawValue))
-                    } else if !wantCylinder && hasCylinder {
+                    // Once opened, retract the alignment cylinder (the twist that opened the door).
+                    if opened {
                         cubeModel.cubies[ci].facelets[fi].props.removeAll { $0.kind == .alignmentCylinder }
                     }
                     break
@@ -489,40 +488,26 @@ class GameState {
         }
     }
 
-    /// Debug (U key): let Eddie watch the door plinth's alignment cylinder RISE without walking to
-    /// the far dials. If a cylinder already exists, reset its grow (and align) so it re-grows in
-    /// place; otherwise unlock the door — bypassing the dials — so `updateDoorPlinths` spawns it and
-    /// it grows from 0. Repeatable, so the rise can be replayed while standing at the plinth.
-    func debugReplayCylinderGrow() {
-        var found = false
-        for ci in cubeModel.cubies.indices {
-            for fi in cubeModel.cubies[ci].facelets.indices {
-                for pi in cubeModel.cubies[ci].facelets[fi].props.indices
-                where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .alignmentCylinder {
-                    cubeModel.cubies[ci].facelets[fi].props[pi].anim = 0
-                    cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = 0
-                    found = true
+    /// Debug (U key): make the temple door READY without walking to the far dials — re-seal the
+    /// door, clear the lock, drop any cylinder — so the plinth reads "four filled". Then stand at the
+    /// plinth and press F to watch the turn-the-world sequence. Repeatable (resets after it opens).
+    func debugMakeDoorReady() {
+        for cu in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[cu].facelets.indices {
+                if cubeModel.cubies[cu].facelets[fi].props.contains(where: { $0.kind == .portal && $0.state == 1 }) {
+                    cubeModel.sealedPortalCubies.insert(cu)   // re-seal the temple door
                 }
+                cubeModel.cubies[cu].facelets[fi].props.removeAll { $0.kind == .alignmentCylinder }
             }
         }
         cylinderEngaged = false
-        if !found {
-            cubeModel.bondedGroups.removeAll()   // debug bypass: unlock so the cylinder spawns
-            updateDoorPlinths()
-        }
+        cubeModel.bondedGroups.removeAll()   // unlock (bypass the dials)
+        updateDoorPlinths()                  // ⇒ plinth shows four-filled, ready for F
     }
 
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props
-        // M16.6 Phase 2b: the alignment cylinder is a WALDO. Engaging it (F) runs the ALIGN
-        // animation — the two half-squares pivot together; when the square is whole the WORLD TWISTS
-        // (tickAlignmentCylinder fires the start-face slice twist M16.4 opens the door on). The
-        // plinth performs the twist FOR the player (the "magic" rung — you act before you understand).
-        if let cyl = props.first(where: { $0.kind == .alignmentCylinder }) {
-            if cyl.anim >= 1 { cylinderEngaged = true }   // only once it's fully risen
-            return
-        }
         if let portal = props.first(where: { $0.kind == .portal }),
            !cubeModel.sealedPortalCubies.contains(ci) {    // M16.4: sealed = inert
             portalRequested = true
@@ -543,10 +528,35 @@ class GameState {
             }
             return
         }
+        // M16.6 (Eddie): F at the READY door plinth (lock undone, door still sealed, no cylinder yet)
+        // rises the alignment cylinder and plays the turn-the-world sequence (grow → align → twist).
+        // Only the door plinth reaches here — dial-tile plinths are caught by the dial branch above,
+        // and gallery plinths have no state-1 door portal to be "sealed".
+        if let plinthProp = cubeModel.cubies[ci].facelets[fi].props.first(where: { $0.kind == .plinth }),
+           !cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .alignmentCylinder }),
+           cubeModel.bondedGroups.isEmpty,
+           templeDoorStillSealed() {
+            cubeModel.cubies[ci].facelets[fi].props.append(
+                Prop(kind: .alignmentCylinder, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
+                     facing: plinthProp.facing, state: 0))
+            cylinderEngaged = true
+            return
+        }
         for pi in cubeModel.cubies[ci].facelets[fi].props.indices
         where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .chest {
             cubeModel.cubies[ci].facelets[fi].props[pi].state = 1 - cubeModel.cubies[ci].facelets[fi].props[pi].state
         }
+    }
+
+    /// Is the temple door (the `state == 1` portal) still sealed? Used to gate the door plinth's F.
+    private func templeDoorStillSealed() -> Bool {
+        for cu in cubeModel.cubies.indices {
+            for f in cubeModel.cubies[cu].facelets
+            where f.props.contains(where: { $0.kind == .portal && $0.state == 1 }) {
+                return cubeModel.sealedPortalCubies.contains(cu)
+            }
+        }
+        return false
     }
 
     // MARK: - Helpers

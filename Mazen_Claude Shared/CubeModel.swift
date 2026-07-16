@@ -81,6 +81,7 @@ class CubeModel {
         // (state = TextureLoader.CausticSymbol: 0 blank, 1–4 ordinals, 5 swirl, 6 portal, 7 square).
         (.plinth, 0), (.plinth, 1), (.plinth, 2), (.plinth, 3),
         (.plinth, 4), (.plinth, 5), (.plinth, 6), (.plinth, 7),
+        (.plinth, 8), (.plinth, 9),   // three-of-four (locked) + four-filled (ready)
         // Phase 2 — the alignment cylinder (the square/world drum). It renders from the plinth-top
         // height, so pair it with a plinth (next cell) to read it grounded.
         (.plinth, 7), (.alignmentCylinder, 5),

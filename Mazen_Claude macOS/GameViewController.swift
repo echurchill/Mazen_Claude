@@ -100,10 +100,10 @@ class GameViewController: NSViewController {
                         let m = renderer.importedProps[p.state]
                         return m.name.isEmpty ? "importedAsset [\(p.state)]" : m.name
                     case .plinth:
-                        let names = ["blank", "one", "two", "three", "four", "swirl", "portal", "square"]
+                        let names = ["blank", "one", "two", "three", "four", "swirl", "portal", "square", "3of4 (F to turn)", "4filled (F to turn)"]
                         return "plinth: " + (names.indices.contains(p.state) ? names[p.state] : "state \(p.state)")
                     case .alignmentCylinder:
-                        return "alignment cylinder (swirl — F to turn the world)"
+                        return "alignment cylinder (swirl + square — turning the world)"
                     default:
                         return "\(p.kind)" + (p.state != 0 ? " [state \(p.state)]" : "")
                     }
@@ -223,9 +223,9 @@ class GameViewController: NSViewController {
             renderer.adjustRelief(0.01)
         case 38:      // J — debug: toggle the idle world spin only (leaves the sun/time moving)
             gs.spinEnabled.toggle()
-        case 32:      // U — M16.6 debug: unlock the door plinth (bypass the dials) & replay the
-                      // alignment cylinder's grow, so you can watch it rise while standing at it
-            gs.debugReplayCylinderGrow()
+        case 32:      // U — M16.6 debug: make the door READY (bypass the dials) so the plinth shows
+                      // four-filled; then stand at it and press F to watch the turn-the-world sequence
+            gs.debugMakeDoorReady()
         case 40:      // K — debug: freeze/unfreeze time *in place* (no reset to noon, unlike Shift+T)
             gs.timeScale = gs.timeScale == 0 ? 1 : 0
         default:
