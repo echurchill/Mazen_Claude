@@ -72,6 +72,11 @@ class GameState {
     /// (visual/audio, TODO) reads and clears it. Harmless until bonds exist.
     var twistRefused = false
 
+    /// M16.6 Phase 2b — true while the door plinth's alignment cylinder is running its ALIGN
+    /// animation (engage → the two half-squares pivot together → the world twists). See
+    /// `tickAlignmentCylinder`.
+    var cylinderEngaged = false
+
     struct DiscoveryAnim {
         let cubieIndex: Int
         let faceletIndex: Int
@@ -145,6 +150,8 @@ class GameState {
                 player.tryMoveBackward(cubeModel: cubeModel)
             }
         }
+
+        tickAlignmentCylinder(deltaTime)
 
         if sliceRotation.isActive {
             // .step holds the twist for manual scrubbing (see stepSlice); .slow crawls; .normal auto.
@@ -429,7 +436,11 @@ class GameState {
                 // The plinth disc: portal once opened, else BLANK — while unlocked the cylinder covers
                 // the disc and carries the swirl on its own top (Eddie), so the disc stays dark.
                 let symbol = opened ? 6 : 0
-                for (nr, nc) in [(r - 1, c), (r, c)] {   // prefer the north neighbour; fall back to the door tile
+                // The plinth is on a tile ADJACENT to the door. A twist rotates the +Z face, so which
+                // neighbour it's on changes — search all four (+ the door tile) so we still find it
+                // after the door-opening twist (else the cylinder never retracts). Only the door
+                // plinth is adjacent to the door portal; the dials sit in the far corners.
+                for (nr, nc) in [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1), (r, c)] {
                     guard let (ci, fi) = cubeModel.faceletAt(face: .positiveZ, row: nr, col: nc),
                           let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .plinth })
                     else { continue }
@@ -453,16 +464,40 @@ class GameState {
         }
     }
 
+    /// M16.6 Phase 2b — drive the alignment cylinder's two animations each frame:
+    ///  • GROW: `anim` rises 0→1 the moment the cylinder exists (unlock), so it extrudes from the disc.
+    ///  • ALIGN: once engaged AND fully risen, `alignAnim` rises 0→1 (the half-squares pivot whole);
+    ///    at 1 it fires the start-face twist that opens the door — the plinth turning the world for you.
+    /// (There is at most one alignment cylinder per world; a full scan is cheap at these counts.)
+    private func tickAlignmentCylinder(_ dt: Float) {
+        let growRate: Float = 1.0 / 0.8, alignRate: Float = 1.0 / 1.1
+        for ci in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[ci].facelets.indices {
+                for pi in cubeModel.cubies[ci].facelets[fi].props.indices
+                where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .alignmentCylinder {
+                    cubeModel.cubies[ci].facelets[fi].props[pi].anim =
+                        min(1, cubeModel.cubies[ci].facelets[fi].props[pi].anim + dt * growRate)
+                    guard cylinderEngaged, cubeModel.cubies[ci].facelets[fi].props[pi].anim >= 1 else { continue }
+                    let a = min(1, cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim + dt * alignRate)
+                    cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = a
+                    if a >= 1 {
+                        cylinderEngaged = false
+                        startSliceRotation(clockwise: true)   // whole → the world turns → door opens → cylinder retracts
+                    }
+                }
+            }
+        }
+    }
+
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props
-        // M16.6 Phase 2: the alignment cylinder is a WALDO — engaging it (F) twists the world open.
-        // The player stands on the start face, so this is exactly the start-face slice twist that
-        // M16.4 opens the door on; the plinth performs it FOR the player (the "magic" rung of the
-        // ladder — you act before you understand). The twist itself opens the door + retracts the
-        // cylinder via finalizeSliceRotation → updateDoorPlinths.
-        if props.contains(where: { $0.kind == .alignmentCylinder }) {
-            startSliceRotation(clockwise: true)
+        // M16.6 Phase 2b: the alignment cylinder is a WALDO. Engaging it (F) runs the ALIGN
+        // animation — the two half-squares pivot together; when the square is whole the WORLD TWISTS
+        // (tickAlignmentCylinder fires the start-face slice twist M16.4 opens the door on). The
+        // plinth performs the twist FOR the player (the "magic" rung — you act before you understand).
+        if let cyl = props.first(where: { $0.kind == .alignmentCylinder }) {
+            if cyl.anim >= 1 { cylinderEngaged = true }   // only once it's fully risen
             return
         }
         if let portal = props.first(where: { $0.kind == .portal }),

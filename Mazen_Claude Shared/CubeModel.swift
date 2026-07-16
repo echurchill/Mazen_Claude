@@ -149,7 +149,11 @@ class CubeModel {
         for (k, item) in catalog.enumerated() {
             let (gr, gc) = cell(k)
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
-            cubies[ci].facelets[fi].props.append(Prop(kind: item.0, subRow: 1, subCol: 1, facing: .s, state: item.1))
+            var pr = Prop(kind: item.0, subRow: 1, subCol: 1, facing: .s, state: item.1)
+            // Show the alignment cylinder in its finished state (fully risen + square whole), so the
+            // gallery reads it as a static form rather than mid-animation.
+            if item.0 == .alignmentCylinder { pr.anim = 1; pr.alignAnim = 1 }
+            cubies[ci].facelets[fi].props.append(pr)
         }
         for (j, group) in groups.enumerated() {   // WenrexaTrees, each group = one intersecting-card tree
             let (gr, gc) = cell(catalog.count + j)

@@ -857,14 +857,17 @@ class TileMeshLibrary {
     /// top of it (so the drum's base is planted exactly on the plinth top, no drift).
     static let plinthHeightM: Float = 0.9
 
-    /// M16.6 Phase 2 — the alignment cylinder: a translucent drum standing on the plinth top, the
-    /// SWIRL (verb: "turn") lit on its TOP so you read it looking down as it rises, matching the
-    /// plinth disc's diameter so it reads as the disc extruding upward. Grows from the plinth when
-    /// the door unlocks; engaging it twists the world open (the waldo). Same material (21) as the
-    /// plinth — UV flags: the rim is the translucent-resin flag (u<0, v<-1.5); the top cap is
-    /// UV [0,1]² carrying the glyph (u≥0).
-    /// (Phase 2b — Eddie: the SQUARE/world glyph WRAPS the drum's side as two half-squares that pivot
-    ///  into alignment; plus the grow animation + grind/shake. Held back until this form is signed off.)
+    /// M16.6 Phase 2b — the alignment cylinder (material 22): a translucent drum standing on the
+    /// plinth top, matching the disc's diameter so it reads as the disc rising. The SWIRL (verb:
+    /// "turn") lights its TOP; the SQUARE (world) WRAPS the front arc as two horizontal halves that
+    /// the shader shears apart when unaligned and heals when aligned ("TURN THE WORLD"). Grows on
+    /// unlock; engaging twists the world open (the waldo).
+    ///
+    /// UV convention read by material 22 (texCoord):
+    ///   u ≥ 2         → the square-wrap band; (u−2, v) is the glyph UV, sheared by the align value
+    ///   0 ≤ u < 2     → the top cap; (u, v) is the swirl glyph UV
+    ///   u < 0, v<−1.5 → translucent resin (the drum's back arc + structure)
+    /// v runs 0 at the top → 1 at the base, so the shear can split the square's upper half.
     private static func addAlignmentCylinder(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let mUnit: Float = ws.eyeHeight / 1.7
         let zBase = ws.floorY + plinthHeightM * mUnit   // planted on the plinth top
@@ -874,21 +877,33 @@ class TileMeshLibrary {
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
             MazeVertexSwift(position: p, normal: n, texCoord: uv, aoFactor: ao)
         }
-        let resinUV = SIMD2<Float>(-1, -2)               // translucent-resin flag (material 21)
-        let seg = 24
-        // Drum rim (resin; the square-wrap glyph lands here in Phase 2b).
+        let resinUV = SIMD2<Float>(-1, -2)
+        let seg = 32
+        let front: Float = -.pi / 2                      // −Y, the plaza-approach side
+        let arcHalf: Float = 100.0 / 180.0 * .pi         // the square wraps ±100° of the front
+        // Rim. Each segment is classed whole (by its mid-φ) as square-wrap or resin, so a quad never
+        // straddles the flag boundary (interpolating u across it would hit the wrong branch).
         for i in 0..<seg {
-            let a0 = Float(i) / Float(seg) * 2 * .pi, a1 = Float(i + 1) / Float(seg) * 2 * .pi
+            let phi0 = -.pi + Float(i) / Float(seg) * 2 * .pi
+            let phi1 = -.pi + Float(i + 1) / Float(seg) * 2 * .pi
+            let mid = (phi0 + phi1) * 0.5
+            let a0 = front + phi0, a1 = front + phi1
             let p0 = SIMD2<Float>(cos(a0) * rD, sin(a0) * rD)
             let p1 = SIMD2<Float>(cos(a1) * rD, sin(a1) * rD)
             let n = normalize(SIMD3<Float>(cos((a0 + a1) * 0.5), sin((a0 + a1) * 0.5), 0))
+            func uvFor(_ phi: Float, top: Bool) -> SIMD2<Float> {
+                guard abs(mid) < arcHalf else { return resinUV }
+                let u = 2.0 + min(1, max(0, (phi + arcHalf) / (2 * arcHalf)))   // 2…3 across the arc
+                return SIMD2(u, top ? 0 : 1)
+            }
             let base = UInt32(verts.count)
-            verts.append(contentsOf: [vtx(SIMD3(p0.x, p0.y, zBase), n, resinUV, 0.85), vtx(SIMD3(p1.x, p1.y, zBase), n, resinUV, 0.85),
-                                      vtx(SIMD3(p1.x, p1.y, zTop), n, resinUV, 1.0), vtx(SIMD3(p0.x, p0.y, zTop), n, resinUV, 1.0)])
+            verts.append(contentsOf: [vtx(SIMD3(p0.x, p0.y, zBase), n, uvFor(phi0, top: false), 0.9),
+                                      vtx(SIMD3(p1.x, p1.y, zBase), n, uvFor(phi1, top: false), 0.9),
+                                      vtx(SIMD3(p1.x, p1.y, zTop), n, uvFor(phi1, top: true), 1.0),
+                                      vtx(SIMD3(p0.x, p0.y, zTop), n, uvFor(phi0, top: true), 1.0)])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
-        // Top cap — UV [0,1]² over its bounding square so the (centred) glyph lands square, exactly
-        // like the plinth disc's top. This is where the swirl reads, looking down.
+        // Top cap — UV [0,1]² over its bounding square (the swirl), like the plinth disc's top.
         let up = SIMD3<Float>(0, 0, 1)
         let cap = UInt32(verts.count)
         verts.append(vtx(SIMD3(0, 0, zTop), up, SIMD2(0.5, 0.5), 1.0))

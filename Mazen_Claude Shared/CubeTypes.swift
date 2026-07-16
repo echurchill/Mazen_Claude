@@ -324,9 +324,11 @@ struct Prop {
     /// M20 — extra rotation about the vertical axis, in degrees (on top of `facing`). Lets several
     /// billboard cards of ONE tree intersect at even angles (a multi-view "billboard cloud"). 0 = none.
     var viewAngle: Float = 0
-    /// M16.6 Phase 2 — generic 0…1 animation progress for animated props (the alignment cylinder's
-    /// grow/align). Driven per-frame by GameState; read by SceneBuilder to scale/rotate the mesh.
+    /// M16.6 Phase 2b — the alignment cylinder's two animation values, driven per-frame by GameState:
+    /// `anim` = GROW (0 hidden → 1 fully risen, on unlock); `alignAnim` = the two half-squares' pivot
+    /// (0 split → 1 whole, on engage — passed to the shader as discoveryAmount to shear the wrap).
     var anim: Float = 0
+    var alignAnim: Float = 0
 
     /// M18 Phase 2 — does this prop remove stand cell (subRow, subCol) of a `grid`×`grid`
     /// tile? Centred on the prop's author sub-cell, it blocks a square of half-extent

@@ -520,6 +520,35 @@ fragment float4 fragmentShader(
             color = float3(0.52, 0.55, 0.60);                                      // grey metallic body
             lighting = amb;
         }
+    } else if (in.materialID == 22) {
+        // M16.6 Phase 2b — the alignment cylinder. UV flags (see addAlignmentCylinder):
+        //   u≥2 → the SQUARE wrap (caustic slice 7), split into an upper/lower half that the align
+        //         value (passed via discoveryAmount, 0=split → 1=whole) shears together;
+        //   0≤u<2 → the top cap SWIRL (slice 5); u<0 → translucent resin.
+        float3 amb = skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor;
+        const uint SWIRL = 5, SQUARE = 7;                 // TextureLoader.CausticSymbol indices
+        if (in.texCoord.x >= 2.0) {
+            float2 uv = float2(in.texCoord.x - 2.0, in.texCoord.y);
+            float align = saturate(in.discoveryAmount);
+            // The square's UPPER half (v<0.5) is rotated off around the drum when unaligned; it
+            // slides back as align→1 so the two halves meet into a whole square. (Circumferential
+            // shift on a wrapped glyph IS the "pivot".)
+            if (uv.y < 0.5) uv.x += (1.0 - align) * 0.55;
+            float g = (uv.x >= 0.0 && uv.x <= 1.0) ? causticTex.sample(texSampler, uv, SQUARE).r : 0.0;
+            float3 plate = float3(0.36, 0.52, 0.66);
+            color = plate * amb * 0.7 + float3(0.35, 0.66, 1.00) * g * 2.1;
+            lighting = float3(1.0);
+        } else if (in.texCoord.x >= 0.0) {
+            float g = causticTex.sample(texSampler, in.texCoord, SWIRL).r;
+            float3 plate = float3(0.36, 0.52, 0.66);
+            color = plate * amb * 0.7 + float3(0.35, 0.66, 1.00) * g * 2.1;
+            lighting = float3(1.0);
+        } else {
+            float3 viewDir = normalize(frame.cameraPosition - in.worldPosition);
+            float fres = pow(1.0 - saturate(dot(normal, viewDir)), 2.5);
+            color = mix(float3(0.42, 0.60, 0.72), float3(0.70, 0.88, 1.0), fres);
+            lighting = amb * 0.6 + float3(0.35);
+        }
     } else if (in.materialID == 20) {
         // M20: imported sub-mesh whose diffuse carries alpha (Quaternius leaves/flowers) — cut it
         // out so foliage reads as leaves instead of solid quads. Otherwise identical to 11.

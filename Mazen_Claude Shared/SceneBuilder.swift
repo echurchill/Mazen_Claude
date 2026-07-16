@@ -226,10 +226,18 @@ final class SceneBuilder {
                                 }
                                 treeScale = sizeBase * jitter
                             }
-                            let pm = restM
+                            var pm = restM
                                 * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180), axis: SIMD3(0, 0, 1))
                                 * float4x4.scale(treeScale)
+                            if prop.kind == .alignmentCylinder {
+                                // M16.6 Phase 2b — GROW: scale the drum's height about its base (the
+                                // plinth top) by `anim`, so it rises from the disc rather than the floor.
+                                let zBase = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
+                                pm = pm * float4x4.translation(0, 0, zBase)
+                                        * float4x4.scale(1, 1, max(0.001, prop.anim))
+                                        * float4x4.translation(0, 0, -zBase)
+                            }
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             var materialID: UInt32 = 10
                             if model.bondedGroups.contains(where: { $0.contains(ci) }) {
@@ -282,12 +290,17 @@ final class SceneBuilder {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }
-                            if prop.kind == .plinth || prop.kind == .alignmentCylinder {
-                                // M16.6: the Builder plinth / its alignment cylinder — material 21 reads
-                                // stone/resin vs glyph from the mesh's UV flag; `state` selects the
-                                // caustic symbol slice (the cylinder carries the square = world).
+                            if prop.kind == .plinth {
+                                // M16.6: the Builder plinth — material 21 reads stone/resin vs glyph
+                                // from the mesh's UV flag; `state` selects the caustic symbol slice.
                                 materialID = 21
                                 propStyleSeed = UInt32(max(0, prop.state))
+                                color = SIMD4(1, 1, 1, 1)
+                            }
+                            if prop.kind == .alignmentCylinder {
+                                // M16.6 Phase 2b — material 22 hardcodes swirl-top + square-wrap; the
+                                // align value rides `discoveryAmount` (set on the instance below).
+                                materialID = 22
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .portalLamp {
@@ -301,8 +314,11 @@ final class SceneBuilder {
                                     materialID = 12                             // emissive (unlit) → reads as a lamp
                                 }
                             }
+                            // M16.6 Phase 2b: the cylinder rides its align value in discoveryAmount
+                            // (material 22 shears the square-wrap by it); every other prop is fully shown.
+                            let discovery: Float = prop.kind == .alignmentCylinder ? prop.alignAnim : 1.0
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
-                                materialID: materialID, tileID: 0, discoveryAmount: 1.0, styleSeed: propStyleSeed,
+                                materialID: materialID, tileID: 0, discoveryAmount: discovery, styleSeed: propStyleSeed,
                                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
                         }
