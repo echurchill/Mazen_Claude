@@ -1,6 +1,6 @@
 # M9: Cube Solar System — Sun, Moon & Dynamic Lighting
 
-> **Status: ✅ COMPLETE** — see [Master Roadmap](Master%20Roadmap.md). All phases 1–7 + polish M9.5-1…4 landed (sun/moon orbits, day/night, per-face terminator, moon phases, moonlight, moon shadows, eclipse, idle cube spin). Detailed per-phase status blocks are inline below. **Deferred (cosmetic, user-agreed):** further orbit-view terminator softening.
+> **Status: ✅ COMPLETE** — see [Master Roadmap](../Master%20Roadmap.md). All phases 1–7 + polish M9.5-1…4 landed (sun/moon orbits, day/night, per-face terminator, moon phases, moonlight, moon shadows, eclipse, idle cube spin). Detailed per-phase status blocks are inline below. **Deferred (cosmetic, user-agreed):** further orbit-view terminator softening.
 
 ## Vision
 

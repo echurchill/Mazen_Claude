@@ -1,7 +1,7 @@
 # Natural & Ring Worlds — Inspiration (M19 seeds)
 
 *2026-07-11 — Eddie added three concept images (this folder) plus seed notes in
-[Random Thoughts](Random%20Thoughts.md). Capture + first mechanical read. The visible dark
+[Random Thoughts](Archive/Random%20Thoughts.md). Capture + first mechanical read. The visible dark
 seams in the images predate the game's real geometry — **ignore them** (Eddie).*
 
 ## The images

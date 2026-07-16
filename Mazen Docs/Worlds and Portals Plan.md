@@ -1,6 +1,6 @@
 # Design Note — Worlds & Portals ("bigger on the inside")
 
-*Captured 2026-07-06. Reframes and absorbs the [M11 Lunar Excursion Seed](M11%20Lunar%20Excursion%20Seed.md).*
+*Captured 2026-07-06. Reframes and absorbs the [M11 Lunar Excursion Seed](Milestones/M11%20Lunar%20Excursion%20Seed.md).*
 
 > **Status: 🔨 IN PROGRESS — core built (2026-07-06).** The world-switch spine (Phase 1), portals + fade + walk-through (Phase 2), different-size worlds (Phase 4), and **the killer visual (Phase 5)** are all implemented and verified. Standing on earth you see the real **moon** hanging in the sky — its actual state, every twist baked in, slowly turning — and vice-versa from a sub-world; the moon persists so its tears stay. Portals are TARDIS beacons you step through; the arena decorations ride slices. **Remaining:** Phase 3 (hoist camera/time so they persist across worlds — currently reset per world), a real **house interior** destination (the "bigger on the inside" house door, as opposed to the moon), moon *styling/rules*, and multiple portal destinations. See the [Master Roadmap](Master%20Roadmap.md).
 
@@ -105,7 +105,7 @@ Recommendation: build the **world-switch spine first** (works for houses immedia
 
 - **[Bandaged Cube Mechanic](Bandaged%20Cube%20Mechanic.md):** portal-worlds *reduce* the need for cube structures to split — most content lives inside portals, so the twist can be a rare, deliberate puzzle action rather than something every surface structure must survive. The two ideas reinforce "twist = scalpel, not ambient."
 - **[Superellipsoid Cube](Superellipsoid%20Cube.md):** orthogonal (a visual treatment of the hub world). A moon world could itself be a superellipsoid "planet."
-- **[M11 Lunar Excursion Seed](M11%20Lunar%20Excursion%20Seed.md):** this note **reframes** it — the moon becomes the first showcase of the general transition system rather than a bespoke feature.
+- **[M11 Lunar Excursion Seed](Milestones/M11%20Lunar%20Excursion%20Seed.md):** this note **reframes** it — the moon becomes the first showcase of the general transition system rather than a bespoke feature.
 
 ## Open questions
 

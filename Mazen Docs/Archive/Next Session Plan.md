@@ -14,7 +14,7 @@ What it still lacks: **a reason to twist** (no goal), destinations that feel lik
 
 ### ⭐ 1 — Bandaged Cube (M13): make the twist a real puzzle
 
-**Why this is the ideal lead.** The twist is the game's signature, but right now it's *aimless* — you can twist anything and structures just tear. Bandaging turns twisting into a **constraint puzzle**: bonded structures **refuse** any slice that would cut them, so the legal move set becomes position-dependent and you have to *plan* turns. It's the single biggest leap toward this being a **game**, it fixes the "twist-anything-into-chaos" feel, and — crucially — its **core is pure logic I can build and unit-test myself**, so we move fast at low risk. Design is already written: [Bandaged Cube Mechanic](Bandaged%20Cube%20Mechanic.md).
+**Why this is the ideal lead.** The twist is the game's signature, but right now it's *aimless* — you can twist anything and structures just tear. Bandaging turns twisting into a **constraint puzzle**: bonded structures **refuse** any slice that would cut them, so the legal move set becomes position-dependent and you have to *plan* turns. It's the single biggest leap toward this being a **game**, it fixes the "twist-anything-into-chaos" feel, and — crucially — its **core is pure logic I can build and unit-test myself**, so we move fast at low risk. Design is already written: [Bandaged Cube Mechanic](../Bandaged%20Cube%20Mechanic.md).
 
 **Tasks (roughly in order):**
 1. **Bond model + legality** *(self-verifiable)* — `bondedGroups: [Set<Int>]` on `CubeModel`; `canRotateSlice(axis:index:)` = every group is fully-in or fully-out of the slice. Unit tests: bonds survive legal twists, illegal twists are detected, group indices stay valid across turns. I can land this solo with confidence.
@@ -40,7 +40,7 @@ The momentum choice if you'd rather stay in the world-building flow. Completes "
 
 ## Bigger bets (higher effort/risk — worth doing, plan first)
 
-- **Superellipsoid planet (M14)** — inflate the cube toward a rounded planet. **New synergy from today:** the counterpart worlds in the sky currently read as *cubes*; inflated, they'd read as real **planets** hanging there — a big upgrade to the killer visual, and it improves M9's day/night shading too. But it's a core geometry change (`worldMatrix`), touches everything, and I can't self-verify it — so it needs a careful, staged approach. [Superellipsoid Cube](Superellipsoid%20Cube.md).
+- **Superellipsoid planet (M14)** — inflate the cube toward a rounded planet. **New synergy from today:** the counterpart worlds in the sky currently read as *cubes*; inflated, they'd read as real **planets** hanging there — a big upgrade to the killer visual, and it improves M9's day/night shading too. But it's a core geometry change (`worldMatrix`), touches everything, and I can't self-verify it — so it needs a careful, staged approach. [Superellipsoid Cube](../Superellipsoid%20Cube.md).
 - **Player collision** — stop walking through walls/buildings; makes exploration feel real (flagged since the house work).
 - **Audio** — first sound pass (footsteps, the twist, the portal "vworp"). A large absence for feel; even a little transforms it.
 

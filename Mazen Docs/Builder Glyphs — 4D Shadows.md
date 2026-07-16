@@ -1,6 +1,6 @@
 # Builder Glyphs — 4D Shadows (design capture)
 
-*Captured 2026-07-10 from a design conversation with Eddie. Answers the open "glyph source" question from the language keystone thread (see [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) §Live design questions). Background source: [The Builders of Garden of Worlds — Transcendent Civilization v3](The_Builders_of_Garden_of_Worlds_-_Transcendent_Civilization_v3.docx) (Eddie + ChatGPT — potential background material, not canon-as-is). Status: **adopted as the working glyph model**; rendering model = **caustic projection + a
+*Captured 2026-07-10 from a design conversation with Eddie. Answers the open "glyph source" question from the language keystone thread (see [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) §Live design questions). Background source: [The Builders of Garden of Worlds — Transcendent Civilization v3](Source%20Material/The_Builders_of_Garden_of_Worlds_-_Transcendent_Civilization_v3.docx) (Eddie + ChatGPT — potential background material, not canon-as-is). Status: **adopted as the working glyph model**; rendering model = **caustic projection + a
 comprehension gradient** (2026-07-13, see that section); message bundling = **the frame cube is the
 cartouche; the vase is a sentence made solid** (2026-07-15, see that section); the plinth is a
 **waldo for the world** (2026-07-15 — mechanism, not signage). Spike re-scoped from the caustic
@@ -47,7 +47,7 @@ That is **exactly what a Builder message is**: shaped matter that only reveals m
 illuminated/read. The artifact looks like inert etched structure; the meaning is invisible until
 you know how to cast light through it — the game's "understanding rewrites perception" at the
 material level. (Working tool, made by Eddie+ChatGPT, in this folder:
-[computational-caustic-projection.html](computational-caustic-projection.html) — it produced the
+[computational-caustic-projection.html](Prototypes/computational-caustic-projection.html) — it produced the
 two-spots / star / solar-system / ringed-planet demos; a poor-man's optimal transport via
 Morton/Z-curve sorting of source cells to target-shape points, then lerp the targets to morph.)
 
@@ -95,7 +95,7 @@ the sharp target must be iconic/memorable. So the forge's job narrows: author pl
 
 ### The forge tool as a living vocabulary sketchpad (Eddie, ongoing)
 
-[computational-caustic-projection.html](computational-caustic-projection.html) is where Eddie is
+[computational-caustic-projection.html](Prototypes/computational-caustic-projection.html) is where Eddie is
 **accreting the symbol vocabulary** — targets so far include the game's own iconography (the
 police-box **portal**, the **obelisk**) alongside two-spots / star / solar-system / ringed-planet.
 More symbols get added over time to think the glyph concept through. Two things this surfaces:
@@ -130,7 +130,7 @@ which feel noun vs. verb), fold a short "vocabulary findings" note in here.*
 
 ## The cartouche — the frame cube (Eddie, 2026-07-15)
 
-Second tool, in this folder: [caustic-frame-cube.html](caustic-frame-cube.html). It takes a series
+Second tool, in this folder: [caustic-frame-cube.html](Prototypes/caustic-frame-cube.html). It takes a series
 of caustic shapes and **lofts them into a single solid**: 10 keyframe glyphs
 (`box, focus, star, double, ring, triple, planet, spiral, solar, stickman`), 20 lerped frames per
 transition → **181 transparent 512² slices** stacked along Z inside a rotatable **wireframe cube**.
@@ -458,7 +458,7 @@ Natural worlds → *cracked* (revealed as constructs) → **hybrid** → **fully
 
 ## The Builders background doc — what to take, and one canon tension
 
-The [v3 doc](The_Builders_of_Garden_of_Worlds_-_Transcendent_Civilization_v3.docx) is *source material, not canon-as-is* (its own words). Strongest takes for us:
+The [v3 doc](Source%20Material/The_Builders_of_Garden_of_Worlds_-_Transcendent_Civilization_v3.docx) is *source material, not canon-as-is* (its own words). Strongest takes for us:
 - **Hidden-by-ethics:** "the ideal Builder completes a work so seamlessly that future generations believe it emerged naturally" — this makes the game's core reveal (natural surface → engineered truth) **the Builders' own ethic**, discovered rather than explained. Perfect thematic lock-in.
 - **Restraint over omnipotence** ("power measured by what is not done", preserving possibility over optimizing outcomes) — harmonizes with the cozy/no-fail pillar.
 - **"They remember being finite… forgetting what it was like to struggle would make stewardship impossible"** — feeds the memory/forgetting mechanics directly.

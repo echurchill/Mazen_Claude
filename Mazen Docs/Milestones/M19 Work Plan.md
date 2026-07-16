@@ -1,10 +1,10 @@
 # M19 — Natural & Moon Worlds (work plan)
 
 *Drafted 2026-07-11. The settings milestone: two authored worlds in the natural register —
-a **Natureworld** (the garden world of the [Player Journey](Player%20Journey%20—%20A%20Session.md))
+a **Natureworld** (the garden world of the [Player Journey](../Player%20Journey%20—%20A%20Session.md))
 and a real **Moon** — at roundness ~1.0, walked with M18's mazeless movement. Inspiration +
-first mechanical read: [Natural & Ring Worlds](Natural%20%26%20Ring%20Worlds%20—%20Inspiration.md)
-(the three concept images). Seeds: Eddie's [Random Thoughts](Random%20Thoughts.md).
+first mechanical read: [Natural & Ring Worlds](../Natural%20%26%20Ring%20Worlds%20—%20Inspiration.md)
+(the three concept images). Seeds: Eddie's [Random Thoughts](../Archive/Random%20Thoughts.md).
 Prerequisite: **M18** (and M17 runs before the M20 walkthrough that stages these worlds).
 Status: **📋 awaiting greenlight.***
 
@@ -23,7 +23,7 @@ The Moon is **visible-only** for the Journey (a sky element; the story revisits 
 the ground) — so Phase 3 is sky-quality first: it must be right in the home/garden sky at
 concept-image fidelity, while its ground detail can trail behind everything else in this
 plan without blocking M20. And per the world-graph's new
-[time-periods section](World%20Graph%20—%20Relational%20Worlds.md), earth/moon may eventually
+[time-periods section](../World%20Graph%20—%20Relational%20Worlds.md), earth/moon may eventually
 exist in **multiple era instances** — stamps should be written era-parameterizable-later
 (one lineage, era-varied dressing), not hardcoded to a single now.
 

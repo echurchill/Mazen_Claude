@@ -2,7 +2,7 @@
 
 **STATUS: THE CORE LOOP IS PLAYABLE AND VERIFIED (2026-07-11)** — notice → refused → understand → unlock → twist open → enter, all built and Eddie-tested in one day (M15.0–2, M16.1–4). Remaining: M16.5 (the carved glyph), the M15.3 twist-percept experiment, and polish (clue slab, carried-light, feel tuning).
 
-*Drafted 2026-07-10 (evening) for Eddie's greenlight, incorporating this week's design decisions: the [World Graph](World%20Graph%20—%20Relational%20Worlds.md) (route-keyed worlds — M15's first build step), [Builder Glyphs](Builder%20Glyphs%20—%204D%20Shadows.md) (locks eventually speak in 4D shadows), the M13 bandaging foundation (built, inert), and M10's deferred Phase H (gates). R2 left the runway clear: Renderer split, placement unified behind `restMatrix`/`inflatedPlacement`, 107k tests. Statuses: **📋 all phases awaiting greenlight.***
+*Drafted 2026-07-10 (evening) for Eddie's greenlight, incorporating this week's design decisions: the [World Graph](../World%20Graph%20—%20Relational%20Worlds.md) (route-keyed worlds — M15's first build step), [Builder Glyphs](../Builder%20Glyphs%20—%204D%20Shadows.md) (locks eventually speak in 4D shadows), the M13 bandaging foundation (built, inert), and M10's deferred Phase H (gates). R2 left the runway clear: Renderer split, placement unified behind `restMatrix`/`inflatedPlacement`, 107k tests. Statuses: **📋 all phases awaiting greenlight.***
 
 ## Why these two together
 

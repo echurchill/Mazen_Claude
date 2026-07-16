@@ -1,6 +1,6 @@
 # M14b — Curved Geometry (per-vertex tessellated superellipsoid inflation)
 
-*Status: **IMPLEMENTED (Phases 0–4), committed, visually verified** (2026-07-09). Remaining = polish/authoring only: per-world authored roundness, sunrise/sunset terminator tuning, optional frame-rail/fog on the surface path. Supersedes the M14 first pass's per-tile inflation. Roadmap: [Master Roadmap](Master%20Roadmap.md) §6. Design context: [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) (shape-as-meaning), [Superellipsoid Cube](Superellipsoid%20Cube.md).*
+*Status: **IMPLEMENTED (Phases 0–4), committed, visually verified** (2026-07-09). Remaining = polish/authoring only: per-world authored roundness, sunrise/sunset terminator tuning, optional frame-rail/fog on the surface path. Supersedes the M14 first pass's per-tile inflation. Roadmap: [Master Roadmap](../Master%20Roadmap.md) §6. Design context: [Design Synthesis](../Garden%20of%20Worlds%20—%20Design%20Synthesis.md) (shape-as-meaning), [Superellipsoid Cube](../Superellipsoid%20Cube.md).*
 
 ## Why this milestone exists (the problem M14 exposed)
 
