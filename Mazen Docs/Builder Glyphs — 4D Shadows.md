@@ -4,7 +4,7 @@
 comprehension gradient** (2026-07-13, see that section); message bundling = **the frame cube is the
 cartouche; the vase is a sentence made solid** (2026-07-15, see that section); the plinth is a
 **waldo for the world** (2026-07-15 — mechanism, not signage). Spike re-scoped from the caustic
-plaque to **the plinth** (the M16 lock's tutorial): first cut landed 2026-07-15 (M21), unreviewed.*
+plaque to **the plinth** (the M16 lock's tutorial): first cut landed 2026-07-15 (M16.6), unreviewed.*
 
 ## The premise
 

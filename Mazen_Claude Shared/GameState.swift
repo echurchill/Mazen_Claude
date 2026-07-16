@@ -407,7 +407,7 @@ class GameState {
     /// A portal takes priority (stepping "through the door" switches worlds); otherwise chests
     /// toggle open ↔ closed. This is the dispatch point where a lever would trigger a slice
     /// rotation, etc.
-    /// M21 — the door plinth speaks the lock's state, and only ever says it in glyphs (no UI text).
+    /// M16.6 — the door plinth speaks the lock's state, and only ever says it in glyphs (no UI text).
     /// blank → **swirl** once the bond dissolves ("turn/combine to produce" — the verb naming the
     /// twist M16.4 requires) → **portal** once that twist has swung the door open. The plinth lives
     /// on the door tile, so it's found by looking for a plinth sharing a tile with a portal.

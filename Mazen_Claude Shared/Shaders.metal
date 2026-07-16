@@ -497,7 +497,7 @@ fragment float4 fragmentShader(
         color = assetDiffuse.sample(texSampler, in.texCoord).rgb;
         lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
     } else if (in.materialID == 21) {
-        // M21 — the Builder plinth. The mesh flags its own split via UV: u < 0 is the tapered
+        // M16.6 — the Builder plinth. The mesh flags its own split via UV: u < 0 is the tapered
         // stone body, otherwise it's the top face carrying the caustic glyph. `styleSeed` picks the
         // symbol slice (Prop.state), so one mesh + one material serves every plinth in the world.
         if (in.texCoord.x < 0.0) {

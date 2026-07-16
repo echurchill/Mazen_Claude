@@ -849,7 +849,7 @@ class TileMeshLibrary {
     /// as raised linework. The language's first public appearance — presence, not system (see
     /// `Mazen Docs/Builder Glyphs — 4D Shadows.md`). All linework is double-sided, so winding
     /// never hides a stroke.
-    /// M21 — the Builder plinth: a tapered stone block with the glyph lit on its TOP face
+    /// M16.6 — the Builder plinth: a tapered stone block with the glyph lit on its TOP face
     /// (Eddie: "just a single symbol engraved into the top"). Replaces the glyph plaque beside the
     /// M16.3 dials and by the temple door.
     ///

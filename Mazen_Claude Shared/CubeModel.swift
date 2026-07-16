@@ -546,7 +546,7 @@ class CubeModel {
             // M16.5: the lock speaks — a carved tesseract-shadow plaque on the door tile (bonded,
             // so the lock livery gilds it and refusals flare it), oriented to face the open
             // approach — never a wall (Eddie).
-            // M21: the door plinth — the language's first VERB, taught by consequence. It starts
+            // M16.6: the door plinth — the language's first VERB, taught by consequence. It starts
             // blank; aligning the last dial makes it show the swirl ("turn/combine to produce"), and
             // the twist that swings the door open makes it show the portal. GameState drives the
             // state; no UI text anywhere. (Mazen Docs/Builder Glyphs — 4D Shadows.md)
@@ -587,7 +587,7 @@ class CubeModel {
             for (r, c2, f, st, ordinal) in dialSpots {
                 if let (ci2, fi2) = faceletAt(face: .positiveZ, row: r, col: c2) {
                     cubies[ci2].facelets[fi2].props.append(Prop(kind: .dial, subRow: 1, subCol: 1, facing: f, state: st))
-                    // M21: a plinth beside each dial, carrying its ORDINAL (1,2,3,4) — replacing
+                    // M16.6: a plinth beside each dial, carrying its ORDINAL (1,2,3,4) — replacing
                     // M16.5's identical mark. These are the same morphemes the Builder vase sentence
                     // uses ("2 planets", "3 ringed planets"), so the tutorial IS the dictionary
                     // entry. Oriented to an open direction (preferring the plaza), never a wall.
@@ -630,7 +630,7 @@ class CubeModel {
     /// approach side), and stand it in a CORNER subcell — the 3×3 path-cross only ever walks
     /// the centre and edge-centre subcells, so a corner can't block anyone. Of the two corners
     /// on the edge behind it, hug one with a closed lateral wall when there is one.
-    /// M21 — place a Builder plinth on an open side of the tile (never against a wall), carrying
+    /// M16.6 — place a Builder plinth on an open side of the tile (never against a wall), carrying
     /// `symbol` (a TextureLoader.CausticSymbol raw value) lit on its top face. Mirrors
     /// `glyphPlaque`'s siting rules; the plinth supersedes it beside the M16 lock.
     private func plinth(onTile openings: DirectionMask, preferred: SurfaceDirection, symbol: Int) -> Prop {

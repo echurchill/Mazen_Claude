@@ -299,7 +299,7 @@ enum TextureLoader {
         }
     }
 
-    // MARK: - M21 Builder glyphs (caustic symbols)
+    // MARK: - M16.6 Builder glyphs (caustic symbols)
 
     /// The plinth vocabulary. Slice index = `Prop.state`, so the order is load-bearing:
     /// 1–4 are the ordinals the four M16.3 dials are labelled with, and they are the SAME morphemes

@@ -100,7 +100,7 @@ class Renderer: NSObject, MTKViewDelegate {
     /// Validation (Xcode's Run) aborts the first draw if a declared slot is never set — even though
     /// the `*Loaded` flags mean it is never sampled. This keeps every declared slot legally bound.
     var placeholderArray: MTLTexture!
-    /// M21: Builder-glyph caustic symbols (r8 intensity array); slice = Prop.state. Generated, not loaded.
+    /// M16.6: Builder-glyph caustic symbols (r8 intensity array); slice = Prop.state. Generated, not loaded.
     var causticArray: MTLTexture!
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
@@ -207,7 +207,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.maxBufferBindCount = 4
         self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
-        argDesc.maxTextureBindCount = 9   // +6 greenery +7 tree-sprite arrays (M20), +8 caustic symbols (M21)
+        argDesc.maxTextureBindCount = 9   // +6 greenery +7 tree-sprite arrays (M20), +8 caustic symbols (M16.6)
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
