@@ -409,21 +409,32 @@ class GameState {
     /// rotation, etc.
     /// M16.6 — the door plinth speaks the lock's state, and only ever says it in glyphs (no UI text).
     /// blank → **swirl** once the bond dissolves ("turn/combine to produce" — the verb naming the
-    /// twist M16.4 requires) → **portal** once that twist has swung the door open. The plinth lives
-    /// on the door tile, so it's found by looking for a plinth sharing a tile with a portal.
+    /// twist M16.4 requires) → **portal** once that twist has swung the door open.
     /// (Mazen Docs/Builder Glyphs — 4D Shadows.md)
+    ///
+    /// The plinth sits on the plaza tile just NORTH of the temple door (Eddie moved it off the
+    /// walk-through portal tile, 2026-07-16), so we find the temple-door portal (`state == 1`,
+    /// destination temple-interior; the moon portal's state is 0) and drive the plinth on its north
+    /// neighbour — falling back to the door tile itself for the tiny-cube case.
     private func updateDoorPlinths() {
+        let n = cubeModel.size
         let unlocked = cubeModel.bondedGroups.isEmpty
-        for ci in cubeModel.cubies.indices {
-            for fi in cubeModel.cubies[ci].facelets.indices {
-                let props = cubeModel.cubies[ci].facelets[fi].props
-                guard props.contains(where: { $0.kind == .portal }),
-                      let pi = props.firstIndex(where: { $0.kind == .plinth }) else { continue }
-                let opened = !cubeModel.sealedPortalCubies.contains(ci)
+        for r in 0..<n {
+            for c in 0..<n {
+                guard let (pci, pfi) = cubeModel.faceletAt(face: .positiveZ, row: r, col: c),
+                      cubeModel.cubies[pci].facelets[pfi].props.contains(where: { $0.kind == .portal && $0.state == 1 })
+                else { continue }
+                let opened = !cubeModel.sealedPortalCubies.contains(pci)
                 // 6 = portal, 5 = swirl, 0 = blank (TextureLoader.CausticSymbol).
                 let symbol = opened ? 6 : (unlocked ? 5 : 0)
-                if cubeModel.cubies[ci].facelets[fi].props[pi].state != symbol {
-                    cubeModel.cubies[ci].facelets[fi].props[pi].state = symbol
+                for (nr, nc) in [(r - 1, c), (r, c)] {   // prefer the north neighbour; fall back to the door tile
+                    guard let (ci, fi) = cubeModel.faceletAt(face: .positiveZ, row: nr, col: nc),
+                          let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .plinth })
+                    else { continue }
+                    if cubeModel.cubies[ci].facelets[fi].props[pi].state != symbol {
+                        cubeModel.cubies[ci].facelets[fi].props[pi].state = symbol
+                    }
+                    break
                 }
             }
         }

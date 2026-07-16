@@ -550,8 +550,18 @@ class CubeModel {
             // blank; aligning the last dial makes it show the swirl ("turn/combine to produce"), and
             // the twist that swings the door open makes it show the portal. GameState drives the
             // state; no UI text anywhere. (Mazen Docs/Builder Glyphs — 4D Shadows.md)
-            let doorOpenings = cubies[dci].facelets[dfi].mazeTile.openings
-            cubies[dci].facelets[dfi].props.append(plinth(onTile: doorOpenings, preferred: .north, symbol: 0))
+            //
+            // Placed on the plaza tile just NORTH of the door — in front of the portal, toward the
+            // plaza (Eddie, 2026-07-16) — NOT on the door tile itself, because that's a walk-through
+            // portal you'd trigger just by stepping up to read it. Seated at that tile's south
+            // sub-cell (nearest the door). Falls back onto the door tile if the cube is too small to
+            // have a tile north.
+            if templeRow - 1 >= 0, let (mci, mfi) = faceletAt(face: .positiveZ, row: templeRow - 1, col: doorCol) {
+                cubies[mci].facelets[mfi].props.append(Prop(kind: .plinth, subRow: 0, subCol: 1, facing: .s, state: 0))
+            } else {
+                let doorOpenings = cubies[dci].facelets[dfi].mazeTile.openings
+                cubies[dci].facelets[dfi].props.append(plinth(onTile: doorOpenings, preferred: .north, symbol: 0))
+            }
             var bond: Set<Int> = [dci]
             for pc in [doorCol - 1, doorCol + 1] where (0..<size).contains(pc) {
                 if let (pci, pfi) = faceletAt(face: .positiveZ, row: templeRow, col: pc) {
