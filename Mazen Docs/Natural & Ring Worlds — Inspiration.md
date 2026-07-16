@@ -6,12 +6,12 @@ seams in the images predate the game's real geometry — **ignore them** (Eddie)
 
 ## The images
 
-1. **[Natural World](Natural%20World.png)** — a fully green sphere at roundness ~1.0: dense
+1. **[Natural World](Images/Natural%20World.png)** — a fully green sphere at roundness ~1.0: dense
    conifer forest with real variation (clumps, clearings), **rivers and lakes** threading
    between the stands, visible ground relief. No paths, no maze — a garden left to grow.
-2. **[Moon World](Moon%20World.png)** — the same body language in grey: regolith texture,
+2. **[Moon World](Images/Moon%20World.png)** — the same body language in grey: regolith texture,
    **craters at many scales with raised rims**, boulder fields. Desolate but sculpted.
-3. **[Natural World with World Builder Toroidal](Natural%20World%20with%20World%20Builder%20Toroidal.png)**
+3. **[Natural World with World Builder Toroidal](Images/Natural%20World%20with%20World%20Builder%20Toroidal.png)**
    — the natural world encircled by a **mechanical toroidal ring**: dense greebled machinery,
    pipes, panels, small glowing elements. The gardener's scaffold around the garden — the
    engineered truth made visible, *encircling* the natural surface instead of hiding under it.
