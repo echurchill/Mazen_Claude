@@ -525,6 +525,8 @@ class GameState {
         // engaged dissolves the lock; disengaging any one re-applies it (goof-and-fix). The door
         // plinth's progress display + the lock are refreshed together.
         if let capIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .switchCap }) {
+            // Once the door is open (portal activated), the switches are inert for this puzzle (Eddie).
+            guard templeDoorStillSealed() else { return }
             let engaged = cubeModel.cubies[ci].facelets[fi].props[capIdx].alignAnim > 0.5
             cubeModel.cubies[ci].facelets[fi].props[capIdx].alignAnim = engaged ? 0 : 1
             refreshSwitchLock()

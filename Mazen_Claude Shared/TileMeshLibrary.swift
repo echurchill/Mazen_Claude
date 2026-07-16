@@ -939,9 +939,9 @@ class TileMeshLibrary {
     /// unlock; engaging twists the world open (the waldo).
     ///
     /// UV convention read by material 22 (texCoord):
-    ///   u ≥ 2         → the square-wrap band; (u−2, v) is the glyph UV, sheared by the align value
-    ///   0 ≤ u < 2     → the top cap; (u, v) is the swirl glyph UV
-    ///   u < 0, v<−1.5 → translucent resin (the drum's back arc + structure)
+    ///   u ≥ 2      → the square-wrap band (FULL circumference; u−2 runs 0…1 once around), sheared
+    ///               by the align value
+    ///   0 ≤ u < 2  → the top cap; (u, v) is the swirl glyph UV
     /// v runs 0 at the top → 1 at the base, so the shear can split the square's upper half.
     private static func addAlignmentCylinder(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let mUnit: Float = ws.eyeHeight / 1.7
@@ -952,30 +952,24 @@ class TileMeshLibrary {
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
             MazeVertexSwift(position: p, normal: n, texCoord: uv, aoFactor: ao)
         }
-        let resinUV = SIMD2<Float>(-1, -2)
         let seg = 32
         let front: Float = -.pi / 2                      // −Y, the plaza-approach side
-        let arcHalf: Float = 100.0 / 180.0 * .pi         // the square wraps ±100° of the front
-        // Rim. Each segment is classed whole (by its mid-φ) as square-wrap or resin, so a quad never
-        // straddles the flag boundary (interpolating u across it would hit the wrong branch).
+        // Rim. The square wraps the FULL circumference (Eddie: no plain-metal gap) — u runs 2…3 once
+        // around from the back seam, so it tiles seamlessly. v = 0 at top → 1 at base for the shear.
         for i in 0..<seg {
             let phi0 = -.pi + Float(i) / Float(seg) * 2 * .pi
             let phi1 = -.pi + Float(i + 1) / Float(seg) * 2 * .pi
-            let mid = (phi0 + phi1) * 0.5
             let a0 = front + phi0, a1 = front + phi1
             let p0 = SIMD2<Float>(cos(a0) * rD, sin(a0) * rD)
             let p1 = SIMD2<Float>(cos(a1) * rD, sin(a1) * rD)
             let n = normalize(SIMD3<Float>(cos((a0 + a1) * 0.5), sin((a0 + a1) * 0.5), 0))
-            func uvFor(_ phi: Float, top: Bool) -> SIMD2<Float> {
-                guard abs(mid) < arcHalf else { return resinUV }
-                let u = 2.0 + min(1, max(0, (phi + arcHalf) / (2 * arcHalf)))   // 2…3 across the arc
-                return SIMD2(u, top ? 0 : 1)
-            }
+            let u0 = 2.0 + (phi0 + .pi) / (2 * .pi)       // 2…3 around the full circumference
+            let u1 = 2.0 + (phi1 + .pi) / (2 * .pi)
             let base = UInt32(verts.count)
-            verts.append(contentsOf: [vtx(SIMD3(p0.x, p0.y, zBase), n, uvFor(phi0, top: false), 0.9),
-                                      vtx(SIMD3(p1.x, p1.y, zBase), n, uvFor(phi1, top: false), 0.9),
-                                      vtx(SIMD3(p1.x, p1.y, zTop), n, uvFor(phi1, top: true), 1.0),
-                                      vtx(SIMD3(p0.x, p0.y, zTop), n, uvFor(phi0, top: true), 1.0)])
+            verts.append(contentsOf: [vtx(SIMD3(p0.x, p0.y, zBase), n, SIMD2(u0, 1), 0.9),
+                                      vtx(SIMD3(p1.x, p1.y, zBase), n, SIMD2(u1, 1), 0.9),
+                                      vtx(SIMD3(p1.x, p1.y, zTop), n, SIMD2(u1, 0), 1.0),
+                                      vtx(SIMD3(p0.x, p0.y, zTop), n, SIMD2(u0, 0), 1.0)])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
         // Top cap — UV [0,1]² over its bounding square (the swirl), like the plinth disc's top.
