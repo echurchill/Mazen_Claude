@@ -221,10 +221,9 @@ And the portal plinth **teaches a verb by consequence, with no UI text**: the gl
 action, you perform it, the glyph updates to the result. "Understanding rewrites perception" as a
 tutorial loop.
 
-**Open question (Eddie):** numbering the dials 1–4 implies an *order*, but M16.3 currently ships
-three pre-aligned and one off ("find the pattern and act once"). So the ordinals are, today,
-teaching-only. Either is fine — but if the numbers should mean "press in sequence", that's a real
-puzzle change, not a label change. **Not decided.**
+**DECIDED (Eddie, 2026-07-15):** the ordinals are **teaching-only — the puzzle is unchanged.** The
+goal is simply to start introducing the numbers; M16.3 keeps shipping three pre-aligned and one off
+("find the pattern and act once"). The numbers are vocabulary, not a combination.
 
 ## The plinth is a WALDO for the world (Eddie, 2026-07-15)
 
@@ -280,17 +279,149 @@ inversion: Heinlein's Waldo is a mind too **weak** to touch the world; the Build
 
 The Builders left both *words* and *hands*. Blur them and each stops meaning anything.
 
-### OPEN QUESTION — does a twist require a plinth? (Eddie to answer)
+### Does a twist require a plinth? — ANSWERED by the ladder (Eddie, 2026-07-15)
 
-Today Q/E twists anywhere. If waldoes **gate** it, every twist becomes *located and authored* — you
-may only turn the world where the Builders left a handle. Strongly in-theme, but a real loss of
-freedom, and **M18/M20 both assume free twisting**. Not decided; Eddie is deciding later.
+Yes, early — then progressively not. See
+[the ladder](#the-ladder--this-answers-the-gating-question-eddie): **magic → plinth → portable waldo →
+none.** So gating is a *stage*, not a rule: twists start located and authored (you may only turn the
+world where the Builders left a handle) and open up as the player gains fluency — which lets
+**M18/M20's free twisting** be the late state rather than a contradiction. The comprehension gradient
+therefore pays out **mechanically**, not just visually: understanding rewrites *capability*, not only
+perception. **Still open:** the fork at the top of the ladder (portable device vs. no device).
 
-*Claude's proposal, for consideration only:* **the plinth is training wheels.** Early you can only
-twist at a Builder's handle — you need their hands; as attunement rises you reach directly and twist
-anywhere. That makes the [comprehension gradient](#the-comprehension-gradient--mushy-is-the-mechanic-not-the-bug-eddies-key-reframe)
-pay out **mechanically** rather than only visually: understanding rewrites *capability*, not just
-perception. The first world's door plinth is already where that lesson belongs.
+## Teaching the twist — the alignment cylinder (Eddie, 2026-07-15)
+
+The problem Eddie set: **slow-teach the world-twisting dynamic without exposing too much too soon.**
+
+His answer: when the swirl appears, the plinth's display **grows taller into a cylinder** — a top half
+and a bottom half, each carrying a mark. Engaging it (tap / Q / …) pivots the halves until the marks
+**align**. As they align, **the world twists**: a loud grinding, the screen shakes, the sky shifts —
+*"after all it has been a while since this last happened."*
+
+**Why it teaches:** the cylinder is a **scale model of the world sitting on the plinth**, so turning
+the model turns the world. That's the waldo's first trait — **correspondence** — made physical, and it
+lands in one gesture with no words. Crucially the player **doesn't need to understand slice rotation;
+they need to align two marks.** The twist is the *consequence* — the same consequence-teaching loop as
+the door plinth (glyph → act → glyph updates), with the whole world as the payoff.
+
+### The haptic channel — resist vs grind
+
+| the world says | how it says it |
+|---|---|
+| **no** | strain, springback, camera wobble — **already shipped** (M16.2) |
+| **yes, but I am old and heavy** | grind, shake, the sky lurches |
+
+One channel, two messages, zero UI. And "it has been a while since this last happened" isn't flavour:
+it's **characterisation through resistance** — the machine tells you its age by how hard it is to turn.
+(Both are the waldo's second trait, **force reflection**.)
+
+### The Portal frame — and why ours is the stronger version
+
+Eddie's anchor: Portal's first room, where a portal *just happens* and you don't own it; eventually you
+get the gun. Ours differs in a way worth keeping deliberately:
+
+| | what the player has |
+|---|---|
+| Portal, room 1 | **the effect, with no agency** — it happens behind glass, you watch |
+| the plinth | **agency, with no comprehension** — *you did that, and you don't know what you did* |
+
+For a cozy, no-fail game ours is better: the player acts first and understands later, which **is** the
+dog/fetch relationship — the dog fetches long before it knows what "fetch" means.
+
+### The marks — two halves of a glyph: the SQUARE
+
+Red/green was **rejected** (Eddie agreed) for two independent reasons:
+- **Diegetic:** why would hyper-dimensional Builders use human traffic-light semantics? Their language
+  is geometry, not RGB convention.
+- **Accessibility:** red/green is the single most common colourblind axis (~8% of men). A tutorial the
+  player cannot fail must not be one they cannot *read*.
+
+Both die to the same fix: **position already carries the signal** — the marks physically line up. Let
+geometry be the message and colour be decoration.
+
+Arrows were considered and dropped: **an arrow is UI ("align me"), a square is language ("world").**
+Since the tutorial *is* the dictionary entry, pick the mark that adds a word — an arrow can't.
+
+**The square is not a metaphor, it's the geometry.** `square : cube :: cube : tesseract` — a square is
+what a cube casts, a cube is what a tesseract casts. So the square is the shadow-of-a-shadow of the
+Builders' world-object, and it is the most literally visible noun available: **the player is standing
+on a cube whose faces are squares.** The Rosetta principle at its most direct.
+
+> **Which gives the cylinder a sentence.** The cap already carries the **swirl** (verb: *turn/combine
+> to produce*); the barrel assembles the **square** (object: *world*). Complete it and you have said
+> **"TURN THE WORLD"** — a two-word imperative that you complete *by obeying it*. The sentence doesn't
+> describe the action; **the action finishes the sentence.** (Straight off the grammar's own rows:
+> rotation = verb, cross-section = word.)
+
+*Tabled (Eddie): the **hourglass** as the glyph for time — we aren't manipulating time yet. Worth the
+back pocket, though: an up-arrow meeting a down-arrow **is** an hourglass, so if time ever becomes
+manipulable, the geometry already implied the glyph.*
+
+*Staging note: dots/circles stay right for lesson one (blur-robust — a mushy dot is still a dot). The
+square-halves is the step after. The tutorial's shape has room to grow into the language.*
+
+### The ladder — this ANSWERS the gating question (Eddie)
+
+| rung | the player… |
+|---|---|
+| **magic** | it happens *to* them; they don't own it (Portal's first room) |
+| **plinth / waldo** | operates a Builder's handle — located, authored twists |
+| **portable waldo** | carries their own hand (a "Pipboy"-ish device) |
+| **none** | reaches directly |
+
+Better than the earlier training-wheels proposal, because the first rung is *"it happens and you don't
+own it."* **The fork at the top is still open:** a portable device **or** enhancing the player until no
+3D device is needed to manipulate the 4D mechanisms within/between worlds.
+
+### Fluency, not capacity — the constraint on that fork
+
+Whichever way the fork goes, **the enhancement must raise vocabulary, not capacity.**
+
+The endgame's entire logic is that an omniscient mind *can't* find pattern in noise while a small,
+finite, **curating** mind can — "the player's limitation is the searchlight." Enhance the player toward
+Builder-scale and **we destroy the very finitude that makes them the only one who can do the job.**
+The dog learns more words; it never becomes human. **Keep the ceiling, raise the fluency.**
+
+Corollary for the Pipboy branch: **a Builder waldo is a hand, not a menu.** The moment it becomes an
+inventory screen it has stopped being a waldo.
+
+### Open — the taxonomy tension
+
+The control now *looks like* the message: a cylinder on a plinth vs. a cylinder standing alone. Either
+that's a bug (players can't tell a word from a handle) or it's deeply in-theme (**you can't tell a
+Builder's word from a Builder's hand**). Decide on purpose, not by accident.
+
+## Numbers — the Builders don't have hands (Eddie, 2026-07-15 — OPEN)
+
+Eddie's observation: decimal is almost certainly an **anatomical accident** (two hands, five fingers).
+Post-biological, hyper-dimensional beings have no fingers — so **we count on our hands; they'd count on
+their world**, and whichever base they use is a *fingerprint of the shape they think in*.
+
+**Two things that make this safe to leave open:**
+- **The existing design already constrains it: the base must be > 4.** If it were 4, the fourth dial's
+  plinth wouldn't be four tallies — it would roll over into positional notation. So 6, 8, 12, 16, 24
+  survive; 2 and 4 don't.
+- **It's deferrable.** At 1–4 *every* base looks identical (small numbers are tallies in essentially
+  all real systems). A base only becomes visible at the first number **≥** itself, which lives deep in
+  the vase archive. **Nothing shipped now forecloses the choice.**
+
+*Claude's suggestion, for Eddie's consideration:*
+
+- **Base 16 — the corners of a tesseract.** Not for elegance: because **the player's most reasonable
+  guess is wrong in exactly the way that reveals the answer.** They live on a cube; a cube has 8
+  corners; so they'll try 8 — and fail, because the Builders counted the corners of *their* world.
+  *You counted the corners of your world; they counted the corners of theirs.* The off-by-one-dimension
+  error **is** the revelation — and it delivers [the doc's promise](#the-premise)
+  that a fan who realises "these are tesseract sections" gets the character's revelation, except through
+  **arithmetic**, which is falsifiable and crackable rather than vibes. It also makes their counting
+  **dimension-stacking**: an n-cube has 2ⁿ vertices, so 1, 2, 4, 8, 16 is binary *because each new
+  dimension doubles your corners* — a geometric soul, not a silicon one.
+- **Runner-up: base 24.** The 24-cell is the one regular polytope that exists *only* in 4D — an
+  unforgeable signature of four-dimensionality — and 24 is gorgeously composite (2,3,4,6,8,12 divide
+  it), which a civilisation doing orbital mechanics would want. Second only because 16 is *learnable*
+  and "corners of a hypercube" is graspable, where 24 needs you to already know what a 24-cell is.
+- **Reject:** base 2 (reads as *computer aliens* — loses the geometry), base 12 (finger-joint counting;
+  too human), decimal (the accident we're escaping).
 
 ## The vase archive (Eddie, 2026-07-15)
 

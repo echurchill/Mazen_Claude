@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-10. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-15. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md).*
 
 ## The 60-second catch-up
 
@@ -28,6 +28,9 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 1. **Can "this lock needs *understanding X*" be legible with no UI?** The exact needle The Witness / Outer Wilds spend their whole budget threading. Hardest craft problem.
 2. **Is the "understand" verb deep enough to repeat across worlds** without becoming "find the switches"? Leading candidate: a **Builder glyph/language you slowly learn to *read*** (Chants of Sennaar / Heaven's Vault style) as the deepening verb.
 3. Where memory-*editing* / selective-forgetting enters as a verb vs. staying theme.
+4. **What base do the Builders count in?** Decimal is an anatomical accident (two hands, five fingers); post-biological beings have no fingers, so their base is a *fingerprint of the shape they think in*. Open — Eddie thinking. Constraint already fixed by the design: **base > 4**; and it's deferrable (at 1–4 every base looks like tallies). Claude's pitch: **16 = a tesseract's corners**, because the player's reasonable guess (8 = a cube's corners) is wrong by exactly one dimension and *that error is the revelation*. See [Builder Glyphs](Builder%20Glyphs%20—%204D%20Shadows.md#numbers--the-builders-dont-have-hands-eddie-2026-07-15--open).
+5. **The top of the waldo ladder:** magic → plinth → **portable waldo (a "Pipboy") _or_ no device at all**? Constraint: the enhancement must be **fluency, not capacity** — enhance the player toward Builder-scale and you destroy the finitude that makes them the only one who can find pattern in noise ("the player's limitation is the searchlight").
+6. **Vase/plinth taxonomy:** the control now looks like the message (a cylinder on a plinth vs. standing alone). Bug (can't tell a word from a handle) or in-theme (*you can't tell a Builder's word from a Builder's hand*)? Decide on purpose.
 
 ## Milestone road to a vertical slice (rough)
 
@@ -39,6 +42,10 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 - **Next:** M16.5 (the first carved glyph — Builder-Glyphs style, cosmetic seed), the M15.3 twist-percept experiment (camera decoupling while riding), polish (clue slab, player-carried light, feel tuning) — then M17 (memory) / M18 (the slice worlds).
 - ~~Greenlight the [M15/M16 Work Plan](M15-M16%20Work%20Plan.md)~~ — **greenlit and mostly executed**; statuses live in that doc.
 - *(Original pre-greenlight note follows for context:)* **the [M15/M16 Work Plan](M15-M16%20Work%20Plan.md)** — drafted 2026-07-10 evening for Eddie's review. Five decision points (D1 sequence, D2 interior lighting, D3 first-interior size, D4 first bonded structure, D5 registry key format), each with a recommendation. First build step on approval: **M15 Phase 0, the World Registry** (route-keyed worlds per the [World Graph](World%20Graph%20—%20Relational%20Worlds.md)).
+- **THE GLYPH LANGUAGE GOT REAL (2026-07-15).** Eddie's caustic expansion landed a working model: the **frame cube is the cartouche**, the **vase is a sentence made solid** (its cross-sections ARE the words, so reading = a light plane sweeping it), and the **plinth is a WALDO for the world** — mechanism, not signage. The first Builder text is glossed (*a star, 2 planets, 3 ringed planets, swirled together into a solar system, where humanity lives* — a creation story sitting on a vase in world 1). Full capture: [Builder Glyphs — 4D Shadows](Builder%20Glyphs%20—%204D%20Shadows.md).
+- **Built + pushed, NOT yet reviewed by Eddie:** the plinth replaces M16.5's plaque beside the M16 lock — four dials carry ordinals 1–4 (teaching-only; puzzle unchanged), the door plinth goes **blank → swirl → portal** with no UI text. Symbols are *generated* (blobs splatted at target points = the forge's transport minus the inverse solve), so blob radius already IS the comprehension-gradient dial. **Eddie's next look: how it LOOKS — sizing, the blue, blob radius, whether the portal glyph reads at plinth scale.**
+- **Designed, not built:** the **alignment cylinder** — the plinth grows taller, two halves each carrying half a **square** (= *world*); align them and the world twists (grind + shake + sky lurch). With the swirl on the cap that reads **"TURN THE WORLD"** — a two-word imperative you complete by obeying it.
+- ⚠️ **Naming collision to resolve:** the plinth work was labelled **M21** in code comments and commits, but this doc's roadmap already uses **M21 = cozy/feel polish**. It extends M16.5 (the lock's glyph), so **M16.6** is probably the right label. Eddie's call; rename before it sets.
 - Loose ends that can ride along anytime: M14b polish (per-world authored roundness; sunset terminator tuning), one FP glance at the moon to fully close R2.11's note.
 
 ## Where things stand — M18 + M19 first pass (2026-07-11 night)
