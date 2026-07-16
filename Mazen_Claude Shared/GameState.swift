@@ -489,6 +489,29 @@ class GameState {
         }
     }
 
+    /// Debug (U key): let Eddie watch the door plinth's alignment cylinder RISE without walking to
+    /// the far dials. If a cylinder already exists, reset its grow (and align) so it re-grows in
+    /// place; otherwise unlock the door — bypassing the dials — so `updateDoorPlinths` spawns it and
+    /// it grows from 0. Repeatable, so the rise can be replayed while standing at the plinth.
+    func debugReplayCylinderGrow() {
+        var found = false
+        for ci in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[ci].facelets.indices {
+                for pi in cubeModel.cubies[ci].facelets[fi].props.indices
+                where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .alignmentCylinder {
+                    cubeModel.cubies[ci].facelets[fi].props[pi].anim = 0
+                    cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = 0
+                    found = true
+                }
+            }
+        }
+        cylinderEngaged = false
+        if !found {
+            cubeModel.bondedGroups.removeAll()   // debug bypass: unlock so the cylinder spawns
+            updateDoorPlinths()
+        }
+    }
+
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props

@@ -223,6 +223,9 @@ class GameViewController: NSViewController {
             renderer.adjustRelief(0.01)
         case 38:      // J — debug: toggle the idle world spin only (leaves the sun/time moving)
             gs.spinEnabled.toggle()
+        case 32:      // U — M16.6 debug: unlock the door plinth (bypass the dials) & replay the
+                      // alignment cylinder's grow, so you can watch it rise while standing at it
+            gs.debugReplayCylinderGrow()
         case 40:      // K — debug: freeze/unfreeze time *in place* (no reset to noon, unlike Shift+T)
             gs.timeScale = gs.timeScale == 0 ? 1 : 0
         default:
