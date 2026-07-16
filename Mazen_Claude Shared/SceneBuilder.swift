@@ -282,9 +282,10 @@ final class SceneBuilder {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }
-                            if prop.kind == .plinth {
-                                // M16.6: the Builder plinth — material 21 reads stone vs glyph from the
-                                // mesh's UV flag; `state` selects the caustic symbol slice.
+                            if prop.kind == .plinth || prop.kind == .alignmentCylinder {
+                                // M16.6: the Builder plinth / its alignment cylinder — material 21 reads
+                                // stone/resin vs glyph from the mesh's UV flag; `state` selects the
+                                // caustic symbol slice (the cylinder carries the square = world).
                                 materialID = 21
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)

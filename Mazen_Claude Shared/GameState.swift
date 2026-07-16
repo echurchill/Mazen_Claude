@@ -427,12 +427,24 @@ class GameState {
                 let opened = !cubeModel.sealedPortalCubies.contains(pci)
                 // 6 = portal, 5 = swirl, 0 = blank (TextureLoader.CausticSymbol).
                 let symbol = opened ? 6 : (unlocked ? 5 : 0)
+                let wantCylinder = unlocked && !opened      // the alignment cylinder lives in the swirl phase
                 for (nr, nc) in [(r - 1, c), (r, c)] {   // prefer the north neighbour; fall back to the door tile
                     guard let (ci, fi) = cubeModel.faceletAt(face: .positiveZ, row: nr, col: nc),
                           let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .plinth })
                     else { continue }
                     if cubeModel.cubies[ci].facelets[fi].props[pi].state != symbol {
                         cubeModel.cubies[ci].facelets[fi].props[pi].state = symbol
+                    }
+                    // M16.6 Phase 2: grow / retract the alignment cylinder (the "turn the world" waldo)
+                    // on the plinth's own tile, co-located with the disc.
+                    let plinthProp = cubeModel.cubies[ci].facelets[fi].props[pi]
+                    let hasCylinder = cubeModel.cubies[ci].facelets[fi].props.contains { $0.kind == .alignmentCylinder }
+                    if wantCylinder && !hasCylinder {
+                        cubeModel.cubies[ci].facelets[fi].props.append(
+                            Prop(kind: .alignmentCylinder, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
+                                 facing: plinthProp.facing, state: TextureLoader.CausticSymbol.square.rawValue))
+                    } else if !wantCylinder && hasCylinder {
+                        cubeModel.cubies[ci].facelets[fi].props.removeAll { $0.kind == .alignmentCylinder }
                     }
                     break
                 }
@@ -443,6 +455,15 @@ class GameState {
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props
+        // M16.6 Phase 2: the alignment cylinder is a WALDO — engaging it (F) twists the world open.
+        // The player stands on the start face, so this is exactly the start-face slice twist that
+        // M16.4 opens the door on; the plinth performs it FOR the player (the "magic" rung of the
+        // ladder — you act before you understand). The twist itself opens the door + retracts the
+        // cylinder via finalizeSliceRotation → updateDoorPlinths.
+        if props.contains(where: { $0.kind == .alignmentCylinder }) {
+            startSliceRotation(clockwise: true)
+            return
+        }
         if let portal = props.first(where: { $0.kind == .portal }),
            !cubeModel.sealedPortalCubies.contains(ci) {    // M16.4: sealed = inert
             portalRequested = true

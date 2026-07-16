@@ -306,7 +306,7 @@ enum TextureLoader {
     /// the vase sentence uses for "2 planets / 3 ringed planets" — the tutorial is the dictionary
     /// entry (see Mazen Docs/Builder Glyphs — 4D Shadows.md).
     enum CausticSymbol: Int, CaseIterable {
-        case blank = 0, one, two, three, four, swirl, portal
+        case blank = 0, one, two, three, four, swirl, portal, square
 
         /// Target points in a centred [-1,1] square — what the caustic concentrates light into.
         /// Deliberately blob-space: a mushy dot is still a dot, so these read at zero attunement.
@@ -348,6 +348,19 @@ enum TextureLoader {
                 for i in 0...4 {                                    // the window band
                     let x = x0 + (x1 - x0) * Float(i) / 4.0
                     p.append(SIMD2(x, 0.30))
+                }
+                return p
+            case .square:
+                // The object: "world" — a cube's shadow is a square (square:cube :: cube:tesseract),
+                // and the player literally stands on a cube whose faces are squares. Drawn as an
+                // outline so it reads as a bounded face, not a filled blob. This is the glyph the
+                // alignment cylinder assembles from two halves ("TURN THE WORLD").
+                var p: [SIMD2<Float>] = []
+                let s: Float = 0.62, n = 8
+                for i in 0..<n {
+                    let t = -s + 2 * s * Float(i) / Float(n - 1)
+                    p.append(SIMD2(t, s)); p.append(SIMD2(t, -s))   // top + bottom edges
+                    p.append(SIMD2(s, t)); p.append(SIMD2(-s, t))   // right + left edges
                 }
                 return p
             }

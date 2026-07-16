@@ -272,6 +272,9 @@ enum PropKind: UInt8 {
     case treeBillboard // M20: a WenrexaTrees billboard sprite — tree array (material 19); `state` = slice
     case plinth       // M16.6: a Builder plinth — a tapered stone with a caustic glyph lit on its top face.
                       // `state` = TextureLoader.CausticSymbol (0 blank, 1-4 ordinals, 5 swirl, 6 portal).
+    case alignmentCylinder  // M16.6 Phase 2: grows from the door plinth when unlocked — a drum bearing
+                            // the "square" (world) glyph. Engaging it (F) twists the world open (the
+                            // waldo). `anim` = grow/align progress 0…1; walk-through (sits on the plinth).
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the
@@ -280,7 +283,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder: return false
         default: return true
         }
     }
@@ -321,6 +324,9 @@ struct Prop {
     /// M20 — extra rotation about the vertical axis, in degrees (on top of `facing`). Lets several
     /// billboard cards of ONE tree intersect at even angles (a multi-view "billboard cloud"). 0 = none.
     var viewAngle: Float = 0
+    /// M16.6 Phase 2 — generic 0…1 animation progress for animated props (the alignment cylinder's
+    /// grow/align). Driven per-frame by GameState; read by SceneBuilder to scale/rotate the mesh.
+    var anim: Float = 0
 
     /// M18 Phase 2 — does this prop remove stand cell (subRow, subCol) of a `grid`×`grid`
     /// tile? Centred on the prop's author sub-cell, it blocks a square of half-extent

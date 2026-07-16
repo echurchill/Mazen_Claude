@@ -100,8 +100,10 @@ class GameViewController: NSViewController {
                         let m = renderer.importedProps[p.state]
                         return m.name.isEmpty ? "importedAsset [\(p.state)]" : m.name
                     case .plinth:
-                        let names = ["blank", "one", "two", "three", "four", "swirl", "portal"]
+                        let names = ["blank", "one", "two", "three", "four", "swirl", "portal", "square"]
                         return "plinth: " + (names.indices.contains(p.state) ? names[p.state] : "state \(p.state)")
+                    case .alignmentCylinder:
+                        return "alignment cylinder (square — F to turn the world)"
                     default:
                         return "\(p.kind)" + (p.state != 0 ? " [state \(p.state)]" : "")
                     }
