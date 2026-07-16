@@ -849,38 +849,80 @@ class TileMeshLibrary {
     /// as raised linework. The language's first public appearance — presence, not system (see
     /// `Mazen Docs/Builder Glyphs — 4D Shadows.md`). All linework is double-sided, so winding
     /// never hides a stroke.
-    /// M16.6 — the Builder plinth: a tapered stone block with the glyph lit on its TOP face
-    /// (Eddie: "just a single symbol engraved into the top"). Replaces the glyph plaque beside the
-    /// M16.3 dials and by the temple door.
+    /// M16.6 — the Builder plinth (Eddie's exact spec, 2026-07-16): a grey-metallic tapered block
+    /// with a flat translucent disc lying on top, the glyph lit on the disc's upper face. Replaces
+    /// the glyph plaque beside the M16.3 dials and by the temple door.
     ///
-    /// UV convention carries the material split, so one prop mesh needs one material: the top face
-    /// is UV-mapped [0,1]² and the sides/base are flagged **(-1,-1)**. The fragment shader reads
-    /// stone wherever u < 0 and the caustic symbol otherwise — no second draw, no second mesh.
+    /// Dimensions are given in METRES and converted by the world's perceptual scale (WorldScale:
+    /// eyeHeight 0.09u ≈ 1.7 m). Plinth: 75 cm square base tapering to a 50 cm square top, 1 m tall.
+    /// Disc: 40 cm diameter, 2 cm thick, sitting on the top face (fits inside the 50 cm square).
+    ///
+    /// One prop mesh, one material (21) that branches on the UV flag in `texCoord`:
+    ///   u ≥ 0            → the disc's top face, UV [0,1]² carrying the caustic glyph
+    ///   u = -1 (y = -1)  → metallic plinth body
+    ///   u = -1 (y = -2)  → translucent disc side/rim
+    /// (The disc can later GROW in Z into a glyph sequence or a waldo — Eddie's states 3 & 4 — but
+    /// this builds the flat single-glyph form, states 1 (blank) & 2.)
     private static func addPlinth(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
-        let h: Float = 0.30                    // waist-high: readable looking down, doesn't block sightlines
-        let rb: Float = 0.20, rt: Float = 0.13 // the taper — a wide plinth base narrowing to the lit top
+        let mUnit: Float = ws.eyeHeight / 1.7       // world units per metre (anchored to eye ≈ 1.7 m)
+        let rb = 0.375 * mUnit, rt = 0.25 * mUnit   // half-widths: 75 cm base → 50 cm top
+        let h = 1.0 * mUnit                          // 1 m tall
+        let discR = 0.20 * mUnit                      // 40 cm diameter
+        let discThick = 0.02 * mUnit                  // 2 cm
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
             MazeVertexSwift(position: p, normal: n, texCoord: uv, aoFactor: ao)
         }
-        let stoneUV = SIMD2<Float>(-1, -1)     // the "this is stone, not glyph" flag
-        // Four tapered sides. AO darkens the base so the plinth sits into the ground.
+        let metalUV = SIMD2<Float>(-1, -1)          // plinth body
+        let discUV  = SIMD2<Float>(-1, -2)          // translucent disc rim
+
+        // ── Plinth body: four tapered sides + a top cap (the cap is capped so no hole shows under
+        //    the smaller disc). AO darkens the base so it sits into the ground.
         let b = [SIMD3<Float>(-rb, -rb, z0), SIMD3<Float>(rb, -rb, z0), SIMD3<Float>(rb, rb, z0), SIMD3<Float>(-rb, rb, z0)]
         let t = [SIMD3<Float>(-rt, -rt, z0 + h), SIMD3<Float>(rt, -rt, z0 + h), SIMD3<Float>(rt, rt, z0 + h), SIMD3<Float>(-rt, rt, z0 + h)]
         for i in 0..<4 {
             let j = (i + 1) % 4
             let n = normalize(cross(b[j] - b[i], t[i] - b[i]))
             let base = UInt32(verts.count)
-            verts.append(contentsOf: [vtx(b[i], n, stoneUV, 0.62), vtx(b[j], n, stoneUV, 0.62),
-                                      vtx(t[j], n, stoneUV, 0.95), vtx(t[i], n, stoneUV, 0.95)])
+            verts.append(contentsOf: [vtx(b[i], n, metalUV, 0.55), vtx(b[j], n, metalUV, 0.55),
+                                      vtx(t[j], n, metalUV, 0.95), vtx(t[i], n, metalUV, 0.95)])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
-        // The top face — the plate. UV [0,1]² so the caustic symbol lands square on it.
         let up = SIMD3<Float>(0, 0, 1)
-        let base = UInt32(verts.count)
-        verts.append(contentsOf: [vtx(t[0], up, SIMD2(0, 1), 1.0), vtx(t[1], up, SIMD2(1, 1), 1.0),
-                                  vtx(t[2], up, SIMD2(1, 0), 1.0), vtx(t[3], up, SIMD2(0, 0), 1.0)])
-        indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        let capBase = UInt32(verts.count)
+        verts.append(contentsOf: [vtx(t[0], up, metalUV, 1.0), vtx(t[1], up, metalUV, 1.0),
+                                  vtx(t[2], up, metalUV, 1.0), vtx(t[3], up, metalUV, 1.0)])
+        indices.append(contentsOf: [capBase+0, capBase+1, capBase+2, capBase+0, capBase+2, capBase+3])
+
+        // ── The disc: an N-gon prism lying flat on the plinth top. Rim = translucent material; top
+        //    face = UV [0,1]² over the disc's bounding square so the (centred) glyph lands square.
+        let seg = 28
+        let zBot = z0 + h, zTop = z0 + h + discThick
+        // Rim
+        for i in 0..<seg {
+            let a0 = Float(i) / Float(seg) * 2 * .pi, a1 = Float(i + 1) / Float(seg) * 2 * .pi
+            let p0 = SIMD2<Float>(cos(a0) * discR, sin(a0) * discR)
+            let p1 = SIMD2<Float>(cos(a1) * discR, sin(a1) * discR)
+            let n = normalize(SIMD3<Float>(cos((a0 + a1) * 0.5), sin((a0 + a1) * 0.5), 0))
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [vtx(SIMD3(p0.x, p0.y, zBot), n, discUV, 0.9), vtx(SIMD3(p1.x, p1.y, zBot), n, discUV, 0.9),
+                                      vtx(SIMD3(p1.x, p1.y, zTop), n, discUV, 1.0), vtx(SIMD3(p0.x, p0.y, zTop), n, discUV, 1.0)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        // Top face — a triangle fan; UV maps the disc's [-R,R] xy into [0,1] so the square glyph
+        // texture is centred on the round disc (its corners fall outside the circle, unused).
+        let centre = UInt32(verts.count)
+        verts.append(vtx(SIMD3(0, 0, zTop), up, SIMD2(0.5, 0.5), 1.0))
+        var ring: [UInt32] = []
+        for i in 0..<seg {
+            let a = Float(i) / Float(seg) * 2 * .pi
+            let x = cos(a) * discR, y = sin(a) * discR
+            ring.append(UInt32(verts.count))
+            verts.append(vtx(SIMD3(x, y, zTop), up, SIMD2(x / (2 * discR) + 0.5, 0.5 - y / (2 * discR)), 1.0))
+        }
+        for i in 0..<seg {
+            indices.append(contentsOf: [centre, ring[i], ring[(i + 1) % seg]])
+        }
     }
 
     private static func addGlyphPlaque(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {

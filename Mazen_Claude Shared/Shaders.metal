@@ -497,20 +497,28 @@ fragment float4 fragmentShader(
         color = assetDiffuse.sample(texSampler, in.texCoord).rgb;
         lighting = skyAmbient * 0.3 + sunColor * 0.7 * halfLambert * shadowFactor;
     } else if (in.materialID == 21) {
-        // M16.6 — the Builder plinth. The mesh flags its own split via UV: u < 0 is the tapered
-        // stone body, otherwise it's the top face carrying the caustic glyph. `styleSeed` picks the
-        // symbol slice (Prop.state), so one mesh + one material serves every plinth in the world.
-        if (in.texCoord.x < 0.0) {
-            color = float3(0.62, 0.60, 0.55);                       // carved stone, same register as the plaque
-            lighting = skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor;
-        } else {
+        // M16.6 — the Builder plinth. The mesh flags its parts via UV (texCoord): u >= 0 is the
+        // disc's top face carrying the caustic glyph; u < 0 splits by v — the metallic body (v=-1)
+        // vs the translucent disc rim (v=-2). `styleSeed` picks the symbol slice (Prop.state), so
+        // one mesh + one material serves every plinth in the world.
+        float3 amb = skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor;
+        if (in.texCoord.x >= 0.0) {
             float glyph = causticTex.sample(texSampler, in.texCoord, in.styleSeed % causticTex.get_array_size()).r;
-            // The caustic is LIGHT, not paint: it adds over the plate rather than replacing it, so
-            // where no rays land you still read the stone underneath.
-            float3 plate = float3(0.34, 0.38, 0.44);
-            float3 lit = plate * (skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor);
-            color = lit + float3(0.30, 0.62, 1.00) * glyph * 1.9;    // the Builders' blue
-            lighting = float3(1.0);                                  // already lit — don't double-light
+            // The caustic is LIGHT, not paint: it ADDS over the translucent plate, so where no rays
+            // land you still read the bluish resin underneath.
+            float3 plate = float3(0.36, 0.52, 0.66);
+            color = plate * amb * 0.7 + float3(0.35, 0.66, 1.00) * glyph * 2.1;   // the Builders' blue
+            lighting = float3(1.0);                                                // already lit
+        } else if (in.texCoord.y < -1.5) {
+            // Translucent disc rim — a pale cyan resin, brightened + Fresnel-rimmed so it reads as
+            // lit glass rather than a solid puck. (True alpha-blend translucency is a later pass.)
+            float3 viewDir = normalize(frame.cameraPosition - in.worldPosition);
+            float fres = pow(1.0 - saturate(dot(normal, viewDir)), 2.5);
+            color = mix(float3(0.42, 0.60, 0.72), float3(0.70, 0.88, 1.0), fres);
+            lighting = amb * 0.6 + float3(0.35);                                   // glassy, low-contrast
+        } else {
+            color = float3(0.52, 0.55, 0.60);                                      // grey metallic body
+            lighting = amb;
         }
     } else if (in.materialID == 20) {
         // M20: imported sub-mesh whose diffuse carries alpha (Quaternius leaves/flowers) — cut it
