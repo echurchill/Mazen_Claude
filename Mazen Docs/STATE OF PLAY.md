@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-15. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-16. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md).*
 
 ## The 60-second catch-up
 
@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`), twist pacing (`G`/`[`/`]`), world toggle (`O`), headless tests (`Tests/run-tests.sh`, 7060 checks). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), world toggles (`O` interior, `I` temple, `B` natural, `V` garden, `Y` prop/glyph gallery), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **218,002 checks**). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -38,14 +38,20 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 
 ## Immediate next actions on resume
 
-- **THE CORE LOOP IS PLAYABLE (2026-07-11):** notice → twist refused (strain + red flare) → find the grey dial → align (F) → the temple sheds its gold → twist swings it open → the door lights → step into the inverted 5³ temple interior. Eddie's verdict after the first full run: **"That was fun."** All of M15.0–2 and M16.1–4 were built AND verified in one session (world registry; inverted interiors; door-semantics portals; the bonded gold temple rooted through the hollow world's core; dials; sealed doors).
-- **Next:** M16.5 (the first carved glyph — Builder-Glyphs style, cosmetic seed), the M15.3 twist-percept experiment (camera decoupling while riding), polish (clue slab, player-carried light, feel tuning) — then M17 (memory) / M18 (the slice worlds).
-- ~~Greenlight the [M15/M16 Work Plan](M15-M16%20Work%20Plan.md)~~ — **greenlit and mostly executed**; statuses live in that doc.
-- *(Original pre-greenlight note follows for context:)* **the [M15/M16 Work Plan](M15-M16%20Work%20Plan.md)** — drafted 2026-07-10 evening for Eddie's review. Five decision points (D1 sequence, D2 interior lighting, D3 first-interior size, D4 first bonded structure, D5 registry key format), each with a recommendation. First build step on approval: **M15 Phase 0, the World Registry** (route-keyed worlds per the [World Graph](World%20Graph%20—%20Relational%20Worlds.md)).
-- **THE GLYPH LANGUAGE GOT REAL (2026-07-15).** Eddie's caustic expansion landed a working model: the **frame cube is the cartouche**, the **vase is a sentence made solid** (its cross-sections ARE the words, so reading = a light plane sweeping it), and the **plinth is a WALDO for the world** — mechanism, not signage. The first Builder text is glossed (*a star, 2 planets, 3 ringed planets, swirled together into a solar system, where humanity lives* — a creation story sitting on a vase in world 1). Full capture: [Builder Glyphs — 4D Shadows](Builder%20Glyphs%20—%204D%20Shadows.md).
-- **Built + pushed, NOT yet reviewed by Eddie:** the plinth replaces M16.5's plaque beside the M16 lock — four dials carry ordinals 1–4 (teaching-only; puzzle unchanged), the door plinth goes **blank → swirl → portal** with no UI text. Symbols are *generated* (blobs splatted at target points = the forge's transport minus the inverse solve), so blob radius already IS the comprehension-gradient dial. **Eddie's next look: how it LOOKS — sizing, the blue, blob radius, whether the portal glyph reads at plinth scale.**
-- **Designed, not built:** the **alignment cylinder** — the plinth grows taller, two halves each carrying half a **square** (= *world*); align them and the world twists (grind + shake + sky lurch). With the swirl on the cap that reads **"TURN THE WORLD"** — a two-word imperative you complete by obeying it.
-- ✅ **Naming resolved (2026-07-16):** the plinth work is **M16.6** (it extends M16.5, the lock's glyph). Code comments renamed; M21 stays reserved for cozy/feel polish. (Historical commits from 2026-07-15 still say M21 — the code no longer does.)
+- **THE CORE LOOP IS PLAYABLE (2026-07-11):** notice → twist refused (strain + red flare) → undo the lock → twist swings it open → the door lights → step into the inverted 5³ temple interior. Eddie after the first full run: **"That was fun."** M15.0–2 and M16.1–4 built + verified in one session (world registry; inverted interiors; door-semantics portals; the bonded gold temple rooted through the hollow world's core; sealed doors). *(The lock's mechanism has since been rebuilt as switch-plinths — see M16.6 below.)*
+- **THE GLYPH LANGUAGE GOT REAL (design, 2026-07-15).** Eddie's caustic expansion: the **frame cube is the cartouche**, the **vase is a sentence made solid** (its cross-sections ARE the words, so reading = a light plane sweeping it), and the **plinth is a WALDO for the world** — mechanism, not signage. First Builder text glossed (*a star, 2 planets, 3 ringed planets, swirled together into a solar system, where humanity lives* — a creation story on a vase in world 1). Full capture: [Builder Glyphs — 4D Shadows](Builder%20Glyphs%20—%204D%20Shadows.md).
+
+### M16.6 — the Builder-glyph tutorial lock: BUILT & Eddie-reviewed ("looked pretty nice", 2026-07-16)
+
+The whole first-world lock is now the caustic-glyph waldo, no UI text anywhere. In-game via `I` (temple), or `U` to skip the switches for testing the turn. Reachable glyph gallery: `Y`.
+
+- **Switches** (replaced the dials): four **switch plinths** in the garden's diagonal corners — a disc-less base + a *number cylinder* that **pokes out = engaged / sits flush = disengaged** (one height-variable cylinder; the disc IS the cylinder at min height, per Eddie). `F` toggles. Three start engaged, **#4 off**. All four engaged dissolves the lock; disengaging any one **re-applies** it (goof-and-fix).
+- **Door plinth = positional lock readout:** one dot per switch, **filled if engaged, hollow ring if not** (16 generated caustic masks), so goofing #2 shows dot #2 hollow. All filled ⇒ ready → the **portal** glyph once opened.
+- **The turn (waldo):** at the ready door plinth, `F` **raises** the rotator cylinder (swirl on top + the **square** = *world* wrapping the drum, tiled in thirds so it reads at 1:1); a second deliberate `F` (after a 0.5 s **cooldown**, so a stray double-tap can't fire it) **turns the world** — the two half-squares pivot whole and the start-face slice twist opens the door; the cylinder retracts. **Switches go inert once the door is open.**
+- **Caustic glyphs** are *generated* (soft blobs splatted at target points — the forge's transport minus the inverse solve), with **per-glyph blob size** (bold dots vs a fine spiral) — a per-glyph slice of the comprehension-gradient dial. Verified by dumping the actual GPU texture slices to disk and eyeballing them.
+- ✅ **Naming:** this is **M16.6** (extends M16.5's carved glyph); M21 stays reserved for cozy/feel polish. (Historical commits from 2026-07-15 still say M21; the code doesn't.)
+- **STILL DEFERRED — the one open piece:** the **grind / camera-shake / sky-lurch** on the turn ("it's been a while since this last happened"). A self-contained feel pass; trigger the sequence on demand with `U` → `F` → `F` to tune it.
+
 - Loose ends that can ride along anytime: M14b polish (per-world authored roundness; sunset terminator tuning), one FP glance at the moon to fully close R2.11's note.
 
 ## Where things stand — M18 + M19 first pass (2026-07-11 night)
