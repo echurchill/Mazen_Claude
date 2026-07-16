@@ -854,8 +854,11 @@ class TileMeshLibrary {
     /// the glyph plaque beside the M16.3 dials and by the temple door.
     ///
     /// Dimensions are given in METRES and converted by the world's perceptual scale (WorldScale:
-    /// eyeHeight 0.09u ≈ 1.7 m). Plinth: 75 cm square base tapering to a 50 cm square top, 1 m tall.
-    /// Disc: 40 cm diameter, 2 cm thick, sitting on the top face (fits inside the 50 cm square).
+    /// eyeHeight 0.09u ≈ 1.7 m). Plinth: 1.4 m square base tapering to a 1 m square top, 0.9 m tall
+    /// (Eddie 2026-07-16 — top + disc doubled from the first spec for readability, height kept LOW so
+    /// the disc stays below the 1.7 m eye; base 0.7 m half-width < the 1.26 m nearest stand cell, so
+    /// you still stand clear of it and it still blocks only one stand cell).
+    /// Disc: 80 cm diameter, 4 cm thick, sitting on the top face (fits inside the 1 m square).
     ///
     /// One prop mesh, one material (21) that branches on the UV flag in `texCoord`:
     ///   u ≥ 0            → the disc's top face, UV [0,1]² carrying the caustic glyph
@@ -866,10 +869,10 @@ class TileMeshLibrary {
     private static func addPlinth(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
         let mUnit: Float = ws.eyeHeight / 1.7       // world units per metre (anchored to eye ≈ 1.7 m)
-        let rb = 0.375 * mUnit, rt = 0.25 * mUnit   // half-widths: 75 cm base → 50 cm top
-        let h = 1.0 * mUnit                          // 1 m tall
-        let discR = 0.20 * mUnit                      // 40 cm diameter
-        let discThick = 0.02 * mUnit                  // 2 cm
+        let rb = 0.70 * mUnit, rt = 0.50 * mUnit    // half-widths: 1.4 m base → 1 m top
+        let h = 0.9 * mUnit                          // 0.9 m tall (kept low so the disc reads from above)
+        let discR = 0.40 * mUnit                      // 80 cm diameter
+        let discThick = 0.04 * mUnit                  // 4 cm
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
             MazeVertexSwift(position: p, normal: n, texCoord: uv, aoFactor: ao)
         }
