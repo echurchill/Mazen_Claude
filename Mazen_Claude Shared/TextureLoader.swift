@@ -318,11 +318,12 @@ enum TextureLoader {
             case .three: return [SIMD2(0, 0.38), SIMD2(-0.34, -0.22), SIMD2(0.34, -0.22)]
             case .four:  return [SIMD2(-0.32, 0.32), SIMD2(0.32, 0.32), SIMD2(-0.32, -0.32), SIMD2(0.32, -0.32)]
             case .swirl:
-                // The verb: "turn / combine to produce". Drawn as the operation it names — an
-                // Archimedean spiral, sampled evenly so the blobs read as one sweeping stroke.
-                return (0..<44).map { i in
-                    let t = Float(i) / 43.0
-                    let a = t * .pi * 3.4, r = 0.10 + t * 0.74
+                // The verb: "turn / combine to produce". Drawn as the operation it names — a clean
+                // ~2.25-turn Archimedean spiral (Eddie's reference), sampled densely so the fine
+                // blobs read as one continuous sweeping stroke from a tight centre out to the rim.
+                return (0..<84).map { i in
+                    let t = Float(i) / 83.0
+                    let a = t * .pi * 4.5, r = 0.05 + t * 0.77
                     return SIMD2(cos(a) * r, sin(a) * r)
                 }
             case .portal:
@@ -365,6 +366,18 @@ enum TextureLoader {
                 return p
             }
         }
+
+        /// Per-symbol blob-radius multiplier on the array's base radius. Simple glyphs (dots) wear
+        /// BOLD soft blobs; detailed ones (swirl, square, portal) need FINER blobs or their strokes
+        /// merge into a filled disc. (A per-glyph slice of the same "sharpness" dial the comprehension
+        /// gradient will drive globally later — the tutorial is the crisp end.)
+        var blobScale: Float {
+            switch self {
+            case .swirl, .portal: return 0.5
+            case .square:         return 0.57
+            default:              return 1.0   // blank / 1–4 ordinals: bold soft blobs
+            }
+        }
     }
 
     /// Build the caustic symbol array — one slice per `CausticSymbol`, `Prop.state` selects it.
@@ -385,11 +398,13 @@ enum TextureLoader {
         guard let texture = device.makeTexture(descriptor: desc) else { return nil }
         texture.label = "CausticSymbols"
 
-        // Blob radius in texels: the gradient dial. Interpolated so 0 = mush, 1 = tight.
-        let radius = Float(size) * (0.16 - 0.10 * max(0, min(1, sharpness)))
-        let inv = 1.0 / max(radius, 1)
-        let reach = Int(radius * 2.2)
+        // Base blob radius in texels: the gradient dial (0 = mush, 1 = tight). Each symbol then
+        // scales it by its own detail level (bold dots vs a fine spiral) — see CausticSymbol.blobScale.
+        let baseRadius = Float(size) * (0.16 - 0.10 * max(0, min(1, sharpness)))
         for (slice, sym) in syms.enumerated() {
+            let radius = max(1, baseRadius * sym.blobScale)
+            let inv = 1.0 / radius
+            let reach = Int(radius * 2.2)
             var px = [UInt8](repeating: 0, count: size * size)
             var acc = [Float](repeating: 0, count: size * size)
             for t in sym.targets {
