@@ -558,11 +558,11 @@ class CubeModel {
             // Placed on the plaza tile just NORTH of the door — in front of the portal, toward the
             // plaza (Eddie, 2026-07-16) — NOT on the door tile itself, because that's a walk-through
             // portal you'd trigger just by stepping up to read it. Seated at that tile's NORTH
-            // sub-cell — the side the player approaches from, so you walk right up to it (its own
-            // solid body must not be between you and the disc). Falls back onto the door tile if the
-            // cube is too small to have a tile north.
+            // sub-cell (subRow 0 = north = toward the plaza, the side the player approaches from). Its
+            // footprint is now just one stand cell (PropKind.footprintRadius), so you can walk right
+            // up. Falls back onto the door tile if the cube is too small to have a tile north.
             if templeRow - 1 >= 0, let (mci, mfi) = faceletAt(face: .positiveZ, row: templeRow - 1, col: doorCol) {
-                cubies[mci].facelets[mfi].props.append(Prop(kind: .plinth, subRow: 2, subCol: 1, facing: .n, state: 0))
+                cubies[mci].facelets[mfi].props.append(Prop(kind: .plinth, subRow: 0, subCol: 1, facing: .n, state: 0))
             } else {
                 let doorOpenings = cubies[dci].facelets[dfi].mazeTile.openings
                 cubies[dci].facelets[dfi].props.append(plinth(onTile: doorOpenings, preferred: .north, symbol: 0))

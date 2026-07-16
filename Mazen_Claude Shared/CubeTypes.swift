@@ -284,6 +284,17 @@ enum PropKind: UInt8 {
         default: return true
         }
     }
+
+    /// M18 Phase 3 — collision footprint half-extent, in STAND cells from the prop's centre. The
+    /// default fills the whole author sub-cell (k/2 ⇒ the historic 5×5 block at standGrid 15). A
+    /// prop physically smaller than one 1.3 m stand cell overrides this so it doesn't wall off a
+    /// ~6 m square around itself.
+    func footprintRadius(grid: Int) -> Int {
+        switch self {
+        case .plinth: return 0        // ~0.75 m base — blocks only the single cell it stands on
+        default:      return max(0, grid / 3 / 2)
+        }
+    }
 }
 
 /// M19 — what a tile's ground is made of. `maze` is the pastoral hedge world (floor + walls +
@@ -312,15 +323,18 @@ struct Prop {
     var viewAngle: Float = 0
 
     /// M18 Phase 2 — does this prop remove stand cell (subRow, subCol) of a `grid`×`grid`
-    /// tile? A solid prop occupies the k×k stand block of its author sub-cell (author grid
-    /// is always 3, so k = grid/3 tiles it exactly: author 0→[0,k), 1→[k,2k), 2→[2k,3k)).
-    /// Walk-through props (portals) block nothing. Footprint tuning (thinner plaques, bigger
-    /// houses) is Phase 3; the connectivity guard proves no footprint severs a tile.
+    /// tile? Centred on the prop's author sub-cell, it blocks a square of half-extent
+    /// `kind.footprintRadius`. The default (k/2, k = grid/3) fills the whole sub-cell exactly —
+    /// the historic 5×5 block at standGrid 15 — so every existing prop is unchanged. A SMALL prop
+    /// (M16.6: a 0.75 m plinth is narrower than one 1.3 m stand cell) blocks fewer cells, so you can
+    /// walk right up to it instead of being held a full ~6 m author-cell away. Walk-through props
+    /// (portals) block nothing; the connectivity guard proves no footprint severs a tile.
     func blocks(_ subRow: Int, _ subCol: Int, grid: Int) -> Bool {
         guard kind.isSolid else { return false }
         let k = grid / 3
-        let r0 = self.subRow * k, c0 = self.subCol * k
-        return subRow >= r0 && subRow < r0 + k && subCol >= c0 && subCol < c0 + k
+        let rc = self.subRow * k + k / 2, cc = self.subCol * k + k / 2   // the sub-cell's centre cell
+        let rad = kind.footprintRadius(grid: grid)
+        return abs(subRow - rc) <= rad && abs(subCol - cc) <= rad
     }
 
     /// Rotate the prop's placement to match a slice rotation, in the same sense as
