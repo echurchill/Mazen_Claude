@@ -425,9 +425,10 @@ class GameState {
                       cubeModel.cubies[pci].facelets[pfi].props.contains(where: { $0.kind == .portal && $0.state == 1 })
                 else { continue }
                 let opened = !cubeModel.sealedPortalCubies.contains(pci)
-                // 6 = portal, 5 = swirl, 0 = blank (TextureLoader.CausticSymbol).
-                let symbol = opened ? 6 : (unlocked ? 5 : 0)
                 let wantCylinder = unlocked && !opened      // the alignment cylinder lives in the swirl phase
+                // The plinth disc: portal once opened, else BLANK — while unlocked the cylinder covers
+                // the disc and carries the swirl on its own top (Eddie), so the disc stays dark.
+                let symbol = opened ? 6 : 0
                 for (nr, nc) in [(r - 1, c), (r, c)] {   // prefer the north neighbour; fall back to the door tile
                     guard let (ci, fi) = cubeModel.faceletAt(face: .positiveZ, row: nr, col: nc),
                           let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .plinth })
@@ -442,7 +443,7 @@ class GameState {
                     if wantCylinder && !hasCylinder {
                         cubeModel.cubies[ci].facelets[fi].props.append(
                             Prop(kind: .alignmentCylinder, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
-                                 facing: plinthProp.facing, state: TextureLoader.CausticSymbol.square.rawValue))
+                                 facing: plinthProp.facing, state: TextureLoader.CausticSymbol.swirl.rawValue))
                     } else if !wantCylinder && hasCylinder {
                         cubeModel.cubies[ci].facelets[fi].props.removeAll { $0.kind == .alignmentCylinder }
                     }

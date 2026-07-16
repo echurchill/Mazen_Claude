@@ -103,7 +103,7 @@ class GameViewController: NSViewController {
                         let names = ["blank", "one", "two", "three", "four", "swirl", "portal", "square"]
                         return "plinth: " + (names.indices.contains(p.state) ? names[p.state] : "state \(p.state)")
                     case .alignmentCylinder:
-                        return "alignment cylinder (square — F to turn the world)"
+                        return "alignment cylinder (swirl — F to turn the world)"
                     default:
                         return "\(p.kind)" + (p.state != 0 ? " [state \(p.state)]" : "")
                     }

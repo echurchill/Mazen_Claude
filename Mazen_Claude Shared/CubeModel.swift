@@ -83,7 +83,7 @@ class CubeModel {
         (.plinth, 4), (.plinth, 5), (.plinth, 6), (.plinth, 7),
         // Phase 2 — the alignment cylinder (the square/world drum). It renders from the plinth-top
         // height, so pair it with a plinth (next cell) to read it grounded.
-        (.plinth, 7), (.alignmentCylinder, 7),
+        (.plinth, 7), (.alignmentCylinder, 5),
     ]
 
     /// M20 — WenrexaTrees grouped into single trees rendered as **intersecting billboard cards**

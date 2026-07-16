@@ -857,16 +857,18 @@ class TileMeshLibrary {
     /// top of it (so the drum's base is planted exactly on the plinth top, no drift).
     static let plinthHeightM: Float = 0.9
 
-    /// M16.6 Phase 2 — the alignment cylinder: a translucent drum standing on the plinth top,
-    /// bearing the "square" (world) glyph on a flat panel facing the player's approach. Grows from
-    /// the plinth when the door unlocks; engaging it twists the world open (the waldo). Same
-    /// material (21) as the plinth, so its UV flags reuse the same branches: the drum rim/cap is the
-    /// translucent-resin flag (u<0, v<-1.5); the front panel is UV [0,1]² carrying the glyph (u≥0).
-    /// (Phase 2 will split the panel into two independently-pivoting half-squares that align.)
+    /// M16.6 Phase 2 — the alignment cylinder: a translucent drum standing on the plinth top, the
+    /// SWIRL (verb: "turn") lit on its TOP so you read it looking down as it rises, matching the
+    /// plinth disc's diameter so it reads as the disc extruding upward. Grows from the plinth when
+    /// the door unlocks; engaging it twists the world open (the waldo). Same material (21) as the
+    /// plinth — UV flags: the rim is the translucent-resin flag (u<0, v<-1.5); the top cap is
+    /// UV [0,1]² carrying the glyph (u≥0).
+    /// (Phase 2b — Eddie: the SQUARE/world glyph WRAPS the drum's side as two half-squares that pivot
+    ///  into alignment; plus the grow animation + grind/shake. Held back until this form is signed off.)
     private static func addAlignmentCylinder(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let mUnit: Float = ws.eyeHeight / 1.7
         let zBase = ws.floorY + plinthHeightM * mUnit   // planted on the plinth top
-        let rD = 0.35 * mUnit                            // drum radius (fits the 1 m plinth top)
+        let rD = 0.40 * mUnit                            // == the plinth disc radius, so it reads as the disc rising
         let hD = 0.70 * mUnit                            // ~0.7 m tall ⇒ its top sits just below the 1.7 m eye
         let zTop = zBase + hD
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
@@ -874,7 +876,7 @@ class TileMeshLibrary {
         }
         let resinUV = SIMD2<Float>(-1, -2)               // translucent-resin flag (material 21)
         let seg = 24
-        // Drum rim.
+        // Drum rim (resin; the square-wrap glyph lands here in Phase 2b).
         for i in 0..<seg {
             let a0 = Float(i) / Float(seg) * 2 * .pi, a1 = Float(i + 1) / Float(seg) * 2 * .pi
             let p0 = SIMD2<Float>(cos(a0) * rD, sin(a0) * rD)
@@ -885,32 +887,19 @@ class TileMeshLibrary {
                                       vtx(SIMD3(p1.x, p1.y, zTop), n, resinUV, 1.0), vtx(SIMD3(p0.x, p0.y, zTop), n, resinUV, 1.0)])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
-        // Top cap (resin).
+        // Top cap — UV [0,1]² over its bounding square so the (centred) glyph lands square, exactly
+        // like the plinth disc's top. This is where the swirl reads, looking down.
         let up = SIMD3<Float>(0, 0, 1)
         let cap = UInt32(verts.count)
-        verts.append(vtx(SIMD3(0, 0, zTop), up, resinUV, 1.0))
+        verts.append(vtx(SIMD3(0, 0, zTop), up, SIMD2(0.5, 0.5), 1.0))
         var ring: [UInt32] = []
         for i in 0..<seg {
             let a = Float(i) / Float(seg) * 2 * .pi
+            let x = cos(a) * rD, y = sin(a) * rD
             ring.append(UInt32(verts.count))
-            verts.append(vtx(SIMD3(cos(a) * rD, sin(a) * rD, zTop), up, resinUV, 1.0))
+            verts.append(vtx(SIMD3(x, y, zTop), up, SIMD2(x / (2 * rD) + 0.5, 0.5 - y / (2 * rD)), 1.0))
         }
         for i in 0..<seg { indices.append(contentsOf: [cap, ring[i], ring[(i + 1) % seg]]) }
-        // The glyph panel — a flat quad just proud of the drum on its −Y (north/front) face, the
-        // side the player approaches from. UV [0,1]² so the square lands square. Double-sided so it
-        // still reads if approached from behind.
-        let pw = rD * 0.82, yF = -rD * 1.02
-        let a = SIMD3<Float>(-pw, yF, zBase), b = SIMD3<Float>(pw, yF, zBase)
-        let c = SIMD3<Float>(pw, yF, zTop), d = SIMD3<Float>(-pw, yF, zTop)
-        let nf = SIMD3<Float>(0, -1, 0)
-        func panelQuad(_ p0: SIMD3<Float>, _ p1: SIMD3<Float>, _ p2: SIMD3<Float>, _ p3: SIMD3<Float>, _ n: SIMD3<Float>,
-                       _ u0: SIMD2<Float>, _ u1: SIMD2<Float>, _ u2: SIMD2<Float>, _ u3: SIMD2<Float>) {
-            let base = UInt32(verts.count)
-            verts.append(contentsOf: [vtx(p0, n, u0, 1.0), vtx(p1, n, u1, 1.0), vtx(p2, n, u2, 1.0), vtx(p3, n, u3, 1.0)])
-            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
-        }
-        panelQuad(a, b, c, d, nf, SIMD2(0, 1), SIMD2(1, 1), SIMD2(1, 0), SIMD2(0, 0))               // front
-        panelQuad(b, a, d, c, -nf, SIMD2(1, 1), SIMD2(0, 1), SIMD2(0, 0), SIMD2(1, 0))              // back
     }
 
     /// M16.6 — the Builder plinth (Eddie's exact spec, 2026-07-16): a grey-metallic tapered block
