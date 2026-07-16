@@ -76,6 +76,10 @@ class GameState {
     /// animation (engage → the two half-squares pivot together → the world twists). See
     /// `tickAlignmentCylinder`.
     var cylinderEngaged = false
+    /// When the alignment cylinder was last RAISED (F #1). The turn (F #2) is refused until this
+    /// cooldown has passed, so a stray double-tap of the raise doesn't fire the turn (Eddie).
+    var lastCylinderRaiseTime: Float = -100
+    let cylinderEngageCooldown: Float = 0.5
 
     struct DiscoveryAnim {
         let cubieIndex: Int
@@ -533,13 +537,20 @@ class GameState {
         // Only the door plinth reaches here — dial-tile plinths are caught by the dial branch above,
         // and gallery plinths have no state-1 door portal to be "sealed".
         if let plinthProp = cubeModel.cubies[ci].facelets[fi].props.first(where: { $0.kind == .plinth }),
-           !cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .alignmentCylinder }),
-           cubeModel.bondedGroups.isEmpty,
-           templeDoorStillSealed() {
-            cubeModel.cubies[ci].facelets[fi].props.append(
-                Prop(kind: .alignmentCylinder, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
-                     facing: plinthProp.facing, state: 0))
-            cylinderEngaged = true
+           cubeModel.bondedGroups.isEmpty, templeDoorStillSealed() {
+            // TWO deliberate presses (Eddie): F #1 RAISES the cylinder (grow only); F #2 — once it's
+            // fully risen AND past a short cooldown — TURNS THE WORLD (align + twist). The cooldown
+            // stops a stray double-tap of the first press from firing the turn by accident.
+            if let cyl = cubeModel.cubies[ci].facelets[fi].props.first(where: { $0.kind == .alignmentCylinder }) {
+                if cyl.anim >= 1 && !cylinderEngaged && time - lastCylinderRaiseTime > cylinderEngageCooldown {
+                    cylinderEngaged = true
+                }
+            } else {
+                cubeModel.cubies[ci].facelets[fi].props.append(
+                    Prop(kind: .alignmentCylinder, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
+                         facing: plinthProp.facing, state: 0))
+                lastCylinderRaiseTime = time
+            }
             return
         }
         for pi in cubeModel.cubies[ci].facelets[fi].props.indices
