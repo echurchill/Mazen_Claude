@@ -99,6 +99,9 @@ class GameViewController: NSViewController {
                     case .importedAsset where renderer.importedProps.indices.contains(p.state):
                         let m = renderer.importedProps[p.state]
                         return m.name.isEmpty ? "importedAsset [\(p.state)]" : m.name
+                    case .importedFoliage where renderer.importedProps.indices.contains(p.state):
+                        let m = renderer.importedProps[p.state]
+                        return (m.name.isEmpty ? "foliage [\(p.state)]" : m.name) + " (garden plant)"
                     case .plinth:
                         let names = ["blank", "one", "two", "three", "four", "swirl", "portal", "square", "3of4 (F to turn)", "4filled (F to turn)"]
                         return "plinth: " + (names.indices.contains(p.state) ? names[p.state] : "state \(p.state)")

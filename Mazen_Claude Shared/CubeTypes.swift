@@ -278,6 +278,10 @@ enum PropKind: UInt8 {
     case switchBase   // M16.6 (Eddie): a switch = a disc-less plinth base + a switchCap. Replaces the dial.
     case switchCap    // M16.6: the switch's number cylinder — flush (disengaged) ↔ poking out (engaged).
                       // `state` = the number glyph; `anim` = height (0 flush disc … 1 fully out). F toggles.
+    case importedFoliage // M20: a Quaternius plant dressing the garden — same imported-mesh render path as
+                         // `.importedAsset` (`state` = registry index), but NON-solid (the hedges block, the
+                         // plants are scenery) and scaled per-instance by `extraScale`. Added at the end of
+                         // the enum so existing raw values don't shift.
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the
@@ -286,7 +290,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage: return false
         default: return true
         }
     }
@@ -332,6 +336,10 @@ struct Prop {
     /// (0 split → 1 whole, on engage — passed to the shader as discoveryAmount to shear the wrap).
     var anim: Float = 0
     var alignAnim: Float = 0
+    /// M20 — per-instance uniform scale multiplier on top of an imported mesh's registry `target`
+    /// fit. Only `.importedFoliage` reads it: the gallery normalises every model to one size, but the
+    /// garden wants trees big and flowers small, so each scattered plant carries its own scale.
+    var extraScale: Float = 1
 
     /// M18 Phase 2 — does this prop remove stand cell (subRow, subCol) of a `grid`×`grid`
     /// tile? Centred on the prop's author sub-cell, it blocks a square of half-extent

@@ -269,22 +269,82 @@ class CubeModel {
                 // REVEAL only the region (the rest of the world stays .unknown ⇒ fog, unseen).
                 cubies[ci].facelets[fi].tileState = .discovered
                 cubies[ci].facelets[fi].discoveryAmount = 1.0
-                // Foliage — non-solid dressing (the hedges do the blocking): leafy card bushes and
-                // the odd conifer, off the paths. Skip spawn + portal tiles.
-                if (r, col) == (c, c) || (r, col) == portalTile { continue }
-                let h = hash(r * 37, col, r &+ col)
-                let roll = h % 100
-                if roll < 30 {
-                    cubies[ci].facelets[fi].props.append(Prop(kind: .foliageCard, subRow: 0, subCol: 0, state: Int((h >> 8) % 3)))
-                } else if roll < 44 {
-                    cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: 2, subCol: 2, state: Int((h >> 8) % 3)))
-                }
+                // (Vegetation is stamped separately in `stampGardenVegetation` — it needs the
+                //  Renderer's Quaternius registry indices, which aren't available here in init.)
             }
         }
         // The way home — a walk-through return portal beside the spawn.
         if let (ci, fi) = faceletAt(face: .positiveZ, row: portalTile.0, col: portalTile.1) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        }
+    }
+
+    /// M20 — Quaternius plant registry indices, grouped by kind, for the garden reskin. The Renderer
+    /// builds this (it owns the `importedProps` indices) and hands it to `stampGardenVegetation`.
+    struct GardenFlora {
+        var trees: [Int] = []
+        var bushes: [Int] = []
+        var flowers: [Int] = []
+        var grasses: [Int] = []
+        var rocks: [Int] = []
+    }
+
+    /// M20 — dress the sealed garden region with Quaternius plants (the reskin of the old procedural
+    /// cone/card scatter). NON-solid: the hedges still do all the blocking, these are pure scenery, so
+    /// the maze stays fully walkable. Deterministic (spatial hash, no RNG) so the garden looks the
+    /// same each visit. Called by the Renderer after the garden is built (it owns the indices).
+    func stampGardenVegetation(_ flora: GardenFlora) {
+        let n = size, c = n / 2
+        let R = 5
+        let rLo = max(0, c - R), rHi = min(n - 1, c + R)
+        let cLo = max(0, c - R), cHi = min(n - 1, c + R)
+        let portalTile = (min(rHi, c + 1), c)
+
+        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
+        }
+        // Fit-to-`target` (0.85 u) is the gallery's uniform size; scale each kind DOWN to garden scale
+        // (a hedge wall ≈ 0.24 u tall). Trees clear the hedges; bushes sit below; ground cover is small.
+        let treeScale: Float = 0.5, bushScale: Float = 0.16, flowerScale: Float = 0.07,
+            grassScale: Float = 0.07, rockScale: Float = 0.12
+
+        func place(_ ci: Int, _ fi: Int, _ pool: [Int], _ base: Float, _ h: UInt32, corner: Bool) {
+            guard !pool.isEmpty else { return }
+            let idx = pool[Int(h % UInt32(pool.count))]
+            // Corner plants avoid the tile centre (the path runs through the middle); ground cover
+            // (non-solid, small) can sit anywhere. Sub-cell + yaw + size all fall out of the hash.
+            let sr = corner ? Int((h >> 3) & 1) * 2 : Int((h >> 3) % 3)
+            let sc = corner ? Int((h >> 4) & 1) * 2 : Int((h >> 5) % 3)
+            let jitter = 0.85 + Float((h >> 6) % 30) / 100.0    // 0.85…1.15 size variety
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .importedFoliage, subRow: sr, subCol: sc,
+                     facing: Heading8(rawValue: Int(h % 8)) ?? .n,
+                     state: idx, extraScale: base * jitter))
+        }
+
+        for r in rLo...rHi {
+            for col in cLo...cHi {
+                if (r, col) == (c, c) || (r, col) == portalTile { continue }
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                let h = hash(r * 37, col, r &+ col)
+                let roll = h % 100
+                // Primary plant — weighted so the garden reads mostly green with occasional trees/rocks.
+                if roll < 14       { place(ci, fi, flora.trees,   treeScale,   h, corner: true)  }
+                else if roll < 38  { place(ci, fi, flora.bushes,  bushScale,   h, corner: true)  }
+                else if roll < 56  { place(ci, fi, flora.flowers, flowerScale, h, corner: false) }
+                else if roll < 71  { place(ci, fi, flora.grasses, grassScale,  h, corner: false) }
+                else if roll < 78  { place(ci, fi, flora.rocks,   rockScale,   h, corner: false) }
+                // Ground-cover accent — a second small plant on ~a third of tiles (a different
+                // sub-cell) to layer the density without walling the paths.
+                let h2 = hash(col * 37, r, r &* col &+ 7)
+                if h2 % 100 < 32 {
+                    if (h2 & 1) == 0 { place(ci, fi, flora.flowers, flowerScale, h2, corner: false) }
+                    else             { place(ci, fi, flora.grasses, grassScale,  h2, corner: false) }
+                }
+            }
         }
     }
 

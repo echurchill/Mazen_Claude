@@ -436,6 +436,9 @@ class Renderer: NSObject, MTKViewDelegate {
                     // apparent curvature), with the natural-maze confined to a sealed entry region
                     // (Eddie). The stamp reveals ONLY that region, so DON'T reveal-all here.
                     w = GameState(size: 25, name: dest, stamp: .gardenMaze)
+                    // Reskin the garden with Quaternius plants — the Renderer owns the registry
+                    // indices, so it groups them by kind and stamps the vegetation after the build.
+                    w.cubeModel.stampGardenVegetation(gardenFlora())
                 case "gallery":
                     // M20 dev tool — flat prop/foliage grid (Y key). Size 25 to fit the full catalog
                     // (props + tree sprites). Stamp partial-reveals.
@@ -649,6 +652,25 @@ class Renderer: NSObject, MTKViewDelegate {
         )
     }
 
+    /// M20 — group the loaded Quaternius nature models by kind (from their registry `name`, e.g.
+    /// "Quaternius PineTree_2") so the garden reskin can scatter trees/bushes/flowers/grass/rocks.
+    /// Dead & palm trees are held back to keep the garden lush and temperate (easy to add later).
+    private func gardenFlora() -> CubeModel.GardenFlora {
+        var f = CubeModel.GardenFlora()
+        for (i, p) in importedProps.enumerated() {
+            let name = p.name
+            func has(_ s: String) -> Bool { name.range(of: s, options: .caseInsensitive) != nil }
+            if !has("Quaternius") { continue }
+            if has("Rock")                                    { f.rocks.append(i) }
+            else if has("Bush")                               { f.bushes.append(i) }
+            else if has("Tree") && !has("Dead") && !has("Palm") { f.trees.append(i) }
+            else if has("Grass")                              { f.grasses.append(i) }
+            else if has("Flower") || has("Petals")            { f.flowers.append(i) }
+            else if has("Plant")                              { f.grasses.append(i) }
+        }
+        return f
+    }
+
     /// Place every imported prop for the frame. Both the decorations (`.importedAsset`, single mesh
     /// from the registry) and the modular house (`.houseCorner`, kit assembly) are now anchored to
     /// facelets and scanned here, so they ride the slice `animMat` (worldMatrix → animMat → spin →
@@ -729,14 +751,16 @@ class Renderer: NSObject, MTKViewDelegate {
                         let tileM = spin * placement
                             * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
                         switch prop.kind {
-                        case .importedAsset:
+                        case .importedAsset, .importedFoliage:
                             guard prop.state >= 0 && prop.state < importedProps.count else { continue }
                             let p = importedProps[prop.state]
                             // Fit the widest dimension to `target`, stand it up (Y-up OBJ → tile Z-up),
-                            // centre the footprint, rest the base on the floor.
+                            // centre the footprint, rest the base on the floor. Garden foliage then
+                            // scales by its per-instance `extraScale` (trees big, flowers small).
                             let dim = p.mesh.size
                             let maxDim = max(dim.x, max(dim.y, dim.z))
-                            let fs: Float = maxDim > 0 ? p.target / maxDim : 1
+                            let userScale: Float = prop.kind == .importedFoliage ? prop.extraScale : 1
+                            let fs: Float = (maxDim > 0 ? p.target / maxDim : 1) * userScale
                             let c = p.mesh.center
                             let orient = p.yUp ? float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0)) : matrix_identity_float4x4
                             let ty = p.yUp ? c.z * fs : -c.y * fs
