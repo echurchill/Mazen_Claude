@@ -243,15 +243,6 @@ class GameState {
         player.facing = newFacing
     }
 
-    /// M16.3: true when no dial anywhere is still unaligned.
-    private func allDialsAligned() -> Bool {
-        for cubie in cubeModel.cubies {
-            for facelet in cubie.facelets {
-                if facelet.props.contains(where: { $0.kind == .dial && $0.state == 0 }) { return false }
-            }
-        }
-        return true
-    }
 
     // MARK: - Discovery
 
@@ -433,20 +424,18 @@ class GameState {
     /// neighbour — falling back to the door tile itself for the tiny-cube case.
     private func updateDoorPlinths() {
         let n = cubeModel.size
-        let unlocked = cubeModel.bondedGroups.isEmpty
         for r in 0..<n {
             for c in 0..<n {
                 guard let (pci, pfi) = cubeModel.faceletAt(face: .positiveZ, row: r, col: c),
                       cubeModel.cubies[pci].facelets[pfi].props.contains(where: { $0.kind == .portal && $0.state == 1 })
                 else { continue }
                 let opened = !cubeModel.sealedPortalCubies.contains(pci)
-                // M16.6 (Eddie): the plinth is the lock's PROGRESS DISPLAY — three filled dots + one
-                // hollow ring while a dial is still off, all four filled once the lock is undone
-                // (ready to turn), the portal glyph once opened. The alignment cylinder is NOT spawned
-                // here; it rises only when the player engages the READY plinth with F (see interact).
+                // M16.6 (Eddie): the plinth is the lock's POSITIONAL PROGRESS DISPLAY — one dot per
+                // switch, filled if that switch is engaged, a hollow ring if disengaged (so goofing up
+                // one switch shows its dot hollow). All four filled ⇒ ready to turn; portal once
+                // opened. The alignment cylinder is NOT spawned here; it rises on F at the ready plinth.
                 let symbol = opened ? TextureLoader.CausticSymbol.portal.rawValue
-                                    : (unlocked ? TextureLoader.CausticSymbol.fourFilled.rawValue
-                                                : TextureLoader.CausticSymbol.threeOfFour.rawValue)
+                                    : (TextureLoader.progressMaskBase + switchMask())
                 // The plinth is on a tile ADJACENT to the door. A twist rotates the +Z face, so which
                 // neighbour it's on changes — search all four (+ the door tile). Only the door plinth
                 // is adjacent to the door portal; the dials sit in the far corners.
@@ -474,8 +463,17 @@ class GameState {
     /// (There is at most one alignment cylinder per world; a full scan is cheap at these counts.)
     private func tickAlignmentCylinder(_ dt: Float) {
         let growRate: Float = 1.0 / 0.8, alignRate: Float = 1.0 / 1.1
+        let switchRate: Float = dt / 0.3       // switch cap slides between flush/out in ~0.3 s
         for ci in cubeModel.cubies.indices {
             for fi in cubeModel.cubies[ci].facelets.indices {
+                // Switch caps: ease the current height (anim) toward the engaged target (alignAnim).
+                for pi in cubeModel.cubies[ci].facelets[fi].props.indices
+                where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .switchCap {
+                    let target = cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim
+                    let cur = cubeModel.cubies[ci].facelets[fi].props[pi].anim
+                    cubeModel.cubies[ci].facelets[fi].props[pi].anim =
+                        cur < target ? min(target, cur + switchRate) : max(target, cur - switchRate)
+                }
                 for pi in cubeModel.cubies[ci].facelets[fi].props.indices
                 where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .alignmentCylinder {
                     cubeModel.cubies[ci].facelets[fi].props[pi].anim =
@@ -502,11 +500,16 @@ class GameState {
                     cubeModel.sealedPortalCubies.insert(cu)   // re-seal the temple door
                 }
                 cubeModel.cubies[cu].facelets[fi].props.removeAll { $0.kind == .alignmentCylinder }
+                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .switchCap {
+                    cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim = 1   // engage every switch
+                    cubeModel.cubies[cu].facelets[fi].props[pi].anim = 1
+                }
             }
         }
         cylinderEngaged = false
-        cubeModel.bondedGroups.removeAll()   // unlock (bypass the dials)
-        updateDoorPlinths()                  // ⇒ plinth shows four-filled, ready for F
+        cubeModel.bondedGroups.removeAll()   // unlock (bypass the switches)
+        updateDoorPlinths()                  // ⇒ plinth shows all-filled, ready for F
     }
 
     func interact() {
@@ -518,18 +521,13 @@ class GameState {
             portalDestinationID = portal.state
             return
         }
-        // M16.3: dials — the lock's mechanism. Aligning the last one dissolves the bond: the
-        // temple sheds its gold and the face twists again. (One lock per world for now — the
-        // dial→lock association becomes real data with the glyph system, M17.)
-        if let di = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .dial }) {
-            if cubeModel.cubies[ci].facelets[fi].props[di].state == 0 {
-                cubeModel.cubies[ci].facelets[fi].props[di].state = 1
-                cubeModel.cubies[ci].facelets[fi].props[di].facing = .n
-                if allDialsAligned() {
-                    cubeModel.bondedGroups.removeAll()
-                    updateDoorPlinths()      // the bond dissolves ⇒ the door plinth shows the swirl
-                }
-            }
+        // M16.6 (Eddie): a SWITCH — F toggles it engaged (poking out) ↔ disengaged (flush). All four
+        // engaged dissolves the lock; disengaging any one re-applies it (goof-and-fix). The door
+        // plinth's progress display + the lock are refreshed together.
+        if let capIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .switchCap }) {
+            let engaged = cubeModel.cubies[ci].facelets[fi].props[capIdx].alignAnim > 0.5
+            cubeModel.cubies[ci].facelets[fi].props[capIdx].alignAnim = engaged ? 0 : 1
+            refreshSwitchLock()
             return
         }
         // M16.6 (Eddie): F at the READY door plinth (lock undone, door still sealed, no cylinder yet)
@@ -557,6 +555,35 @@ class GameState {
         where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .chest {
             cubeModel.cubies[ci].facelets[fi].props[pi].state = 1 - cubeModel.cubies[ci].facelets[fi].props[pi].state
         }
+    }
+
+    /// M16.6 — the 4-bit engaged mask of the four switches (bit i = switch i+1 engaged). Drives the
+    /// door plinth's positional progress display.
+    private func switchMask() -> Int {
+        var m = 0
+        for cu in cubeModel.cubies {
+            for f in cu.facelets {
+                for p in f.props where p.kind == .switchCap {
+                    if p.alignAnim > 0.5, (1...4).contains(p.state) { m |= (1 << (p.state - 1)) }
+                }
+            }
+        }
+        return m
+    }
+
+    private func allSwitchesEngaged() -> Bool { switchMask() == 0b1111 }
+
+    /// M16.6 — after a switch toggles: while the door is still sealed, clear the lock if all four are
+    /// engaged, else RE-apply the stored temple bond (goof-and-fix). Then refresh the plinth display.
+    private func refreshSwitchLock() {
+        if templeDoorStillSealed() {
+            if allSwitchesEngaged() {
+                cubeModel.bondedGroups.removeAll()
+            } else if !cubeModel.templeDoorBond.isEmpty {
+                cubeModel.bondedGroups = [cubeModel.templeDoorBond]
+            }
+        }
+        updateDoorPlinths()
     }
 
     /// Is the temple door (the `state == 1` portal) still sealed? Used to gate the door plinth's F.

@@ -399,13 +399,18 @@ enum TextureLoader {
     /// HTML tool's Morton-sorted cells produce anyway). `sharpness` is the blob radius and therefore
     /// the comprehension-gradient dial for free — small = crisp, large = the alien mush. Stored as
     /// single-channel intensity; the shader tints it.
+    /// M16.6 (Eddie) — the door plinth's positional progress display: 16 slices at
+    /// [progressMaskBase + mask], one per subset of the 4 switches. Bit i (switch i+1) set ⇒ dot i
+    /// is FILLED (engaged); clear ⇒ a HOLLOW ring (disengaged). Dots sit at the same 2×2 as `four`.
+    static let progressMaskBase = CausticSymbol.allCases.count      // 16 slices follow the enum slices
+
     static func makeCausticArray(device: MTLDevice, size: Int = 128, sharpness: Float = 0.5) -> MTLTexture? {
         let syms = CausticSymbol.allCases
         let desc = MTLTextureDescriptor()
         desc.textureType = .type2DArray
         desc.pixelFormat = .r8Unorm            // intensity only — light, not colour
         desc.width = size; desc.height = size
-        desc.arrayLength = syms.count
+        desc.arrayLength = syms.count + 16     // enum glyphs + the 16 progress-mask combinations
         desc.storageMode = .shared; desc.usage = .shaderRead
         guard let texture = device.makeTexture(descriptor: desc) else { return nil }
         texture.label = "CausticSymbols"
@@ -413,35 +418,42 @@ enum TextureLoader {
         // Base blob radius in texels: the gradient dial (0 = mush, 1 = tight). Each symbol then
         // scales it by its own detail level (bold dots vs a fine spiral) — see CausticSymbol.blobScale.
         let baseRadius = Float(size) * (0.16 - 0.10 * max(0, min(1, sharpness)))
-        for (slice, sym) in syms.enumerated() {
-            let radius = max(1, baseRadius * sym.blobScale)
-            let inv = 1.0 / radius
-            let reach = Int(radius * 2.2)
-            var px = [UInt8](repeating: 0, count: size * size)
+        // Splat soft blobs at `targets` into a slice, `scale` × the base radius.
+        func splat(_ targets: [SIMD2<Float>], _ scale: Float, into slice: Int) {
+            let radius = max(1, baseRadius * scale), inv = 1.0 / radius, reach = Int(radius * 2.2)
             var acc = [Float](repeating: 0, count: size * size)
-            for t in sym.targets {
-                // [-1,1] → texel space (y flipped: texture v runs down).
+            for t in targets {
                 let cx = (t.x * 0.5 + 0.5) * Float(size - 1)
-                let cy = (1 - (t.y * 0.5 + 0.5)) * Float(size - 1)
+                let cy = (1 - (t.y * 0.5 + 0.5)) * Float(size - 1)   // v runs down
                 let x0 = max(0, Int(cx) - reach), x1 = min(size - 1, Int(cx) + reach)
                 let y0 = max(0, Int(cy) - reach), y1 = min(size - 1, Int(cy) + reach)
                 guard x0 <= x1, y0 <= y1 else { continue }
-                for y in y0...y1 {
-                    for x in x0...x1 {
-                        let dx = (Float(x) - cx) * inv, dy = (Float(y) - cy) * inv
-                        let d2 = dx * dx + dy * dy
-                        guard d2 < 4.84 else { continue }
-                        // Gaussian-ish falloff; blobs ADD, so overlaps brighten — the piled-up
-                        // look real caustics have where rays converge.
-                        acc[y * size + x] += exp(-d2 * 1.9)
-                    }
-                }
+                for y in y0...y1 { for x in x0...x1 {
+                    let dx = (Float(x) - cx) * inv, dy = (Float(y) - cy) * inv, d2 = dx * dx + dy * dy
+                    if d2 < 4.84 { acc[y * size + x] += exp(-d2 * 1.9) }   // blobs add → piled-up caustic look
+                } }
             }
-            for i in 0..<acc.count { px[i] = UInt8(max(0, min(255, acc[i] * 235))) }
+            let px = acc.map { UInt8(max(0, min(255, $0 * 235))) }
             texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
                                               size: MTLSize(width: size, height: size, depth: 1)),
-                            mipmapLevel: 0, slice: slice, withBytes: px,
-                            bytesPerRow: size, bytesPerImage: size * size)
+                            mipmapLevel: 0, slice: slice, withBytes: px, bytesPerRow: size, bytesPerImage: size * size)
+        }
+        for (slice, sym) in syms.enumerated() { splat(sym.targets, sym.blobScale, into: slice) }
+
+        // The 16 progress masks. Dot positions match `four`; a set bit is a filled dot, a clear bit
+        // a hollow ring — the same style as `threeOfFour`.
+        let centres: [SIMD2<Float>] = [SIMD2(-0.32, 0.32), SIMD2(0.32, 0.32), SIMD2(-0.32, -0.32), SIMD2(0.32, -0.32)]
+        for mask in 0..<16 {
+            var pts: [SIMD2<Float>] = []
+            for (i, ctr) in centres.enumerated() {
+                if mask & (1 << i) != 0 {
+                    pts.append(ctr)                                   // engaged → filled dot
+                } else {
+                    for k in 0..<8 { let a = Float(k) / 8 * 2 * .pi   // disengaged → hollow ring
+                        pts.append(SIMD2(ctr.x + cos(a) * 0.18, ctr.y + sin(a) * 0.18)) }
+                }
+            }
+            splat(pts, 0.5, into: progressMaskBase + mask)
         }
         return texture
     }

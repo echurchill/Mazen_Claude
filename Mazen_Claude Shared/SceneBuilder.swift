@@ -238,6 +238,17 @@ final class SceneBuilder {
                                         * float4x4.scale(1, 1, max(0.001, prop.anim))
                                         * float4x4.translation(0, 0, -zBase)
                             }
+                            if prop.kind == .switchCap {
+                                // M16.6 — the switch cap is ONE cylinder that is the flush disc at
+                                // anim 0 and poking out at anim 1 (Eddie). Scale its height about the
+                                // base between the flush and out fractions.
+                                let zBase = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
+                                let flushFrac = TileMeshLibrary.switchCapFlushM / TileMeshLibrary.switchCapOutM
+                                let hs = flushFrac + (1 - flushFrac) * max(0, min(1, prop.anim))
+                                pm = pm * float4x4.translation(0, 0, zBase)
+                                        * float4x4.scale(1, 1, hs)
+                                        * float4x4.translation(0, 0, -zBase)
+                            }
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             var materialID: UInt32 = 10
                             if model.bondedGroups.contains(where: { $0.contains(ci) }) {
@@ -298,9 +309,18 @@ final class SceneBuilder {
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .alignmentCylinder {
-                                // M16.6 Phase 2b — material 22 hardcodes swirl-top + square-wrap; the
-                                // align value rides `discoveryAmount` (set on the instance below).
+                                // M16.6 Phase 2b — material 22: swirl on top (styleSeed) + square wrap;
+                                // the align value rides `discoveryAmount` (set on the instance below).
                                 materialID = 22
+                                propStyleSeed = UInt32(TextureLoader.CausticSymbol.swirl.rawValue)
+                                color = SIMD4(1, 1, 1, 1)
+                            }
+                            if prop.kind == .switchCap {
+                                // M16.6 (Eddie) — the switch's number cylinder: material 22 (no wrap in
+                                // this mesh), `state` = the number glyph on top. Height (engaged out /
+                                // disengaged flush) is `anim`, applied to pm below.
+                                materialID = 22
+                                propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .portalLamp {

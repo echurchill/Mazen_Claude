@@ -275,6 +275,9 @@ enum PropKind: UInt8 {
     case alignmentCylinder  // M16.6 Phase 2: grows from the door plinth when unlocked — a drum bearing
                             // the "square" (world) glyph. Engaging it (F) twists the world open (the
                             // waldo). `anim` = grow/align progress 0…1; walk-through (sits on the plinth).
+    case switchBase   // M16.6 (Eddie): a switch = a disc-less plinth base + a switchCap. Replaces the dial.
+    case switchCap    // M16.6: the switch's number cylinder — flush (disengaged) ↔ poking out (engaged).
+                      // `state` = the number glyph; `anim` = height (0 flush disc … 1 fully out). F toggles.
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the
@@ -283,7 +286,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap: return false
         default: return true
         }
     }
@@ -294,8 +297,8 @@ enum PropKind: UInt8 {
     /// ~6 m square around itself.
     func footprintRadius(grid: Int) -> Int {
         switch self {
-        case .plinth: return 0        // ~0.75 m base — blocks only the single cell it stands on
-        default:      return max(0, grid / 3 / 2)
+        case .plinth, .switchBase: return 0   // small base — blocks only the single cell it stands on
+        default:                   return max(0, grid / 3 / 2)
         }
     }
 }

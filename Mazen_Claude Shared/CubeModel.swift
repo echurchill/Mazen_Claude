@@ -592,32 +592,29 @@ class CubeModel {
                 bond.insert(root)
             }
             addBond(bond)
+            templeDoorBond = bond   // M16.6: stored so disengaging a switch can RE-lock the door (Eddie)
 
-            // M16.3: the lock's mechanism — four stone dials spread to the garden's diagonal
-            // quarters. Three are aligned (gold, pointer north); the SE one — nearest the temple —
-            // is off (grey, pointer east). Align it (F, GameState.interact) and the temple
-            // unbonds: understanding is the key. Deliberately "find the pattern and act once";
-            // the composable glyph grammar is M17's.
+            // M16.6 (Eddie) — the lock's mechanism is now four SWITCHES in the garden's diagonal
+            // quarters. Each is a disc-less base + a number cylinder that pokes OUT (engaged) or sits
+            // FLUSH (disengaged); F toggles it. Three start engaged, the SE one disengaged — engage it
+            // and the temple unbonds. The player can also disengage others (goof) and re-engage to fix.
             let cc = size / 2
             let spread = min(3, size / 2)
-            // (row, col, facing, aligned, ordinal) — the ordinal is the plinth's glyph, 1…4.
-            let dialSpots: [(Int, Int, Heading8, Int, Int)] = [
-                (cc - spread, cc - spread, .n, 1, 1),
-                (cc - spread, cc + spread, .n, 1, 2),
-                (cc + spread, cc - spread, .n, 1, 3),
-                (cc + spread, cc + spread, .e, 0, 4),
+            // (row, col, engaged, ordinal-number)
+            let switchSpots: [(Int, Int, Int, Int)] = [
+                (cc - spread, cc - spread, 1, 1),
+                (cc - spread, cc + spread, 1, 2),
+                (cc + spread, cc - spread, 1, 3),
+                (cc + spread, cc + spread, 0, 4),
             ]
-            for (r, c2, f, st, ordinal) in dialSpots {
+            for (r, c2, engaged, ordinal) in switchSpots {
                 if let (ci2, fi2) = faceletAt(face: .positiveZ, row: r, col: c2) {
-                    cubies[ci2].facelets[fi2].props.append(Prop(kind: .dial, subRow: 1, subCol: 1, facing: f, state: st))
-                    // M16.6: a plinth beside each dial, carrying its ORDINAL (1,2,3,4) — replacing
-                    // M16.5's identical mark. These are the same morphemes the Builder vase sentence
-                    // uses ("2 planets", "3 ringed planets"), so the tutorial IS the dictionary
-                    // entry. Oriented to an open direction (preferring the plaza), never a wall.
-                    let dialOpenings = cubies[ci2].facelets[fi2].mazeTile.openings
-                    let towardPlaza: SurfaceDirection = r < cc ? .south : .north
-                    cubies[ci2].facelets[fi2].props.append(
-                        plinth(onTile: dialOpenings, preferred: towardPlaza, symbol: ordinal))
+                    cubies[ci2].facelets[fi2].props.append(Prop(kind: .switchBase, subRow: 1, subCol: 1, facing: .n))
+                    // `state` = the number glyph; `alignAnim` = engaged target (1 out / 0 flush),
+                    // `anim` = current height (starts at target). F toggles.
+                    var cap = Prop(kind: .switchCap, subRow: 1, subCol: 1, facing: .n, state: ordinal)
+                    cap.anim = Float(engaged); cap.alignAnim = Float(engaged)
+                    cubies[ci2].facelets[fi2].props.append(cap)
                 }
             }
         }
@@ -1093,6 +1090,9 @@ class CubeModel {
     /// and refused. Indices are into `cubies` and stay valid across turns (`applySliceRotation`
     /// moves cubies but never reindexes the array). A cubie should belong to at most one group.
     var bondedGroups: [Set<Int>] = []
+    /// M16.6 (Eddie) — the temple-door bond, stored so the lock can be RE-applied when the player
+    /// disengages a switch after unlocking (goof-and-fix), and cleared when all switches re-engage.
+    var templeDoorBond: Set<Int> = []
 
     /// Bond a set of cubie indices so they move as one rigid block (M13). Ignores trivial groups.
     func addBond(_ cubieIndices: Set<Int>) {

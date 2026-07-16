@@ -526,7 +526,7 @@ fragment float4 fragmentShader(
         //         value (passed via discoveryAmount, 0=split → 1=whole) shears together;
         //   0≤u<2 → the top cap SWIRL (slice 5); u<0 → translucent resin.
         float3 amb = skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor;
-        const uint SWIRL = 5, SQUARE = 7;                 // TextureLoader.CausticSymbol indices
+        const uint SQUARE = 7;                            // TextureLoader.CausticSymbol.square
         if (in.texCoord.x >= 2.0) {
             float2 uv = float2(in.texCoord.x - 2.0, in.texCoord.y);
             float align = saturate(in.discoveryAmount);
@@ -539,7 +539,9 @@ fragment float4 fragmentShader(
             color = plate * amb * 0.7 + float3(0.35, 0.66, 1.00) * g * 2.1;
             lighting = float3(1.0);
         } else if (in.texCoord.x >= 0.0) {
-            float g = causticTex.sample(texSampler, in.texCoord, SWIRL).r;
+            // The cap's TOP glyph — the prop's own slice (swirl for the door cylinder, the number
+            // for a switch), so one material serves both. `styleSeed` selects the slice.
+            float g = causticTex.sample(texSampler, in.texCoord, in.styleSeed % causticTex.get_array_size()).r;
             float3 plate = float3(0.36, 0.52, 0.66);
             color = plate * amb * 0.7 + float3(0.35, 0.66, 1.00) * g * 2.1;
             lighting = float3(1.0);

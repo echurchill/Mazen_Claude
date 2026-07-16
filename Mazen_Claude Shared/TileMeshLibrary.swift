@@ -218,6 +218,14 @@ class TileMeshLibrary {
         Self.addAlignmentCylinder(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.alignmentCylinder.rawValue] = TileMesh(vertexOffset: 0, indexOffset: alignStart, indexCount: allIndices.count - alignStart)
 
+        let switchBaseStart = allIndices.count
+        Self.addSwitchBase(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.switchBase.rawValue] = TileMesh(vertexOffset: 0, indexOffset: switchBaseStart, indexCount: allIndices.count - switchBaseStart)
+
+        let switchCapStart = allIndices.count
+        Self.addSwitchCap(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.switchCap.rawValue] = TileMesh(vertexOffset: 0, indexOffset: switchCapStart, indexCount: allIndices.count - switchCapStart)
+
         let treeStart = allIndices.count
         Self.addTree(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.tree.rawValue] = TileMesh(vertexOffset: 0, indexOffset: treeStart, indexCount: allIndices.count - treeStart)
@@ -856,6 +864,73 @@ class TileMeshLibrary {
     /// Plinth height in metres — shared by the plinth mesh and the alignment cylinder that sits on
     /// top of it (so the drum's base is planted exactly on the plinth top, no drift).
     static let plinthHeightM: Float = 0.9
+    /// M16.6 (Eddie) — the switch cap's height when DISENGAGED (a flush disc) and ENGAGED (poking
+    /// out). The cap mesh is built at the engaged height; SceneBuilder scales Z between these by the
+    /// cap's `anim`, so ONE cylinder is the disc (min) and the raised switch (max) — no separate disc.
+    static let switchCapFlushM: Float = 0.05
+    static let switchCapOutM: Float = 0.35
+
+    /// M16.6 (Eddie) — the switch's disc-less plinth base (the cap provides the top). Same tapered
+    /// grey-metallic form as the plinth, minus the glyph disc.
+    private static func addSwitchBase(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        let mUnit: Float = ws.eyeHeight / 1.7
+        let rb = 0.55 * mUnit, rt = 0.42 * mUnit    // a touch narrower than the door plinth
+        let h = plinthHeightM * mUnit
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ ao: Float) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(-1, -1), aoFactor: ao)   // metal flag (material 21)
+        }
+        let b = [SIMD3<Float>(-rb, -rb, z0), SIMD3<Float>(rb, -rb, z0), SIMD3<Float>(rb, rb, z0), SIMD3<Float>(-rb, rb, z0)]
+        let t = [SIMD3<Float>(-rt, -rt, z0 + h), SIMD3<Float>(rt, -rt, z0 + h), SIMD3<Float>(rt, rt, z0 + h), SIMD3<Float>(-rt, rt, z0 + h)]
+        for i in 0..<4 {
+            let j = (i + 1) % 4
+            let n = normalize(cross(b[j] - b[i], t[i] - b[i]))
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [vtx(b[i], n, 0.55), vtx(b[j], n, 0.55), vtx(t[j], n, 0.95), vtx(t[i], n, 0.95)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        let up = SIMD3<Float>(0, 0, 1)
+        let cap = UInt32(verts.count)
+        verts.append(contentsOf: [vtx(t[0], up, 1.0), vtx(t[1], up, 1.0), vtx(t[2], up, 1.0), vtx(t[3], up, 1.0)])
+        indices.append(contentsOf: [cap+0, cap+1, cap+2, cap+0, cap+2, cap+3])
+    }
+
+    /// M16.6 (Eddie) — the switch CAP: a resin cylinder with the number glyph on top. Built at the
+    /// ENGAGED height (`switchCapOutM`); SceneBuilder scales its Z to `switchCapFlushM` when
+    /// disengaged, so the same cylinder is the flush disc (min) and the poking-out switch (max).
+    /// Material 22 (no square-wrap band here → only the top-glyph + resin branches fire).
+    private static func addSwitchCap(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let mUnit: Float = ws.eyeHeight / 1.7
+        let zBase = ws.floorY + plinthHeightM * mUnit
+        let rD = 0.40 * mUnit
+        let zTop = zBase + switchCapOutM * mUnit
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: uv, aoFactor: ao)
+        }
+        let resinUV = SIMD2<Float>(-1, -2)
+        let seg = 24
+        for i in 0..<seg {
+            let a0 = Float(i) / Float(seg) * 2 * .pi, a1 = Float(i + 1) / Float(seg) * 2 * .pi
+            let p0 = SIMD2<Float>(cos(a0) * rD, sin(a0) * rD)
+            let p1 = SIMD2<Float>(cos(a1) * rD, sin(a1) * rD)
+            let n = normalize(SIMD3<Float>(cos((a0 + a1) * 0.5), sin((a0 + a1) * 0.5), 0))
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [vtx(SIMD3(p0.x, p0.y, zBase), n, resinUV, 0.9), vtx(SIMD3(p1.x, p1.y, zBase), n, resinUV, 0.9),
+                                      vtx(SIMD3(p1.x, p1.y, zTop), n, resinUV, 1.0), vtx(SIMD3(p0.x, p0.y, zTop), n, resinUV, 1.0)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        let up = SIMD3<Float>(0, 0, 1)
+        let cap = UInt32(verts.count)
+        verts.append(vtx(SIMD3(0, 0, zTop), up, SIMD2(0.5, 0.5), 1.0))
+        var ring: [UInt32] = []
+        for i in 0..<seg {
+            let a = Float(i) / Float(seg) * 2 * .pi
+            let x = cos(a) * rD, y = sin(a) * rD
+            ring.append(UInt32(verts.count))
+            verts.append(vtx(SIMD3(x, y, zTop), up, SIMD2(x / (2 * rD) + 0.5, 0.5 - y / (2 * rD)), 1.0))
+        }
+        for i in 0..<seg { indices.append(contentsOf: [cap, ring[i], ring[(i + 1) % seg]]) }
+    }
 
     /// M16.6 Phase 2b — the alignment cylinder (material 22): a translucent drum standing on the
     /// plinth top, matching the disc's diameter so it reads as the disc rising. The SWIRL (verb:
