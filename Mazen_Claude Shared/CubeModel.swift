@@ -233,17 +233,20 @@ class CubeModel {
         }
     }
 
-    /// M20 prototype (Eddie) — a set of sample "natural walls" in the gallery: instead of a stone
-    /// hedge slab, a maze wall is a **run of tightly-aligned bushes and rocks** packed into a
-    /// continuous ridge, so the space reads as natural. Lays four N–S runs in a clear plot EAST of
-    /// the catalog — bushes-only, rocks-only, mixed, and a double-row hedge — to walk between and
-    /// judge (and whether Quaternius is the right pack). Non-solid, so you can walk through to inspect.
-    /// Registry indices come from the Renderer (like `stampGalleryImports`).
+    /// M20 prototype (Eddie) — sample "natural walls" in the gallery: instead of a stone hedge slab, a
+    /// maze wall is a **run of tightly-aligned bushes and rocks** packed into a continuous ridge, so
+    /// the space reads as natural. Lays four **E–W** runs (so you walk straight east down a clear lane
+    /// alongside each) in a plot east of the catalog — bushes-only, rocks-only, mixed, dense-mixed —
+    /// at the SAME normalised scale as the individual gallery models (Eddie: rocks must match those),
+    /// to judge the look (and whether Quaternius is the right pack). Non-solid — walk through to
+    /// inspect. Registry indices come from the Renderer (like `stampGalleryImports`).
     func stampGalleryWalls(_ flora: GardenFlora) {
         let n = size, c = n / 2
-        // A clear grassy plot east of the catalog (cols c+5…), north of the imported-models strip.
-        let pLo = max(1, c - 4), pHi = min(n - 2, c)                  // rows 8…12 at size 25
-        let qLo = min(n - 2, c + 5), qHi = min(n - 2, c + 11)         // cols 17…23
+        // A clear grassy plot east of the catalog (cols c+5…), north of the imported-models strip
+        // (rows ≤ c so we never collide with the strip at c+1↓). Walls run E–W; you enter the south
+        // lane (row c) walking east from spawn, then step north between walls to compare them.
+        let pLo = max(1, c - 7), pHi = c                              // rows 5…12 at size 25
+        let qLo = min(n - 2, c + 5), qHi = min(n - 2, c + 11)         // cols 17…23 (the wall length)
         guard qLo < qHi, pLo < pHi else { return }
         func inPlot(_ r: Int, _ q: Int) -> Bool { r >= pLo && r <= pHi && q >= qLo && q <= qHi }
         for r in pLo...pHi {
@@ -275,47 +278,48 @@ class CubeModel {
             v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
             return v
         }
-        // Build one N–S run of packed foliage down the centre of column `q`, spanning the plot rows.
-        // `perTile` models per tile length ⇒ ~19 m / perTile spacing (9 ≈ 2.1 m — tight overlap).
-        let perTile = 9
-        func run(col q: Int, style: Int) {
-            guard qLo <= q, q <= qHi else { return }
-            for r in pLo...pHi {
-                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
+        // Same normalised scale as the individual gallery models (extraScale 1 == the registry
+        // `target` fit). At that size each model is big, so pack ~2 per tile (~9 m) for solid overlap.
+        let wallScale: Float = 1.0
+        let perTile = 2
+        // One E–W wall down row `wr`, packed along its length (cols qLo…qHi).
+        func wall(row wr: Int, style: Int) {
+            guard pLo <= wr, wr <= pHi else { return }
+            for q in qLo...qHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: wr, col: q) else { continue }
                 for k in 0..<perTile {
-                    let fy = -0.5 + (Float(k) + 0.5) / Float(perTile)          // tile-local Y in [-0.5, 0.5)
-                    let h = hash(r &* 131 &+ q &* 17, style, k &* 7 &+ 3)
-                    // Pick pool + garden-wall scale by style.
+                    let fx = -0.5 + (Float(k) + 0.5) / Float(perTile)          // tile-local X in [-0.5, 0.5)
+                    let h = hash(wr &* 131 &+ q &* 17, style, k &* 7 &+ 3)
                     let bushes = flora.bushes, rocks = flora.rocks
-                    var pool = bushes; var base: Float = 0.20
+                    let pool: [Int]
                     switch style {
-                    case 0: pool = bushes;                       base = 0.20    // bushes only
-                    case 1: pool = rocks;                        base = 0.17    // rocks only
-                    case 2: (pool, base) = (h & 1 == 0) ? (bushes, 0.20) : (rocks, 0.17)  // mixed
-                    default: pool = bushes;                      base = 0.20    // double-row hedge
+                    case 0:  pool = bushes                                        // bushes only
+                    case 1:  pool = rocks                                         // rocks only
+                    default: pool = (h & 1 == 0) ? bushes : rocks                 // mixed / dense-mixed
                     }
                     guard !pool.isEmpty else { continue }
                     let idx = pool[Int(h % UInt32(pool.count))]
-                    let jitter = 0.85 + Float((h >> 6) % 30) / 100.0            // 0.85…1.15
-                    // Style 3 = two parallel rows (a thick hedge); others a single jittered row.
-                    let bands: [Float] = style == 3 ? [-0.055, 0.055]
-                                                    : [(Float((h >> 3) % 20) / 20.0 - 0.5) * 0.06]
-                    for ox in bands {
+                    let jitter = 0.9 + Float((h >> 6) % 20) / 100.0               // 0.90…1.10
+                    // style 3 = two thickness bands (a deeper berm); others a single jittered line.
+                    let bands: [Float] = style == 3 ? [-0.18, 0.18]
+                                                    : [(Float((h >> 3) % 20) / 20.0 - 0.5) * 0.14]
+                    for oy in bands {
                         var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
                                      facing: Heading8(rawValue: Int(h % 8)) ?? .n,
-                                     state: idx, extraScale: base * jitter)
-                        p.offsetX = ox
-                        p.offsetY = fy
+                                     state: idx, extraScale: wallScale * jitter)
+                        p.offsetX = fx
+                        p.offsetY = oy
                         cubies[ci].facelets[fi].props.append(p)
                     }
                 }
             }
         }
-        // Four runs on alternating columns, walkable lanes between them.
-        run(col: qLo,     style: 0)   // bushes only
-        run(col: qLo + 2, style: 1)   // rocks only
-        run(col: qLo + 4, style: 2)   // mixed
-        run(col: qLo + 6, style: 3)   // double-row hedge
+        // Four E–W walls with a walkable lane (empty row) between each. From the south entry lane
+        // (row c): bushes just north, then rocks, mixed, dense-mixed — one lane apart.
+        wall(row: c - 1, style: 0)   // bushes only
+        wall(row: c - 3, style: 1)   // rocks only
+        wall(row: c - 5, style: 2)   // mixed
+        wall(row: c - 7, style: 3)   // dense mixed (thick berm)
     }
 
     /// M20 — the Journey **entry world**: a large world (size 25 → local surface reads nearly
