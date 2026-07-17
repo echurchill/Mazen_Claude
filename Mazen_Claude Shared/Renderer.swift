@@ -1123,7 +1123,8 @@ extension InstanceData {
     init(modelMatrix: matrix_float4x4, baseColor: SIMD4<Float>, materialID: UInt32,
          tileID: UInt32, discoveryAmount: Float, styleSeed: UInt32,
          spinMatrix: matrix_float4x4 = matrix_identity_float4x4,
-         roundness: Float = 0, invHalfExtent: Float = 0, reliefAmplitude: Float = 0) {
+         roundness: Float = 0, invHalfExtent: Float = 0, reliefAmplitude: Float = 0,
+         heightScale: Float = 1, heightPivot: Float = 0) {
         self.init()
         self.modelMatrix = modelMatrix
         self.baseColor = baseColor
@@ -1135,5 +1136,7 @@ extension InstanceData {
         self.roundness = roundness
         self.invHalfExtent = invHalfExtent
         self.reliefAmplitude = reliefAmplitude
+        self.heightScale = heightScale
+        self.heightPivot = heightPivot
     }
 }

@@ -76,6 +76,11 @@ typedef struct
     float roundness;             // 0 = flat/rigid (default); >0 = per-vertex superellipsoid inflate
     float invHalfExtent;         // 1 / (cubeSize/2) — maps rest world coords to the unit cube
     float reliefAmplitude;       // M19: 0 = smooth (default); >0 = roll the surface into hills
+    // M20: per-instance HEIGHT animation, applied to the vertex's local z BEFORE the inflation's
+    // footprint/height split (a Z-scale baked into modelMatrix would corrupt the footprint on a
+    // curved world — that floated the flush switch cap). z' = heightPivot + (z - heightPivot)*heightScale.
+    float heightScale;           // 1 = unchanged (default)
+    float heightPivot;           // pivot the scale is taken about (e.g. the plinth top for a switch cap)
 } InstanceData;
 
 typedef struct

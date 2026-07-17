@@ -146,8 +146,13 @@ struct InflatedVertex { float3 position; float3 normal; float3 tangent; float3 s
 // footprint-then-extrude split keeps wall tops off the ill-conditioned √ map. (M14b.)
 InflatedVertex m14bTransform(float3 localPos, float3 localNormal,
                              float4x4 modelMatrix, float4x4 spinMatrix,
-                             float roundness, float invHalfExtent, float reliefAmplitude) {
+                             float roundness, float invHalfExtent, float reliefAmplitude,
+                             float heightScale, float heightPivot) {
     InflatedVertex o;
+    // M20: per-instance height animation (switch cap flush / cylinder grow). Applied to the local z
+    // HERE — not baked into modelMatrix — so it can't corrupt the curved footprint/height split below.
+    float hsc = heightScale <= 0.0 ? 1.0 : heightScale;   // 0 (zero-inited) ⇒ no-op
+    localPos.z = heightPivot + (localPos.z - heightPivot) * hsc;
     float3x3 spin3 = float3x3(spinMatrix[0].xyz, spinMatrix[1].xyz, spinMatrix[2].xyz);
     if (roundness <= 0.0) {
         // Flat/rigid. Rigid instances bake spin into modelMatrix and pass spinMatrix = identity
@@ -196,7 +201,8 @@ vertex float4 shadowVertexShader(
     const device MazeVertex& vert = vertices[vertexID];
     const device InstanceData& inst = instances[instanceID];
     InflatedVertex xf = m14bTransform(vert.position, vert.normal, inst.modelMatrix,
-                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude);
+                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude,
+                                      inst.heightScale, inst.heightPivot);
     return frame.lightViewProjectionMatrix * float4(xf.position, 1.0);
 }
 
@@ -219,7 +225,8 @@ vertex ShadowCutoutOut shadowCutoutVertexShader(
     const device MazeVertex& vert = vertices[vertexID];
     const device InstanceData& inst = instances[instanceID];
     InflatedVertex xf = m14bTransform(vert.position, vert.normal, inst.modelMatrix,
-                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude);
+                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude,
+                                      inst.heightScale, inst.heightPivot);
     ShadowCutoutOut out;
     out.position = frame.lightViewProjectionMatrix * float4(xf.position, 1.0);
     out.texCoord = vert.texCoord;
@@ -263,7 +270,8 @@ vertex VertexOut vertexShader(
 
     // M14b: inflate per-vertex when this instance's roundness > 0 (flat/rigid otherwise).
     InflatedVertex xf = m14bTransform(vert.position, vert.normal, inst.modelMatrix,
-                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude);
+                                      inst.spinMatrix, inst.roundness, inst.invHalfExtent, inst.reliefAmplitude,
+                                      inst.heightScale, inst.heightPivot);
     float4 worldPos = float4(xf.position, 1.0);
     float3 worldNormal = xf.normal;
 

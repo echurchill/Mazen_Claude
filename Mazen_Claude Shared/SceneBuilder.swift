@@ -230,24 +230,20 @@ final class SceneBuilder {
                                 * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180), axis: SIMD3(0, 0, 1))
                                 * float4x4.scale(treeScale)
-                            if prop.kind == .alignmentCylinder {
-                                // M16.6 Phase 2b — GROW: scale the drum's height about its base (the
-                                // plinth top) by `anim`, so it rises from the disc rather than the floor.
-                                let zBase = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
-                                pm = pm * float4x4.translation(0, 0, zBase)
-                                        * float4x4.scale(1, 1, max(0.001, prop.anim))
-                                        * float4x4.translation(0, 0, -zBase)
-                            }
-                            if prop.kind == .switchCap {
-                                // M16.6 — the switch cap is ONE cylinder that is the flush disc at
-                                // anim 0 and poking out at anim 1 (Eddie). Scale its height about the
-                                // base between the flush and out fractions.
-                                let zBase = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
-                                let flushFrac = TileMeshLibrary.switchCapFlushM / TileMeshLibrary.switchCapOutM
-                                let hs = flushFrac + (1 - flushFrac) * max(0, min(1, prop.anim))
-                                pm = pm * float4x4.translation(0, 0, zBase)
-                                        * float4x4.scale(1, 1, hs)
-                                        * float4x4.translation(0, 0, -zBase)
+                            // M16.6/M20 — the alignment cylinder (GROW) and switch cap (flush↔out) animate
+                            // their HEIGHT. Pass it as heightScale about the plinth top (applied to the
+                            // vertex's local z in the shader), NOT a modelMatrix Z-scale: a non-uniform Z
+                            // in modelMatrix corrupts the curved-world footprint/height split and floated
+                            // the flush cap on the garden (Eddie).
+                            var heightScale: Float = 1, heightPivot: Float = 0
+                            if prop.kind == .alignmentCylinder || prop.kind == .switchCap {
+                                heightPivot = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
+                                if prop.kind == .alignmentCylinder {
+                                    heightScale = max(0.001, prop.anim)                          // rise from the disc
+                                } else {
+                                    let flushFrac = TileMeshLibrary.switchCapFlushM / TileMeshLibrary.switchCapOutM
+                                    heightScale = flushFrac + (1 - flushFrac) * max(0, min(1, prop.anim))   // flush ↔ poking out
+                                }
                             }
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             var materialID: UInt32 = 10
@@ -339,7 +335,8 @@ final class SceneBuilder {
                             let discovery: Float = prop.kind == .alignmentCylinder ? prop.alignAnim : 1.0
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
                                 materialID: materialID, tileID: 0, discoveryAmount: discovery, styleSeed: propStyleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
+                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief,
+                                heightScale: heightScale, heightPivot: heightPivot)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
                         }
                     }
