@@ -455,12 +455,15 @@ class Renderer: NSObject, MTKViewDelegate {
                 case "gallery-dungeons":
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("Dungeons "))
+                    w.cubeModel.noFog = true              // showroom, not a story world — no fog
                 case "gallery-nature":
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("Nature "))
+                    w.cubeModel.noFog = true
                 case "gallery-ruins":
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("Ruins "))
+                    w.cubeModel.noFog = true
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
