@@ -145,6 +145,7 @@ and **the one re-see reveal**.
 ## Phases
 
 ### Phase 0 — Paper edit
+**Draft: [M20 Journey Shot List](M20%20Journey%20Shot%20List.md)** (2026-07-17 — awaiting sign-off).
 Walk the script against the built game world-by-world and write the *shot list*: where each
 beat physically lives on the M19 Natureworld (where the arch is, where the dead-end seam is,
 where the temple squats, where the four dials hide, which hill buries the machine). Scope
