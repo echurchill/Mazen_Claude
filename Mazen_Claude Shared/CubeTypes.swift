@@ -345,6 +345,10 @@ struct Prop {
     /// spacing to build a continuous "wall" of bushes/rocks, instead of snapping to the 6 m author grid.
     var offsetX: Float = 0
     var offsetY: Float = 0
+    /// M20 — bury the model into the ground by this fraction of its own height. A rounded rock/bush
+    /// rested on its single lowest vertex balances on a point and looks like it floats; sinking a
+    /// little seats it. 0 = base exactly on the floor (flat-bottomed walls). Only imported kinds read it.
+    var sink: Float = 0
 
     /// M18 Phase 2 — does this prop remove stand cell (subRow, subCol) of a `grid`×`grid`
     /// tile? Centred on the prop's author sub-cell, it blocks a square of half-extent

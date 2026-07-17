@@ -94,8 +94,18 @@ enum AssetRegistry {
         // with its flat `Kd` colour (materialID 10). Gallery-only; each pack gets its own full-face
         // gallery world (keys 1/2/3). Y-up like all our OBJ kits. Loaded CONCURRENTLY — 290 serial
         // OBJ parses would dominate a Debug boot; each parse is independent (separate MDLAsset).
-        func loadFlatPack(_ packDir: String, _ prefix: String) -> [ImportedProp] {
+        // `texBind` optionally binds specific MATERIAL NAMES to a texture (from the pack's `texSubdir`)
+        // — used to give Ruins' "overgrown" wall pieces their green foliage (their Leaf_Texture/Green
+        // submeshes otherwise render flat grey). Other submeshes stay flat `Kd` (materialID 10).
+        func loadFlatPack(_ packDir: String, _ prefix: String,
+                          texBind: [String: String] = [:], texSubdir: String = "Textures") -> [ImportedProp] {
             let objDir = "\(modelsRoot)/\(packDir)/OBJ"
+            let texDir = "\(modelsRoot)/\(packDir)/\(texSubdir)"
+            var texByMat = [String: SubmeshMaterial]()   // loaded once, read-only in the parallel loop
+            for (mat, file) in texBind {
+                let loaded = TextureLoader.loadAssetTexture(url: URL(fileURLWithPath: "\(texDir)/\(file)"), device: device, srgb: true)
+                texByMat[mat] = SubmeshMaterial(diffuse: loaded?.texture, cutout: loaded?.cutout ?? false)
+            }
             let files = ((try? FileManager.default.contentsOfDirectory(atPath: objDir)) ?? [])
                 .filter { $0.hasSuffix(".obj") }.map { String($0.dropLast(4)) }.sorted()
             var out = [ImportedProp?](repeating: nil, count: files.count)
@@ -105,8 +115,11 @@ enum AssetRegistry {
                 guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(objDir)/\(f).obj"), device: device) else {
                     print("[AssetRegistry] \(prefix) FAILED: \(f)"); return
                 }
+                let mats: [SubmeshMaterial] = texByMat.isEmpty ? [] : mesh.submeshes.map {
+                    texByMat[$0.materialName] ?? SubmeshMaterial(diffuse: nil, cutout: false)
+                }
                 let p = ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget,
-                                     yUp: true, name: "\(prefix) \(f)", galleryOnly: true)
+                                     yUp: true, name: "\(prefix) \(f)", galleryOnly: true, submeshMaterials: mats)
                 lock.lock(); out[i] = p; lock.unlock()
             }
             let loaded = out.compactMap { $0 }
@@ -115,7 +128,8 @@ enum AssetRegistry {
         }
         let dungeons = loadFlatPack("Dungeons Pack", "Dungeons")
         let naturePk = loadFlatPack("Nature Pack",   "Nature")
-        let ruins    = loadFlatPack("Ruins Pack",    "Ruins")
+        let ruins    = loadFlatPack("Ruins Pack",    "Ruins",
+                                    texBind: ["Leaf_Texture": "Leaf_Texture.png"])   // leaf-shaped mesh → cutout leaves; "Green" left flat (solid mesh would go holey)
 
         // M20 — Stylized Nature MegaKit (Quaternius): a TEXTURED OBJ pack (stylized atlas + alpha
         // leaves/flowers). Its MTL `map_Kd` paths are broken Windows absolutes ("C:/X.png"), so we

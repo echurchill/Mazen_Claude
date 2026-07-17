@@ -326,6 +326,7 @@ class CubeModel {
                                  state: pool[Int((h >> 8) % UInt32(pool.count))], extraScale: base)
                     p.offsetX = fx
                     p.offsetY = (Float((h >> 3) % 20) / 20.0 - 0.5) * spread   // scatter across the wall
+                    p.sink = useRock ? 0.20 : 0.10                             // seat into the ground (no floating)
                     cubies[ci].facelets[fi].props.append(p)
                 }
             }
@@ -336,6 +337,66 @@ class CubeModel {
         placeWalls(row: c - 3, perTile: wallPT); placeOvergrowth(row: c - 3, perTile: growthPT, rockPct: 45)       // lightly overgrown ruin
         placeWalls(row: c - 5, perTile: wallPT); placeOvergrowth(row: c - 5, perTile: growthPT + 3, rockPct: 35)   // heavily overgrown ruin
         placeOvergrowth(row: c - 7, perTile: growthPT + 3, rockPct: 45)           // rocks + bushes only (no wall)
+    }
+
+    /// M20 prototype (Eddie) — path-stone options in the gallery, in a plot WEST of the catalog:
+    /// three N–S columns to compare — **just the paved path** (the current path texture), **stones on
+    /// the paved path**, and **just stones** (rock-path models on grass, no paving). `stones` = the
+    /// MegaKit RockPath registry indices (Renderer supplies them). Walk west from spawn to reach it.
+    func stampGalleryPaths(_ stones: [Int]) {
+        guard !stones.isEmpty else { return }
+        let n = size, c = n / 2
+        let pLo = max(1, c - 3), pHi = min(n - 2, c + 3)       // rows 9…15
+        let qLo = 1, qHi = 6                                   // cols west of the catalog (col 7)
+        func inPlot(_ r: Int, _ q: Int) -> Bool { r >= pLo && r <= pHi && q >= qLo && q <= qHi }
+        for r in pLo...pHi {
+            for q in qLo...qHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
+                var op: DirectionMask = []
+                if inPlot(r - 1, q) { op.insert(.north) }
+                if inPlot(r + 1, q) { op.insert(.south) }
+                if inPlot(r, q - 1) { op.insert(.west) }
+                if inPlot(r, q + 1) { op.insert(.east) }
+                if r == c && q == qHi { op.insert(.east) }     // entry from the catalog/spawn (east side)
+                cubies[ci].facelets[fi].mazeTile.openings = op
+                cubies[ci].facelets[fi].mazeTile.openEdges = op
+                // cols 2 & 4 are the paved "path texture" (all-open ⇒ paved, no hedge walls); rest grass.
+                cubies[ci].facelets[fi].terrain = (q == 2 || q == 4) ? .maze : .grass
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+            }
+        }
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: c, col: qHi + 1) {   // open catalog side of entry
+            cubies[ci].facelets[fi].mazeTile.openings.insert(.west)
+            cubies[ci].facelets[fi].mazeTile.openEdges.insert(.west)
+            cubies[ci].facelets[fi].tileState = .discovered
+            cubies[ci].facelets[fi].discoveryAmount = 1.0
+        }
+        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
+        }
+        // Lay ~1.5 m rock-path stones down a column: 3 per tile, seated slightly into the ground.
+        let stoneScale = 1.5 * (worldScale.eyeHeight / 1.7) / 0.85
+        func layStones(col q: Int) {
+            for r in pLo...pHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
+                for k in 0..<3 {
+                    let h = hash(r &* 131 &+ q &* 17, 7, k &* 5 &+ 2)
+                    var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
+                                 facing: Heading8(rawValue: Int(h % 8)) ?? .n,
+                                 state: stones[Int(h % UInt32(stones.count))],
+                                 extraScale: stoneScale * (0.8 + Float((h >> 6) % 40) / 100.0))
+                    p.offsetY = -0.5 + (Float(k) + 0.5) / 3.0
+                    p.offsetX = (Float((h >> 3) % 20) / 20.0 - 0.5) * 0.15
+                    p.sink = 0.2
+                    cubies[ci].facelets[fi].props.append(p)
+                }
+            }
+        }
+        layStones(col: 4)   // stones ON the paved path
+        layStones(col: 6)   // just stones, on grass
     }
 
     /// M20 — a full-face evaluation grid for ONE imported pack (Dungeons / Nature / Ruins, up to 150

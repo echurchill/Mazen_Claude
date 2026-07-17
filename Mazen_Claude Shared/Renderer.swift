@@ -446,6 +446,8 @@ class Renderer: NSObject, MTKViewDelegate {
                     w = GameState(size: 25, name: dest, stamp: .gallery)
                     // M20 prototype — sample "natural walls" (Ruins wall pieces + Nature rocks/bushes).
                     w.cubeModel.stampGalleryWalls(wallFlora())
+                    // M20 prototype — rock-path options west of the catalog (MegaKit RockPath models).
+                    w.cubeModel.stampGalleryPaths(pathStones())
                 case "gallery-dungeons":
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("Dungeons "))
@@ -674,6 +676,13 @@ class Renderer: NSObject, MTKViewDelegate {
         importedProps.enumerated().filter { $0.element.name.hasPrefix(prefix) }.map { $0.offset }
     }
 
+    /// M20 — the MegaKit's rock-path stone models, for the gallery path-stone prototype.
+    private func pathStones() -> [Int] {
+        importedProps.enumerated()
+            .filter { $0.element.name.hasPrefix("MegaKit ") && $0.element.name.contains("RockPath") }
+            .map { $0.offset }
+    }
+
     /// M20 — group the flat-shaded Nature pack models by kind (from their registry `name`, e.g.
     /// "Nature PineTree_2") so the garden scatter can place trees/bushes/flowers/grass/rocks. Snow
     /// and dead variants are held back to keep the garden lush and temperate (easy to add later).
@@ -703,7 +712,7 @@ class Renderer: NSObject, MTKViewDelegate {
             let name = p.name
             func has(_ s: String) -> Bool { name.range(of: s, options: .caseInsensitive) != nil }
             if has("Snow") { continue }
-            if name.hasPrefix("Ruins ") && has("Wall") && !has("Flag")            { f.walls.append(i) }
+            if name.hasPrefix("Ruins ") && has("Wall") && !has("Flag") && !has("ArchRound") { f.walls.append(i) }   // ArchRound too holey (Eddie)
             else if has("Path")                                                   { continue }   // MegaKit RockPath = paths, not wall rocks
             else if (has("Rock") && name.hasPrefix("Nature "))
                  || (name.hasPrefix("MegaKit ") && (has("Rock") || has("Pebble"))) { f.rocks.append(i) }   // + textured MegaKit rocks
@@ -805,7 +814,10 @@ class Renderer: NSObject, MTKViewDelegate {
                             let c = p.mesh.center
                             let orient = p.yUp ? float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0)) : matrix_identity_float4x4
                             let ty = p.yUp ? c.z * fs : -c.y * fs
-                            let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs
+                            // Rest the base on the floor, then bury by `sink`·height so rounded
+                            // rocks/bushes seat instead of balancing on their lowest vertex.
+                            let heightU = (p.yUp ? p.mesh.size.y : p.mesh.size.z) * fs
+                            let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs - prop.sink * heightU
                             let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
                             emit(p.mesh, m, diffuse: p.diffuse, submeshMaterials: p.submeshMaterials)
                         case .houseCorner:
