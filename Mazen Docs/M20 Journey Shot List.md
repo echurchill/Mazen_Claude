@@ -126,9 +126,12 @@ Per the plan's build order (spine first):
   of corridors from spawn to the plinth and every switch. Way-home portal removed (forward-only).
   Verified headlessly: the puzzle solves end-to-end on the curved garden and all switches + plinth are
   reachable. **Eddie's visual check:** press `V`, walk north to the temple, solve the switches, turn.
+- ✅ **(4) Step-inside works (2026-07-17).** Stepping onto the opened temple door from the garden now
+  PUSHES the temple interior (fixed the nested-world pop bug); returning pops back to the garden. The
+  full spine plays: arrival → solve switches → turn → door opens → step inside → return. Verified
+  headlessly.
 - ⬜ **(2)** first-twist dead-end + seam groove (west of spawn).
 - ⬜ **(3)** clue slab + four indicator points + mossy temple dressing.
-- ⬜ **(4)** wire the temple door → the interior world (step inside).
 
 Then Arc 1 wraps the front (home world, arrival, counterpart sky, arch look), and Arc 3 (the
 inventions — PlayerKnowledge, memory, re-see, onward arch) comes last.
