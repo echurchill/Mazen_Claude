@@ -167,7 +167,8 @@ class Renderer: NSObject, MTKViewDelegate {
 
     /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
     /// sub-world a portal simply pops back out; the destination only matters from the root.
-    static let portalDestinations = ["moon", "temple-interior", "natural", "garden", "gallery"]
+    static let portalDestinations = ["moon", "temple-interior", "natural", "garden", "gallery",
+                                     "gallery-dungeons", "gallery-nature", "gallery-ruins"]
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -445,14 +446,26 @@ class Renderer: NSObject, MTKViewDelegate {
                     w = GameState(size: 25, name: dest, stamp: .gallery)
                     // Append the imported 3D models (Quaternius proof) as their own eval strip — the
                     // Renderer owns the registry indices, so it stamps them after the world is built.
-                    let importStates = importedProps.enumerated().filter { $0.element.galleryOnly }.map { $0.offset }
+                    // Just the Quaternius Stylized Nature pack here — the other packs have their own
+                    // full-face galleries (below), so don't dump all gallery-only models into this grid.
+                    let importStates = packIndices("Quaternius ")
                     w.cubeModel.stampGalleryImports(importStates)
                     // M20 prototype — sample "natural walls" (packed bushes/rocks) east of the catalog.
                     w.cubeModel.stampGalleryWalls(gardenFlora())
+                case "gallery-dungeons":
+                    w = GameState(size: 25, name: dest, stamp: .bare)
+                    w.cubeModel.stampPackGallery(packIndices("Dungeons "))
+                case "gallery-nature":
+                    w = GameState(size: 25, name: dest, stamp: .bare)
+                    w.cubeModel.stampPackGallery(packIndices("Nature "))
+                case "gallery-ruins":
+                    w = GameState(size: 25, name: dest, stamp: .bare)
+                    w.cubeModel.stampPackGallery(packIndices("Ruins "))
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
-                if dest != "garden" && dest != "gallery" { Self.setupInitialDiscovery(gameState: w) }
+                // Gardens & all gallery worlds reveal only their own stamped region (no reveal-all).
+                if !dest.hasPrefix("gallery") && dest != "garden" { Self.setupInitialDiscovery(gameState: w) }
                 return w
             }
             enterWorld(world)
@@ -652,6 +665,12 @@ class Renderer: NSObject, MTKViewDelegate {
             greeneryLoaded: greeneryArray != nil ? 1 : 0,
             treeSpriteLoaded: treeSpriteArray != nil ? 1 : 0
         )
+    }
+
+    /// M20 — registry indices of every imported model whose gallery `name` starts with `prefix`
+    /// (e.g. "Dungeons ", "Ruins ", "Quaternius "), for that pack's full-face evaluation gallery.
+    private func packIndices(_ prefix: String) -> [Int] {
+        importedProps.enumerated().filter { $0.element.name.hasPrefix(prefix) }.map { $0.offset }
     }
 
     /// M20 — group the loaded Quaternius nature models by kind (from their registry `name`, e.g.

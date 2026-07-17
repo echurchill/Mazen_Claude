@@ -322,6 +322,53 @@ class CubeModel {
         wall(row: c - 7, style: 3)   // dense mixed (thick berm)
     }
 
+    /// M20 — a full-face evaluation grid for ONE imported pack (Dungeons / Nature / Ruins, up to 150
+    /// models). Unlike the mixed `stampGallery`, this fills the whole +Z face with just this pack's
+    /// models on an open grass field — models on even columns leave clear odd-column lanes to walk.
+    /// `states` = registry indices (Renderer supplies them). Spawn sits among the grid; a return
+    /// portal is beside the spawn. Built on a `.bare` world, so only this plot is revealed.
+    func stampPackGallery(_ states: [Int]) {
+        guard !states.isEmpty else { return }
+        let n = size, c = n / 2
+        let rLo = 2, rHi = n - 3                                   // rows 2…22 at size 25
+        let cLo = 1, cHi = n - 2                                   // cols 1…23
+        let modelCols = Array(stride(from: 2, through: cHi - 1, by: 2))   // 2,4,…,22 (11 aisled cols)
+        let portalTile = (min(rHi, c + 1), c)
+        func inPlot(_ r: Int, _ q: Int) -> Bool { r >= rLo && r <= rHi && q >= cLo && q <= cHi }
+        for r in rLo...rHi {
+            for q in cLo...cHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
+                var op: DirectionMask = []
+                if inPlot(r - 1, q) { op.insert(.north) }
+                if inPlot(r + 1, q) { op.insert(.south) }
+                if inPlot(r, q - 1) { op.insert(.west) }
+                if inPlot(r, q + 1) { op.insert(.east) }
+                cubies[ci].facelets[fi].mazeTile.openings = op
+                cubies[ci].facelets[fi].mazeTile.openEdges = op
+                cubies[ci].facelets[fi].terrain = .grass
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+            }
+        }
+        // Lay the pack's models row-major on the aisled grid, skipping the spawn + portal cells.
+        var idx = 0
+        outer: for r in rLo...rHi {
+            for q in modelCols {
+                if (r, q) == (c, c) || (r, q) == portalTile { continue }
+                if idx >= states.count { break outer }
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
+                cubies[ci].facelets[fi].props.append(
+                    Prop(kind: .importedAsset, subRow: 1, subCol: 1, facing: .s, state: states[idx]))
+                idx += 1
+            }
+        }
+        // Return portal beside the spawn.
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: portalTile.0, col: portalTile.1) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        }
+    }
+
     /// M20 — the Journey **entry world**: a large world (size 25 → local surface reads nearly
     /// flat, little apparent curvature, Eddie) whose natural-maze garden is only a **bounded entry
     /// region**, SEALED so the player can't wander off into the unauthored rest, and the rest left

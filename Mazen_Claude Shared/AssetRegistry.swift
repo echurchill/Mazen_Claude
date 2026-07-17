@@ -132,6 +132,35 @@ enum AssetRegistry {
             print("[AssetRegistry] nature: \(nature.count)/\(natureFiles.count) models loaded")
         }
 
+        // M20 — three more Quaternius CC0 packs (Dungeons / Nature / Ruins), added for evaluation.
+        // Unlike the Stylized Nature pack these ship as FLAT-COLOUR OBJ (named Kd materials, no
+        // `map_Kd`), so we load the OBJ directly — no USD/Blender step — and each sub-mesh renders
+        // with its flat `Kd` colour (materialID 10). Gallery-only; each pack gets its own full-face
+        // gallery world (keys 1/2/3). Y-up like all our OBJ kits. Loaded CONCURRENTLY — 290 serial
+        // OBJ parses would dominate a Debug boot; each parse is independent (separate MDLAsset).
+        func loadFlatPack(_ packDir: String, _ prefix: String) -> [ImportedProp] {
+            let objDir = "\(modelsRoot)/\(packDir)/OBJ"
+            let files = ((try? FileManager.default.contentsOfDirectory(atPath: objDir)) ?? [])
+                .filter { $0.hasSuffix(".obj") }.map { String($0.dropLast(4)) }.sorted()
+            var out = [ImportedProp?](repeating: nil, count: files.count)
+            let lock = NSLock()
+            DispatchQueue.concurrentPerform(iterations: files.count) { i in
+                let f = files[i]
+                guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(objDir)/\(f).obj"), device: device) else {
+                    print("[AssetRegistry] \(prefix) FAILED: \(f)"); return
+                }
+                let p = ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget,
+                                     yUp: true, name: "\(prefix) \(f)", galleryOnly: true)
+                lock.lock(); out[i] = p; lock.unlock()
+            }
+            let loaded = out.compactMap { $0 }
+            print("[AssetRegistry] \(prefix): \(loaded.count)/\(files.count) models loaded")
+            return loaded
+        }
+        let dungeons = loadFlatPack("Dungeons Pack", "Dungeons")
+        let naturePk = loadFlatPack("Nature Pack",   "Nature")
+        let ruins    = loadFlatPack("Ruins Pack",    "Ruins")
+
         // M12-E: imported modular house. Load the kit's solid-colour OBJ pieces and assemble one
         // canonical quarter (authored for facing.n — two outer walls on the −X/−Y tile edges +
         // floor). The four `.houseCorner` props stamped in CubeModel place/orient the quarters and
@@ -147,7 +176,7 @@ enum AssetRegistry {
         } else {
             print("[AssetRegistry] house kit FAILED to load")
         }
-        return (props + nature, house, houseDoor)
+        return (props + nature + dungeons + naturePk + ruins, house, houseDoor)
     }
 
     /// Stamp the imported decorations into a world as `.importedAsset` Props (one per registry entry,

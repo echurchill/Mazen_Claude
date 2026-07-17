@@ -222,8 +222,14 @@ class GameViewController: NSViewController {
             renderer.beginWorldTransition(destinationID: 2)
         case 9:       // V — M20 first cut: fade into / out of the natural-maze "garden" hybrid
             renderer.beginWorldTransition(destinationID: 3)
-        case 16:      // Y — M20 dev tool: fade into / out of the prop/foliage gallery
+        case 16:      // Y — M20 dev tool: fade into / out of the prop/foliage gallery (Quaternius)
             renderer.beginWorldTransition(destinationID: 4)
+        case 18:      // 1 — M20: Dungeons pack evaluation gallery
+            renderer.beginWorldTransition(destinationID: 5)
+        case 19:      // 2 — M20: Nature pack evaluation gallery
+            renderer.beginWorldTransition(destinationID: 6)
+        case 20:      // 3 — M20: Ruins pack evaluation gallery
+            renderer.beginWorldTransition(destinationID: 7)
         case 43:      // , — M19 debug: lower relief (hill amplitude) on the active world
             renderer.adjustRelief(-0.01)
         case 47:      // . — M19 debug: raise relief (hill amplitude) on the active world
