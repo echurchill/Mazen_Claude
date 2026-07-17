@@ -131,7 +131,11 @@ Per the plan's build order (spine first):
   full spine plays: arrival → solve switches → turn → door opens → step inside → return. Verified
   headlessly.
 - ⬜ **(2)** first-twist dead-end + seam groove (west of spawn).
-- ⬜ **(3)** clue slab + four indicator points + mossy temple dressing.
+- 🟡 **(3) Dressing — partial (2026-07-17).** ✅ Mossy temple (bonded livery is mossy grey-green in the
+  garden, gold only on the overworld; still flares red on refusal). ✅ Clue plinth (caustic `threeOfFour`
+  glyph, east of spawn on the approach). ⬜ **Four indicator points on the temple** — deferred: needs
+  new emissive-point rendering + a placement decision, and the door plinth already shows switch
+  progress, so it's a legibility *nice-to-have*, not a blocker. Wants Eddie's eye.
 
 Then Arc 1 wraps the front (home world, arrival, counterpart sky, arch look), and Arc 3 (the
 inventions — PlayerKnowledge, memory, re-see, onward arch) comes last.
