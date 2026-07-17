@@ -168,7 +168,7 @@ class Renderer: NSObject, MTKViewDelegate {
     /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
     /// sub-world a portal simply pops back out; the destination only matters from the root.
     static let portalDestinations = ["moon", "temple-interior", "natural", "garden", "gallery",
-                                     "gallery-dungeons", "gallery-nature", "gallery-ruins"]
+                                     "gallery-dungeons", "gallery-nature", "gallery-ruins", "gallery-megakit"]
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -458,6 +458,10 @@ class Renderer: NSObject, MTKViewDelegate {
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("Ruins "))
                     w.cubeModel.noFog = true
+                case "gallery-megakit":
+                    w = GameState(size: 25, name: dest, stamp: .bare)
+                    w.cubeModel.stampPackGallery(packIndices("MegaKit "))
+                    w.cubeModel.noFog = true
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
@@ -699,9 +703,11 @@ class Renderer: NSObject, MTKViewDelegate {
             let name = p.name
             func has(_ s: String) -> Bool { name.range(of: s, options: .caseInsensitive) != nil }
             if has("Snow") { continue }
-            if name.hasPrefix("Ruins ") && has("Wall") && !has("Flag") { f.walls.append(i) }
-            else if has("Rock") && name.hasPrefix("Nature ")           { f.rocks.append(i) }
-            else if has("Bush")                                        { f.bushes.append(i) }
+            if name.hasPrefix("Ruins ") && has("Wall") && !has("Flag")            { f.walls.append(i) }
+            else if has("Path")                                                   { continue }   // MegaKit RockPath = paths, not wall rocks
+            else if (has("Rock") && name.hasPrefix("Nature "))
+                 || (name.hasPrefix("MegaKit ") && (has("Rock") || has("Pebble"))) { f.rocks.append(i) }   // + textured MegaKit rocks
+            else if has("Bush")                                                    { f.bushes.append(i) }   // Nature / Ruins / MegaKit bushes
         }
         return f
     }

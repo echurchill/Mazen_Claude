@@ -277,10 +277,19 @@ class CubeModel {
             v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
             return v
         }
-        // Gallery-scale (extraScale 1 == the registry `target` fit; Eddie wanted rocks to match the
-        // individual gallery models). Walls are the tallest structural piece; rocks/bushes overgrow
-        // the base a bit smaller. At that size a model is big, so pack tight for a continuous ridge.
-        let wallScale: Float = 1.0, rockScale: Float = 0.85, bushScale: Float = 0.6
+        // Eddie: ~4 m walls (was ~16 at full gallery scale — too tall). Derive the scale from a metre
+        // target via eyeHeight (1.7 m ≈ 0.09 u); rocks/bushes overgrow the base a bit smaller. Spacing
+        // is derived from the size too, so the run stays continuous when the height is retuned.
+        let mUnit = worldScale.eyeHeight / 1.7                    // metres → world units
+        let tileM = 1.0 / mUnit                                   // a tile is ~18.9 m across
+        let wallHeightM: Float = 4.0
+        let galleryTarget: Float = 0.85                          // == AssetRegistry.galleryTarget (kept local: test target excludes AssetRegistry)
+        let wallScale = wallHeightM * mUnit / galleryTarget
+        let rockScale = wallScale * 0.85, bushScale = wallScale * 0.6
+        let spread = wallHeightM * mUnit                          // overgrowth scatter across the wall line
+        func perTileFor(_ spacingM: Float) -> Int { max(1, Int((tileM / spacingM).rounded())) }
+        let wallPT = perTileFor(wallHeightM * 0.55)               // wall pieces overlap into a ridge
+        let growthPT = perTileFor(wallHeightM * 0.40)             // rocks/bushes tighter
 
         // Structural backbone: Ruins `Wall` pieces laid end-to-end along the row (facing .n so their
         // length runs along the wall; if they read rotated, that's the one knob to flip). perTile 2
@@ -316,17 +325,17 @@ class CubeModel {
                                  facing: Heading8(rawValue: Int(h % 8)) ?? .n,
                                  state: pool[Int((h >> 8) % UInt32(pool.count))], extraScale: base)
                     p.offsetX = fx
-                    p.offsetY = (Float((h >> 3) % 20) / 20.0 - 0.5) * 0.24   // scatter across the wall
+                    p.offsetY = (Float((h >> 3) % 20) / 20.0 - 0.5) * spread   // scatter across the wall
                     cubies[ci].facelets[fi].props.append(p)
                 }
             }
         }
         // Four E–W walls, a walkable lane between each, showing a progression from bare structure to
         // fully reclaimed — plus a foliage-only ridge to compare against the packed-plants version.
-        placeWalls(row: c - 1, perTile: 2)                                   // structural wall only
-        placeWalls(row: c - 3, perTile: 2); placeOvergrowth(row: c - 3, perTile: 3, rockPct: 45)   // lightly overgrown ruin
-        placeWalls(row: c - 5, perTile: 2); placeOvergrowth(row: c - 5, perTile: 4, rockPct: 35)   // heavily overgrown ruin
-        placeOvergrowth(row: c - 7, perTile: 4, rockPct: 45)                 // rocks + bushes only (no wall)
+        placeWalls(row: c - 1, perTile: wallPT)                                   // structural wall only
+        placeWalls(row: c - 3, perTile: wallPT); placeOvergrowth(row: c - 3, perTile: growthPT, rockPct: 45)       // lightly overgrown ruin
+        placeWalls(row: c - 5, perTile: wallPT); placeOvergrowth(row: c - 5, perTile: growthPT + 3, rockPct: 35)   // heavily overgrown ruin
+        placeOvergrowth(row: c - 7, perTile: growthPT + 3, rockPct: 45)           // rocks + bushes only (no wall)
     }
 
     /// M20 — a full-face evaluation grid for ONE imported pack (Dungeons / Nature / Ruins, up to 150

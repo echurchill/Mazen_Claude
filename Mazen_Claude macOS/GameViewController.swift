@@ -230,6 +230,8 @@ class GameViewController: NSViewController {
             renderer.beginWorldTransition(destinationID: 6)
         case 20:      // 3 — M20: Ruins pack evaluation gallery
             renderer.beginWorldTransition(destinationID: 7)
+        case 21:      // 4 — M20: Stylized Nature MegaKit evaluation gallery
+            renderer.beginWorldTransition(destinationID: 8)
         case 43:      // , — M19 debug: lower relief (hill amplitude) on the active world
             renderer.adjustRelief(-0.01)
         case 47:      // . — M19 debug: raise relief (hill amplitude) on the active world

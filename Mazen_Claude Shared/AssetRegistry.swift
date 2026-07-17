@@ -117,6 +117,57 @@ enum AssetRegistry {
         let naturePk = loadFlatPack("Nature Pack",   "Nature")
         let ruins    = loadFlatPack("Ruins Pack",    "Ruins")
 
+        // M20 — Stylized Nature MegaKit (Quaternius): a TEXTURED OBJ pack (stylized atlas + alpha
+        // leaves/flowers). Its MTL `map_Kd` paths are broken Windows absolutes ("C:/X.png"), so we
+        // resolve each sub-mesh's texture by FILENAME against the pack's Blends/textures folder —
+        // preferring the map_Kd filename (baseColorURL), falling back to a material→file table. Cutout
+        // is auto-detected from the PNG's alpha (loadAssetTexture). Y-up OBJ, gallery-only (key 4).
+        let megakit: [ImportedProp] = {
+            let dir = "\(modelsRoot)/Stylized Nature MegaKit"
+            let objDir = "\(dir)/OBJ", texDir = "\(dir)/Blends/textures"
+            let matTex: [String: String] = [
+                "Bark_Birch": "Bark_BirchTree.png", "Bark_DeadTree": "Bark_DeadTree.png",
+                "Bark_NormalTree": "Bark_NormalTree.png", "Bark_Pine": "Bark_PineTree.png",
+                "Bark_TwistedTree": "Bark_TwistedTree.png", "Flowers": "Flowers.png", "Grass": "Grass.png",
+                "Leaves": "Leaves.png", "Leaves_Birch": "Leaves_Birch_C.png",
+                "Leaves_CherryBlossom": "Leaves_CherryBlossom_C.png", "Leaves_GiantPine": "Leaves_GiantPine_C.png",
+                "Leaves_NormalTree": "Leaves_NormalTree_C.png", "Leaves_Pine": "Leaf_Pine_C.png",
+                "Leaves_TallThick": "Leaves_TallThick_C.png", "Leaves_TwistedTree": "Leaves_TwistedTree_C.png",
+                "Mushrooms": "Mushrooms.png", "PathRocks": "PathRocks_Diffuse.png", "Rocks": "Rocks_Diffuse.png"]
+            func texFile(_ sm: AssetSubmesh) -> String? {
+                if let u = sm.baseColorURL, FileManager.default.fileExists(atPath: "\(texDir)/\(u.lastPathComponent)") {
+                    return u.lastPathComponent
+                }
+                return matTex[sm.materialName]
+            }
+            let files = ((try? FileManager.default.contentsOfDirectory(atPath: objDir)) ?? [])
+                .filter { $0.hasSuffix(".obj") }.map { String($0.dropLast(4)) }.sorted()
+            var meshSlots = [AssetMesh?](repeating: nil, count: files.count)
+            let mlock = NSLock()
+            DispatchQueue.concurrentPerform(iterations: files.count) { i in
+                if let m = AssetMesh(url: URL(fileURLWithPath: "\(objDir)/\(files[i]).obj"), device: device) {
+                    mlock.lock(); meshSlots[i] = m; mlock.unlock()
+                }
+            }
+            let meshes: [(String, AssetMesh)] = zip(files, meshSlots).compactMap { f, m in m.map { (f, $0) } }
+            let uniqueTex = Array(Set(meshes.flatMap { $0.1.submeshes.compactMap { texFile($0) } }))
+            var texByName = [String: SubmeshMaterial]()
+            let tlock = NSLock()
+            DispatchQueue.concurrentPerform(iterations: uniqueTex.count) { k in
+                let loaded = TextureLoader.loadAssetTexture(url: URL(fileURLWithPath: "\(texDir)/\(uniqueTex[k])"), device: device, srgb: true)
+                let mat = SubmeshMaterial(diffuse: loaded?.texture, cutout: loaded?.cutout ?? false)
+                tlock.lock(); texByName[uniqueTex[k]] = mat; tlock.unlock()
+            }
+            return meshes.map { file, mesh in
+                let mats = mesh.submeshes.map { sm in
+                    texFile(sm).flatMap { texByName[$0] } ?? SubmeshMaterial(diffuse: nil, cutout: false)
+                }
+                return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget, yUp: true,
+                                    name: "MegaKit \(file)", galleryOnly: true, submeshMaterials: mats)
+            }
+        }()
+        print("[AssetRegistry] MegaKit: \(megakit.count) models loaded")
+
         // M12-E: imported modular house. Load the kit's solid-colour OBJ pieces and assemble one
         // canonical quarter (authored for facing.n — two outer walls on the −X/−Y tile edges +
         // floor). The four `.houseCorner` props stamped in CubeModel place/orient the quarters and
@@ -132,7 +183,7 @@ enum AssetRegistry {
         } else {
             print("[AssetRegistry] house kit FAILED to load")
         }
-        return (props + dungeons + naturePk + ruins, house, houseDoor)
+        return (props + dungeons + naturePk + ruins + megakit, house, houseDoor)
     }
 
     /// Stamp the imported decorations into a world as `.importedAsset` Props (one per registry entry,
