@@ -88,51 +88,7 @@ enum AssetRegistry {
             loadSolid("Modular Temple/Prop_Vase.obj",         ( 1,  1), 0.28),   // moved off the temple-door path (Eddie)
         ].compactMap { $0 }
 
-        // M20 — a sampling of the Quaternius Ultimate Stylized Nature Pack (CC0). Gallery-only, so
-        // they don't clutter the overworld. See `loadNature` for why these come from USD, not OBJ.
-        let natureDir = "Quaternius Ultimate Stylized Nature Pack"
-        /// Loaded from USD (exported from the pack's per-model .blend files via Blender), NOT the
-        /// shipped OBJ. The OBJ/MTL is the pack's lossiest export: it carries no `map_Kd`, so we had
-        /// to guess textures by material name plus a hand-written exception table (Rock→"Rocks.png",
-        /// Blender's unnamed "None"→"Grass.png"), and it collapsed some multi-material models. The
-        /// USD carries a real UsdPreviewSurface material→texture binding that ModelIO resolves to an
-        /// absolute URL — so the asset tells us its texture and all that guessing is gone.
-        /// Z-up (Blender's axes, like our other USD props) ⇒ yUp: false.
-        ///
-        /// Meshes first, then every texture the USDs bind loaded CONCURRENTLY: decode + cutout prep
-        /// is CPU-bound and per-texture independent, and serially it dominated a Debug boot.
-        let usdDir = "\(modelsRoot)/\(natureDir)/USD"
-        let natureFiles = ((try? FileManager.default.contentsOfDirectory(atPath: usdDir)) ?? [])
-            .filter { $0.hasSuffix(".usdc") }
-            .map { String($0.dropLast(5)) }
-            .sorted()
-        let meshes: [(file: String, mesh: AssetMesh)] = natureFiles.compactMap { f in
-            guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(usdDir)/\(f).usdc"), device: device) else {
-                print("[AssetRegistry] nature prop FAILED: \(f)"); return nil
-            }
-            return (f, mesh)
-        }
-        let uniqueTexURLs = Array(Set(meshes.flatMap { $0.mesh.submeshes.compactMap { $0.baseColorURL } }))
-        var matByPath = [String: SubmeshMaterial](minimumCapacity: uniqueTexURLs.count)
-        let matLock = NSLock()
-        DispatchQueue.concurrentPerform(iterations: uniqueTexURLs.count) { k in
-            let url = uniqueTexURLs[k]
-            let loaded = TextureLoader.loadAssetTexture(url: url, device: device, srgb: true)
-            let mat = SubmeshMaterial(diffuse: loaded?.texture, cutout: loaded?.cutout ?? false)
-            matLock.lock(); matByPath[url.path] = mat; matLock.unlock()
-        }
-        let nature: [ImportedProp] = meshes.map { file, mesh in
-            let mats = mesh.submeshes.map { sm in
-                sm.baseColorURL.flatMap { matByPath[$0.path] } ?? SubmeshMaterial(diffuse: nil, cutout: false)
-            }
-            return ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget, yUp: false,
-                                name: "Quaternius \(file)", galleryOnly: true, submeshMaterials: mats)
-        }
-        if nature.count != natureFiles.count {
-            print("[AssetRegistry] nature: \(nature.count)/\(natureFiles.count) models loaded")
-        }
-
-        // M20 — three more Quaternius CC0 packs (Dungeons / Nature / Ruins), added for evaluation.
+        // M20 — three Quaternius CC0 packs (Dungeons / Nature / Ruins), for evaluation.
         // Unlike the Stylized Nature pack these ship as FLAT-COLOUR OBJ (named Kd materials, no
         // `map_Kd`), so we load the OBJ directly — no USD/Blender step — and each sub-mesh renders
         // with its flat `Kd` colour (materialID 10). Gallery-only; each pack gets its own full-face
@@ -176,7 +132,7 @@ enum AssetRegistry {
         } else {
             print("[AssetRegistry] house kit FAILED to load")
         }
-        return (props + nature + dungeons + naturePk + ruins, house, houseDoor)
+        return (props + dungeons + naturePk + ruins, house, houseDoor)
     }
 
     /// Stamp the imported decorations into a world as `.importedAsset` Props (one per registry entry,

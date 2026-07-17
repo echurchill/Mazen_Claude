@@ -234,12 +234,11 @@ class CubeModel {
     }
 
     /// M20 prototype (Eddie) — sample "natural walls" in the gallery: instead of a stone hedge slab, a
-    /// maze wall is a **run of tightly-aligned bushes and rocks** packed into a continuous ridge, so
-    /// the space reads as natural. Lays four **E–W** runs (so you walk straight east down a clear lane
-    /// alongside each) in a plot east of the catalog — bushes-only, rocks-only, mixed, dense-mixed —
-    /// at the SAME normalised scale as the individual gallery models (Eddie: rocks must match those),
-    /// to judge the look (and whether Quaternius is the right pack). Non-solid — walk through to
-    /// inspect. Registry indices come from the Renderer (like `stampGalleryImports`).
+    /// maze wall is built from **Ruins `Wall` pieces overgrown by Nature rocks + bushes** (Eddie), so
+    /// a structure reads as reclaimed by nature. Lays four **E–W** runs (walk east down a clear lane
+    /// alongside each) in a plot east of the catalog: bare wall, lightly-overgrown ruin, heavily-
+    /// overgrown ruin, and a rocks+bushes-only ridge (to compare). Gallery scale. Non-solid — walk
+    /// through to inspect. Registry indices come from the Renderer (`wallFlora`).
     func stampGalleryWalls(_ flora: GardenFlora) {
         let n = size, c = n / 2
         // A clear grassy plot east of the catalog (cols c+5…), north of the imported-models strip
@@ -278,48 +277,56 @@ class CubeModel {
             v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
             return v
         }
-        // Same normalised scale as the individual gallery models (extraScale 1 == the registry
-        // `target` fit). At that size each model is big, so pack ~2 per tile (~9 m) for solid overlap.
-        let wallScale: Float = 1.0
-        let perTile = 2
-        // One E–W wall down row `wr`, packed along its length (cols qLo…qHi).
-        func wall(row wr: Int, style: Int) {
+        // Gallery-scale (extraScale 1 == the registry `target` fit; Eddie wanted rocks to match the
+        // individual gallery models). Walls are the tallest structural piece; rocks/bushes overgrow
+        // the base a bit smaller. At that size a model is big, so pack tight for a continuous ridge.
+        let wallScale: Float = 1.0, rockScale: Float = 0.85, bushScale: Float = 0.6
+
+        // Structural backbone: Ruins `Wall` pieces laid end-to-end along the row (facing .n so their
+        // length runs along the wall; if they read rotated, that's the one knob to flip). perTile 2
+        // (~9 m) ⇒ they overlap into a continuous wall regardless of exact piece width.
+        func placeWalls(row wr: Int, perTile: Int) {
+            guard !flora.walls.isEmpty, pLo <= wr, wr <= pHi else { return }
+            for q in qLo...qHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: wr, col: q) else { continue }
+                for k in 0..<perTile {
+                    let fx = -0.5 + (Float(k) + 0.5) / Float(perTile)
+                    let h = hash(wr &* 131 &+ q &* 17, 100, k &* 7 &+ 1)
+                    var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: .n,
+                                 state: flora.walls[Int(h % UInt32(flora.walls.count))], extraScale: wallScale)
+                    p.offsetX = fx; p.offsetY = 0
+                    cubies[ci].facelets[fi].props.append(p)
+                }
+            }
+        }
+        // Overgrowth: rocks (Nature) + bushes (Nature/Ruins) scattered across the wall line, resting
+        // on the ground in front of / behind the wall, so a ruin reads as reclaimed by nature.
+        func placeOvergrowth(row wr: Int, perTile: Int, rockPct: Int) {
             guard pLo <= wr, wr <= pHi else { return }
             for q in qLo...qHi {
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: wr, col: q) else { continue }
                 for k in 0..<perTile {
-                    let fx = -0.5 + (Float(k) + 0.5) / Float(perTile)          // tile-local X in [-0.5, 0.5)
-                    let h = hash(wr &* 131 &+ q &* 17, style, k &* 7 &+ 3)
-                    let bushes = flora.bushes, rocks = flora.rocks
-                    let pool: [Int]
-                    switch style {
-                    case 0:  pool = bushes                                        // bushes only
-                    case 1:  pool = rocks                                         // rocks only
-                    default: pool = (h & 1 == 0) ? bushes : rocks                 // mixed / dense-mixed
-                    }
+                    let fx = -0.5 + (Float(k) + 0.5) / Float(perTile)
+                    let h = hash(wr &* 131 &+ q &* 17, 200, k &* 7 &+ 5)
+                    let useRock = Int(h % 100) < rockPct
+                    let pool = useRock ? flora.rocks : flora.bushes
                     guard !pool.isEmpty else { continue }
-                    let idx = pool[Int(h % UInt32(pool.count))]
-                    let jitter = 0.9 + Float((h >> 6) % 20) / 100.0               // 0.90…1.10
-                    // style 3 = two thickness bands (a deeper berm); others a single jittered line.
-                    let bands: [Float] = style == 3 ? [-0.18, 0.18]
-                                                    : [(Float((h >> 3) % 20) / 20.0 - 0.5) * 0.14]
-                    for oy in bands {
-                        var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
-                                     facing: Heading8(rawValue: Int(h % 8)) ?? .n,
-                                     state: idx, extraScale: wallScale * jitter)
-                        p.offsetX = fx
-                        p.offsetY = oy
-                        cubies[ci].facelets[fi].props.append(p)
-                    }
+                    let base = (useRock ? rockScale : bushScale) * (0.8 + Float((h >> 6) % 40) / 100.0)
+                    var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
+                                 facing: Heading8(rawValue: Int(h % 8)) ?? .n,
+                                 state: pool[Int((h >> 8) % UInt32(pool.count))], extraScale: base)
+                    p.offsetX = fx
+                    p.offsetY = (Float((h >> 3) % 20) / 20.0 - 0.5) * 0.24   // scatter across the wall
+                    cubies[ci].facelets[fi].props.append(p)
                 }
             }
         }
-        // Four E–W walls with a walkable lane (empty row) between each. From the south entry lane
-        // (row c): bushes just north, then rocks, mixed, dense-mixed — one lane apart.
-        wall(row: c - 1, style: 0)   // bushes only
-        wall(row: c - 3, style: 1)   // rocks only
-        wall(row: c - 5, style: 2)   // mixed
-        wall(row: c - 7, style: 3)   // dense mixed (thick berm)
+        // Four E–W walls, a walkable lane between each, showing a progression from bare structure to
+        // fully reclaimed — plus a foliage-only ridge to compare against the packed-plants version.
+        placeWalls(row: c - 1, perTile: 2)                                   // structural wall only
+        placeWalls(row: c - 3, perTile: 2); placeOvergrowth(row: c - 3, perTile: 3, rockPct: 45)   // lightly overgrown ruin
+        placeWalls(row: c - 5, perTile: 2); placeOvergrowth(row: c - 5, perTile: 4, rockPct: 35)   // heavily overgrown ruin
+        placeOvergrowth(row: c - 7, perTile: 4, rockPct: 45)                 // rocks + bushes only (no wall)
     }
 
     /// M20 — a full-face evaluation grid for ONE imported pack (Dungeons / Nature / Ruins, up to 150
@@ -424,6 +431,7 @@ class CubeModel {
         var flowers: [Int] = []
         var grasses: [Int] = []
         var rocks: [Int] = []
+        var walls: [Int] = []      // M20: structural wall pieces (Ruins) for the wall-builder
     }
 
     /// M20 — dress the sealed garden region with Quaternius plants (the reskin of the old procedural

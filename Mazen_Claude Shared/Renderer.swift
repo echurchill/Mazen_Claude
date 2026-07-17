@@ -441,17 +441,11 @@ class Renderer: NSObject, MTKViewDelegate {
                     // indices, so it groups them by kind and stamps the vegetation after the build.
                     w.cubeModel.stampGardenVegetation(gardenFlora())
                 case "gallery":
-                    // M20 dev tool — flat prop/foliage grid (Y key). Size 25 to fit the full catalog
-                    // (props + tree sprites). Stamp partial-reveals.
+                    // M20 dev tool — procedural prop/glyph catalog (Y key) + the natural-wall
+                    // prototype east of it. Size 25 to fit the catalog. Stamp partial-reveals.
                     w = GameState(size: 25, name: dest, stamp: .gallery)
-                    // Append the imported 3D models (Quaternius proof) as their own eval strip — the
-                    // Renderer owns the registry indices, so it stamps them after the world is built.
-                    // Just the Quaternius Stylized Nature pack here — the other packs have their own
-                    // full-face galleries (below), so don't dump all gallery-only models into this grid.
-                    let importStates = packIndices("Quaternius ")
-                    w.cubeModel.stampGalleryImports(importStates)
-                    // M20 prototype — sample "natural walls" (packed bushes/rocks) east of the catalog.
-                    w.cubeModel.stampGalleryWalls(gardenFlora())
+                    // M20 prototype — sample "natural walls" (Ruins wall pieces + Nature rocks/bushes).
+                    w.cubeModel.stampGalleryWalls(wallFlora())
                 case "gallery-dungeons":
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("Dungeons "))
@@ -676,21 +670,38 @@ class Renderer: NSObject, MTKViewDelegate {
         importedProps.enumerated().filter { $0.element.name.hasPrefix(prefix) }.map { $0.offset }
     }
 
-    /// M20 — group the loaded Quaternius nature models by kind (from their registry `name`, e.g.
-    /// "Quaternius PineTree_2") so the garden reskin can scatter trees/bushes/flowers/grass/rocks.
-    /// Dead & palm trees are held back to keep the garden lush and temperate (easy to add later).
+    /// M20 — group the flat-shaded Nature pack models by kind (from their registry `name`, e.g.
+    /// "Nature PineTree_2") so the garden scatter can place trees/bushes/flowers/grass/rocks. Snow
+    /// and dead variants are held back to keep the garden lush and temperate (easy to add later).
     private func gardenFlora() -> CubeModel.GardenFlora {
         var f = CubeModel.GardenFlora()
         for (i, p) in importedProps.enumerated() {
             let name = p.name
             func has(_ s: String) -> Bool { name.range(of: s, options: .caseInsensitive) != nil }
-            if !has("Quaternius") { continue }
+            if !name.hasPrefix("Nature ") || has("Snow") || has("Dead") { continue }
             if has("Rock")                                    { f.rocks.append(i) }
             else if has("Bush")                               { f.bushes.append(i) }
-            else if has("Tree") && !has("Dead") && !has("Palm") { f.trees.append(i) }
-            else if has("Grass")                              { f.grasses.append(i) }
-            else if has("Flower") || has("Petals")            { f.flowers.append(i) }
+            else if has("Tree") || has("Willow")              { f.trees.append(i) }   // Palm/Pine/Birch/Common/Willow
+            else if has("Grass") || has("Wheat") || has("Corn") { f.grasses.append(i) }
+            else if has("Flower")                             { f.flowers.append(i) }
             else if has("Plant")                              { f.grasses.append(i) }
+        }
+        return f
+    }
+
+    /// M20 — the wall-builder's palette (Eddie): a natural/ruined wall built from **Ruins `Wall`
+    /// pieces** for the structural backbone, plus **rocks** (Nature) and **bushes** (Nature + Ruins)
+    /// packed at the base to overgrow it. Snow variants excluded (temperate). Reuses `GardenFlora`'s
+    /// `walls`/`rocks`/`bushes` fields.
+    private func wallFlora() -> CubeModel.GardenFlora {
+        var f = CubeModel.GardenFlora()
+        for (i, p) in importedProps.enumerated() {
+            let name = p.name
+            func has(_ s: String) -> Bool { name.range(of: s, options: .caseInsensitive) != nil }
+            if has("Snow") { continue }
+            if name.hasPrefix("Ruins ") && has("Wall") && !has("Flag") { f.walls.append(i) }
+            else if has("Rock") && name.hasPrefix("Nature ")           { f.rocks.append(i) }
+            else if has("Bush")                                        { f.bushes.append(i) }
         }
         return f
     }
