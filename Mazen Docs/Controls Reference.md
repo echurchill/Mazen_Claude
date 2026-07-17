@@ -33,6 +33,24 @@
 | P | Toggle orbit auto-rotation |
 | H | Toggle debug HUD (face, position, camera, cube size, fps, twist pacing) |
 
+### Debug — worlds & views (macOS)
+Each fades into / out of a separate world (press again to return).
+| Input | Action |
+|---|---|
+| O | Temple/interior inverted-cube world |
+| I | Temple-interior world |
+| B | Natural open-field world |
+| V | Garden (natural-maze hybrid, the Journey entry world) |
+| Y | Prop/foliage gallery (Quaternius Stylized Nature) |
+| 1 | Dungeons pack evaluation gallery (full-face grid) |
+| 2 | Nature pack evaluation gallery (full-face grid) |
+| 3 | Ruins pack evaluation gallery (full-face grid) |
+| U | Make the garden door lock READY (bypass the switches, for testing the turn) |
+| M | Toggle flat matte shading (read raw geometry) |
+| J | Toggle idle world spin |
+| `-` / `=` | Deflate / inflate roundness (all worlds) |
+| `,` / `.` | Lower / raise relief (hill amplitude) |
+
 ## iOS — Touch Gestures
 
 | Gesture | Action |
