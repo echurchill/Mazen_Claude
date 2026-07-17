@@ -475,16 +475,9 @@ class CubeModel {
         let R = 5                                   // entry region half-extent → an (2R+1)² garden
         let rLo = max(0, c - R), rHi = min(n - 1, c + R)
         let cLo = max(0, c - R), cHi = min(n - 1, c + R)
-        let portalTile = (min(rHi, c + 1), c)
 
         // A clearing at spawn (room to get bearings) — done BEFORE sealing so it can't reopen the wall.
         stampRoom(face: .positiveZ, top: max(rLo, c - 1), left: max(cLo, c - 1), height: 3, width: 3)
-
-        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
-            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
-            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
-            return v
-        }
 
         for r in rLo...rHi {
             for col in cLo...cHi {
@@ -503,11 +496,32 @@ class CubeModel {
                 //  Renderer's Quaternius registry indices, which aren't available here in init.)
             }
         }
-        // The way home — a walk-through return portal beside the spawn.
-        if let (ci, fi) = faceletAt(face: .positiveZ, row: portalTile.0, col: portalTile.1) {
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        // Forward-only (Eddie): no way-home portal — the only exits are into the temple and (later,
+        // Arc 3) the onward arch.
+
+        // M20 Phase 1 — stage the VERIFIED temple lock into the garden (see M20 Journey Shot List):
+        // temple NORTH of spawn (door faces south, toward the player), the four switches at the
+        // diagonal ±3 corners (SE one off). Carve a reachable "spine" — corridors from the spawn
+        // clearing to the door plinth and out to every switch — so the puzzle is solvable through the
+        // otherwise-procedural maze (the rest stays maze filler). Then re-stamp the shared lock.
+        guard c - 3 >= rLo, c + 3 <= rHi else { return }
+        var spine = Set<[Int]>()
+        for col in (c - 3)...(c + 3) { spine.insert([c, col]) }         // spawn-row spur, E–W to the switch columns
+        for row in (c - 3)...(c + 3) { spine.insert([row, c - 3]); spine.insert([row, c + 3]) }   // W/E corridors to the corner switches
+        for row in (c - 3)...c { spine.insert([row, c]) }              // spawn up to the plinth + door
+        for rc in spine {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: rc[0], col: rc[1]) else { continue }
+            var op = cubies[ci].facelets[fi].mazeTile.openings
+            if spine.contains([rc[0] - 1, rc[1]]) { op.insert(.north) }
+            if spine.contains([rc[0] + 1, rc[1]]) { op.insert(.south) }
+            if spine.contains([rc[0], rc[1] - 1]) { op.insert(.west) }
+            if spine.contains([rc[0], rc[1] + 1]) { op.insert(.east) }
+            cubies[ci].facelets[fi].mazeTile.openings = op
+            cubies[ci].facelets[fi].mazeTile.openEdges = op
         }
+        stampTempleLock(doorRow: c - 3, doorCol: c, doorFacing: .s,
+                        plinthRow: c - 2, plinthSubRow: 2,
+                        switchCenter: c, spread: 3)
     }
 
     /// M20 — Quaternius plant registry indices, grouped by kind, for the garden reskin. The Renderer
@@ -804,6 +818,57 @@ class CubeModel {
         }
     }
 
+    /// M16.6 — the temple lock, shared by the overworld (`stampDemoProps`) and the M20 garden
+    /// (`stampGardenMaze`). Places the SEALED interior door (portal `state==1`), its rigid **bond**
+    /// (the door + its two flanking pillar tiles + the ROOT cubie straight through the hollow core on
+    /// the opposite face — so any start-face twist is REFUSED until unlocked), the **door plinth**
+    /// (caustic-glyph progress read-out + the turn), and the **four switches** (disc-less base +
+    /// number cylinder; three engaged, the fourth off — engage it to unbond). Verified to run
+    /// identically on a flat or curved (roundness 1) world (2026-07-17). All on face `.positiveZ`.
+    private func stampTempleLock(doorRow: Int, doorCol: Int, doorFacing: Heading8,
+                                 plinthRow: Int, plinthSubRow: Int,
+                                 switchCenter: Int, spread: Int) {
+        guard let (dci, dfi) = faceletAt(face: .positiveZ, row: doorRow, col: doorCol) else { return }
+        cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: doorFacing, state: 1))
+        cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        sealedPortalCubies.insert(dci)   // M16.4: closed until unlocked AND twisted open
+        // The door plinth — seated on the tile in front of the door (the side the player approaches
+        // from), NOT the walk-through door tile. Falls back onto the door tile on a tiny cube.
+        if (0..<size).contains(plinthRow), let (mci, mfi) = faceletAt(face: .positiveZ, row: plinthRow, col: doorCol) {
+            cubies[mci].facelets[mfi].props.append(Prop(kind: .plinth, subRow: plinthSubRow, subCol: 1, facing: doorFacing, state: 0))
+        } else {
+            let doorOpenings = cubies[dci].facelets[dfi].mazeTile.openings
+            cubies[dci].facelets[dfi].props.append(plinth(onTile: doorOpenings, preferred: doorFacing == .n ? .north : .south, symbol: 0))
+        }
+        var bond: Set<Int> = [dci]
+        for pc in [doorCol - 1, doorCol + 1] where (0..<size).contains(pc) {
+            if let (pci, pfi) = faceletAt(face: .positiveZ, row: doorRow, col: pc) {
+                cubies[pci].facelets[pfi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+                bond.insert(pci)
+            }
+        }
+        if let root = cubies.firstIndex(where: { $0.position == SIMD3<Int32>(Int32(doorCol), Int32(doorRow), 0) }) {
+            bond.insert(root)
+        }
+        addBond(bond)
+        templeDoorBond = bond   // stored so disengaging a switch can RE-lock the door (goof-and-fix)
+        // Four switches: (row, col, engaged, ordinal). Three engaged, the SE one off.
+        let switchSpots: [(Int, Int, Int, Int)] = [
+            (switchCenter - spread, switchCenter - spread, 1, 1),
+            (switchCenter - spread, switchCenter + spread, 1, 2),
+            (switchCenter + spread, switchCenter - spread, 1, 3),
+            (switchCenter + spread, switchCenter + spread, 0, 4),
+        ]
+        for (r, c2, engaged, ordinal) in switchSpots {
+            if let (ci2, fi2) = faceletAt(face: .positiveZ, row: r, col: c2) {
+                cubies[ci2].facelets[fi2].props.append(Prop(kind: .switchBase, subRow: 1, subCol: 1, facing: .n))
+                var cap = Prop(kind: .switchCap, subRow: 1, subCol: 1, facing: .n, state: ordinal)
+                cap.anim = Float(engaged); cap.alignAnim = Float(engaged)
+                cubies[ci2].facelets[fi2].props.append(cap)
+            }
+        }
+    }
+
     /// Place a hedge-sculpture topiary in the NW corner sub-cell of each start-plaza tile
     /// so Phase G's prop pipeline is visible — and rides slice rotations (the plaza is on
     /// the start face, so Q/E carries the topiaries around). (M10 Phase G)
@@ -843,72 +908,12 @@ class CubeModel {
         // the bond and is REFUSED — the temple pins the face until the lock is undone (M16.3).
         let templeRow = min(size - 1, top + h)
         let doorCol = left + w / 2
-        if templeDoor, let (dci, dfi) = faceletAt(face: .positiveZ, row: templeRow, col: doorCol) {
-            cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1))
-            cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
-            sealedPortalCubies.insert(dci)   // M16.4: closed until unlocked AND twisted open
-            // M16.5: the lock speaks — a carved tesseract-shadow plaque on the door tile (bonded,
-            // so the lock livery gilds it and refusals flare it), oriented to face the open
-            // approach — never a wall (Eddie).
-            // M16.6: the door plinth — the language's first VERB, taught by consequence. It starts
-            // blank; aligning the last dial makes it show the swirl ("turn/combine to produce"), and
-            // the twist that swings the door open makes it show the portal. GameState drives the
-            // state; no UI text anywhere. (Mazen Docs/Builder Glyphs — 4D Shadows.md)
-            //
-            // Placed on the plaza tile just NORTH of the door — in front of the portal, toward the
-            // plaza (Eddie, 2026-07-16) — NOT on the door tile itself, because that's a walk-through
-            // portal you'd trigger just by stepping up to read it. Seated at that tile's NORTH
-            // sub-cell (subRow 0 = north = toward the plaza, the side the player approaches from). Its
-            // footprint is now just one stand cell (PropKind.footprintRadius), so you can walk right
-            // up. Falls back onto the door tile if the cube is too small to have a tile north.
-            if templeRow - 1 >= 0, let (mci, mfi) = faceletAt(face: .positiveZ, row: templeRow - 1, col: doorCol) {
-                cubies[mci].facelets[mfi].props.append(Prop(kind: .plinth, subRow: 0, subCol: 1, facing: .n, state: 0))
-            } else {
-                let doorOpenings = cubies[dci].facelets[dfi].mazeTile.openings
-                cubies[dci].facelets[dfi].props.append(plinth(onTile: doorOpenings, preferred: .north, symbol: 0))
-            }
-            var bond: Set<Int> = [dci]
-            for pc in [doorCol - 1, doorCol + 1] where (0..<size).contains(pc) {
-                if let (pci, pfi) = faceletAt(face: .positiveZ, row: templeRow, col: pc) {
-                    cubies[pci].facelets[pfi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
-                    bond.insert(pci)
-                }
-            }
-            // The root: the cube is HOLLOW (only surface cubies exist — buildCubies skips
-            // interiors), so the lock anchors straight through the world's core to the cubie on
-            // the OPPOSITE face (z = 0). Any twist of the start face's slice would tear door from
-            // root — refused until the lock is undone.
-            if let root = cubies.firstIndex(where: {
-                $0.position == SIMD3<Int32>(Int32(doorCol), Int32(templeRow), 0)
-            }) {
-                bond.insert(root)
-            }
-            addBond(bond)
-            templeDoorBond = bond   // M16.6: stored so disengaging a switch can RE-lock the door (Eddie)
-
-            // M16.6 (Eddie) — the lock's mechanism is now four SWITCHES in the garden's diagonal
-            // quarters. Each is a disc-less base + a number cylinder that pokes OUT (engaged) or sits
-            // FLUSH (disengaged); F toggles it. Three start engaged, the SE one disengaged — engage it
-            // and the temple unbonds. The player can also disengage others (goof) and re-engage to fix.
-            let cc = size / 2
-            let spread = min(3, size / 2)
-            // (row, col, engaged, ordinal-number)
-            let switchSpots: [(Int, Int, Int, Int)] = [
-                (cc - spread, cc - spread, 1, 1),
-                (cc - spread, cc + spread, 1, 2),
-                (cc + spread, cc - spread, 1, 3),
-                (cc + spread, cc + spread, 0, 4),
-            ]
-            for (r, c2, engaged, ordinal) in switchSpots {
-                if let (ci2, fi2) = faceletAt(face: .positiveZ, row: r, col: c2) {
-                    cubies[ci2].facelets[fi2].props.append(Prop(kind: .switchBase, subRow: 1, subCol: 1, facing: .n))
-                    // `state` = the number glyph; `alignAnim` = engaged target (1 out / 0 flush),
-                    // `anim` = current height (starts at target). F toggles.
-                    var cap = Prop(kind: .switchCap, subRow: 1, subCol: 1, facing: .n, state: ordinal)
-                    cap.anim = Float(engaged); cap.alignAnim = Float(engaged)
-                    cubies[ci2].facelets[fi2].props.append(cap)
-                }
-            }
+        if templeDoor {
+            // Door faces NORTH (toward the plaza the player approaches from); plinth on the plaza tile
+            // just north of the door; switches at the diagonal ±spread of the plaza centre.
+            stampTempleLock(doorRow: templeRow, doorCol: doorCol, doorFacing: .n,
+                            plinthRow: templeRow - 1, plinthSubRow: 0,
+                            switchCenter: size / 2, spread: min(3, size / 2))
         }
         // M12-E: the 2×2 modular house gets its OWN open plaza on the −Z (back) face, away from the
         // crowded +Z demo plaza, so it has room to breathe. It sits at the row-0 face edge so an
