@@ -248,10 +248,13 @@ final class SceneBuilder {
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             var materialID: UInt32 = 10
                             if model.bondedGroups.contains(where: { $0.contains(ci) }) {
-                                // Locked-structure livery (M16.2, Eddie): golden yellow, so a lock
-                                // is findable at a glance — and it flares red while a refused
-                                // twist strains against it.
-                                color = SIMD4(0.95, 0.78, 0.20, 1.0)
+                                // Locked-structure livery: GOLD on the engineered overworld (a lock
+                                // findable at a glance). But the M20 garden temple wants to be
+                                // *discovered, not advertised* (Player Journey) — so on a natural-dressed
+                                // world it wears mossy grey-green stone instead. Both still flare red
+                                // while a refused twist strains against them.
+                                color = model.naturalDressing ? SIMD4(0.40, 0.45, 0.33, 1.0)
+                                                              : SIMD4(0.95, 0.78, 0.20, 1.0)
                                 if refusalGlow > 0 { color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow) }
                             }
                             if prop.kind == .portal, model.sealedPortalCubies.contains(ci) {

@@ -522,6 +522,13 @@ class CubeModel {
         stampTempleLock(doorRow: c - 3, doorCol: c, doorFacing: .s,
                         plinthRow: c - 2, plinthSubRow: 2,
                         switchCenter: c, spread: 3)
+        // M20 dressing — the clue (Player Journey: "a fallen slab carved four dots, three filled"):
+        // a plinth wearing the caustic `threeOfFour` glyph (index 8), the lock's GOAL. Placed east on
+        // the approach, off the door-plinth column so it doesn't read as the live progress display, and
+        // not adjacent to the door (updateDoorPlinths only rewrites the door-adjacent plinth).
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: c, col: min(cHi, c + 2)) {
+            cubies[ci].facelets[fi].props.append(Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .n, state: 8))
+        }
     }
 
     /// M20 — Quaternius plant registry indices, grouped by kind, for the garden reskin. The Renderer
