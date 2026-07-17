@@ -117,10 +117,18 @@ that reads as comprehension, not switch-hunting (that's the Phase 4 fresh-eyes t
 removed. The temple + door-plinth-share-a-twistable-slice constraint is a staging detail, handled in
 Phase 1, not a design decision.)*
 
-## After sign-off — Phase 1 order
+## Phase 1 progress
 
-Per the plan's build order (spine first): **(1)** carve the temple + its slice + door plinth + the four
-switches (re-stage the verified lock into the garden at the tiles above) → **(2)** the first-twist
-dead-end + seam groove → **(3)** clue slab + indicator points + mossy dressing → **(4)** wire the
-temple door to the interior. Then Arc 1 wraps the front (home world, arrival, counterpart sky, arch
-look), and Arc 3 (the inventions) comes last.
+Per the plan's build order (spine first):
+- ✅ **(1) Lock re-staged onto the garden (2026-07-17).** The verified M16.6 lock (shared
+  `stampTempleLock`) now stamps into the garden at the tiles above — temple north (door faces south),
+  door plinth in front, four switches at the ±3 corners (SE off) — with a carved reachable **spine**
+  of corridors from spawn to the plinth and every switch. Way-home portal removed (forward-only).
+  Verified headlessly: the puzzle solves end-to-end on the curved garden and all switches + plinth are
+  reachable. **Eddie's visual check:** press `V`, walk north to the temple, solve the switches, turn.
+- ⬜ **(2)** first-twist dead-end + seam groove (west of spawn).
+- ⬜ **(3)** clue slab + four indicator points + mossy temple dressing.
+- ⬜ **(4)** wire the temple door → the interior world (step inside).
+
+Then Arc 1 wraps the front (home world, arrival, counterpart sky, arch look), and Arc 3 (the
+inventions — PlayerKnowledge, memory, re-see, onward arch) comes last.
