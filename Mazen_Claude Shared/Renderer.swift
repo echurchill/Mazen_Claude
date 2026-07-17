@@ -713,7 +713,10 @@ class Renderer: NSObject, MTKViewDelegate {
             if name.hasPrefix("Ruins ") && has("Wall") && !has("Flag") && !has("Arch") { f.walls.append(i) }   // ArchRound + ArchGothic too holey (Eddie); Wall_Half kept (clean half-width)
             else if has("Path")                                                   { continue }   // MegaKit RockPath = paths, not wall rocks
             else if (has("Rock") && name.hasPrefix("Nature "))
-                 || (name.hasPrefix("MegaKit ") && (has("Rock") || has("Pebble"))) { f.rocks.append(i) }   // + textured MegaKit rocks
+                 || (name.hasPrefix("MegaKit ") && (has("Rock") || has("Pebble"))) {
+                f.rocks.append(i)                                                                 // + textured MegaKit rocks
+                if name.hasPrefix("MegaKit ") && (has("Rock_Big") || has("Rock_Medium")) { f.bigRocks.append(i) }   // big/medium boulders
+            }
             else if has("Bush")                                                    { f.bushes.append(i) }   // Nature / Ruins / MegaKit bushes
         }
         return f

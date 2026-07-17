@@ -322,12 +322,35 @@ class CubeModel {
                 }
             }
         }
-        // Four E–W walls, a walkable lane between each, showing a progression from bare structure to
-        // fully reclaimed — plus a foliage-only ridge to compare against the packed-plants version.
+        // A SOLID boulder wall (no brick): the MegaKit big/medium rocks, big and packed with a tight
+        // scatter so they overlap into a continuous berm with no breaks (Eddie), plus a few bushes.
+        func placeRockWall(row wr: Int, perTile: Int) {
+            let rocks = flora.bigRocks.isEmpty ? flora.rocks : flora.bigRocks
+            guard !rocks.isEmpty, pLo <= wr, wr <= pHi else { return }
+            for q in qLo...qHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: wr, col: q) else { continue }
+                for k in 0..<perTile {
+                    let fx = -0.5 + (Float(k) + 0.5) / Float(perTile)
+                    let h = hash(wr &* 131 &+ q &* 17, 300, k &* 7 &+ 5)
+                    let bush = Int(h % 100) < 18 && !flora.bushes.isEmpty
+                    let pool = bush ? flora.bushes : rocks
+                    let base = (bush ? bushScale : wallScale * 0.9) * (0.85 + Float((h >> 6) % 30) / 100.0)
+                    var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
+                                 facing: Heading8(rawValue: Int(h % 8)) ?? .n,
+                                 state: pool[Int((h >> 8) % UInt32(pool.count))], extraScale: base)
+                    p.offsetX = fx
+                    p.offsetY = (Float((h >> 3) % 20) / 20.0 - 0.5) * spread * 0.6   // tight ⇒ boulders overlap into a solid berm
+                    p.sink = bush ? 0.10 : 0.20
+                    cubies[ci].facelets[fi].props.append(p)
+                }
+            }
+        }
+        // Four E–W walls, a walkable lane between each: a progression from bare structure to fully
+        // reclaimed, then a solid boulder wall (no brick) of the MegaKit big/medium rocks.
         placeWalls(row: c - 1, perTile: wallPT)                                   // structural wall only
         placeWalls(row: c - 3, perTile: wallPT); placeOvergrowth(row: c - 3, perTile: growthPT, rockPct: 45)       // lightly overgrown ruin
         placeWalls(row: c - 5, perTile: wallPT); placeOvergrowth(row: c - 5, perTile: growthPT + 3, rockPct: 35)   // heavily overgrown ruin
-        placeOvergrowth(row: c - 7, perTile: growthPT + 3, rockPct: 45)           // rocks + bushes only (no wall)
+        placeRockWall(row: c - 7, perTile: growthPT + 4)                          // solid boulder wall (big/medium MegaKit rocks)
     }
 
     /// M20 prototype (Eddie) — path-stone options in the gallery, in a plot WEST of the catalog:
@@ -375,14 +398,14 @@ class CubeModel {
             for r in pLo...pHi {
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
                 for k in 0..<perTile {
-                    for band in [-0.22, 0.0, 0.22] as [Float] {   // three across ⇒ a full-width stone path
+                    for band in [-0.12, 0.0, 0.12] as [Float] {   // three tight runs, kept within the paved strip
                         let h = hash(r &* 131 &+ q &* 17, 7, k &* 13 &+ Int(band * 100))
                         var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
                                      facing: Heading8(rawValue: Int(h % 8)) ?? .n,
                                      state: stones[Int(h % UInt32(stones.count))],
                                      extraScale: stoneScale * (0.8 + Float((h >> 6) % 40) / 100.0))
                         p.offsetY = -0.5 + (Float(k) + 0.5) / Float(perTile)
-                        p.offsetX = band + (Float((h >> 3) % 20) / 20.0 - 0.5) * 0.08
+                        p.offsetX = band + (Float((h >> 3) % 20) / 20.0 - 0.5) * 0.05
                         p.sink = 0.2
                         cubies[ci].facelets[fi].props.append(p)
                     }
@@ -496,6 +519,7 @@ class CubeModel {
         var grasses: [Int] = []
         var rocks: [Int] = []
         var walls: [Int] = []      // M20: structural wall pieces (Ruins) for the wall-builder
+        var bigRocks: [Int] = []   // M20: MegaKit Rock_Big/Rock_Medium — for a solid boulder wall
     }
 
     /// M20 — dress the sealed garden region with Quaternius plants (the reskin of the old procedural
