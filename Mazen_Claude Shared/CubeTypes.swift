@@ -340,6 +340,11 @@ struct Prop {
     /// fit. Only `.importedFoliage` reads it: the gallery normalises every model to one size, but the
     /// garden wants trees big and flowers small, so each scattered plant carries its own scale.
     var extraScale: Float = 1
+    /// M20 — fine tile-local position offset (in tile units, where a tile is 1.0 wide), added on top
+    /// of the coarse 3×3 sub-cell centre. Lets `.importedFoliage` pack many models at sub-metre
+    /// spacing to build a continuous "wall" of bushes/rocks, instead of snapping to the 6 m author grid.
+    var offsetX: Float = 0
+    var offsetY: Float = 0
 
     /// M18 Phase 2 — does this prop remove stand cell (subRow, subCol) of a `grid`×`grid`
     /// tile? Centred on the prop's author sub-cell, it blocks a square of half-extent

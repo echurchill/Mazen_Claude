@@ -233,6 +233,91 @@ class CubeModel {
         }
     }
 
+    /// M20 prototype (Eddie) — a set of sample "natural walls" in the gallery: instead of a stone
+    /// hedge slab, a maze wall is a **run of tightly-aligned bushes and rocks** packed into a
+    /// continuous ridge, so the space reads as natural. Lays four N–S runs in a clear plot EAST of
+    /// the catalog — bushes-only, rocks-only, mixed, and a double-row hedge — to walk between and
+    /// judge (and whether Quaternius is the right pack). Non-solid, so you can walk through to inspect.
+    /// Registry indices come from the Renderer (like `stampGalleryImports`).
+    func stampGalleryWalls(_ flora: GardenFlora) {
+        let n = size, c = n / 2
+        // A clear grassy plot east of the catalog (cols c+5…), north of the imported-models strip.
+        let pLo = max(1, c - 4), pHi = min(n - 2, c)                  // rows 8…12 at size 25
+        let qLo = min(n - 2, c + 5), qHi = min(n - 2, c + 11)         // cols 17…23
+        guard qLo < qHi, pLo < pHi else { return }
+        func inPlot(_ r: Int, _ q: Int) -> Bool { r >= pLo && r <= pHi && q >= qLo && q <= qHi }
+        for r in pLo...pHi {
+            for q in qLo...qHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
+                var op: DirectionMask = []
+                if inPlot(r - 1, q) { op.insert(.north) }
+                if inPlot(r + 1, q) { op.insert(.south) }
+                if inPlot(r, q - 1) { op.insert(.west) }
+                if inPlot(r, q + 1) { op.insert(.east) }
+                if r == c && q == qLo { op.insert(.west) }            // entry from the catalog/spawn
+                cubies[ci].facelets[fi].mazeTile.openings = op
+                cubies[ci].facelets[fi].mazeTile.openEdges = op
+                cubies[ci].facelets[fi].terrain = .grass
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+            }
+        }
+        // Open the catalog side of the entry (row c, col qLo-1 → east).
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: c, col: qLo - 1) {
+            cubies[ci].facelets[fi].mazeTile.openings.insert(.east)
+            cubies[ci].facelets[fi].mazeTile.openEdges.insert(.east)
+            cubies[ci].facelets[fi].tileState = .discovered
+            cubies[ci].facelets[fi].discoveryAmount = 1.0
+        }
+
+        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
+        }
+        // Build one N–S run of packed foliage down the centre of column `q`, spanning the plot rows.
+        // `perTile` models per tile length ⇒ ~19 m / perTile spacing (9 ≈ 2.1 m — tight overlap).
+        let perTile = 9
+        func run(col q: Int, style: Int) {
+            guard qLo <= q, q <= qHi else { return }
+            for r in pLo...pHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
+                for k in 0..<perTile {
+                    let fy = -0.5 + (Float(k) + 0.5) / Float(perTile)          // tile-local Y in [-0.5, 0.5)
+                    let h = hash(r &* 131 &+ q &* 17, style, k &* 7 &+ 3)
+                    // Pick pool + garden-wall scale by style.
+                    let bushes = flora.bushes, rocks = flora.rocks
+                    var pool = bushes; var base: Float = 0.20
+                    switch style {
+                    case 0: pool = bushes;                       base = 0.20    // bushes only
+                    case 1: pool = rocks;                        base = 0.17    // rocks only
+                    case 2: (pool, base) = (h & 1 == 0) ? (bushes, 0.20) : (rocks, 0.17)  // mixed
+                    default: pool = bushes;                      base = 0.20    // double-row hedge
+                    }
+                    guard !pool.isEmpty else { continue }
+                    let idx = pool[Int(h % UInt32(pool.count))]
+                    let jitter = 0.85 + Float((h >> 6) % 30) / 100.0            // 0.85…1.15
+                    // Style 3 = two parallel rows (a thick hedge); others a single jittered row.
+                    let bands: [Float] = style == 3 ? [-0.055, 0.055]
+                                                    : [(Float((h >> 3) % 20) / 20.0 - 0.5) * 0.06]
+                    for ox in bands {
+                        var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
+                                     facing: Heading8(rawValue: Int(h % 8)) ?? .n,
+                                     state: idx, extraScale: base * jitter)
+                        p.offsetX = ox
+                        p.offsetY = fy
+                        cubies[ci].facelets[fi].props.append(p)
+                    }
+                }
+            }
+        }
+        // Four runs on alternating columns, walkable lanes between them.
+        run(col: qLo,     style: 0)   // bushes only
+        run(col: qLo + 2, style: 1)   // rocks only
+        run(col: qLo + 4, style: 2)   // mixed
+        run(col: qLo + 6, style: 3)   // double-row hedge
+    }
+
     /// M20 — the Journey **entry world**: a large world (size 25 → local surface reads nearly
     /// flat, little apparent curvature, Eddie) whose natural-maze garden is only a **bounded entry
     /// region**, SEALED so the player can't wander off into the unauthored rest, and the rest left

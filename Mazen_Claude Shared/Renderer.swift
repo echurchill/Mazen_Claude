@@ -318,7 +318,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
         var assetBufs: [MTLBuffer] = []
         for _ in 0..<maxBuffersInFlight {
-            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 512, options: .storageModeShared)!)
+            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 4096, options: .storageModeShared)!)  // M20: densely-packed foliage walls need headroom (was 512)
         }
         self.assetInstanceBuffers = assetBufs
 
@@ -447,6 +447,8 @@ class Renderer: NSObject, MTKViewDelegate {
                     // Renderer owns the registry indices, so it stamps them after the world is built.
                     let importStates = importedProps.enumerated().filter { $0.element.galleryOnly }.map { $0.offset }
                     w.cubeModel.stampGalleryImports(importStates)
+                    // M20 prototype — sample "natural walls" (packed bushes/rocks) east of the catalog.
+                    w.cubeModel.stampGalleryWalls(gardenFlora())
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
@@ -744,8 +746,8 @@ class Renderer: NSObject, MTKViewDelegate {
                     // slice animation + spin. The asset stays rigid (its instance roundness stays 0);
                     // only its anchor rides the curve, so it no longer pokes through / floats.
                     for prop in props {
-                        let localX = Float(prop.subCol - 1) * step
-                        let localY = Float(prop.subRow - 1) * step
+                        let localX = Float(prop.subCol - 1) * step + prop.offsetX
+                        let localY = Float(prop.subRow - 1) * step + prop.offsetY
                         var placement = model.inflatedPlacement(face: face, row: row, col: col, localX: localX, localY: localY)
                         if sr.isActive && sr.affectedCubies.contains(ci) { placement = sliceMat * placement }
                         let tileM = spin * placement
