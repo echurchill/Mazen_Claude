@@ -70,6 +70,14 @@ M19 tree scatter on maze tiles. **Validate before trusting the garden.** (Tracke
 6. **Seam-groove affordance** — the subtle floor marking that teaches "this slice turns," no UI.
    `[INVENT]` (small, load-bearing). *Min:* a decal on the twistable seam tiles.
 
+> **Verified 2026-07-17 — the lock runs on a curved world.** The M16.6 lock was only ever built/run
+> flat; before staging it in the roundness-1 garden I drove the whole puzzle on a roundness-1.0 model
+> headlessly (solve switch → bond releases → raise cylinder → turn → **door unseals**: all pass) and
+> rendered the full curved lock — plinth (mat 21), switch caps + alignment-cylinder drum (mat 22),
+> caustic glyphs — under Metal API+GPU validation with zero errors. Confirmed by inspection that the
+> lock's logic reads only cube-topology (no roundness / inflated geometry). **Arc 2's one open risk is
+> cleared** — re-staging onto the garden is pure authoring.
+
 ### Arc 2 — SPINE (0:09–0:15): re-stage the verified lock→enter loop onto the garden
 7. **Temple on a garden slice** — a bonded structure that refuses the twist (refusal wobble + red
    flare). `[have]` (M16). *Min:* reuse the exact overworld temple bond, placed in the garden.
