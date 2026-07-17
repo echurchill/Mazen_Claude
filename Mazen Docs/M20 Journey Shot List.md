@@ -13,8 +13,12 @@ size-25 roundness-1.0 world (so the local surface reads nearly flat). Orientatio
 - **row 7 = north (deep in the garden)** … **row 17 = south (toward home)**
 - **col 7 = west** … **col 17 = east**
 - **Spawn** = **(12, 12)**, dead-center, with a 3×3 clearing (rows 11–13, cols 11–13).
-- **Home portal** (walk-through, back to the home world) = **(13, 12)**, one tile south of spawn.
 - The region is **sealed** at its boundary (no escape); everything outside stays fogged/unbuilt.
+
+**Forward-only (Eddie):** once you're in the garden there is **no way back to home** — only onward and
+forward. The spike's return-to-home portal (next to spawn) is **removed** for the journey. The two
+exits are *deeper* (into the temple → interior) and, at the very end, the *onward arch*. (The current
+`V` spike still has the return portal as a dev convenience; staging drops it.)
 
 **Verified prerequisite:** the M16.6 lock runs correctly on this curved world (logic + render), so
 everything below is authoring, not new systems.
@@ -30,8 +34,8 @@ everything below is authoring, not new systems.
 
 ## The route (designed discovery order)
 
-1. **Arrival** — fade in at spawn (12,12). Calm clearing; home turning overhead in the sky. The way
-   home (portal) sits behind you (south). Nowhere obvious to go → you wander. *[Arc 1]*
+1. **Arrival** — fade in at spawn (12,12). Calm clearing; home turning overhead in the sky. No way
+   back — nowhere obvious to go → you wander deeper. *[Arc 1]*
 2. **First twist (the teaching)** — a short walk **west** dead-ends at a hedge with a **seam groove**
    in the paving. On a hunch you twist the slice → the dead-end swings away, opening the way north. The
    "oh, I can move the world" hook, taught by a seam, not a tutorial. *[Arc 1]*
@@ -53,8 +57,7 @@ everything below is authoring, not new systems.
 
 | # | Beat | Location (row, col) | Machinery reused | Authoring notes |
 |---|---|---|---|---|
-| 1 | Arrival / spawn | **(12,12)** | garden stamp | 3×3 clearing (exists) |
-| 1 | Way home portal | **(13,12)** | `.portal`/`.portalLamp` (exists) | stone-arch look (Arc 1 glue) |
+| 1 | Arrival / spawn | **(12,12)** | garden stamp | 3×3 clearing (exists); **no return portal** (forward-only) |
 | 2 | First-twist dead-end + **seam groove** | **(12,9)** (west of spawn) | twist (`Q`) + seam decal `[INVENT-small]` | carve a dead-end here; decal on the twistable seam tile |
 | 3 | **Temple** (bonded, on a slice) | body **rows 8–9, cols 11–13**; door **(9,12)** facing south | M13/M16 bond + refusal (`stampDemoProps` temple, re-placed) | door faces the approaching player; temple + door-plinth share one twistable slice |
 | 3 | Four indicator points | on the temple face | dial/switch-state lights `[glue]` | 3 steady, 1 flicker (mirror switch mask) |
@@ -66,7 +69,7 @@ everything below is authoring, not new systems.
 | 5 | Switch-plinth #4 (**hidden**, off) | **(15,15)** SE hedge-spiral | " | the one to find + engage |
 | 6 | Alignment cylinder / turn | at the door plinth (10,12) | M16.6 rotator (verified) | spawns on the ready plinth |
 | 6 | Temple door → interior | door (9,12) → `templeInterior` | M15 portal (exists) | seam to the interior world |
-| 7 | Onward arch (Arc 3, dark) | **(12,17)** east edge | knowledge-gated portal `[INVENT-small]` | inert until the memory flag; built in Arc 3 |
+| 7 | Onward arch (Arc 3, dark) | **(12,17)** east edge | knowledge-gated portal `[INVENT-small]` | **inert until you exit the temple carrying the memory** — then it lights (the re-see reward). Built in Arc 3 |
 | — | Counterpart sky (home overhead) | n/a (sky) | M11 sky-object | wire home as the garden's sky world |
 
 ## Map (rows 7–17 × cols 7–17)
@@ -78,16 +81,17 @@ everything below is authoring, not new systems.
    row  9      ·  ·  ①  ·  ·  D  ·  ·  ②  ·  ·      D = temple door (faces south)
    row 10      ·  ·  ·  ·  ·  P  L  ·  ·  ·  ·      P = door plinth   L = clue slab
    row 11      ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·
-   row 12      ·  ·  ⟳  ·  · [S] ·  ·  ·  ·  A      S = spawn   ⟳ = first-twist seam   A = onward arch (dark)
-   row 13      ·  ·  ·  ·  ·  H  ·  ·  ·  ·  ·      H = way-home portal
+   row 12      ·  ·  ⟳  ·  · [S] ·  ·  ·  ·  A      S = spawn   ⟳ = first-twist seam   A = onward arch (dark until the memory)
+   row 13      ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·
    row 14      ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·
    row 15      ·  ·  ③  ·  ·  ·  ·  ·  ④  ·  ·      ④ = hidden switch (SE hedge-spiral)
    row 16      ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·
-   row 17      ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·      south / home
+   row 17      ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·      south
 ```
 
 Route: **[S]** → west to **⟳** (first twist) → north to the temple **▓/D**, refused → read **L** + **P**
-→ find switches **①②③** + hidden **④** → engage ④ → back to **P**, turn → door opens → step inside.
+→ find switches **①②③** + hidden **④** → engage ④ → back to **P**, turn → door opens → step inside →
+(memory) → back out → **A** lights → onward. **No way back home** — forward only.
 
 ## Reconciling the mechanism (script "dials" → M16.6 switches)
 
@@ -108,8 +112,10 @@ that reads as comprehension, not switch-hunting (that's the Phase 4 fresh-eyes t
   hand-author every tile.
 - **D-D — Hidden switch motif:** the 4th in a **hedge-spiral** you'd skip (recommended, matches the
   script) vs. just a far dead-end.
-- **D-E — Temple slice:** confirm the temple + door-plinth sit on **one twistable slice** so the turn
-  opens the door (staging detail; flagging so the placement above is chosen to satisfy it).
+
+*(Resolved: **switches** = keep the M16.6 switch-plinths; **forward-only** — the return-home portal is
+removed. The temple + door-plinth-share-a-twistable-slice constraint is a staging detail, handled in
+Phase 1, not a design decision.)*
 
 ## After sign-off — Phase 1 order
 
