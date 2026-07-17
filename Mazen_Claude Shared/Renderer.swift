@@ -412,13 +412,17 @@ class Renderer: NSObject, MTKViewDelegate {
         // with walk-through portals, an un-cleared "forward held" would ping-pong through gates.
         gameState.forwardHeld = false; gameState.backwardHeld = false
         let departingMode = gameState.camera.mode   // FPV stays FPV across worlds (Eddie, M15.2)
+        let dest = Self.portalDestinations.indices.contains(destinationID)
+            ? Self.portalDestinations[destinationID] : "moon"
+        // M20: a nested DESCEND — stepping into the temple interior from an already-pushed world (the
+        // garden) — must PUSH a new world, not pop the way the toggle worlds do. (Toggling the interior
+        // off with the I key still pops, because then we're already IN it: gameState.name == dest.)
+        let nestedEnter = dest == "temple-interior" && gameState.name != dest
         let pushed: Bool
-        if worldStack.count > 1 {
+        if worldStack.count > 1 && !nestedEnter {
             exitWorld()
             pushed = false
         } else {
-            let dest = Self.portalDestinations.indices.contains(destinationID)
-                ? Self.portalDestinations[destinationID] : "moon"
             let key = WorldKey(destination: dest, origin: gameState.name)
             let world = worldRegistry.world(for: key) {
                 // First visit — build the destination. (The moon is pre-bound at init, so its
