@@ -269,9 +269,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // foliage materials fall back gracefully. Repoint here if new card assets land.
         self.leafArray = nil
         self.greeneryArray = nil
-        self.treeSpriteArray = TextureLoader.loadRGBAArray(device: device,
-            urls: Renderer.treeSprites.map { URL(fileURLWithPath: "\(modelsRoot)/WenrexaTrees/\($0).png") },
-            size: 384, centerOnTrunk: true)
+        self.treeSpriteArray = nil   // M20: WenrexaTrees billboards removed (Eddie) — folder no longer used
         self.causticArray = TextureLoader.makeCausticArray(device: device)
         self.texSampler = PipelineFactory.makeSampler(device: device)
         // A 1×1 array-texture placeholder for the unconditionally-declared foliage slots (see the
@@ -712,7 +710,7 @@ class Renderer: NSObject, MTKViewDelegate {
             let name = p.name
             func has(_ s: String) -> Bool { name.range(of: s, options: .caseInsensitive) != nil }
             if has("Snow") { continue }
-            if name.hasPrefix("Ruins ") && has("Wall") && !has("Flag") && !has("ArchRound") { f.walls.append(i) }   // ArchRound too holey (Eddie)
+            if name.hasPrefix("Ruins ") && has("Wall") && !has("Flag") && !has("Arch") { f.walls.append(i) }   // ArchRound + ArchGothic too holey (Eddie); Wall_Half kept (clean half-width)
             else if has("Path")                                                   { continue }   // MegaKit RockPath = paths, not wall rocks
             else if (has("Rock") && name.hasPrefix("Nature "))
                  || (name.hasPrefix("MegaKit ") && (has("Rock") || has("Pebble"))) { f.rocks.append(i) }   // + textured MegaKit rocks

@@ -90,18 +90,9 @@ class CubeModel {
     /// M20 — WenrexaTrees grouped into single trees rendered as **intersecting billboard cards**
     /// (each entry = the sprite slices, in view order, that form one tree). Eddie's groupings so far;
     /// the rest are singletons pending his mapping. (Slice = filename−1: "01"→0 … "27"→26.)
-    static let treeGroups: [[Int]] = [
-        [23, 24, 25, 26],   // filenames 24–27: Tall Purple
-        [0, 1, 2],          // filenames 1–3: Wide Purple
-        [11, 10, 9],        // filenames 12,11,10: Dead
-        [7, 8, 17, 5],      // filenames 8,9,18,6: Orange
-        [20, 21, 22],       // filenames 21–23: Dark Red
-        [6, 16],            // filenames 7,17: Tall Green
-        [12, 13],           // filenames 13,14: Dark Green
-        [3, 4],             // filenames 4,5:  Red Tree
-        [18, 19],           // filenames 19,20: Dark Yellow
-        // filenames 15,16 (slices 14,15) intentionally omitted — bad-looking, deleted (Eddie).
-    ]
+    /// M20: emptied — the WenrexaTrees billboard sprites were removed (Eddie), so no tree groups are
+    /// placed in the gallery. (`placeTreeGroup` / `.treeBillboard` remain as inert scaffolding.)
+    static let treeGroups: [[Int]] = []
 
     /// Display names for `treeGroups` (same order). Shown in the gallery HUD.
     static let treeGroupNames = [
@@ -379,19 +370,22 @@ class CubeModel {
         }
         // Lay ~1.5 m rock-path stones down a column: 3 per tile, seated slightly into the ground.
         let stoneScale = 1.5 * (worldScale.eyeHeight / 1.7) / 0.85
+        let perTile = 9                                    // dense — a packed stone path (Eddie)
         func layStones(col q: Int) {
             for r in pLo...pHi {
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: q) else { continue }
-                for k in 0..<3 {
-                    let h = hash(r &* 131 &+ q &* 17, 7, k &* 5 &+ 2)
-                    var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
-                                 facing: Heading8(rawValue: Int(h % 8)) ?? .n,
-                                 state: stones[Int(h % UInt32(stones.count))],
-                                 extraScale: stoneScale * (0.8 + Float((h >> 6) % 40) / 100.0))
-                    p.offsetY = -0.5 + (Float(k) + 0.5) / 3.0
-                    p.offsetX = (Float((h >> 3) % 20) / 20.0 - 0.5) * 0.15
-                    p.sink = 0.2
-                    cubies[ci].facelets[fi].props.append(p)
+                for k in 0..<perTile {
+                    for band in [-0.22, 0.0, 0.22] as [Float] {   // three across ⇒ a full-width stone path
+                        let h = hash(r &* 131 &+ q &* 17, 7, k &* 13 &+ Int(band * 100))
+                        var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
+                                     facing: Heading8(rawValue: Int(h % 8)) ?? .n,
+                                     state: stones[Int(h % UInt32(stones.count))],
+                                     extraScale: stoneScale * (0.8 + Float((h >> 6) % 40) / 100.0))
+                        p.offsetY = -0.5 + (Float(k) + 0.5) / Float(perTile)
+                        p.offsetX = band + (Float((h >> 3) % 20) / 20.0 - 0.5) * 0.08
+                        p.sink = 0.2
+                        cubies[ci].facelets[fi].props.append(p)
+                    }
                 }
             }
         }
