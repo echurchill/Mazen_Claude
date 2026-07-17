@@ -14,9 +14,11 @@
 
 - Rock-path stone models (MegaKit `RockPath_*`) are prototyped in the gallery (west of the catalog): **just paved path / stones on paved path / just stones**. Once Eddie picks a look, the next step is a **real path pass** — lay rock-path stones along the garden's paved path tiles to replace/augment the current path texture. `Pebble_*` models are also available for finer scatter.
 
-## Unused model folders (audit 2026-07-17)
+## Model folder cleanup (done 2026-07-17)
 
-Not referenced at runtime (candidates to remove for disk hygiene; leaving in place for now):
-`Modular Village`, `modular_fort_01_2k`, `modular_terrain_collections`, `othertrees`, `pinetree`,
-`para_CC0_tex-pack-hedges` (was the *source* of the now-bundled `hedge_*` textures; folder itself isn't loaded),
-`old_military_crate_2k` & `stone_fire_pit_2k` (only commented-out references). (`Quaternius Ultimate Stylized Nature Pack` already deleted.)
+`Mazen_Models` pruned to only what's loaded: **Dungeons Pack, Nature Pack, Ruins Pack, Stylized
+Nature MegaKit** (eval packs), **Modular Temple** (flags/vase), **horse_statue_01_2k**,
+**modular_house_collection** (the splitting house). Deleted (unused, gitignored): Quaternius pack,
+Modular Village, modular_fort_01_2k, modular_terrain_collections, othertrees, pinetree,
+para_CC0_tex-pack-hedges (its `hedge_*` textures are already bundled in the app), old_military_crate_2k,
+stone_fire_pit_2k, WenrexaTrees (billboard sprites removed), tree_stump_01/02_2k. All re-downloadable if needed.
