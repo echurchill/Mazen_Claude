@@ -444,6 +444,8 @@ class Renderer: NSObject, MTKViewDelegate {
                     w.cubeModel.stampGardenVegetation(gardenFlora())
                     // M20 — replace the hedge maze walls with the packed natural walls (Ruins + rocks/bushes).
                     w.cubeModel.stampGardenWalls(wallFlora())
+                    // M20 — a stone path marking the correct route between the puzzle elements (tapers off).
+                    w.cubeModel.stampGardenPath(pathStones())
                 case "gallery":
                     // M20 dev tool — procedural prop/glyph catalog (Y key) + the natural-wall
                     // prototype east of it. Size 25 to fit the catalog. Stamp partial-reveals.

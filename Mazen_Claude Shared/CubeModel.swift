@@ -543,6 +543,24 @@ class CubeModel {
         var bigRocks: [Int] = []   // M20: MegaKit Rock_Big/Rock_Medium — for a solid boulder wall
     }
 
+    /// M20 (Eddie) — tiles that must stay CLEAR of dressing so nothing hides a puzzle element: every
+    /// tile holding a switch / plinth / temple pillar / sealed door / cylinder, plus its 4 neighbours.
+    /// Scanned from the actual placed props (so it tracks whatever the lock stamped). +Z face only.
+    private func gardenClearTiles() -> Set<[Int]> {
+        var s = Set<[Int]>()
+        let puzzle: Set<PropKind> = [.switchBase, .switchCap, .plinth, .obelisk, .alignmentCylinder]
+        for r in 0..<size {
+            for c in 0..<size {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                let props = cubies[ci].facelets[fi].props
+                if props.contains(where: { puzzle.contains($0.kind) || ($0.kind == .portal && $0.state == 1) }) {
+                    for (dr, dc) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] { s.insert([r + dr, c + dc]) }
+                }
+            }
+        }
+        return s
+    }
+
     /// M20 — dress the sealed garden region with Quaternius plants (the reskin of the old procedural
     /// cone/card scatter). NON-solid: the hedges still do all the blocking, these are pure scenery, so
     /// the maze stays fully walkable. Deterministic (spatial hash, no RNG) so the garden looks the
@@ -552,7 +570,7 @@ class CubeModel {
         let R = 5
         let rLo = max(0, c - R), rHi = min(n - 1, c + R)
         let cLo = max(0, c - R), cHi = min(n - 1, c + R)
-        let portalTile = (min(rHi, c + 1), c)
+        let clear = gardenClearTiles()   // keep puzzle elements visible (Eddie)
 
         func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
             var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
@@ -580,7 +598,7 @@ class CubeModel {
 
         for r in rLo...rHi {
             for col in cLo...cHi {
-                if (r, col) == (c, c) || (r, col) == portalTile { continue }
+                if (r, col) == (c, c) || clear.contains([r, col]) { continue }
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
                 let h = hash(r * 37, col, r &+ col)
                 let roll = h % 100
@@ -600,17 +618,16 @@ class CubeModel {
             }
         }
         // Eddie — considerably MORE greenery ("can't add too much"; non-solid, so it never impedes
-        // movement): a dense second pass over the whole region, and an EXTRA-heavy cluster swallowing
-        // the mossy temple (rows c-4…c-1, cols c-2…c+2).
+        // movement): a dense EVEN second pass over the whole region (no center-heavy cluster — the
+        // distribution should read uniform), skipping the puzzle tiles so nothing hides a switch/plinth.
         for r in rLo...rHi {
             for col in cLo...cHi {
-                if (r, col) == (c, c) || (r, col) == portalTile { continue }
+                if (r, col) == (c, c) || clear.contains([r, col]) { continue }
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
-                let temple = r >= c - 4 && r <= c - 1 && col >= c - 2 && col <= c + 2
-                for k in 0..<(temple ? 6 : 2) {
+                for k in 0..<2 {
                     let h = hash(r &* 53 &+ col &* 3, k &* 29 &+ 11, r &* col &+ k &* 7)
                     let roll = h % 100
-                    if roll < 55       { place(ci, fi, flora.bushes,  bushScale * (temple ? 1.35 : 1.0), h, corner: false) }
+                    if roll < 55       { place(ci, fi, flora.bushes,  bushScale,  h, corner: false) }
                     else if roll < 80  { place(ci, fi, flora.grasses, grassScale, h, corner: false) }
                     else if roll < 92  { place(ci, fi, flora.flowers, flowerScale, h, corner: false) }
                     else               { place(ci, fi, flora.rocks,   rockScale,  h, corner: false) }
@@ -631,6 +648,7 @@ class CubeModel {
         let rLo = max(0, c - R), rHi = min(n - 1, c + R)
         let cLo = max(0, c - R), cHi = min(n - 1, c + R)
         foliageWalls = true
+        let clear = gardenClearTiles()              // keep walls off the puzzle tiles + neighbours (Eddie)
         let mUnit = worldScale.eyeHeight / 1.7
         let wallScale = 4.0 * mUnit / 0.85          // ~4 m, matching the hedges they replace
         let rockScale = wallScale * 0.7, bushScale = wallScale * 0.5
@@ -655,7 +673,8 @@ class CubeModel {
         // A foliage wall along ONE edge of a tile (only if that edge is closed = a maze wall).
         func edge(_ r: Int, _ cc: Int, _ dir: DirectionMask) {
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: cc),
-                  !cubies[ci].facelets[fi].mazeTile.openings.contains(dir) else { return }
+                  !cubies[ci].facelets[fi].mazeTile.openings.contains(dir),
+                  !clear.contains([r, cc]) else { return }
             let type = wallType(r, cc)
             let horiz = dir == .north || dir == .south
             let side: Float = (dir == .north || dir == .west) ? -0.46 : 0.46
@@ -689,6 +708,64 @@ class CubeModel {
                 edge(r, cc, .north); edge(r, cc, .west)
                 if r == rHi { edge(r, cc, .south) }
                 if cc == cHi { edge(r, cc, .east) }
+            }
+        }
+    }
+
+    /// M20 (Eddie) — a stone path (MegaKit RockPath) marking the CORRECT route between the puzzle
+    /// elements: dense on the "spine" (spawn ↔ switches ↔ door plinth ↔ temple), then TAPERING off as
+    /// you go the wrong way (fewer stones the further a tile is, along the maze, from the right path).
+    /// `stones` = the MegaKit RockPath registry indices (Renderer supplies them). Runs after build.
+    func stampGardenPath(_ stones: [Int]) {
+        guard !stones.isEmpty else { return }
+        let n = size, c = n / 2, R = 5
+        let rLo = max(0, c - R), rHi = min(n - 1, c + R)
+        let cLo = max(0, c - R), cHi = min(n - 1, c + R)
+        // The correct path — the same spine stampGardenMaze carved — plus the spawn clearing.
+        var spine = Set<[Int]>()
+        for col in (c - 3)...(c + 3) { spine.insert([c, col]) }
+        for row in (c - 3)...(c + 3) { spine.insert([row, c - 3]); spine.insert([row, c + 3]) }
+        for row in (c - 3)...c { spine.insert([row, c]) }
+        for r in (c - 1)...(c + 1) { for cc in (c - 1)...(c + 1) { spine.insert([r, cc]) } }
+        // BFS distance from the spine over WALKABLE tiles (open edges), so the taper follows the maze.
+        var dist = [[Int]: Int](); var q = [[Int]](); var head = 0
+        for t in spine { dist[t] = 0; q.append(t) }
+        while head < q.count {
+            let t = q[head]; head += 1; let d = dist[t]!
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: t[0], col: t[1]) else { continue }
+            let op = cubies[ci].facelets[fi].mazeTile.openings
+            for (ok, nt) in [(op.contains(.north), [t[0]-1, t[1]]), (op.contains(.south), [t[0]+1, t[1]]),
+                             (op.contains(.west), [t[0], t[1]-1]), (op.contains(.east), [t[0], t[1]+1])]
+            where ok && nt[0] >= rLo && nt[0] <= rHi && nt[1] >= cLo && nt[1] <= cHi && dist[nt] == nil {
+                dist[nt] = d + 1; q.append(nt)
+            }
+        }
+        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
+        }
+        let stoneScale = 1.5 * (worldScale.eyeHeight / 1.7) / 0.85    // ~1.5 m flat stepping stones
+        for (t, d) in dist {
+            let per: Int, chance: UInt32
+            switch d {                                   // dense on-path, tapering off it
+            case 0:  per = 5; chance = 100
+            case 1:  per = 3; chance = 55
+            case 2:  per = 2; chance = 25
+            default: per = 1; chance = 8
+            }
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: t[0], col: t[1]) else { continue }
+            for k in 0..<per {
+                let h = hash(t[0] &* 131 &+ t[1] &* 17, 9, k &* 7 &+ 3)
+                if h % 100 >= chance { continue }
+                var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
+                             facing: Heading8(rawValue: Int(h % 8)) ?? .n,
+                             state: stones[Int((h >> 8) % UInt32(stones.count))],
+                             extraScale: stoneScale * (0.8 + Float((h >> 6) % 40) / 100.0))
+                p.offsetX = Float((h >> 3) % 20) / 20.0 - 0.5
+                p.offsetY = Float((h >> 13) % 20) / 20.0 - 0.5
+                p.sink = 0.25
+                cubies[ci].facelets[fi].props.append(p)
             }
         }
     }
