@@ -15,6 +15,18 @@
 - **Temple indicator points still wrong / missing** (the four-points-on-the-structure beat) — deferred,
   needs Eddie's eye (see shot list step 3).
 
+## Twist-safe walls — why the garden keeps its hedges (2026-07-18)
+
+**Constraint discovered the hard way:** the garden is a twistable Rubik's maze, and a maze wall must
+stay correct *through a twist*. Only the **dynamic hedge-wall mesh** does — it re-derives from each
+tile's topology across the WHOLE cube every frame. **Static stamped foliage/stone-wall props cannot
+replace it**, because a door-twist is a whole-cube slice rotation that (a) rotates tiles in from
+*outside* the small stamped +Z region (unstamped ⇒ invisible walls when the hedge mesh is suppressed),
+and (b) rearranges everything. So the hedge mesh stays as the twist-safe backbone; the Ruins pieces +
+rocks/bushes ride on it as overgrowth. **To get a true STONE look on the walls that survives twists,
+re-style the wall MESH/material (materialID 1) to stone/ruin — a rendering change, not stamped props.**
+That's the real path if Eddie wants stone (not hedge) walls; flagged for a focused pass.
+
 ## Rendering / assets
 
 - **MegaKit custom shaders (Eddie, 2026-07-17).** The Stylized Nature MegaKit ships with *custom shaders* (in its `Engine Projects` / Unity+Unreal material graphs) that "might prove interesting." We currently use only the pack's diffuse atlases through our ModelIO path — the shaders aren't wired in and our pipeline can't consume Unity/Unreal material graphs directly. **Worth a look:** are any of the effects (e.g. wind sway on foliage, stylized rock/path shading) reproducible as a Metal material in our shader (`Shaders.metal`)? Could give the nature dressing motion/life beyond the flat/atlas look.
