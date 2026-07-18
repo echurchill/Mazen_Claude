@@ -802,15 +802,22 @@ class CubeModel {
             }
             let overgrowth = skipOvergrowth ? 0 : [2, 4, 6, 8][type]
             if overgrowth > 0 {
-                let inward = side < 0 ? side + 0.12 : side - 0.12
-                for k in 0..<overgrowth {
-                    let t = -0.5 + (Float(k) + 0.5) / Float(overgrowth)
-                    let h = hash(canon &* 31 &+ 2, k &* 7 &+ type)
-                    let rock = h % 100 < 45 && !rocks.isEmpty
-                    let (ox, oy) = pos(t, inward)
-                    put(rock ? rocks : bushes, rock ? rockScale : bushScale,
-                        rock ? 0.20 : 0.10, Heading8(rawValue: Int(h % 8)) ?? .n, h >> 3, ox, oy)
+                // Overgrow BOTH faces of the wall (Eddie). The owner dresses the shared wall once, so
+                // its outward face is the neighbour's side — placing it here fills that side too (the
+                // neighbour never dresses this edge). `salt` distinguishes the two faces so they aren't
+                // a mirror image; both are twist-invariant (canon + a fixed inward/outward flag).
+                func scatter(_ across: Float, _ salt: Int) {
+                    for k in 0..<overgrowth {
+                        let t = -0.5 + (Float(k) + 0.5) / Float(overgrowth)
+                        let h = hash(canon &* 31 &+ salt, k &* 7 &+ type)
+                        let rock = h % 100 < 45 && !rocks.isEmpty
+                        let (ox, oy) = pos(t, across)
+                        put(rock ? rocks : bushes, rock ? rockScale : bushScale,
+                            rock ? 0.20 : 0.10, Heading8(rawValue: Int(h % 8)) ?? .n, h >> 3, ox, oy)
+                    }
                 }
+                scatter(side < 0 ? side + 0.12 : side - 0.12, 2)   // this tile's (inner) face
+                scatter(side < 0 ? side - 0.12 : side + 0.12, 3)   // the neighbour's (outer) face
             }
         }
         edge(.north); edge(.west)
