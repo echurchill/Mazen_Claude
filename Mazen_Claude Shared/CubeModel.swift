@@ -647,10 +647,8 @@ class CubeModel {
         let n = size, c = n / 2, R = 5
         let rLo = max(0, c - R), rHi = min(n - 1, c + R)
         let cLo = max(0, c - R), cHi = min(n - 1, c + R)
-        // Eddie: KEEP the hedge maze walls as the readable structure ("bring back all the walls") — do
-        // NOT suppress them (foliageWalls stays false). The packed Ruins/rock/bush walls placed below
-        // sit ON them as overgrowth, so the maze stays legible but reads natural/ruined.
-        let clear = gardenClearTiles()              // keep walls off the puzzle tiles + neighbours (Eddie)
+        foliageWalls = true                         // the stone walls REPLACE the hedges (Eddie)
+        let clear = gardenClearTiles()              // overgrowth skips puzzle tiles (walls still placed there)
         let mUnit = worldScale.eyeHeight / 1.7
         let wallScale = 4.0 * mUnit / 0.85          // ~4 m, matching the hedges they replace
         let rockScale = wallScale * 0.7, bushScale = wallScale * 0.5
@@ -672,29 +670,32 @@ class CubeModel {
             p.offsetX = ox; p.offsetY = oy; p.sink = sink
             cubies[ci].facelets[fi].props.append(p)
         }
-        // A foliage wall along ONE edge of a tile (only if that edge is closed = a maze wall).
+        // A stone wall along ONE edge of a tile (only if that edge is closed = a maze wall). A wall
+        // piece is placed on EVERY closed edge so the maze reads clearly (Eddie: bring back all the
+        // stone walls) — the boundary-distance `type` only grades how OVERGROWN it is (outermost clean,
+        // innermost lush). Walls go on puzzle-tile edges too (they don't hide the centre); only the
+        // overgrowth skips puzzle tiles so nothing buries a switch/plinth.
         func edge(_ r: Int, _ cc: Int, _ dir: DirectionMask) {
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: cc),
-                  !cubies[ci].facelets[fi].mazeTile.openings.contains(dir),
-                  !clear.contains([r, cc]) else { return }
+                  !cubies[ci].facelets[fi].mazeTile.openings.contains(dir) else { return }
             let type = wallType(r, cc)
             let horiz = dir == .north || dir == .south
             let side: Float = (dir == .north || dir == .west) ? -0.46 : 0.46
             let wallFacing: Heading8 = horiz ? .n : .e
             func pos(_ t: Float, _ across: Float) -> (Float, Float) { horiz ? (t, across) : (across, t) }
-            if type < 3 && !flora.walls.isEmpty {          // structural Ruins wall pieces
-                for k in 0..<5 {
-                    let t = -0.5 + (Float(k) + 0.5) / 5.0
+            if !flora.walls.isEmpty {                       // structural Ruins wall pieces on every edge
+                for k in 0..<6 {
+                    let t = -0.5 + (Float(k) + 0.5) / 6.0
                     let h = hash(r &* 131 &+ cc &* 17, Int(dir.rawValue) &* 31 &+ 1, k &* 7 &+ type)
                     let (ox, oy) = pos(t, side)
                     put(ci, fi, flora.walls, wallScale, 0.03, wallFacing, h, ox, oy)
                 }
             }
-            if type >= 1 {                                  // overgrowth: rocks + bushes at the base
-                let per = type == 3 ? 7 : 5
+            let overgrowth = clear.contains([r, cc]) ? 0 : [0, 3, 5, 7][type]   // more inward; none by puzzles
+            if overgrowth > 0 {
                 let inward = side < 0 ? side + 0.12 : side - 0.12
-                for k in 0..<per {
-                    let t = -0.5 + (Float(k) + 0.5) / Float(per)
+                for k in 0..<overgrowth {
+                    let t = -0.5 + (Float(k) + 0.5) / Float(overgrowth)
                     let h = hash(r &* 131 &+ cc &* 17, Int(dir.rawValue) &* 31 &+ 2, k &* 7 &+ type)
                     let rock = h % 100 < 45 && !flora.rocks.isEmpty
                     let (ox, oy) = pos(t, inward)
