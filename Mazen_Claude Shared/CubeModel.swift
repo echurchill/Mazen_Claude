@@ -764,6 +764,12 @@ class CubeModel {
         let op = facelet.mazeTile.openings
         let type = min(3, Int(facelet.mazeTile.wallType))
         let seed = UInt32(truncatingIfNeeded: facelet.mazeTile.styleSeed)
+        // How many quarter-turns this tile has accrued through slice-twists (kept in lockstep with
+        // `openings` by applySliceRotation, same as the floor UVs). We seed the decoration off the
+        // edge's CANONICAL (pre-twist) direction — `dir` rotated back by `uvTurns` — so a given physical
+        // wall keeps the SAME pieces on the SAME side as the tile turns, instead of regenerating in the
+        // world frame (which made rocks/bushes swap identity and side on every Q rotation).
+        let uvTurns = Int(facelet.mazeTile.uvTurns)
         var out: [Prop] = []
         func hash(_ a: Int, _ b: Int) -> UInt32 {
             var v = seed &+ UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663)
@@ -786,10 +792,11 @@ class CubeModel {
             let horiz = dir == .north || dir == .south
             let side: Float = (dir == .north || dir == .west) ? -0.46 : 0.46
             let wallFacing: Heading8 = horiz ? .n : .e
+            let canon = Int(dir.rotated(quarterTurns: -uvTurns).rawValue)   // twist-invariant edge id
             func pos(_ t: Float, _ across: Float) -> (Float, Float) { horiz ? (t, across) : (across, t) }
             for k in 0..<6 {                               // structural wall pieces span the edge
                 let t = -0.5 + (Float(k) + 0.5) / 6.0
-                let h = hash(Int(dir.rawValue) &* 31 &+ 1, k &* 7 &+ type)
+                let h = hash(canon &* 31 &+ 1, k &* 7 &+ type)
                 let (ox, oy) = pos(t, side)
                 put(walls, wallScale, 0.03, wallFacing, h, ox, oy)
             }
@@ -798,7 +805,7 @@ class CubeModel {
                 let inward = side < 0 ? side + 0.12 : side - 0.12
                 for k in 0..<overgrowth {
                     let t = -0.5 + (Float(k) + 0.5) / Float(overgrowth)
-                    let h = hash(Int(dir.rawValue) &* 31 &+ 2, k &* 7 &+ type)
+                    let h = hash(canon &* 31 &+ 2, k &* 7 &+ type)
                     let rock = h % 100 < 45 && !rocks.isEmpty
                     let (ox, oy) = pos(t, inward)
                     put(rock ? rocks : bushes, rock ? rockScale : bushScale,
