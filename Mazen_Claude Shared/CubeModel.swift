@@ -760,12 +760,15 @@ class CubeModel {
     ///    neighbourSeed`), which is identical whichever tile owns it, and invariant as they turn together.
     /// 2. **Foliage** is NOT owner-based: each tile overgrows the INNER face (toward its own centre) of
     ///    its *own* closed edges, seeded by its *own* tile. A shared wall still gets both faces (each
-    ///    neighbour dresses its side), but with no handoff, so a twist carries each tile's foliage with
-    ///    it. The canonical edge id (`dir` un-rotated by `uvTurns`, the twist accumulator kept in
-    ///    lockstep with `openings`) keeps a tile's pieces put on the right side as it turns.
+    ///    neighbour dresses its side), but with no handoff, so a twist carries each tile's foliage with it.
     ///
-    /// `skipOvergrowth` (a puzzle-clear tile) drops the foliage but keeps the wall. `walls`/`rocks`/
-    /// `bushes` are registry indices; scales are the Renderer's metre fit.
+    /// Everything is expressed in a **rigid edge frame** (outward normal + a tangent that rotates with
+    /// the edge) and selected by the **canonical edge id** (`dir` un-rotated by `uvTurns`, the twist
+    /// accumulator kept in lockstep with `openings`). So the SAME tile always draws a given wall (owner
+    /// chosen by tile identity, not by N/W which flips on a turn), each piece keeps its slot and its
+    /// facing, and the whole arrangement simply rotates rigidly with the tile — no reordering, mirroring,
+    /// or hole-pattern churn on a twist. `skipOvergrowth` (a puzzle-clear tile) drops the foliage but
+    /// keeps the wall. `walls`/`rocks`/`bushes` are registry indices; scales are the Renderer's metre fit.
     func dressedWallProps(_ facelet: MazeFacelet, face: CubeFace, row: Int, col: Int,
                           walls: [Int], rocks: [Int], bushes: [Int],
                           wallScale: Float, rockScale: Float, bushScale: Float,
@@ -792,10 +795,6 @@ class CubeModel {
             guard let f = faceletAt(face: face, row: row + dr, col: col + dc) else { return nil }
             return (f.cubieIndex, f.faceletIndex)
         }
-        func neighborDiscovered(_ dir: DirectionMask) -> Bool {
-            guard let (nci, nfi) = neighbor(dir) else { return false }
-            return cubies[nci].facelets[nfi].tileState == .discovered
-        }
         func put(_ pool: [Int], _ scale: Float, _ sink: Float, _ facing: Heading8, _ h: UInt32, _ ox: Float, _ oy: Float) {
             guard !pool.isEmpty else { return }
             var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: facing,
@@ -803,49 +802,60 @@ class CubeModel {
             p.offsetX = ox; p.offsetY = oy; p.sink = sink
             out.append(p)
         }
-        // Geometry of one edge: orientation, the edge line's offset, and along/across → (x,y).
-        func geom(_ dir: DirectionMask) -> (horiz: Bool, side: Float, facing: Heading8) {
-            let horiz = dir == .north || dir == .south
-            let side: Float = (dir == .north || dir == .west) ? -0.46 : 0.46
-            return (horiz, side, horiz ? .n : .e)
-        }
-        func pos(_ horiz: Bool, _ t: Float, _ across: Float) -> (Float, Float) { horiz ? (t, across) : (across, t) }
-
-        // (1) Structural wall — seeded by the UNORDERED tile pair, so ownership hand-off on a twist
-        // doesn't change the pieces.
-        func wallPieces(_ dir: DirectionMask) {
-            let g = geom(dir)
-            let nSeed = neighbor(dir).map { UInt32(truncatingIfNeeded: cubies[$0.ci].facelets[$0.fi].mazeTile.styleSeed) } ?? 0
-            let wallSeed = seed ^ nSeed
-            for k in 0..<6 {
-                let t = -0.5 + (Float(k) + 0.5) / 6.0
-                let h = hash(wallSeed, 1, k &* 7 &+ type)
-                let (ox, oy) = pos(g.horiz, t, g.side)
-                put(walls, wallScale, 0.03, g.facing, h, ox, oy)
+        // Rigid edge frame: outward normal (nx,ny), a tangent (tx,ty) that rotates WITH the edge through
+        // a twist, and the piece facing. Placing at `normal·r + tangent·t` makes a slot rotate rigidly as
+        // the edge turns N→E→S→W (a piece's t no longer runs a fixed world axis), and the n/e/s/w facing
+        // gives the full 90°-per-turn rotation (not just horizontal/vertical).
+        func frame(_ dir: DirectionMask) -> (nx: Float, ny: Float, tx: Float, ty: Float, facing: Heading8) {
+            switch dir {
+            case .north: return ( 0, -1,  1,  0, .n)
+            case .east:  return ( 1,  0,  0,  1, .e)
+            case .south: return ( 0,  1, -1,  0, .s)
+            default:     return (-1,  0,  0, -1, .w)   // west
             }
         }
-        // (2) Foliage — this tile's own inner face of `dir`, seeded by its own tile via the canonical
-        // (twist-invariant) edge id. A GENTLE gradient (outer cleaner → inner lusher; a steep one pooled
-        // it all into the 3×3 centre, per Eddie). No ownership, so it can't hand off on a twist.
+        let canon = { (dir: DirectionMask) in Int(dir.rotated(quarterTurns: -uvTurns).rawValue) }
+
+        // (1) Structural wall pieces along the edge line (radius 0.46 from centre). Owner is the tile
+        // that draws it — chosen below by identity — so the same tile always draws it and it rotates
+        // rigidly with that tile; pieces selected by the canonical edge id + own seed.
+        func wallPieces(_ dir: DirectionMask) {
+            let f = frame(dir)
+            for k in 0..<6 {
+                let t = -0.5 + (Float(k) + 0.5) / 6.0
+                let h = hash(seed, canon(dir) &* 31 &+ 1, k &* 7 &+ type)
+                put(walls, wallScale, 0.03, f.facing, h, f.nx * 0.46 + f.tx * t, f.ny * 0.46 + f.ty * t)
+            }
+        }
+        // (2) Foliage on this tile's INNER face (radius 0.34, toward centre), same rigid frame + canon.
+        // Gentle gradient (outer cleaner → inner lusher; a steep one pooled it into the 3×3 centre).
         func foliage(_ dir: DirectionMask) {
             let overgrowth = [3, 4, 4, 5][type]
             guard overgrowth > 0 else { return }
-            let g = geom(dir)
-            let inward = g.side < 0 ? g.side + 0.12 : g.side - 0.12
-            let canon = Int(dir.rotated(quarterTurns: -uvTurns).rawValue)
+            let f = frame(dir)
             for k in 0..<overgrowth {
                 let t = -0.5 + (Float(k) + 0.5) / Float(overgrowth)
-                let h = hash(seed, canon &* 31 &+ 2, k &* 7 &+ type)
+                let h = hash(seed, canon(dir) &* 31 &+ 2, k &* 7 &+ type)
                 let rock = h % 100 < 45 && !rocks.isEmpty
-                let (ox, oy) = pos(g.horiz, t, inward)
-                put(rock ? rocks : bushes, rock ? rockScale : bushScale,
-                    rock ? 0.20 : 0.10, Heading8(rawValue: Int(h % 8)) ?? .n, h >> 3, ox, oy)
+                // Yaw advances with the tile's turns so an asymmetric bush spins rigidly too.
+                let yaw = Heading8(rawValue: (Int(h % 8) + 2 * uvTurns) % 8) ?? .n
+                put(rock ? rocks : bushes, rock ? rockScale : bushScale, rock ? 0.20 : 0.10,
+                    yaw, h >> 3, f.nx * 0.34 + f.tx * t, f.ny * 0.34 + f.ty * t)
             }
+        }
+        // Structural-wall ownership by tile IDENTITY (not N/W): the shared wall is drawn once, by the
+        // tile with the smaller styleSeed (id breaks ties). Identity is invariant under a twist, so the
+        // owner never hands off — the wall stays drawn in one tile's frame and rotates rigidly.
+        func ownsWall(_ dir: DirectionMask) -> Bool {
+            guard let (nci, nfi) = neighbor(dir) else { return true }     // region border: sole owner
+            let nTile = cubies[nci].facelets[nfi]
+            guard nTile.tileState == .discovered else { return true }     // neighbour unseen: sole owner
+            let nSeed = UInt32(truncatingIfNeeded: nTile.mazeTile.styleSeed)
+            return seed != nSeed ? seed < nSeed : facelet.id.rawValue < nTile.id.rawValue
         }
         for dir in [DirectionMask.north, .east, .south, .west] {
             guard !op.contains(dir) else { continue }                    // only CLOSED edges are walls
-            let owns = (dir == .north || dir == .west) || !neighborDiscovered(dir)
-            if owns { wallPieces(dir) }                                  // deduped structural wall
+            if ownsWall(dir) { wallPieces(dir) }                         // deduped structural wall
             if !skipOvergrowth { foliage(dir) }                          // this tile's own inner face
         }
         return out
