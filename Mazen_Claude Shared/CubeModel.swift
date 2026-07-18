@@ -647,7 +647,9 @@ class CubeModel {
         let n = size, c = n / 2, R = 5
         let rLo = max(0, c - R), rHi = min(n - 1, c + R)
         let cLo = max(0, c - R), cHi = min(n - 1, c + R)
-        foliageWalls = true
+        // Eddie: KEEP the hedge maze walls as the readable structure ("bring back all the walls") — do
+        // NOT suppress them (foliageWalls stays false). The packed Ruins/rock/bush walls placed below
+        // sit ON them as overgrowth, so the maze stays legible but reads natural/ruined.
         let clear = gardenClearTiles()              // keep walls off the puzzle tiles + neighbours (Eddie)
         let mUnit = worldScale.eyeHeight / 1.7
         let wallScale = 4.0 * mUnit / 0.85          // ~4 m, matching the hedges they replace
@@ -747,25 +749,37 @@ class CubeModel {
         }
         let stoneScale = 1.5 * (worldScale.eyeHeight / 1.7) / 0.85    // ~1.5 m flat stepping stones
         for (t, d) in dist {
-            let per: Int, chance: UInt32
-            switch d {                                   // dense on-path, tapering off it
-            case 0:  per = 5; chance = 100
-            case 1:  per = 3; chance = 55
-            case 2:  per = 2; chance = 25
-            default: per = 1; chance = 8
+            // Taper off the correct path (Eddie): fewer tiles get a lane, and shorter stubs, the
+            // further you go the wrong way.
+            let laneChance: UInt32, stubSteps: Int
+            switch d {
+            case 0:  laneChance = 100; stubSteps = 2
+            case 1:  laneChance = 70;  stubSteps = 2
+            case 2:  laneChance = 35;  stubSteps = 1
+            default: laneChance = 12;  stubSteps = 1
             }
+            if hash(t[0] &* 131 &+ t[1] &* 17, 5, 1) % 100 >= laneChance { continue }
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: t[0], col: t[1]) else { continue }
-            for k in 0..<per {
-                let h = hash(t[0] &* 131 &+ t[1] &* 17, 9, k &* 7 &+ 3)
-                if h % 100 >= chance { continue }
+            let op = cubies[ci].facelets[fi].mazeTile.openings
+            // A lane down the MIDDLE of the corridor (Eddie): a centre stone, plus stubs running from
+            // the centre toward each OPEN edge — so straight corridors read as a line, corners as an L.
+            func stone(_ ox: Float, _ oy: Float, _ salt: Int) {
+                let h = hash(t[0] &* 131 &+ t[1] &* 17, salt &+ 40, 7)
                 var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1,
                              facing: Heading8(rawValue: Int(h % 8)) ?? .n,
                              state: stones[Int((h >> 8) % UInt32(stones.count))],
-                             extraScale: stoneScale * (0.8 + Float((h >> 6) % 40) / 100.0))
-                p.offsetX = Float((h >> 3) % 20) / 20.0 - 0.5
-                p.offsetY = Float((h >> 13) % 20) / 20.0 - 0.5
+                             extraScale: stoneScale * (0.85 + Float((h >> 6) % 30) / 100.0))
+                p.offsetX = ox + (Float((h >> 3) % 10) / 10.0 - 0.5) * 0.06   // tiny jitter, stays centred
+                p.offsetY = oy + (Float((h >> 11) % 10) / 10.0 - 0.5) * 0.06
                 p.sink = 0.25
                 cubies[ci].facelets[fi].props.append(p)
+            }
+            stone(0, 0, 0)   // centre of the corridor
+            for (dir, dx, dy) in [(DirectionMask.north, Float(0), Float(-1)), (.south, 0, 1), (.west, -1, 0), (.east, 1, 0)] where op.contains(dir) {
+                for s in 1...stubSteps {
+                    let tt = Float(s) / Float(stubSteps + 1) * 0.5
+                    stone(dx * tt, dy * tt, Int(dir.rawValue) &* 10 &+ s)
+                }
             }
         }
     }
