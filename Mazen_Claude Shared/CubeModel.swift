@@ -800,7 +800,11 @@ class CubeModel {
                 let (ox, oy) = pos(t, side)
                 put(walls, wallScale, 0.03, wallFacing, h, ox, oy)
             }
-            let overgrowth = skipOvergrowth ? 0 : [2, 4, 6, 8][type]
+            // Per-face overgrowth by wall type. A GENTLE gradient (outer cleaner → inner lusher) rather
+            // than a steep one: the lushest ring is only the tiny 3×3 centre, so a steep curve pooled
+            // all the foliage into a central blob (Eddie). Flattened so greenery spreads across the
+            // whole maze while the outermost walls stay a touch more wall-like.
+            let overgrowth = skipOvergrowth ? 0 : [3, 4, 4, 5][type]
             if overgrowth > 0 {
                 // Overgrow BOTH faces of the wall (Eddie). The owner dresses the shared wall once, so
                 // its outward face is the neighbour's side — placing it here fills that side too (the
