@@ -624,7 +624,7 @@ class CubeModel {
             for col in cLo...cHi {
                 if (r, col) == (c, c) || clear.contains([r, col]) { continue }
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
-                for k in 0..<2 {
+                for k in 0..<4 {          // Eddie: don't over-thin — keep it lush (still even + clear of puzzles)
                     let h = hash(r &* 53 &+ col &* 3, k &* 29 &+ 11, r &* col &+ k &* 7)
                     let roll = h % 100
                     if roll < 55       { place(ci, fi, flora.bushes,  bushScale,  h, corner: false) }
@@ -647,7 +647,11 @@ class CubeModel {
         let n = size, c = n / 2, R = 5
         let rLo = max(0, c - R), rHi = min(n - 1, c + R)
         let cLo = max(0, c - R), cHi = min(n - 1, c + R)
-        foliageWalls = true                         // the stone walls REPLACE the hedges (Eddie)
+        // Keep the DYNAMIC hedge walls (do NOT suppress them): they re-derive from topology on the
+        // whole cube every frame, so they're the only TWIST-SAFE wall — a door-twist that rotates in
+        // tiles from outside the small stamped region can't create invisible/mis-placed walls (static
+        // stamped props can't cover those). The Ruins pieces + rocks/bushes below sit ON the hedges, so
+        // the maze reads as an overgrown stone ruin while staying legible and twist-correct.
         let clear = gardenClearTiles()              // overgrowth skips puzzle tiles (walls still placed there)
         let mUnit = worldScale.eyeHeight / 1.7
         let wallScale = 4.0 * mUnit / 0.85          // ~4 m, matching the hedges they replace
@@ -691,7 +695,7 @@ class CubeModel {
                     put(ci, fi, flora.walls, wallScale, 0.03, wallFacing, h, ox, oy)
                 }
             }
-            let overgrowth = clear.contains([r, cc]) ? 0 : [0, 3, 5, 7][type]   // more inward; none by puzzles
+            let overgrowth = clear.contains([r, cc]) ? 0 : [2, 4, 6, 8][type]   // embedded foliage on every wall, more inward; none by puzzles
             if overgrowth > 0 {
                 let inward = side < 0 ? side + 0.12 : side - 0.12
                 for k in 0..<overgrowth {

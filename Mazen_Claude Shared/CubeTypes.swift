@@ -302,6 +302,7 @@ enum PropKind: UInt8 {
     func footprintRadius(grid: Int) -> Int {
         switch self {
         case .plinth, .switchBase: return 0   // small base — blocks only the single cell it stands on
+        case .obelisk:             return 1   // M20: a thin pillar — a 3×3 footprint, not the default 5×5 (Eddie: don't eat more stepping spots than needed)
         default:                   return max(0, grid / 3 / 2)
         }
     }
@@ -376,6 +377,11 @@ struct Prop {
             let dc = subCol - 1, dr = subRow - 1
             subCol = -dr + 1
             subRow = dc + 1
+            // M20: the fine sub-tile offset must rotate the SAME way (else wall props end up mis-placed
+            // after a twist): (offsetX, offsetY) → (−offsetY, offsetX).
+            let ox = offsetX, oy = offsetY
+            offsetX = -oy
+            offsetY = ox
         }
         facing = facing.turned(steps: 2 * turns)  // 90° = two 45° Heading8 steps
     }

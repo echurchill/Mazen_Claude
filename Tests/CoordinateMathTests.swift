@@ -158,12 +158,12 @@ struct CoordinateMathTests {
         for d in [3, 9, 15] {
             let k = d / 3
             for ar in 0..<3 { for ac in 0..<3 {
-                let solid = Prop(kind: .obelisk, subRow: ar, subCol: ac)
+                let solid = Prop(kind: .topiary, subRow: ar, subCol: ac)   // a DEFAULT-footprint solid prop
                 let walkThrough = Prop(kind: .portal, subRow: ar, subCol: ac)
                 for sr in 0..<d { for sc in 0..<d {
                     let inBlock = sr >= ar * k && sr < ar * k + k && sc >= ac * k && sc < ac * k + k
                     check(solid.blocks(sr, sc, grid: d) == inBlock,
-                          "footprint d=\(d) obelisk@(\(ar),\(ac)): cell (\(sr),\(sc)) expected \(inBlock)")
+                          "footprint d=\(d) topiary@(\(ar),\(ac)): cell (\(sr),\(sc)) expected \(inBlock)")
                     check(!walkThrough.blocks(sr, sc, grid: d),
                           "footprint d=\(d) portal@(\(ar),\(ac)): cell (\(sr),\(sc)) must be walk-through")
                 } }
