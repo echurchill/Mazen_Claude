@@ -317,7 +317,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
         var assetBufs: [MTLBuffer] = []
         for _ in 0..<maxBuffersInFlight {
-            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 4096, options: .storageModeShared)!)  // M20: densely-packed foliage walls need headroom (was 512)
+            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 16384, options: .storageModeShared)!)  // M20: the garden's replaced foliage walls + heavy greenery need headroom (was 512→4096)
         }
         self.assetInstanceBuffers = assetBufs
 
@@ -442,6 +442,8 @@ class Renderer: NSObject, MTKViewDelegate {
                     // Reskin the garden with Quaternius plants — the Renderer owns the registry
                     // indices, so it groups them by kind and stamps the vegetation after the build.
                     w.cubeModel.stampGardenVegetation(gardenFlora())
+                    // M20 — replace the hedge maze walls with the packed natural walls (Ruins + rocks/bushes).
+                    w.cubeModel.stampGardenWalls(wallFlora())
                 case "gallery":
                     // M20 dev tool — procedural prop/glyph catalog (Y key) + the natural-wall
                     // prototype east of it. Size 25 to fit the catalog. Stamp partial-reveals.

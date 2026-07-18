@@ -599,6 +599,98 @@ class CubeModel {
                 }
             }
         }
+        // Eddie — considerably MORE greenery ("can't add too much"; non-solid, so it never impedes
+        // movement): a dense second pass over the whole region, and an EXTRA-heavy cluster swallowing
+        // the mossy temple (rows c-4…c-1, cols c-2…c+2).
+        for r in rLo...rHi {
+            for col in cLo...cHi {
+                if (r, col) == (c, c) || (r, col) == portalTile { continue }
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                let temple = r >= c - 4 && r <= c - 1 && col >= c - 2 && col <= c + 2
+                for k in 0..<(temple ? 6 : 2) {
+                    let h = hash(r &* 53 &+ col &* 3, k &* 29 &+ 11, r &* col &+ k &* 7)
+                    let roll = h % 100
+                    if roll < 55       { place(ci, fi, flora.bushes,  bushScale * (temple ? 1.35 : 1.0), h, corner: false) }
+                    else if roll < 80  { place(ci, fi, flora.grasses, grassScale, h, corner: false) }
+                    else if roll < 92  { place(ci, fi, flora.flowers, flowerScale, h, corner: false) }
+                    else               { place(ci, fi, flora.rocks,   rockScale,  h, corner: false) }
+                }
+            }
+        }
+    }
+
+    /// M20 (Eddie) — REPLACE the garden's hedge maze walls with the packed natural walls built for the
+    /// gallery: a run of Ruins wall pieces + Nature/MegaKit rocks & bushes along every closed maze edge.
+    /// The four wall "types" are graded by distance to the region boundary — the **outermost walls are
+    /// the most wall-like** (bare Ruins pieces), the innermost the most overgrown/foliage. The hedge
+    /// mesh is suppressed (`foliageWalls`); movement is unchanged (the maze topology still blocks). Runs
+    /// after construction (needs the Renderer's registry indices), like `stampGardenVegetation`.
+    func stampGardenWalls(_ flora: GardenFlora) {
+        guard !flora.walls.isEmpty || !flora.rocks.isEmpty || !flora.bushes.isEmpty else { return }
+        let n = size, c = n / 2, R = 5
+        let rLo = max(0, c - R), rHi = min(n - 1, c + R)
+        let cLo = max(0, c - R), cHi = min(n - 1, c + R)
+        foliageWalls = true
+        let mUnit = worldScale.eyeHeight / 1.7
+        let wallScale = 4.0 * mUnit / 0.85          // ~4 m, matching the hedges they replace
+        let rockScale = wallScale * 0.7, bushScale = wallScale * 0.5
+        func hash(_ a: Int, _ b: Int, _ d: Int) -> UInt32 {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ d &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
+        }
+        // Distance to the region boundary → wall type: 0 bare structural … 3 mostly foliage.
+        func wallType(_ r: Int, _ cc: Int) -> Int {
+            let d = min(min(r - rLo, rHi - r), min(cc - cLo, cHi - cc))
+            return d <= 1 ? 0 : (d == 2 ? 1 : (d == 3 ? 2 : 3))
+        }
+        func put(_ ci: Int, _ fi: Int, _ pool: [Int], _ scale: Float, _ sink: Float, _ facing: Heading8,
+                 _ h: UInt32, _ ox: Float, _ oy: Float) {
+            guard !pool.isEmpty else { return }
+            var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: facing,
+                         state: pool[Int(h % UInt32(pool.count))], extraScale: scale * (0.85 + Float((h >> 6) % 30) / 100.0))
+            p.offsetX = ox; p.offsetY = oy; p.sink = sink
+            cubies[ci].facelets[fi].props.append(p)
+        }
+        // A foliage wall along ONE edge of a tile (only if that edge is closed = a maze wall).
+        func edge(_ r: Int, _ cc: Int, _ dir: DirectionMask) {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: cc),
+                  !cubies[ci].facelets[fi].mazeTile.openings.contains(dir) else { return }
+            let type = wallType(r, cc)
+            let horiz = dir == .north || dir == .south
+            let side: Float = (dir == .north || dir == .west) ? -0.46 : 0.46
+            let wallFacing: Heading8 = horiz ? .n : .e
+            func pos(_ t: Float, _ across: Float) -> (Float, Float) { horiz ? (t, across) : (across, t) }
+            if type < 3 && !flora.walls.isEmpty {          // structural Ruins wall pieces
+                for k in 0..<5 {
+                    let t = -0.5 + (Float(k) + 0.5) / 5.0
+                    let h = hash(r &* 131 &+ cc &* 17, Int(dir.rawValue) &* 31 &+ 1, k &* 7 &+ type)
+                    let (ox, oy) = pos(t, side)
+                    put(ci, fi, flora.walls, wallScale, 0.03, wallFacing, h, ox, oy)
+                }
+            }
+            if type >= 1 {                                  // overgrowth: rocks + bushes at the base
+                let per = type == 3 ? 7 : 5
+                let inward = side < 0 ? side + 0.12 : side - 0.12
+                for k in 0..<per {
+                    let t = -0.5 + (Float(k) + 0.5) / Float(per)
+                    let h = hash(r &* 131 &+ cc &* 17, Int(dir.rawValue) &* 31 &+ 2, k &* 7 &+ type)
+                    let rock = h % 100 < 45 && !flora.rocks.isEmpty
+                    let (ox, oy) = pos(t, inward)
+                    put(ci, fi, rock ? flora.rocks : flora.bushes, rock ? rockScale : bushScale,
+                        rock ? 0.20 : 0.10, Heading8(rawValue: Int(h % 8)) ?? .n, h >> 3, ox, oy)
+                }
+            }
+        }
+        // Each tile owns its NORTH + WEST edges (shared edges placed once); the region's south/east
+        // boundary edges have no owner-below, so place them explicitly.
+        for r in rLo...rHi {
+            for cc in cLo...cHi {
+                edge(r, cc, .north); edge(r, cc, .west)
+                if r == rHi { edge(r, cc, .south) }
+                if cc == cHi { edge(r, cc, .east) }
+            }
+        }
     }
 
     /// M19 — the Moon: open grey regolith on every tile (no walls), grey boulders scattered
@@ -1219,6 +1311,11 @@ class CubeModel {
     /// gateways, twistable) but dressed natural — grass floors instead of paved, no dark cube
     /// frame. SceneBuilder reads it. Default false ⇒ maze worlds render byte-identically.
     var naturalDressing = false
+
+    /// M20 — the garden's maze walls are REPLACED by packed foliage/ruin walls (`stampGardenWalls`),
+    /// so SceneBuilder skips the hedge wall + post meshes. Movement is unaffected (the maze topology
+    /// still blocks closed edges). Default false ⇒ other worlds keep their hedge walls.
+    var foliageWalls = false
 
     /// M20 — suppress ALL fog for this world (both the unknown-tile fog cubes and the distance
     /// fog): a dev/showroom world (the gallery) shouldn't have atmosphere. Fog is opt-out — only
