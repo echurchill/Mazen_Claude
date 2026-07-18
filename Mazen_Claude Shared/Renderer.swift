@@ -125,6 +125,10 @@ class Renderer: NSObject, MTKViewDelegate {
     /// They become `.importedAsset` Props on facelets so they ride slice rotations — and, being
     /// stamped only into the overworld, they don't appear in portal-worlds like the test interior.
     private var needsDecorativeStamp = true
+    /// M20 — the palette for DYNAMIC dressed walls (Ruins wall pieces + rocks/bushes), captured when a
+    /// `.dressed` world is built. `updateAssetInstances` re-emits these per closed edge every frame, so
+    /// the stone walls survive slice-twists (see `CubeModel.dressedWallProps`). Empty ⇒ hedge worlds.
+    private var wallDressingPalette = CubeModel.GardenFlora()
     var houseAssembly: [HouseKitPiece] = []       // M12-E: canonical imported house quarter (two walls)
     var houseAssemblyDoor: [HouseKitPiece] = []   // the front quarter — one wall swapped for a door
     var assetInstanceBuffers: [MTLBuffer] = []
@@ -442,8 +446,11 @@ class Renderer: NSObject, MTKViewDelegate {
                     // Reskin the garden with Quaternius plants — the Renderer owns the registry
                     // indices, so it groups them by kind and stamps the vegetation after the build.
                     w.cubeModel.stampGardenVegetation(gardenFlora())
-                    // M20 — replace the hedge maze walls with the packed natural walls (Ruins + rocks/bushes).
-                    w.cubeModel.stampGardenWalls(wallFlora())
+                    // M20 — the garden's walls are DRESSED with stone models (Ruins pieces + rocks/bushes)
+                    // instead of hedges: capture the palette; `updateAssetInstances` emits it per closed
+                    // edge every frame from live topology, so the stone walls survive slice-twists. (The
+                    // static "stone-in-hedges" look — `stampGardenWalls` — is kept available for reuse.)
+                    wallDressingPalette = wallFlora()
                     // M20 — a stone path marking the correct route between the puzzle elements (tapers off).
                     w.cubeModel.stampGardenPath(pathStones())
                 case "gallery":
@@ -792,49 +799,80 @@ class Renderer: NSObject, MTKViewDelegate {
             }
         }
 
+        // Place ONE prop at (face,row,col). M14b: seat each rigid asset at the inflated sub-cell
+        // footprint, tilted to the local surface normal (roundness==0 → flat, exactly as before). Then
+        // facing + slice animation + spin. The asset stays rigid (its instance roundness stays 0); only
+        // its anchor rides the curve, so it no longer pokes through / floats. Shared by the stored props
+        // and the dynamic dressed walls, so both take the identical placement + slice-twist path.
+        func placeProp(_ prop: Prop, face: CubeFace, row: Int, col: Int, ci: Int) {
+            let localX = Float(prop.subCol - 1) * step + prop.offsetX
+            let localY = Float(prop.subRow - 1) * step + prop.offsetY
+            var placement = model.inflatedPlacement(face: face, row: row, col: col, localX: localX, localY: localY)
+            if sr.isActive && sr.affectedCubies.contains(ci) { placement = sliceMat * placement }
+            let tileM = spin * placement
+                * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
+            switch prop.kind {
+            case .importedAsset, .importedFoliage:
+                guard prop.state >= 0 && prop.state < importedProps.count else { return }
+                let p = importedProps[prop.state]
+                // Fit the widest dimension to `target`, stand it up (Y-up OBJ → tile Z-up),
+                // centre the footprint, rest the base on the floor. Garden foliage then
+                // scales by its per-instance `extraScale` (trees big, flowers small).
+                let dim = p.mesh.size
+                let maxDim = max(dim.x, max(dim.y, dim.z))
+                let userScale: Float = prop.kind == .importedFoliage ? prop.extraScale : 1
+                let fs: Float = (maxDim > 0 ? p.target / maxDim : 1) * userScale
+                let c = p.mesh.center
+                let orient = p.yUp ? float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0)) : matrix_identity_float4x4
+                let ty = p.yUp ? c.z * fs : -c.y * fs
+                // Rest the base on the floor, then bury by `sink`·height so rounded
+                // rocks/bushes seat instead of balancing on their lowest vertex.
+                let heightU = (p.yUp ? p.mesh.size.y : p.mesh.size.z) * fs
+                let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs - prop.sink * heightU
+                let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
+                emit(p.mesh, m, diffuse: p.diffuse, submeshMaterials: p.submeshMaterials)
+            case .houseCorner:
+                let assembly = prop.facing == .s ? houseAssemblyDoor : houseAssembly
+                for piece in assembly { emit(piece.mesh, tileM * piece.local, diffuse: nil) }
+            default:
+                break
+            }
+        }
+
         for face in CubeFace.allCases {
             for row in 0..<n {
                 for col in 0..<n {
                     guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
                     let props = model.cubies[ci].facelets[fi].props
                     if props.isEmpty { continue }
-                    // M14b: seat each rigid asset at the inflated sub-cell footprint, tilted to the
-                    // local surface normal (roundness==0 → flat, exactly as before). Then facing +
-                    // slice animation + spin. The asset stays rigid (its instance roundness stays 0);
-                    // only its anchor rides the curve, so it no longer pokes through / floats.
-                    for prop in props {
-                        let localX = Float(prop.subCol - 1) * step + prop.offsetX
-                        let localY = Float(prop.subRow - 1) * step + prop.offsetY
-                        var placement = model.inflatedPlacement(face: face, row: row, col: col, localX: localX, localY: localY)
-                        if sr.isActive && sr.affectedCubies.contains(ci) { placement = sliceMat * placement }
-                        let tileM = spin * placement
-                            * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
-                        switch prop.kind {
-                        case .importedAsset, .importedFoliage:
-                            guard prop.state >= 0 && prop.state < importedProps.count else { continue }
-                            let p = importedProps[prop.state]
-                            // Fit the widest dimension to `target`, stand it up (Y-up OBJ → tile Z-up),
-                            // centre the footprint, rest the base on the floor. Garden foliage then
-                            // scales by its per-instance `extraScale` (trees big, flowers small).
-                            let dim = p.mesh.size
-                            let maxDim = max(dim.x, max(dim.y, dim.z))
-                            let userScale: Float = prop.kind == .importedFoliage ? prop.extraScale : 1
-                            let fs: Float = (maxDim > 0 ? p.target / maxDim : 1) * userScale
-                            let c = p.mesh.center
-                            let orient = p.yUp ? float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0)) : matrix_identity_float4x4
-                            let ty = p.yUp ? c.z * fs : -c.y * fs
-                            // Rest the base on the floor, then bury by `sink`·height so rounded
-                            // rocks/bushes seat instead of balancing on their lowest vertex.
-                            let heightU = (p.yUp ? p.mesh.size.y : p.mesh.size.z) * fs
-                            let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs - prop.sink * heightU
-                            let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
-                            emit(p.mesh, m, diffuse: p.diffuse, submeshMaterials: p.submeshMaterials)
-                        case .houseCorner:
-                            let assembly = prop.facing == .s ? houseAssemblyDoor : houseAssembly
-                            for piece in assembly { emit(piece.mesh, tileM * piece.local, diffuse: nil) }
-                        default:
-                            break
-                        }
+                    for prop in props { placeProp(prop, face: face, row: row, col: col, ci: ci) }
+                }
+            }
+        }
+
+        // M20 — DYNAMIC dressed walls (twist-safe stone walls). For a `.dressed` world the hedge mesh is
+        // suppressed; instead we emit imported wall MODELS on every closed edge of each discovered tile,
+        // re-derived from the live topology every frame — so a slice-twist carries the walls with their
+        // tiles exactly like the hedge mesh (the failure that killed static stamped walls can't recur).
+        if model.wallStyle == .dressed && (!wallDressingPalette.walls.isEmpty
+                                           || !wallDressingPalette.rocks.isEmpty
+                                           || !wallDressingPalette.bushes.isEmpty) {
+            let mUnit = ws.eyeHeight / 1.7
+            let wallScale = 4.0 * mUnit / 0.85            // ~4 m wide, matching the hedges they replace
+            let rockScale = wallScale * 0.7, bushScale = wallScale * 0.5
+            let clear = model.dressedClearTiles()          // overgrowth skips puzzle tiles + neighbours
+            let pal = wallDressingPalette
+            for face in CubeFace.allCases {
+                for row in 0..<n {
+                    for col in 0..<n {
+                        guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
+                        let facelet = model.cubies[ci].facelets[fi]
+                        guard facelet.tileState == .discovered else { continue }   // only the revealed maze
+                        let wallProps = model.dressedWallProps(facelet, face: face, row: row, col: col,
+                            walls: pal.walls, rocks: pal.rocks, bushes: pal.bushes,
+                            wallScale: wallScale, rockScale: rockScale, bushScale: bushScale,
+                            skipOvergrowth: clear.contains(facelet.id.rawValue))
+                        for prop in wallProps { placeProp(prop, face: face, row: row, col: col, ci: ci) }
                     }
                 }
             }

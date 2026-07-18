@@ -166,7 +166,7 @@ final class SceneBuilder {
                         // Revealed maze geometry + the dissolve fog that is still burning off it.
                         emitMazeTile(facelet, restM: restM, spin: spin,
                                      roundness: roundness, invHalf: invHalf, relief: relief,
-                                     naturalDressing: model.naturalDressing, foliageWalls: model.foliageWalls, tileMeshLib: tileMeshLib)
+                                     naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed, tileMeshLib: tileMeshLib)
                         let fogInst = InstanceDataSwift(
                             modelMatrix: matrix,
                             baseColor: faceColor * 0.9,
@@ -184,7 +184,7 @@ final class SceneBuilder {
                         case .maze:
                             emitMazeTile(facelet, restM: restM, spin: spin,
                                          roundness: roundness, invHalf: invHalf, relief: relief,
-                                         naturalDressing: model.naturalDressing, foliageWalls: model.foliageWalls, tileMeshLib: tileMeshLib)
+                                         naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed, tileMeshLib: tileMeshLib)
                         case .grass, .water, .regolith:
                             // M19: a full-tile ground quad, no walls. Grass (14) / water (15) /
                             // regolith (16) share the fieldFloor mesh, so they batch into one draw.
@@ -612,7 +612,7 @@ final class SceneBuilder {
     /// (R2.2: previously two hand-maintained copies that had to be edited in lockstep).
     private func emitMazeTile(_ facelet: MazeFacelet, restM: float4x4, spin: float4x4,
                               roundness: Float, invHalf: Float, relief: Float, naturalDressing: Bool,
-                              foliageWalls: Bool, tileMeshLib: TileMeshLibrary) {
+                              suppressHedge: Bool, tileMeshLib: TileMeshLibrary) {
         let openings = facelet.mazeTile.openings
         let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
         let uvT = facelet.mazeTile.uvTurns
@@ -646,7 +646,7 @@ final class SceneBuilder {
         // M20: the garden REPLACES its hedge walls with packed foliage/ruin walls (stampGardenWalls),
         // so skip the wall + post meshes there — the maze topology still blocks movement.
         let cfg = facelet.mazeTile.edgeConfigKey
-        if foliageWalls {
+        if suppressHedge {
             // (walls are the foliage props placed by stampGardenWalls; nothing to emit here)
         } else if let wm = tileMeshLib.wallMesh(configKey: cfg) {
             let wallInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
@@ -655,7 +655,7 @@ final class SceneBuilder {
                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
             mazeWallTiles[cfg, default: []].append(TileEntry(instance: wallInst, mesh: wm))
         }
-        if !foliageWalls, let pm = tileMeshLib.postMesh(configKey: cfg) {
+        if !suppressHedge, let pm = tileMeshLib.postMesh(configKey: cfg) {
             let postInst = InstanceDataSwift(modelMatrix: restM, baseColor: Self.postColor,
                 materialID: 8, tileID: UInt32(facelet.id.rawValue),
                 discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed,

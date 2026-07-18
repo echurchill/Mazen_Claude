@@ -193,6 +193,12 @@ struct MazeTile {
     /// glued to the tile across finalization (no pop). 0 for tiles that never rotated.
     var uvTurns: Int = 0
 
+    /// M20 — for a world whose walls are DRESSED with imported models (`WallStyle.dressed`), which of
+    /// the wall "types" this tile's walls use (0 = cleanest/most wall-like … up = more overgrown).
+    /// Stored per-tile (not computed from position) so it travels with the tile through slice-twists.
+    /// 0 for every other world, so behaviour is unchanged by default.
+    var wallType: UInt8 = 0
+
     /// Geometric type of one edge (Phase B/F): wall if closed, open if a room interior,
     /// otherwise a gateway.
     func edgeType(_ dir: SurfaceDirection) -> EdgeType {

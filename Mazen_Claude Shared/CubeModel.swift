@@ -13,6 +13,18 @@ enum WorldStamp {
     case gallery         // M20 dev tool: a flat grid of every prop/foliage variant, one per cell, for isolated evaluation
 }
 
+/// M20 — how a world's maze WALLS are rendered.
+/// - `.hedge`: the procedural hedge-wall mesh (default; `SceneBuilder` draws it, keyed by edge config).
+///   A world can additionally stamp static rock/bush overgrowth ON the hedges ("stone-in-hedges",
+///   `stampGardenWalls`) — a look we keep as an option.
+/// - `.dressed`: the hedge mesh is suppressed; imported wall MODELS (Ruins pieces + rocks/bushes) are
+///   emitted per closed edge DYNAMICALLY from topology every frame by the Renderer (a `WallDressing`).
+///   This is the only stone-wall look that survives a slice-twist (it re-derives, like the hedge mesh).
+enum WallStyle {
+    case hedge
+    case dressed
+}
+
 class CubeModel {
     let size: Int
     let worldScale: WorldScale
@@ -475,6 +487,10 @@ class CubeModel {
         let R = 5                                   // entry region half-extent → an (2R+1)² garden
         let rLo = max(0, c - R), rHi = min(n - 1, c + R)
         let cLo = max(0, c - R), cHi = min(n - 1, c + R)
+        // M20 (Eddie) — this world's walls are DRESSED with imported stone models (Ruins pieces + rocks
+        // /bushes), not hedges: SceneBuilder skips the hedge mesh and the Renderer emits the wall models
+        // per closed edge, dynamically from topology, so they survive slice-twists. See `WallStyle`.
+        wallStyle = .dressed
 
         // A clearing at spawn (room to get bearings) — done BEFORE sealing so it can't reopen the wall.
         stampRoom(face: .positiveZ, top: max(rLo, c - 1), left: max(cLo, c - 1), height: 3, width: 3)
@@ -492,6 +508,12 @@ class CubeModel {
                 // REVEAL only the region (the rest of the world stays .unknown ⇒ fog, unseen).
                 cubies[ci].facelets[fi].tileState = .discovered
                 cubies[ci].facelets[fi].discoveryAmount = 1.0
+                // Per-tile wall "type" for the dressed walls: graded by distance to the region border,
+                // so the OUTERMOST walls are the cleanest/most wall-like (0) and the inner ones the most
+                // overgrown (3). Stored on the tile so it travels through slice-twists (not recomputed
+                // from position, which the twist would scramble).
+                let d = min(min(r - rLo, rHi - r), min(col - cLo, cHi - col))
+                cubies[ci].facelets[fi].mazeTile.wallType = UInt8(d <= 1 ? 0 : (d == 2 ? 1 : (d == 3 ? 2 : 3)))
                 // (Vegetation is stamped separately in `stampGardenVegetation` — it needs the
                 //  Renderer's Quaternius registry indices, which aren't available here in init.)
             }
@@ -717,6 +739,101 @@ class CubeModel {
                 if cc == cHi { edge(r, cc, .east) }
             }
         }
+    }
+
+    // MARK: - M20 dressed walls (dynamic, twist-safe)
+
+    /// M20 (Eddie) — the framework for STONE walls that survive twists. For a `.dressed` world the
+    /// hedge mesh is suppressed and, every frame, the Renderer asks each discovered tile for the wall
+    /// MODELS on its closed edges via this method and runs them through the normal asset placement.
+    /// Because the props are re-derived from the tile's live topology (never stored, never stamped),
+    /// they move with the tile through a slice-twist exactly like the hedge mesh — the failure mode
+    /// that killed the static `stampGardenWalls` approach can't happen here.
+    ///
+    /// One tile owns its **N + W** edges; it owns its **S + E** edges only where the neighbour that way
+    /// isn't discovered (a region border), so an interior edge shared by two tiles is dressed once.
+    /// Structural Ruins wall pieces go on every closed edge; rocks/bushes overgrow them by `wallType`
+    /// (0 clean … 3 lush), suppressed on `skipOvergrowth` tiles so nothing buries a puzzle element.
+    /// Seeded by the tile's `styleSeed` (which travels with it) so a wall's pieces stay stable as the
+    /// tile moves. `walls`/`rocks`/`bushes` are registry indices; scales are the Renderer's metre fit.
+    func dressedWallProps(_ facelet: MazeFacelet, face: CubeFace, row: Int, col: Int,
+                          walls: [Int], rocks: [Int], bushes: [Int],
+                          wallScale: Float, rockScale: Float, bushScale: Float,
+                          skipOvergrowth: Bool) -> [Prop] {
+        guard !walls.isEmpty || !rocks.isEmpty || !bushes.isEmpty else { return [] }
+        let op = facelet.mazeTile.openings
+        let type = min(3, Int(facelet.mazeTile.wallType))
+        let seed = UInt32(truncatingIfNeeded: facelet.mazeTile.styleSeed)
+        var out: [Prop] = []
+        func hash(_ a: Int, _ b: Int) -> UInt32 {
+            var v = seed &+ UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return v
+        }
+        func neighborDiscovered(_ dr: Int, _ dc: Int) -> Bool {
+            guard let (nci, nfi) = faceletAt(face: face, row: row + dr, col: col + dc) else { return false }
+            return cubies[nci].facelets[nfi].tileState == .discovered
+        }
+        func put(_ pool: [Int], _ scale: Float, _ sink: Float, _ facing: Heading8, _ h: UInt32, _ ox: Float, _ oy: Float) {
+            guard !pool.isEmpty else { return }
+            var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: facing,
+                         state: pool[Int(h % UInt32(pool.count))], extraScale: scale * (0.85 + Float((h >> 6) % 30) / 100.0))
+            p.offsetX = ox; p.offsetY = oy; p.sink = sink
+            out.append(p)
+        }
+        func edge(_ dir: DirectionMask) {
+            guard !op.contains(dir) else { return }        // only CLOSED edges are walls
+            let horiz = dir == .north || dir == .south
+            let side: Float = (dir == .north || dir == .west) ? -0.46 : 0.46
+            let wallFacing: Heading8 = horiz ? .n : .e
+            func pos(_ t: Float, _ across: Float) -> (Float, Float) { horiz ? (t, across) : (across, t) }
+            for k in 0..<6 {                               // structural wall pieces span the edge
+                let t = -0.5 + (Float(k) + 0.5) / 6.0
+                let h = hash(Int(dir.rawValue) &* 31 &+ 1, k &* 7 &+ type)
+                let (ox, oy) = pos(t, side)
+                put(walls, wallScale, 0.03, wallFacing, h, ox, oy)
+            }
+            let overgrowth = skipOvergrowth ? 0 : [2, 4, 6, 8][type]
+            if overgrowth > 0 {
+                let inward = side < 0 ? side + 0.12 : side - 0.12
+                for k in 0..<overgrowth {
+                    let t = -0.5 + (Float(k) + 0.5) / Float(overgrowth)
+                    let h = hash(Int(dir.rawValue) &* 31 &+ 2, k &* 7 &+ type)
+                    let rock = h % 100 < 45 && !rocks.isEmpty
+                    let (ox, oy) = pos(t, inward)
+                    put(rock ? rocks : bushes, rock ? rockScale : bushScale,
+                        rock ? 0.20 : 0.10, Heading8(rawValue: Int(h % 8)) ?? .n, h >> 3, ox, oy)
+                }
+            }
+        }
+        edge(.north); edge(.west)
+        if !neighborDiscovered(1, 0) { edge(.south) }
+        if !neighborDiscovered(0, 1) { edge(.east) }
+        return out
+    }
+
+    /// M20 — facelet IDs whose dressed-wall OVERGROWTH must be suppressed: a puzzle prop sits on the
+    /// tile, or on an in-face neighbour. Re-derived each frame from the live props (which ride their
+    /// facelets through a twist), so the clear zone tracks the puzzle wherever the twist carries it.
+    /// The structural wall pieces are still placed on these tiles — only the rocks/bushes are dropped.
+    func dressedClearTiles() -> Set<Int> {
+        let puzzle: Set<PropKind> = [.switchBase, .switchCap, .plinth, .obelisk, .alignmentCylinder]
+        var s = Set<Int>()
+        for face in CubeFace.allCases {
+            for r in 0..<size {
+                for cc in 0..<size {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: cc) else { continue }
+                    let props = cubies[ci].facelets[fi].props
+                    guard props.contains(where: { puzzle.contains($0.kind) || ($0.kind == .portal && $0.state == 1) }) else { continue }
+                    for (dr, dc) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        if let (nci, nfi) = faceletAt(face: face, row: r + dr, col: cc + dc) {
+                            s.insert(cubies[nci].facelets[nfi].id.rawValue)
+                        }
+                    }
+                }
+            }
+        }
+        return s
     }
 
     /// M20 (Eddie) — a stone path (MegaKit RockPath) marking the CORRECT route between the puzzle
@@ -1408,10 +1525,11 @@ class CubeModel {
     /// frame. SceneBuilder reads it. Default false ⇒ maze worlds render byte-identically.
     var naturalDressing = false
 
-    /// M20 — the garden's maze walls are REPLACED by packed foliage/ruin walls (`stampGardenWalls`),
-    /// so SceneBuilder skips the hedge wall + post meshes. Movement is unaffected (the maze topology
-    /// still blocks closed edges). Default false ⇒ other worlds keep their hedge walls.
-    var foliageWalls = false
+    /// M20 — how this world's maze walls render (see `WallStyle`). `.dressed` ⇒ SceneBuilder skips the
+    /// hedge wall + post meshes and the Renderer emits imported wall models per closed edge instead
+    /// (twist-safe, re-derived from topology). Movement is unaffected either way (the maze topology
+    /// blocks closed edges). Default `.hedge` ⇒ other worlds are byte-identical.
+    var wallStyle: WallStyle = .hedge
 
     /// M20 — suppress ALL fog for this world (both the unknown-tile fog cubes and the distance
     /// fog): a dev/showroom world (the gallery) shouldn't have atmosphere. Fog is opt-out — only
