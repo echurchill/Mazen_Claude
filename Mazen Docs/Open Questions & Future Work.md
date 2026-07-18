@@ -2,6 +2,19 @@
 
 *A parking lot for ideas and open work items that aren't scheduled yet, so they don't get lost. Not a bug list — see [Known Issues](Known%20Issues.md) for those. Add freely; promote to a work plan when it's time.*
 
+## M20 garden — design & fixes (Eddie, 2026-07-17)
+
+- **Temple as a real puzzle (riff — not final).** The garden temple isn't a puzzle yet. Rough idea:
+  **a puzzle plinth at the centre of each of the 6 cube faces**; interacting with each turns something
+  on (charges something?); once **all 6 are lit, the gateway to the next world opens**. Just riffing —
+  design later. (Would replace/extend the current switch-plinth lock as the world's core puzzle.)
+- **Rethink the clue plinth** (next major session). Two concrete problems with the current one:
+  (1) it's the wrong presentation (needs a rethink); (2) it's **static** — disengaging one of the
+  other switches updates the door plinth but NOT the clue, so they disagree and confuse. Address when
+  we redo it.
+- **Temple indicator points still wrong / missing** (the four-points-on-the-structure beat) — deferred,
+  needs Eddie's eye (see shot list step 3).
+
 ## Rendering / assets
 
 - **MegaKit custom shaders (Eddie, 2026-07-17).** The Stylized Nature MegaKit ships with *custom shaders* (in its `Engine Projects` / Unity+Unreal material graphs) that "might prove interesting." We currently use only the pack's diffuse atlases through our ModelIO path — the shaders aren't wired in and our pipeline can't consume Unity/Unreal material graphs directly. **Worth a look:** are any of the effects (e.g. wind sway on foliage, stylized rock/path shading) reproducible as a Metal material in our shader (`Shaders.metal`)? Could give the nature dressing motion/life beyond the flat/atlas look.

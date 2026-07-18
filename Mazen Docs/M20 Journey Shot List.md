@@ -130,6 +130,11 @@ Per the plan's build order (spine first):
   PUSHES the temple interior (fixed the nested-world pop bug); returning pops back to the garden. The
   full spine plays: arrival → solve switches → turn → door opens → step inside → return. Verified
   headlessly.
+- 🟢 **Garden reskin (2026-07-17, Eddie).** Hedge maze walls REPLACED by the gallery's packed natural
+  walls (`stampGardenWalls`): Ruins wall pieces + rocks/bushes along every closed edge, graded so the
+  outermost walls are most wall-like, innermost most overgrown. Plus much heavier greenery (dense pass +
+  a cluster swallowing the mossy temple; all non-solid). Only the +Z journey region is populated.
+  **First cut — densities/scales/wall-orientation all tunable; Eddie's visual review pending.**
 - ⬜ **(2)** first-twist dead-end + seam groove (west of spawn).
 - 🟡 **(3) Dressing — partial (2026-07-17).** ✅ Mossy temple (bonded livery is mossy grey-green in the
   garden, gold only on the overworld; still flares red on refusal). ✅ Clue plinth (caustic `threeOfFour`
