@@ -15,17 +15,22 @@
 - **Temple indicator points still wrong / missing** (the four-points-on-the-structure beat) — deferred,
   needs Eddie's eye (see shot list step 3).
 
-## Twist-safe walls — why the garden keeps its hedges (2026-07-18)
+## Twist-safe walls — RESOLVED: the dynamic dressed-wall framework (2026-07-18)
 
 **Constraint discovered the hard way:** the garden is a twistable Rubik's maze, and a maze wall must
-stay correct *through a twist*. Only the **dynamic hedge-wall mesh** does — it re-derives from each
-tile's topology across the WHOLE cube every frame. **Static stamped foliage/stone-wall props cannot
-replace it**, because a door-twist is a whole-cube slice rotation that (a) rotates tiles in from
-*outside* the small stamped +Z region (unstamped ⇒ invisible walls when the hedge mesh is suppressed),
-and (b) rearranges everything. So the hedge mesh stays as the twist-safe backbone; the Ruins pieces +
-rocks/bushes ride on it as overgrowth. **To get a true STONE look on the walls that survives twists,
-re-style the wall MESH/material (materialID 1) to stone/ruin — a rendering change, not stamped props.**
-That's the real path if Eddie wants stone (not hedge) walls; flagged for a focused pass.
+stay correct *through a twist*. Only walls **re-derived from each tile's topology every frame** do —
+static stamped props can't, because a door-twist is a whole-cube slice rotation that rotates tiles in
+from *outside* the stamped region (⇒ invisible/misplaced walls when the hedge mesh is suppressed).
+
+**Built the framework (`WallStyle.dressed`):** a world can now dress its maze walls with imported wall
+MODELS (Ruins pieces + rocks/bushes) instead of hedges, and they survive twists — because the Renderer
+re-emits them per closed edge from live topology every frame, exactly like the hedge mesh (never
+stamped). Pieces: `MazeTile.wallType` (per-tile overgrowth grade, travels through twists),
+`CubeModel.dressedWallProps` / `dressedClearTiles`, `SceneBuilder` suppresses the hedge mesh, and
+`Renderer.updateAssetInstances` runs the wall props through the normal `placeProp` path. The garden now
+uses this; **the static "stone-in-hedges" look (`stampGardenWalls`) is kept available** for reuse (Eddie
+liked it). Reusable for future wall models — just add them to `wallFlora()`. **Pending Eddie's eyes:**
+the in-garden look + an actual twist to confirm the walls carry correctly.
 
 ## Rendering / assets
 
