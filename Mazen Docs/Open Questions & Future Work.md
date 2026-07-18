@@ -29,8 +29,8 @@ stamped). Pieces: `MazeTile.wallType` (per-tile overgrowth grade, travels throug
 `CubeModel.dressedWallProps` / `dressedClearTiles`, `SceneBuilder` suppresses the hedge mesh, and
 `Renderer.updateAssetInstances` runs the wall props through the normal `placeProp` path. The garden now
 uses this; **the static "stone-in-hedges" look (`stampGardenWalls`) is kept available** for reuse (Eddie
-liked it). Reusable for future wall models — just add them to `wallFlora()`. **Pending Eddie's eyes:**
-the in-garden look + an actual twist to confirm the walls carry correctly.
+liked it). Reusable for future wall models — just add them to `wallFlora()`. **Confirmed by Eddie
+(2026-07-18): looks good in the garden.**
 
 ## Rendering / assets
 
