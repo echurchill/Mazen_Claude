@@ -461,6 +461,13 @@ class Renderer: NSObject, MTKViewDelegate {
                     w.cubeModel.stampGalleryWalls(wallFlora())
                     // M20 prototype — rock-path options west of the catalog (MegaKit RockPath models).
                     w.cubeModel.stampGalleryPaths(pathStones())
+                    // M20 (Eddie) — three new PORTAL styles in a showroom north of the catalog
+                    // (retiring the TARDIS): elevator, spot-to-spot energy veils, level-to-level arch.
+                    w.cubeModel.stampGalleryPortals(barrel: namedProp("Dungeons Barrel2"),
+                                                    column: namedProp("Dungeons Column"),
+                                                    torch: namedProp("Dungeons Torch"),
+                                                    archRuins: namedProp("Ruins Arch_Round"),
+                                                    vine: wallFlora().bushes.first)
                 case "gallery-dungeons":
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("Dungeons "))
@@ -688,6 +695,10 @@ class Renderer: NSObject, MTKViewDelegate {
     private func packIndices(_ prefix: String) -> [Int] {
         importedProps.enumerated().filter { $0.element.name.hasPrefix(prefix) }.map { $0.offset }
     }
+
+    /// M20 — resolve one imported model by its exact registry name (e.g. "Ruins Arch_Round"), for
+    /// composing the portal-style prototypes. `nil` if the pack/model isn't loaded.
+    private func namedProp(_ name: String) -> Int? { importedProps.firstIndex { $0.name == name } }
 
     /// M20 — the MegaKit's rock-path stone models, for the gallery path-stone prototype.
     private func pathStones() -> [Int] {

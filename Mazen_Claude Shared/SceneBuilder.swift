@@ -51,6 +51,8 @@ final class SceneBuilder {
         .houseCorner: SIMD4(0.50, 0.45, 0.44, 1.0),  // roof grey (walls are imported tan kit; M12-E)
         .portal:      SIMD4(0.11, 0.20, 0.52, 1.0),  // TARDIS police-box blue (M11.2 world portal)
         .portalLamp:  SIMD4(1.0, 1.0, 1.0, 1.0),     // overridden per-frame by the blink (below)
+        .portalField: SIMD4(0.42, 0.55, 1.0, 1.0),   // M20 — energy-veil tint (overridden per style below)
+        .portalRing:  SIMD4(0.55, 0.72, 1.0, 1.0),   // M20 — base-glow ring (emissive)
         .dial:        SIMD4(0.52, 0.52, 0.58, 1.0),  // M16.3 — overridden by state below
         .glyph:       SIMD4(0.68, 0.65, 0.59, 1.0),  // M16.5 — carved stone (lock livery may gild it)
         .plinth:      SIMD4(1.0, 1.0, 1.0, 1.0),     // M16.6 — material 21 does the colouring itself
@@ -321,6 +323,21 @@ final class SceneBuilder {
                                 materialID = 22
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
+                            }
+                            if prop.kind == .portalField {
+                                // M20 (Eddie) — animated energy field (material 23). `state` = style
+                                // (0 blue veil, 1 pink veil, 2 starfield); the tint per style rides
+                                // baseColor. Emissive + time-driven; the shader wisps its own edges.
+                                materialID = 23
+                                propStyleSeed = UInt32(max(0, prop.state))
+                                switch prop.state {
+                                case 1:  color = SIMD4(1.0, 0.42, 0.66, 1.0)   // pink/magenta veil
+                                case 2:  color = SIMD4(0.42, 0.34, 0.78, 1.0)  // starfield nebula (violet)
+                                default: color = SIMD4(0.40, 0.56, 1.0, 1.0)   // blue/purple veil
+                                }
+                            }
+                            if prop.kind == .portalRing {
+                                materialID = 12                                 // emissive glow ring
                             }
                             if prop.kind == .portalLamp {
                                 if model.sealedPortalCubies.contains(ci) {

@@ -202,6 +202,14 @@ class TileMeshLibrary {
         Self.addPortalLamp(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.portalLamp.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalLampStart, indexCount: allIndices.count - portalLampStart)
 
+        let portalFieldStart = allIndices.count
+        Self.addPortalField(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.portalField.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalFieldStart, indexCount: allIndices.count - portalFieldStart)
+
+        let portalRingStart = allIndices.count
+        Self.addPortalRing(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.portalRing.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalRingStart, indexCount: allIndices.count - portalRingStart)
+
         let dialStart = allIndices.count
         Self.addDial(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.dial.rawValue] = TileMesh(vertexOffset: 0, indexOffset: dialStart, indexCount: allIndices.count - dialStart)
@@ -821,6 +829,49 @@ class TileMeshLibrary {
         for i in 0..<4 { let j = (i + 1) % 4; quad(b[i], b[j], t[j], t[i]) }   // body sides
         let apex = SIMD3<Float>(0, 0, roofTop)
         for i in 0..<4 { let j = (i + 1) % 4; tri(t[i], t[j], apex) }          // tented pyramid roof
+    }
+
+    /// M20 (Eddie) — a portal's ENERGY VEIL: a vertical, double-sided quad standing in a doorway,
+    /// shaded by the animated portal material (23) which reads `texCoord` (u across, v bottom→top) and
+    /// `frame.time`. Built facing −Y so `Prop.facing` aims it at the player; `state`/styleSeed picks the
+    /// look (shimmer vs starfield). Double-sided so it reads from both approaches without back-face culls.
+    private static func addPortalField(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        let hW: Float = 0.15          // half width (~a grand doorway)
+        let hgt: Float = 0.52         // height (a touch taller than the old TARDIS body)
+        let bl = SIMD3<Float>(-hW, 0, z0), br = SIMD3<Float>(hW, 0, z0)
+        let tr = SIMD3<Float>(hW, 0, z0 + hgt), tl = SIMD3<Float>(-hW, 0, z0 + hgt)
+        func v(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ u: Float, _ w: Float) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(u, w), aoFactor: 1.0)
+        }
+        func face(_ n: SIMD3<Float>, _ flip: Bool) {
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [v(bl, n, flip ? 1 : 0, 0), v(br, n, flip ? 0 : 1, 0),
+                                      v(tr, n, flip ? 0 : 1, 1), v(tl, n, flip ? 1 : 0, 1)])
+            if flip { indices.append(contentsOf: [base+0, base+2, base+1, base+0, base+3, base+2]) }
+            else    { indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3]) }
+        }
+        face(SIMD3(0, -1, 0), false)   // front (faces −Y toward the player)
+        face(SIMD3(0,  1, 0), true)    // back
+    }
+
+    /// M20 — a flat glowing RING on the ground at a portal's base (emissive, material 12): the light
+    /// pooling under an energy veil, or the lit floor plate of the elevator. An annulus on the floor.
+    private static func addPortalRing(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z = ws.floorY + 0.006     // just above the floor to avoid z-fighting
+        let rO: Float = 0.21, rI: Float = 0.135
+        let seg = 40
+        func v(_ p: SIMD3<Float>, _ u: Float) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: SIMD3(0, 0, 1), texCoord: SIMD2(u, 0), aoFactor: 1.0)
+        }
+        for i in 0..<seg {
+            let a0 = Float(i) / Float(seg) * 2 * .pi, a1 = Float(i + 1) / Float(seg) * 2 * .pi
+            let oi = SIMD3<Float>(cos(a0) * rO, sin(a0) * rO, z), oj = SIMD3<Float>(cos(a1) * rO, sin(a1) * rO, z)
+            let ii = SIMD3<Float>(cos(a0) * rI, sin(a0) * rI, z), ij = SIMD3<Float>(cos(a1) * rI, sin(a1) * rI, z)
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [v(ii, 0), v(oi, 1), v(oj, 1), v(ij, 0)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
     }
 
     /// The flashing lamp atop the portal (M11.2 / TARDIS) — a tiny box sitting at the roof apex.

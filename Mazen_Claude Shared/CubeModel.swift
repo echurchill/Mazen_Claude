@@ -170,6 +170,76 @@ class CubeModel {
         }
     }
 
+    /// M20 (Eddie) — three PORTAL-STYLE prototypes in a showroom revealed just NORTH of the catalog
+    /// (we're retiring the TARDIS): an ELEVATOR (outer world → temple), two SPOT-TO-SPOT energy veils
+    /// (a place on the world → another place / its moon), and a LEVEL-TO-LEVEL stone arch with a
+    /// starfield fill (solved level → next). Imported model indices come from the Renderer (which owns
+    /// the registry); pass `nil` for any it couldn't resolve and that part is skipped.
+    func stampGalleryPortals(barrel: Int?, column: Int?, torch: Int?, archRuins: Int?, vine: Int?) {
+        let n = size, c = n / 2
+        let rLo = 3, rHi = 6                                  // showroom rows, north of the catalog (7–13)
+        let cLo = max(1, c - 4), cHi = min(n - 1, c + 4)      // cols 8–16
+        let all: DirectionMask = [.north, .east, .south, .west]
+        for r in rLo...rHi {
+            for col in cLo...cHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                var op = all
+                if r == rLo { op.remove(.north) }
+                if col == cLo { op.remove(.west) }
+                if col == cHi { op.remove(.east) }
+                cubies[ci].facelets[fi].mazeTile.openings = op
+                cubies[ci].facelets[fi].mazeTile.openEdges = op
+                cubies[ci].facelets[fi].terrain = .grass
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+            }
+        }
+        // Open the seam between the showroom (row rHi) and the catalog room (row 7) so you can walk up.
+        for col in cLo...cHi {
+            if let (ci, fi) = faceletAt(face: .positiveZ, row: rHi, col: col) {
+                cubies[ci].facelets[fi].mazeTile.openings.insert(.south); cubies[ci].facelets[fi].mazeTile.openEdges.insert(.south)
+            }
+            if let (ci, fi) = faceletAt(face: .positiveZ, row: 7, col: col) {
+                cubies[ci].facelets[fi].mazeTile.openings.insert(.north); cubies[ci].facelets[fi].mazeTile.openEdges.insert(.north)
+            }
+        }
+        let row = 4
+        func add(_ col: Int, _ p: Prop) {
+            if let (ci, fi) = faceletAt(face: .positiveZ, row: row, col: col) { cubies[ci].facelets[fi].props.append(p) }
+        }
+        func part(_ idx: Int?, _ col: Int, _ scale: Float, _ ox: Float, _ oy: Float, _ sink: Float = 0, _ facing: Heading8 = .s) {
+            guard let i = idx else { return }
+            var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: facing, state: i, extraScale: scale)
+            p.offsetX = ox; p.offsetY = oy; p.sink = sink
+            add(col, p)
+        }
+        func veil(_ col: Int, _ style: Int) {
+            add(col, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                   // base glow
+            add(col, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: style))        // energy surface
+        }
+
+        // (1) ELEVATOR at col c-3 — a lift cage: a barrel capsule ringed by 4 columns on a lit plate.
+        let eCol = c - 3
+        add(eCol, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                      // lit floor plate
+        part(barrel, eCol, 0.55, 0, 0, 0.02)                                                          // capsule
+        for (ox, oy) in [(-0.15, -0.15), (0.15, -0.15), (-0.15, 0.15), (0.15, 0.15)] {
+            part(column, eCol, 0.6, Float(ox), Float(oy))                                              // 4 shaft columns
+        }
+        part(torch, eCol, 0.4, -0.15, 0.16); part(torch, eCol, 0.4, 0.15, 0.16)                       // front torches
+
+        // (2) SPOT-TO-SPOT — two frameless energy veils (blue at c-1, pink at c+1), each on a glow ring.
+        veil(c - 1, 0)
+        veil(c + 1, 1)
+
+        // (3) LEVEL-TO-LEVEL at col c+3 — a stone arch with a starfield fill and climbing vines.
+        let aCol = c + 3
+        veil(aCol, 2)                                                                                 // starfield fill (+ ring)
+        part(archRuins, aCol, 0.72, 0, 0, 0)                                                          // the stone arch
+        for (ox, oy) in [(-0.16, 0.04), (0.16, 0.04), (-0.12, -0.12)] {
+            part(vine, aCol, 0.16, Float(ox), Float(oy))                                              // climbing vines
+        }
+    }
+
     /// M20 proof — lay `.importedAsset` eval cells (3D models) in their own revealed strip just SOUTH
     /// of the catalog grid, connected to the spawn by a short corridor so the player can walk down to
     /// them. `states` are registry indices into `Renderer.importedProps`; the Renderer owns those

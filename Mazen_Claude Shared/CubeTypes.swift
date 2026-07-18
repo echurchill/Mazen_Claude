@@ -288,6 +288,11 @@ enum PropKind: UInt8 {
                          // `.importedAsset` (`state` = registry index), but NON-solid (the hedges block, the
                          // plants are scenery) and scaled per-instance by `extraScale`. Added at the end of
                          // the enum so existing raw values don't shift.
+    case portalField     // M20 (Eddie): a portal's animated ENERGY surface — a vertical shimmering veil
+                         // (material 23). `state` = style: 0 blue veil, 1 pink veil, 2 starfield/galaxy
+                         // fill. NON-solid (you step through it). The new portal styles replacing the TARDIS.
+    case portalRing      // M20: a flat glowing ring on the ground at a portal's base (emissive, material
+                         // 12) — the light pooling under an energy veil / the lit floor of the elevator.
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the
@@ -296,7 +301,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .portalRing: return false
         default: return true
         }
     }

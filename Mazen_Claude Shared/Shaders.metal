@@ -565,6 +565,39 @@ fragment float4 fragmentShader(
             color = mix(float3(0.42, 0.60, 0.72), float3(0.70, 0.88, 1.0), fres);
             lighting = amb * 0.6 + float3(0.35);
         }
+    } else if (in.materialID == 23) {
+        // M20 (Eddie) — a portal's animated ENERGY field (the new portal styles replacing the TARDIS).
+        // Drawn on a vertical veil quad (texCoord u across, v bottom→top), tinted by baseColor, driven
+        // by frame.time. Emissive. `styleSeed`: 0/1 = shimmering energy veil (spot-to-spot), 2 =
+        // starfield/galaxy fill (level-to-level, under a stone arch). Wispy edges use cutout so no
+        // alpha-blend pass is needed.
+        float2 uv = in.texCoord;
+        float tt = frame.time;
+        float3 tint = in.color.rgb;
+        if (in.styleSeed == 2u) {
+            // Starfield / galaxy: dark space, a slow nebula swirl in the tint, and twinkling stars.
+            float neb = fbm(uv * 3.0 + float2(tt * 0.03, -tt * 0.02), 4);
+            float swirl = fbm(uv * 5.0 + neb * 1.6, 3);
+            float3 nebula = mix(float3(0.015, 0.02, 0.06), tint, saturate(swirl * 1.25));
+            float star = valueNoise(uv * 64.0);
+            float twinkle = 0.5 + 0.5 * sin(tt * 3.0 + star * 40.0);
+            float bright = smoothstep(0.90, 0.995, star) * twinkle;
+            // fade toward the opening edge so it seats inside the arch rather than a hard rectangle
+            float edge = smoothstep(0.0, 0.10, uv.x) * smoothstep(1.0, 0.90, uv.x)
+                       * smoothstep(0.0, 0.05, uv.y) * smoothstep(1.0, 0.97, uv.y);
+            color = (nebula + float3(bright) * 1.7) * (0.5 + 0.5 * edge);
+            lighting = float3(1.0);
+        } else {
+            // Energy veil: vertical flowing streaks of light, brighter core, wispy translucent edges.
+            float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 - tt * 0.55), 4);
+            float streak = 0.5 + 0.5 * sin(uv.x * 8.0 + flow * 4.0 + tt * 1.4);
+            float energy = pow(streak, 2.0) * (0.55 + 0.7 * flow);
+            float edge = smoothstep(0.0, 0.32, uv.x) * smoothstep(1.0, 0.68, uv.x);   // veil, not a slab
+            float veil = energy * edge;
+            if (flow * edge + 0.16 < 0.30) discard_fragment();                        // wispy tendrils
+            color = tint * (0.45 + 1.7 * veil) + float3(0.65, 0.75, 1.0) * pow(veil, 3.0) * 0.8;
+            lighting = float3(1.0);
+        }
     } else if (in.materialID == 20) {
         // M20: imported sub-mesh whose diffuse carries alpha (Quaternius leaves/flowers) — cut it
         // out so foliage reads as leaves instead of solid quads. Otherwise identical to 11.
