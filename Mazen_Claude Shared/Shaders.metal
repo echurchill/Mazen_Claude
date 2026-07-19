@@ -71,20 +71,21 @@ float3 volumetricClouds(float2 uv, float t) {
             // Density a short step toward the light: a big drop means this is a lit, sun-facing face;
             // little drop means a shadowed crevice → strong billow contrast (the missing detail).
             float shd = saturate((cloudField(pos + lgt * 0.45, t) + 0.12) * 1.7);
-            float lit = saturate((den - shd) * 4.0 + 0.10);
-            // Richer, saturated ramp (Eddie): cool violet shadows → warm gold body → hot white, with a
-            // cool blue-white kiss on the very hottest edges — the warm-cloud / cool-hotspot reference look.
-            float3 shade = mix(float3(0.10, 0.06, 0.26), float3(0.95, 0.52, 0.20), smoothstep(0.0, 0.5, lit));
-            shade = mix(shade, float3(1.0, 0.93, 0.72), smoothstep(0.5, 1.0, lit));
-            shade += float3(0.45, 0.65, 1.0) * pow(lit, 5.0) * 0.5;       // cool blue-white hotspot
-            shade *= 0.45 + 0.55 * exp(-march * 0.22);                    // depth: nearer billows read brighter
-            float op = den * 0.55;
-            col += trans * op * shade * 1.5;
+            float lit = saturate((den - shd) * 4.0 + 0.08);
+            // Richer, saturated ramp (Eddie): cool violet shadows → warm gold body → hot gold (NOT
+            // white — a white hot-stop + additive build-up blew out to flat white), cool blue kiss.
+            float3 shade = mix(float3(0.10, 0.06, 0.24), float3(0.90, 0.48, 0.18), smoothstep(0.0, 0.55, lit));
+            shade = mix(shade, float3(1.0, 0.84, 0.52), smoothstep(0.55, 1.0, lit));
+            shade += float3(0.35, 0.55, 1.0) * pow(lit, 6.0) * 0.35;      // subtle cool hotspot
+            shade *= 0.5 + 0.5 * exp(-march * 0.22);                      // depth: nearer billows read brighter
+            float op = den * 0.40;                                        // lower opacity → slower build-up
+            col += trans * op * shade;
             trans *= (1.0 - op);
             if (trans < 0.02) break;
         }
         march += 0.085;
     }
+    col = 1.0 - exp(-col * 1.4);                                          // tonemap: highlights stay coloured, not clipped to white
     return col;
 }
 
