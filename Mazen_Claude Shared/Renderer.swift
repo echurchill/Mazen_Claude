@@ -466,8 +466,7 @@ class Renderer: NSObject, MTKViewDelegate {
                     w.cubeModel.stampGalleryPortals(barrel: namedProp("Dungeons Barrel2"),
                                                     column: namedProp("Dungeons Column"),
                                                     torch: namedProp("Dungeons Torch"),
-                                                    archRuins: namedProp("Ruins Arch_Round"),
-                                                    vine: wallFlora().bushes.first)
+                                                    archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
                 case "gallery-dungeons":
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("Dungeons "))

@@ -592,15 +592,21 @@ fragment float4 fragmentShader(
         float energy = mix(swirl, filament, 0.55);
         float rim = smoothstep(0.80, 1.0, ell) * smoothstep(1.15, 0.98, ell);   // glowing boundary ring
         if (arch) {
-            // Starfield / galaxy: the swirl tints a dark nebula, plus twinkling stars; fills the arch.
+            // Fill the WHOLE arch opening (Eddie): a rounded-RECTANGLE mask covering most of the quad,
+            // so the vortex fills the doorway and the overgrown stonework frames it — not a floating
+            // oval. The swirl still spins from the centre; only the shape mask changes.
+            float2 p = (uv - 0.5) * 2.0;                                        // [-1,1]
+            float2 q2 = abs(p) - float2(0.82, 0.94);
+            float sd = length(max(q2, 0.0)) + min(max(q2.x, q2.y), 0.0) - 0.14; // rounded-rect SDF (<0 inside)
+            float fill = smoothstep(0.10, -0.06, sd);                          // 1 inside → soft edge
+            float rimR = smoothstep(0.10, 0.0, abs(sd));                       // glow along the opening border
             float star = valueNoise(uv * 64.0);
             float tw = 0.5 + 0.5 * sin(tt * 3.0 + star * 40.0);
             float bright = smoothstep(0.90, 0.995, star) * tw;
             float3 nebula = mix(float3(0.015, 0.02, 0.06), tint, saturate(energy * 1.25));
-            float fill = smoothstep(1.30, 0.55, ell);                           // soft fade into the stone
-            color = (nebula + float3(bright) * 1.7) * fill + tint * rim * 0.8;
+            color = (nebula + float3(bright) * 1.7) * fill + tint * rimR * 0.7;
             lighting = float3(1.0);
-            if (ell > 1.32) discard_fragment();
+            if (fill < 0.02) discard_fragment();
         } else {
             if (ell > 1.02) discard_fragment();                                 // outside the oval → clear
             float core = smoothstep(1.0, 0.12, ell);                            // bright toward the eye

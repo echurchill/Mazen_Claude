@@ -837,7 +837,7 @@ class TileMeshLibrary {
     /// look (shimmer vs starfield). Double-sided so it reads from both approaches without back-face culls.
     private static func addPortalField(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
-        let hW: Float = 0.15          // half width (~a grand doorway)
+        let hW: Float = 0.18          // half width (~a grand doorway; the arch fill wants to reach the jambs)
         let hgt: Float = 0.52         // height (a touch taller than the old TARDIS body)
         let bl = SIMD3<Float>(-hW, 0, z0), br = SIMD3<Float>(hW, 0, z0)
         let tr = SIMD3<Float>(hW, 0, z0 + hgt), tl = SIMD3<Float>(-hW, 0, z0 + hgt)

@@ -175,7 +175,7 @@ class CubeModel {
     /// (a place on the world → another place / its moon), and a LEVEL-TO-LEVEL stone arch with a
     /// starfield fill (solved level → next). Imported model indices come from the Renderer (which owns
     /// the registry); pass `nil` for any it couldn't resolve and that part is skipped.
-    func stampGalleryPortals(barrel: Int?, column: Int?, torch: Int?, archRuins: Int?, vine: Int?) {
+    func stampGalleryPortals(barrel: Int?, column: Int?, torch: Int?, archRuins: Int?) {
         let n = size, c = n / 2
         let rLo = 3, rHi = 6                                  // showroom rows, north of the catalog (7–13)
         let cLo = max(1, c - 4), cHi = min(n - 1, c + 4)      // cols 8–16
@@ -231,13 +231,12 @@ class CubeModel {
         veil(c - 1, 0)
         veil(c + 1, 1)
 
-        // (3) LEVEL-TO-LEVEL at col c+3 — a stone arch with a starfield fill and climbing vines.
+        // (3) LEVEL-TO-LEVEL at col c+3 — an overgrown arched WALL (a solid panel with a round-arch
+        // opening) so the vortex field fills the entire opening and the stonework frames it completely.
+        // The "Overgrown" model already wears its own moss/foliage, so no separate vines.
         let aCol = c + 3
-        veil(aCol, 2)                                                                                 // starfield fill (+ ring)
-        part(archRuins, aCol, 0.72, 0, 0, 0)                                                          // the stone arch
-        for (ox, oy) in [(-0.16, 0.04), (0.16, 0.04), (-0.12, -0.12)] {
-            part(vine, aCol, 0.16, Float(ox), Float(oy))                                              // climbing vines
-        }
+        veil(aCol, 2)                                                                                 // vortex fill (+ ring)
+        part(archRuins, aCol, 0.78, 0, 0, 0)                                                          // the arched wall
     }
 
     /// M20 proof — lay `.importedAsset` eval cells (3D models) in their own revealed strip just SOUTH
