@@ -65,6 +65,9 @@ final class SceneBuilder {
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
     private var opaqueFogTiles: [TileEntry] = []
     private var dissolveTiles: [TileEntry] = []
+    // PERF: reused mesh-grouping scratch for the fog passes (were fresh dictionaries every frame).
+    private var fogByMesh: [Int: [TileEntry]] = [:]
+    private var dissolveByMesh: [Int: [TileEntry]] = [:]
     private var frameTiles: [TileEntry] = []
     private var celestialTiles: [TileEntry] = []
     private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
@@ -601,11 +604,11 @@ final class SceneBuilder {
 
         // Opaque fog base layer + player marker
         if !opaqueFogTiles.isEmpty {
-            var byMesh: [Int: [TileEntry]] = [:]
+            for key in fogByMesh.keys { fogByMesh[key]?.removeAll(keepingCapacity: true) }
             for entry in opaqueFogTiles {
-                byMesh[entry.mesh.indexOffset, default: []].append(entry)
+                fogByMesh[entry.mesh.indexOffset, default: []].append(entry)
             }
-            for (_, entries) in byMesh {
+            for (_, entries) in fogByMesh where !entries.isEmpty {
                 let mesh = entries[0].mesh
                 let startIdx = idx
                 for entry in entries {
@@ -623,11 +626,11 @@ final class SceneBuilder {
 
         // Translucent fog upper layers + dissolve fog
         if !dissolveTiles.isEmpty {
-            var byMesh: [Int: [TileEntry]] = [:]
+            for key in dissolveByMesh.keys { dissolveByMesh[key]?.removeAll(keepingCapacity: true) }
             for entry in dissolveTiles {
-                byMesh[entry.mesh.indexOffset, default: []].append(entry)
+                dissolveByMesh[entry.mesh.indexOffset, default: []].append(entry)
             }
-            for (_, entries) in byMesh {
+            for (_, entries) in dissolveByMesh where !entries.isEmpty {
                 let mesh = entries[0].mesh
                 let startIdx = idx
                 for entry in entries {
