@@ -188,6 +188,7 @@ class GameState {
             cubeModel.cubies[ci].facelets[fi].discoveryAmount = t
             if t >= 1.0 {
                 cubeModel.cubies[ci].facelets[fi].tileState = .discovered
+                cubeModel.markTopologyChanged()   // PERF: a newly discovered tile gains dressed walls etc.
                 completed.append(i)
             }
         }
@@ -470,6 +471,7 @@ class GameState {
                     // Once opened, retract the alignment cylinder (the twist that opened the door).
                     if opened {
                         cubeModel.cubies[ci].facelets[fi].props.removeAll { $0.kind == .alignmentCylinder }
+                        cubeModel.markTopologyChanged()   // PERF: prop removed — location caches re-derive
                     }
                     break
                 }
@@ -481,31 +483,31 @@ class GameState {
     ///  • GROW: `anim` rises 0→1 the moment the cylinder exists (unlock), so it extrudes from the disc.
     ///  • ALIGN: once engaged AND fully risen, `alignAnim` rises 0→1 (the half-squares pivot whole);
     ///    at 1 it fires the start-face twist that opens the door — the plinth turning the world for you.
-    /// (There is at most one alignment cylinder per world; a full scan is cheap at these counts.)
+    /// PERF: iterates the cached list of facelets that actually CARRY a switch cap / cylinder
+    /// (`animatablePropTiles`, keyed on topologyVersion) instead of sweeping every cubie×facelet×prop
+    /// per frame — a full-surface scan at size 25 to animate a handful of props.
     private func tickAlignmentCylinder(_ dt: Float) {
         let growRate: Float = 1.0 / 0.8, alignRate: Float = 1.0 / 1.1
         let switchRate: Float = dt / 0.3       // switch cap slides between flush/out in ~0.3 s
-        for ci in cubeModel.cubies.indices {
-            for fi in cubeModel.cubies[ci].facelets.indices {
-                // Switch caps: ease the current height (anim) toward the engaged target (alignAnim).
-                for pi in cubeModel.cubies[ci].facelets[fi].props.indices
-                where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .switchCap {
-                    let target = cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim
-                    let cur = cubeModel.cubies[ci].facelets[fi].props[pi].anim
-                    cubeModel.cubies[ci].facelets[fi].props[pi].anim =
-                        cur < target ? min(target, cur + switchRate) : max(target, cur - switchRate)
-                }
-                for pi in cubeModel.cubies[ci].facelets[fi].props.indices
-                where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .alignmentCylinder {
-                    cubeModel.cubies[ci].facelets[fi].props[pi].anim =
-                        min(1, cubeModel.cubies[ci].facelets[fi].props[pi].anim + dt * growRate)
-                    guard cylinderEngaged, cubeModel.cubies[ci].facelets[fi].props[pi].anim >= 1 else { continue }
-                    let a = min(1, cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim + dt * alignRate)
-                    cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = a
-                    if a >= 1 {
-                        cylinderEngaged = false
-                        startSliceRotation(clockwise: true)   // whole → the world turns → door opens → cylinder retracts
-                    }
+        for (ci, fi) in cubeModel.animatablePropTiles() {
+            // Switch caps: ease the current height (anim) toward the engaged target (alignAnim).
+            for pi in cubeModel.cubies[ci].facelets[fi].props.indices
+            where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .switchCap {
+                let target = cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim
+                let cur = cubeModel.cubies[ci].facelets[fi].props[pi].anim
+                cubeModel.cubies[ci].facelets[fi].props[pi].anim =
+                    cur < target ? min(target, cur + switchRate) : max(target, cur - switchRate)
+            }
+            for pi in cubeModel.cubies[ci].facelets[fi].props.indices
+            where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .alignmentCylinder {
+                cubeModel.cubies[ci].facelets[fi].props[pi].anim =
+                    min(1, cubeModel.cubies[ci].facelets[fi].props[pi].anim + dt * growRate)
+                guard cylinderEngaged, cubeModel.cubies[ci].facelets[fi].props[pi].anim >= 1 else { continue }
+                let a = min(1, cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim + dt * alignRate)
+                cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = a
+                if a >= 1 {
+                    cylinderEngaged = false
+                    startSliceRotation(clockwise: true)   // whole → the world turns → door opens → cylinder retracts
                 }
             }
         }
@@ -530,6 +532,7 @@ class GameState {
         }
         cylinderEngaged = false
         cubeModel.bondedGroups.removeAll()   // unlock (bypass the switches)
+        cubeModel.markTopologyChanged()      // PERF: cylinder props removed above — caches re-derive
         updateDoorPlinths()                  // ⇒ plinth shows all-filled, ready for F
     }
 
@@ -570,6 +573,7 @@ class GameState {
                 cubeModel.cubies[ci].facelets[fi].props.append(
                     Prop(kind: .alignmentCylinder, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
                          facing: plinthProp.facing, state: 0))
+                cubeModel.markTopologyChanged()   // PERF: prop added — location caches re-derive
                 lastCylinderRaiseTime = time
             }
             return

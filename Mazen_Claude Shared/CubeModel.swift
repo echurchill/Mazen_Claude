@@ -264,6 +264,7 @@ class CubeModel {
     /// after the world builds (pass `nil` for any not loaded → that frame is skipped). Non-solid, so
     /// you still walk through; always shown (the frame stays even while the energy field is sealed off).
     func stampPortalFrames(column: Int?, archRuins: Int?) {
+        defer { markTopologyChanged() }   // PERF: appends props (the home world stamps this lazily, post-boot)
         for e in styledPortals {
             if e.fieldStyle == 2 {                           // ARCH (level-to-level cloud portal)
                 guard let a = archRuins else { continue }
@@ -1893,6 +1894,94 @@ class CubeModel {
     struct StyledPortal { let ci: Int; let fi: Int; let facing: Heading8; let fieldStyle: Int }
     var styledPortals: [StyledPortal] = []
 
+    // MARK: - PERF: topology version + derived caches
+
+    /// Monotone counter bumped whenever topology-derived render inputs change: a finalized slice twist
+    /// (openings/uvTurns/props rotate), a tile completing discovery, or a prop added/removed at runtime.
+    /// The caches below key on it, so the per-frame 6×n² scans collapse to cache hits between changes —
+    /// while a bump forces full re-derivation, preserving the twist-safety invariant (walls/props always
+    /// re-derive from live topology after a change).
+    private(set) var topologyVersion: UInt64 = 1
+    func markTopologyChanged() { topologyVersion &+= 1 }
+
+    struct PropTileEntry { let face: CubeFace; let row: Int; let col: Int; let ci: Int; let fi: Int }
+    private var propTilesCache: (version: UInt64, entries: [PropTileEntry]) = (0, [])
+
+    /// Facelets that carry props, as grid locations (the Renderer's asset pass iterates this instead of
+    /// scanning all 6×n² tiles per frame). Only LOCATIONS are cached — prop fields are read live by the
+    /// consumer; a twist relocates props ⇒ version bump ⇒ rescan.
+    func propTiles() -> [PropTileEntry] {
+        if propTilesCache.version != topologyVersion {
+            var entries: [PropTileEntry] = []
+            for face in CubeFace.allCases {
+                for row in 0..<size {
+                    for col in 0..<size {
+                        guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
+                        if !cubies[ci].facelets[fi].props.isEmpty {
+                            entries.append(PropTileEntry(face: face, row: row, col: col, ci: ci, fi: fi))
+                        }
+                    }
+                }
+            }
+            propTilesCache = (topologyVersion, entries)
+        }
+        return propTilesCache.entries
+    }
+
+    private var dressedClearCache: (version: UInt64, tiles: Set<Int>) = (0, [])
+    private var dressedWallCache: (version: UInt64, entries: [(loc: PropTileEntry, props: [Prop])]) = (0, [])
+
+    /// Dressed-wall props for every discovered tile — the same derivation as calling `dressedWallProps`
+    /// per tile per frame (twist-safe: any topology change re-derives everything), just cached between
+    /// changes. The palette/scales are fixed per world (the Renderer's `wallDressingPalette`), so the
+    /// cache keys on `topologyVersion` alone.
+    func dressedWallEntries(walls: [Int], rocks: [Int], bushes: [Int],
+                            wallScale: Float, rockScale: Float, bushScale: Float) -> [(loc: PropTileEntry, props: [Prop])] {
+        if dressedWallCache.version != topologyVersion {
+            if dressedClearCache.version != topologyVersion {
+                dressedClearCache = (topologyVersion, dressedClearTiles())
+            }
+            let clear = dressedClearCache.tiles
+            var entries: [(loc: PropTileEntry, props: [Prop])] = []
+            for face in CubeFace.allCases {
+                for row in 0..<size {
+                    for col in 0..<size {
+                        guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
+                        let facelet = cubies[ci].facelets[fi]
+                        guard facelet.tileState == .discovered else { continue }
+                        let props = dressedWallProps(facelet, face: face, row: row, col: col,
+                                                     walls: walls, rocks: rocks, bushes: bushes,
+                                                     wallScale: wallScale, rockScale: rockScale, bushScale: bushScale,
+                                                     skipOvergrowth: clear.contains(facelet.id.rawValue))
+                        if !props.isEmpty {
+                            entries.append((PropTileEntry(face: face, row: row, col: col, ci: ci, fi: fi), props))
+                        }
+                    }
+                }
+            }
+            dressedWallCache = (topologyVersion, entries)
+        }
+        return dressedWallCache.entries
+    }
+
+    /// Facelets carrying animatable puzzle props (switch caps / the alignment cylinder) — replaces
+    /// GameState.tickAlignmentCylinder's every-frame full cubie×facelet×prop sweep.
+    private var animPropCache: (version: UInt64, entries: [(ci: Int, fi: Int)]) = (0, [])
+    func animatablePropTiles() -> [(ci: Int, fi: Int)] {
+        if animPropCache.version != topologyVersion {
+            var entries: [(ci: Int, fi: Int)] = []
+            for ci in cubies.indices {
+                for fi in cubies[ci].facelets.indices {
+                    if cubies[ci].facelets[fi].props.contains(where: { $0.kind == .switchCap || $0.kind == .alignmentCylinder }) {
+                        entries.append((ci, fi))
+                    }
+                }
+            }
+            animPropCache = (topologyVersion, entries)
+        }
+        return animPropCache.entries
+    }
+
     /// Bonded cubie groups: each set of cubie indices must move together, so a slice twist that
     /// would cut through a group — some of its cubies in the rotating slice, some out — is illegal
     /// and refused. Indices are into `cubies` and stay valid across turns (`applySliceRotation`
@@ -1979,6 +2068,7 @@ class CubeModel {
         }
 
         rebuildProjection()
+        markTopologyChanged()   // PERF: a twist relocated tiles/props — derived caches must re-derive
     }
 
     func sliceAxisAndIndex(for face: CubeFace) -> (axis: Int, index: Int) {

@@ -795,7 +795,6 @@ class Renderer: NSObject, MTKViewDelegate {
         let cap = assetInstanceBuffers[currentBufferIndex].length / MemoryLayout<InstanceDataSwift>.stride
         let ptr = assetInstanceBuffers[currentBufferIndex].contents().bindMemory(to: InstanceDataSwift.self, capacity: cap)
         let ws = gameState.worldScale
-        let n = gameState.cubeModel.size
         let spin = gameState.worldSpinMatrix()
         let model = gameState.cubeModel
         let sr = gameState.sliceRotation
@@ -887,41 +886,30 @@ class Renderer: NSObject, MTKViewDelegate {
             }
         }
 
-        for face in CubeFace.allCases {
-            for row in 0..<n {
-                for col in 0..<n {
-                    guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
-                    let props = model.cubies[ci].facelets[fi].props
-                    if props.isEmpty { continue }
-                    for prop in props { placeProp(prop, face: face, row: row, col: col, ci: ci) }
-                }
-            }
+        // PERF: iterate only the facelets that CARRY props (cached per topologyVersion) instead of
+        // scanning all 6×n² tiles per frame. Prop fields are read live; a twist bumps the version.
+        for e in model.propTiles() {
+            let props = model.cubies[e.ci].facelets[e.fi].props
+            for prop in props { placeProp(prop, face: e.face, row: e.row, col: e.col, ci: e.ci) }
         }
 
         // M20 — DYNAMIC dressed walls (twist-safe stone walls). For a `.dressed` world the hedge mesh is
         // suppressed; instead we emit imported wall MODELS on every closed edge of each discovered tile,
-        // re-derived from the live topology every frame — so a slice-twist carries the walls with their
-        // tiles exactly like the hedge mesh (the failure that killed static stamped walls can't recur).
+        // re-derived from the live topology — so a slice-twist carries the walls with their tiles exactly
+        // like the hedge mesh. PERF: the derivation is cached per topologyVersion (a twist/discovery
+        // re-derives everything); PLACEMENT stays per-frame (placeProp applies the live slice matrix),
+        // so mid-twist animation still swings the walls with their slice.
         if model.wallStyle == .dressed && (!wallDressingPalette.walls.isEmpty
                                            || !wallDressingPalette.rocks.isEmpty
                                            || !wallDressingPalette.bushes.isEmpty) {
             let mUnit = ws.eyeHeight / 1.7
             let wallScale = 4.0 * mUnit / 0.85            // ~4 m wide, matching the hedges they replace
             let rockScale = wallScale * 0.7, bushScale = wallScale * 0.5
-            let clear = model.dressedClearTiles()          // overgrowth skips puzzle tiles + neighbours
             let pal = wallDressingPalette
-            for face in CubeFace.allCases {
-                for row in 0..<n {
-                    for col in 0..<n {
-                        guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
-                        let facelet = model.cubies[ci].facelets[fi]
-                        guard facelet.tileState == .discovered else { continue }   // only the revealed maze
-                        let wallProps = model.dressedWallProps(facelet, face: face, row: row, col: col,
-                            walls: pal.walls, rocks: pal.rocks, bushes: pal.bushes,
-                            wallScale: wallScale, rockScale: rockScale, bushScale: bushScale,
-                            skipOvergrowth: clear.contains(facelet.id.rawValue))
-                        for prop in wallProps { placeProp(prop, face: face, row: row, col: col, ci: ci) }
-                    }
+            for entry in model.dressedWallEntries(walls: pal.walls, rocks: pal.rocks, bushes: pal.bushes,
+                                                  wallScale: wallScale, rockScale: rockScale, bushScale: bushScale) {
+                for prop in entry.props {
+                    placeProp(prop, face: entry.loc.face, row: entry.loc.row, col: entry.loc.col, ci: entry.loc.ci)
                 }
             }
         }
