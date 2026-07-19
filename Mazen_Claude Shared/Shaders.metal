@@ -616,20 +616,22 @@ fragment float4 fragmentShader(
             float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 + dir * tt * 0.6 + phase), 4);
             float streak = 0.5 + 0.5 * sin(uv.x * 8.0 + flow * 4.0 + dir * tt * 1.4 + phase);
             float energy = pow(streak, 2.0) * (0.55 + 0.7 * flow);
-            float edge = smoothstep(0.0, 0.30, uv.x) * smoothstep(1.0, 0.70, uv.x);   // side falloff
+            float edge = smoothstep(0.0, 0.42, uv.x) * smoothstep(1.0, 0.58, uv.x);   // softer side falloff (Eddie)
             float topN = fbm(float2(uv.x * 6.0 + phase, 11.3), 3);         // per-column top height
             float topLimit = 0.70 + 0.22 * topN;                          // ragged top silhouette
             if (uv.y > topLimit) discard_fragment();
-            float topFade = smoothstep(topLimit, topLimit - 0.16, uv.y);
-            float veil = energy * edge * topFade;
-            if (veil < 0.08) discard_fragment();                          // wispy tendrils
-            // Translucency via MOVING noise holes (Eddie: a static screen-door grain read cheesy). The
-            // holes scroll with the flow; the layer's opacity (discoveryAmount) sets how many.
+            float topFade = smoothstep(topLimit, topLimit - 0.22, uv.y);  // softer top dissolve
+            float soft = edge * topFade;                                  // 1 in the body → 0 toward every edge
+            float veil = energy * soft;
+            if (veil < 0.04) discard_fragment();                          // wispy tendrils
+            // Translucency via MOVING noise holes (a static screen-door grain read cheesy). Grade it by
+            // `soft` so the edges get MORE transparent — a gradient of translucency that dissolves the
+            // layer into its surroundings rather than a hard cut-off (Eddie).
             float holes = valueNoise(float2(uv.x * 11.0, uv.y * 7.0 + dir * tt * 1.7) + flow);
-            if (holes > in.discoveryAmount) discard_fragment();
-            // Bright motes racing along the flow (denser + brighter so they actually read).
+            if (holes > in.discoveryAmount * (0.18 + 0.82 * soft)) discard_fragment();
+            // Bright motes racing along the flow (fade at the edges with `soft`).
             float mote = smoothstep(0.80, 0.95, valueNoise(float2(uv.x * 6.0 + phase, uv.y * 4.5 + dir * tt * 1.8)));
-            color = tint * (0.5 + 1.6 * veil) + float3(0.75, 0.88, 1.0) * mote * 1.4;
+            color = tint * (0.5 + 1.6 * veil) + float3(0.75, 0.88, 1.0) * mote * soft * 1.4;
             lighting = float3(1.0);
         } else {
         bool arch = (in.styleSeed == 2u);
@@ -651,19 +653,15 @@ fragment float4 fragmentShader(
             // Fill the WHOLE arch opening to its SHAPE (Eddie): straight jambs up to a springline, then
             // a round arch to the apex. The field is also made taller (heightScale, set in SceneBuilder)
             // so it reaches up into the stone arch instead of stopping short. Swirl spins from the centre.
-            float hw = 0.47, spring = 0.52;                                    // half-width, springline (uv)
-            float side = smoothstep(hw + 0.03, hw - 0.05, abs(uv.x - 0.5));    // within the jambs
-            float top;
-            if (uv.y <= spring) { top = 1.0; }                                 // straight lower part
-            else {                                                             // elliptical arch to the apex
-                float2 e = float2((uv.x - 0.5) / hw, (uv.y - spring) / (1.0 - spring));
-                top = smoothstep(1.02, 0.88, length(e));
-            }
-            float fill = side * top;
-            float rimR = smoothstep(0.45, 0.06, fill) * smoothstep(0.0, 0.06, fill);   // glow near the border
-            // "Crossing storms" volumetric plasma (Eddie's ref, ported above), masked to the arch shape.
+            // Leave the fill RECTANGULAR (Eddie: don't trim it to the arch shape), with soft gradient
+            // edges — full at the base, fading at the sides and top so it seats inside the opening.
+            float sideF = smoothstep(0.5, 0.34, abs(uv.x - 0.5));
+            float topF  = smoothstep(1.0, 0.80, uv.y);
+            float fill = sideF * topF;
+            float rimR = smoothstep(0.35, 0.05, fill) * smoothstep(0.0, 0.05, fill);   // glow near the border
+            // "Crossing storms" volumetric plasma (Eddie's ref, ported above), in a soft rectangle.
             float3 storm = crossingStorms(uv, tt);
-            color = storm * fill + tint * rimR * 0.7;
+            color = storm * fill + tint * rimR * 0.5;
             lighting = float3(1.0);
             if (fill < 0.02) discard_fragment();
         } else {

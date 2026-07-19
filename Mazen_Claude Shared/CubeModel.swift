@@ -248,10 +248,10 @@ class CubeModel {
         // opening up into the curved top. The "Overgrown" model wears its own moss, so no separate vines.
         let aCol = c + 4
         add(aCol, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                      // base glow
-        var archField = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2)          // vortex fill (~4 m, arch-masked)
-        archField.offsetY = -0.015                                                                    // set just behind the stone so overshoot is cropped
-        add(aCol, archField)
-        part(archRuins, aCol, 0.24, 0, 0, 0)                                                          // the arched wall, opening shrunk to ≈ the 4 m field
+        // Rectangular fill, shorter than 4 m so it doesn't stick past the arch top, and centered
+        // depthwise IN the opening (offsetY 0 = the arch's mid-plane), not set behind it (Eddie).
+        add(aCol, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2, extraScale: 0.75))  // ~3 m tall
+        part(archRuins, aCol, 0.24, 0, 0, 0)                                                          // the arched wall
     }
 
     /// M20 proof — lay `.importedAsset` eval cells (3D models) in their own revealed strip just SOUTH
