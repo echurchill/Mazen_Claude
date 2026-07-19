@@ -566,36 +566,48 @@ fragment float4 fragmentShader(
             lighting = amb * 0.6 + float3(0.35);
         }
     } else if (in.materialID == 23) {
-        // M20 (Eddie) — a portal's animated ENERGY field (the new portal styles replacing the TARDIS).
-        // Drawn on a vertical veil quad (texCoord u across, v bottom→top), tinted by baseColor, driven
-        // by frame.time. Emissive. `styleSeed`: 0/1 = shimmering energy veil (spot-to-spot), 2 =
-        // starfield/galaxy fill (level-to-level, under a stone arch). Wispy edges use cutout so no
-        // alpha-blend pass is needed.
+        // M20 (Eddie) — a portal's animated ENERGY field. Upgraded to a swirling VORTEX: technique
+        // ported from a BinBun Godot portal shader and reimplemented procedurally for Metal (no
+        // textures, no Godot) — a differential-rotation swirl (twisting harder toward the eye) that
+        // scrolls inward for a look-into-depth read, inside a soft ELLIPSE shape mask with a glowing
+        // rim. Tinted by baseColor, driven by frame.time, emissive; cutout edges (no alpha-blend pass).
+        // texCoord u across, v bottom→top. styleSeed: 0/1 = free-standing energy veil (an oval that
+        // cuts out cleanly), 2 = starfield/galaxy fill that seats inside a stone arch.
         float2 uv = in.texCoord;
         float tt = frame.time;
         float3 tint = in.color.rgb;
-        if (in.styleSeed == 2u) {
-            // Starfield / galaxy: dark space, a slow nebula swirl in the tint, and twinkling stars.
-            float neb = fbm(uv * 3.0 + float2(tt * 0.03, -tt * 0.02), 4);
-            float swirl = fbm(uv * 5.0 + neb * 1.6, 3);
-            float3 nebula = mix(float3(0.015, 0.02, 0.06), tint, saturate(swirl * 1.25));
+        bool arch = (in.styleSeed == 2u);
+        float2 d = uv - 0.5;
+        // Tall ellipse: `ell` is 0 at the eye, 1 on the boundary. The arch fill is fuller/softer.
+        float2 axes = arch ? float2(0.52, 0.52) : float2(0.42, 0.5);
+        float ell = length(d / axes);
+        // Seam-free swirl: rotate the sample coords by a radius-dependent angle (differential rotation
+        // = a vortex), spinning over time, then read fbm in the twisted frame. A second sine lays fine
+        // filaments over it. Scrolling the radius inward reads as depth pulling toward the centre.
+        float rot = tt * 0.5 + (1.25 - ell) * 3.6;
+        float cs = cos(rot), sn = sin(rot);
+        float2 rv = float2(d.x * cs - d.y * sn, d.x * sn + d.y * cs);
+        float swirl = fbm(rv * 7.0 + float2(0.0, -tt * 0.25), 5);
+        float filament = 0.5 + 0.5 * sin(swirl * 6.2831853 + ell * 9.0 - tt * 1.4);
+        float energy = mix(swirl, filament, 0.55);
+        float rim = smoothstep(0.80, 1.0, ell) * smoothstep(1.15, 0.98, ell);   // glowing boundary ring
+        if (arch) {
+            // Starfield / galaxy: the swirl tints a dark nebula, plus twinkling stars; fills the arch.
             float star = valueNoise(uv * 64.0);
-            float twinkle = 0.5 + 0.5 * sin(tt * 3.0 + star * 40.0);
-            float bright = smoothstep(0.90, 0.995, star) * twinkle;
-            // fade toward the opening edge so it seats inside the arch rather than a hard rectangle
-            float edge = smoothstep(0.0, 0.10, uv.x) * smoothstep(1.0, 0.90, uv.x)
-                       * smoothstep(0.0, 0.05, uv.y) * smoothstep(1.0, 0.97, uv.y);
-            color = (nebula + float3(bright) * 1.7) * (0.5 + 0.5 * edge);
+            float tw = 0.5 + 0.5 * sin(tt * 3.0 + star * 40.0);
+            float bright = smoothstep(0.90, 0.995, star) * tw;
+            float3 nebula = mix(float3(0.015, 0.02, 0.06), tint, saturate(energy * 1.25));
+            float fill = smoothstep(1.30, 0.55, ell);                           // soft fade into the stone
+            color = (nebula + float3(bright) * 1.7) * fill + tint * rim * 0.8;
             lighting = float3(1.0);
+            if (ell > 1.32) discard_fragment();
         } else {
-            // Energy veil: vertical flowing streaks of light, brighter core, wispy translucent edges.
-            float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 - tt * 0.55), 4);
-            float streak = 0.5 + 0.5 * sin(uv.x * 8.0 + flow * 4.0 + tt * 1.4);
-            float energy = pow(streak, 2.0) * (0.55 + 0.7 * flow);
-            float edge = smoothstep(0.0, 0.32, uv.x) * smoothstep(1.0, 0.68, uv.x);   // veil, not a slab
-            float veil = energy * edge;
-            if (flow * edge + 0.16 < 0.30) discard_fragment();                        // wispy tendrils
-            color = tint * (0.45 + 1.7 * veil) + float3(0.65, 0.75, 1.0) * pow(veil, 3.0) * 0.8;
+            if (ell > 1.02) discard_fragment();                                 // outside the oval → clear
+            float core = smoothstep(1.0, 0.12, ell);                            // bright toward the eye
+            float v = energy * core;
+            color = tint * (0.32 + 1.35 * v) + float3(0.68, 0.78, 1.0) * pow(v, 3.0) * 0.7;
+            color += tint * rim * 1.7;                                          // glowing rim
+            if (v + rim < 0.09) discard_fragment();                            // wispy filaments, not a disc
             lighting = float3(1.0);
         }
     } else if (in.materialID == 20) {
