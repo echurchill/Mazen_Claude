@@ -1,9 +1,17 @@
 import Foundation
 import simd
 
-/// The app defines this global in GameState.swift (not compiled here); PlayerState
-/// references it, so the harness supplies the quiet default.
-let verboseDebugLog = false
+// (GameState.swift is compiled into the harness now — it supplies `verboseDebugLog`.)
+
+/// GameState references two pure constants from TextureLoader (Metal-bound, not compiled here):
+/// the CausticSymbol slice ids and progressMaskBase. This shim mirrors them EXACTLY — if the real
+/// enum in TextureLoader.swift gains/reorders cases, update this copy (the compiler can't catch it).
+enum TextureLoader {
+    enum CausticSymbol: Int, CaseIterable {
+        case blank = 0, one, two, three, four, swirl, portal, square, threeOfFour, fourFilled
+    }
+    static let progressMaskBase = CausticSymbol.allCases.count
+}
 
 // Standalone coordinate-math test runner (Phase 0 / R4).
 //
@@ -61,6 +69,8 @@ struct CoordinateMathTests {
         testInflateGoldens()
         testSizeCap()
         testStandGridPathCross()
+        testWalkThroughPortalGating()
+        testTopologyVersionCaches()
 
         print("")
         if failed == 0 {
@@ -848,5 +858,142 @@ struct CoordinateMathTests {
         check(WorldScale(cubeSize: 7).cubeSize == 7, "normal sizes untouched")
         check(WorldScale(cubeSize: 1).cubeSize == 2, "floor clamps to 2")
         check(CubeModel(size: 99).size == WorldScale.maxSupportedSize, "CubeModel inherits the cap")
+    }
+
+    /// M20 — the walk-through portal trigger (the two regressions Eddie hit, as permanent guards):
+    /// (a) tile-entry must NOT fire it — only reaching the portal's own centre sub-cell does
+    ///     ("sensitive" bug: fired half a tile early);
+    /// (b) the continuous check must fire when you settle on the centre — not only on tile
+    ///     crossings (dead-centre-nothing-happens bug);
+    /// (c) priming: a portal you spawn on, stand on, or that re-primes under you (a twist) must
+    ///     not teleport you — you have to walk OFF and back ON.
+    static func testWalkThroughPortalGating() {
+        func makeState() -> GameState {
+            let g = GameState(size: 5, name: "portal-test", stamp: .bare)
+            let c = g.cubeModel.size / 2
+            if let (ci, fi) = g.cubeModel.faceletAt(face: .positiveZ, row: c + 1, col: c) {
+                g.cubeModel.cubies[ci].facelets[fi].props.append(
+                    Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 3))
+            }
+            return g
+        }
+        let dt: Float = 1.0 / 60.0
+        let g = makeState()
+        let c = g.cubeModel.size / 2
+        let center = g.player.standCenter
+        // (prime) player settled off-portal: first update records position, no fire
+        g.update(deltaTime: dt)
+        check(!g.portalRequested, "portal: no fire while off the portal tile")
+        // (a) step onto the portal TILE but at its edge sub-cell — must NOT fire
+        g.player.row = c + 1; g.player.col = c
+        g.player.subRow = 0; g.player.subCol = center
+        g.update(deltaTime: dt)
+        check(!g.portalRequested, "portal: entering the tile edge does not fire (the 'sensitive' bug)")
+        // (b) reach the CENTRE sub-cell — must fire, with the portal's destination
+        g.player.subRow = center; g.player.subCol = center
+        g.update(deltaTime: dt)
+        check(g.portalRequested, "portal: settling on the centre sub-cell fires")
+        check(g.portalDestinationID == 3, "portal: destination rides Prop.state")
+        // (c1) standing still must not re-fire
+        g.portalRequested = false
+        g.update(deltaTime: dt)
+        check(!g.portalRequested, "portal: standing on it does not re-fire (edge-triggered)")
+        // (c2) re-prime (what a finalized twist does) with the player ON the portal: no fire
+        g.reprimePortalZone()
+        g.update(deltaTime: dt)
+        check(!g.portalRequested, "portal: re-prime on the portal (twist case) does not teleport")
+        // walk off and back on — fires again
+        g.player.subRow = 0
+        g.update(deltaTime: dt)
+        g.player.subRow = center
+        g.update(deltaTime: dt)
+        check(g.portalRequested, "portal: off then back on fires again")
+        // (c3) spawn directly on a portal: the first evaluations must not fire
+        let g2 = makeState()
+        g2.player.row = c + 1; g2.player.col = c
+        g2.player.subRow = center; g2.player.subCol = center
+        g2.update(deltaTime: dt)
+        g2.update(deltaTime: dt)
+        check(!g2.portalRequested, "portal: spawning on a portal does not teleport (priming)")
+    }
+
+    /// PERF (2026-07-19) — the topology-versioned caches must be EXACTLY equivalent to fresh
+    /// re-derivation: stable between changes, and re-derived to a structural match after a twist
+    /// (the dressed-wall twist-safety invariant, promoted from a throwaway probe to a guard).
+    static func testTopologyVersionCaches() {
+        let g = GameState(size: 25, name: "cache-test", stamp: .gardenMaze)
+        let m = g.cubeModel
+        let walls = [0, 1], rocks = [2, 3], bushes = [4]   // palette = registry indices; any ints work
+
+        func freshPropTiles() -> [String] {
+            var out: [String] = []
+            for face in CubeFace.allCases {
+                for row in 0..<m.size {
+                    for col in 0..<m.size {
+                        guard let (ci, fi) = m.faceletAt(face: face, row: row, col: col) else { continue }
+                        if !m.cubies[ci].facelets[fi].props.isEmpty { out.append("\(face)/\(row)/\(col)/\(ci)/\(fi)") }
+                    }
+                }
+            }
+            return out.sorted()
+        }
+        func cachedPropTiles() -> [String] {
+            m.propTiles().map { "\($0.face)/\($0.row)/\($0.col)/\($0.ci)/\($0.fi)" }.sorted()
+        }
+        func wallSig(_ face: CubeFace, _ r: Int, _ c: Int, _ ps: [Prop]) -> String {
+            "\(face)/\(r)/\(c):" + ps.map { "\($0.state),\($0.offsetX),\($0.offsetY),\($0.facing),\($0.extraScale)" }.joined(separator: ";")
+        }
+        func cachedWallSigs() -> Set<String> {
+            var sigs = Set<String>()
+            for e in m.dressedWallEntries(walls: walls, rocks: rocks, bushes: bushes,
+                                          wallScale: 1, rockScale: 0.7, bushScale: 0.5) {
+                sigs.insert(wallSig(e.loc.face, e.loc.row, e.loc.col, e.props))
+            }
+            return sigs
+        }
+        func freshWallSigs() -> Set<String> {
+            let clear = m.dressedClearTiles()
+            var sigs = Set<String>()
+            for face in CubeFace.allCases {
+                for r in 0..<m.size {
+                    for c in 0..<m.size {
+                        guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                        let f = m.cubies[ci].facelets[fi]
+                        guard f.tileState == .discovered else { continue }
+                        let ps = m.dressedWallProps(f, face: face, row: r, col: c,
+                                                    walls: walls, rocks: rocks, bushes: bushes,
+                                                    wallScale: 1, rockScale: 0.7, bushScale: 0.5,
+                                                    skipOvergrowth: clear.contains(f.id.rawValue))
+                        if !ps.isEmpty { sigs.insert(wallSig(face, r, c, ps)) }
+                    }
+                }
+            }
+            return sigs
+        }
+
+        // Pre-twist: cache == fresh, and stable across repeat calls.
+        check(cachedPropTiles() == freshPropTiles(), "cache: propTiles matches brute-force scan")
+        let sigsA = cachedWallSigs()
+        check(!sigsA.isEmpty, "cache: garden derives dressed walls")
+        check(sigsA == cachedWallSigs(), "cache: dressed walls stable on repeat call")
+        check(sigsA == freshWallSigs(), "cache: dressed walls match fresh derivation")
+        // dressedWallProps itself is pure: same inputs, same output.
+        let ver0 = m.topologyVersion
+        _ = cachedWallSigs()
+        check(m.topologyVersion == ver0, "cache: reads do not bump the version")
+
+        // Twist: version bumps, caches re-derive, and STRUCTURALLY match a fresh recompute
+        // (count parity is not enough — a face twist preserves totals).
+        let (ax, ix) = m.sliceAxisAndIndex(for: .positiveZ)
+        m.applySliceRotation(axis: ax, index: ix, angle: .pi / 2)
+        check(m.topologyVersion != ver0, "cache: a twist bumps topologyVersion")
+        let sigsB = cachedWallSigs()
+        check(sigsB == freshWallSigs(), "cache: post-twist dressed walls match fresh derivation (twist-safety)")
+        check(sigsB != sigsA, "cache: the twist actually changed the layout under test")
+        check(cachedPropTiles() == freshPropTiles(), "cache: post-twist propTiles matches brute-force")
+
+        // Four quarter-turns round-trip back to the original layout.
+        for _ in 0..<3 { m.applySliceRotation(axis: ax, index: ix, angle: .pi / 2) }
+        check(cachedWallSigs() == sigsA, "cache: four quarter-turns restore the original walls")
     }
 }

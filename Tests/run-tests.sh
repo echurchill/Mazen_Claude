@@ -14,6 +14,9 @@ swiftc -O \
     "$SHARED/CubeModel.swift" \
     "$SHARED/PlayerState.swift" \
     "$SHARED/PlayerKnowledge.swift" \
+    "$SHARED/CameraState.swift" \
+    "$SHARED/CelestialSystem.swift" \
+    "$SHARED/GameState.swift" \
     "Tests/CoordinateMathTests.swift" \
     -o "$OUT"
 
