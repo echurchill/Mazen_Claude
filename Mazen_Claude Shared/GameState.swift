@@ -253,9 +253,14 @@ class GameState {
         // teleport you home — you interact with F or walk onto it (Eddie, M19 — the moon's return
         // portal sits by spawn, so a twist kept landing it under the player).
         // M15.2: the portal's `state` says WHERE it leads (index into Renderer.portalDestinations).
+        // Fire only when the player is actually on the portal's SUB-CELL (its 3×3 author cell), not
+        // merely anywhere on the ~19 m tile — otherwise it triggers half a tile early, well before you
+        // reach the arch/curtain (Eddie: "sensitive"). Map the stand-grid position to the author 3×3.
         if viaMove,
            let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
            let portal = cubeModel.cubies[pci].facelets[pfi].props.first(where: { $0.kind == .portal }),
+           player.subRow * 3 / player.standGrid == portal.subRow,
+           player.subCol * 3 / player.standGrid == portal.subCol,
            !cubeModel.sealedPortalCubies.contains(pci) {   // M16.4: a sealed door is just a door
             portalRequested = true
             portalDestinationID = portal.state
