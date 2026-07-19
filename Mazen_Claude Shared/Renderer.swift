@@ -27,9 +27,29 @@ struct AssetDrawCmd {
     let indexBuffer: MTLBuffer
     let indexOffset: Int        // element offset
     let indexCount: Int
-    let instanceIndex: Int
+    let instanceIndex: Int      // baseInstance of this command's contiguous instance range
     let diffuse: MTLTexture?
     var cutout: Bool = false    // diffuse is a cut-out ⇒ alpha-test it in the shadow pass too
+    var instanceCount: Int = 1  // PERF: one instanced draw per unique (mesh, submesh, texture)
+}
+
+/// PERF — identity of one instanced asset draw: the same sub-mesh with the same texture, drawn N times
+/// with different transforms, becomes ONE `drawIndexedPrimitives(instanceCount: N)` instead of N draws
+/// (and N more in the shadow pass). Same bucketing idea SceneBuilder already uses for the maze tiles.
+struct AssetBucketKey: Hashable {
+    let indexBuffer: ObjectIdentifier   // mesh identity (its index buffer)
+    let indexOffset: Int                // sub-mesh range start (0 = whole mesh)
+    let diffuse: ObjectIdentifier?      // bound texture identity (nil = flat colour)
+}
+
+struct AssetBucket {
+    let vertexBuffer: MTLBuffer
+    let indexBuffer: MTLBuffer
+    let indexOffset: Int
+    let indexCount: Int
+    let diffuse: MTLTexture?
+    let cutout: Bool
+    var instances: [InstanceDataSwift] = []
 }
 
 class Renderer: NSObject, MTKViewDelegate {
@@ -133,6 +153,9 @@ class Renderer: NSObject, MTKViewDelegate {
     var houseAssemblyDoor: [HouseKitPiece] = []   // the front quarter — one wall swapped for a door
     var assetInstanceBuffers: [MTLBuffer] = []
     var assetDrawCmds: [AssetDrawCmd] = []
+    /// PERF — persistent instancing buckets for the imported-asset pass (cleared per frame with
+    /// capacity kept; entries persist so per-frame allocation is ~zero once warmed up).
+    private var assetBuckets: [AssetBucketKey: AssetBucket] = [:]
     var opaqueDrawCalls: [DrawCall] = []
     var wallDrawCallRange: Range<Int> = 0..<0
     var translucentDrawCalls: [DrawCall] = []
@@ -778,40 +801,48 @@ class Renderer: NSObject, MTKViewDelegate {
         let sr = gameState.sliceRotation
         let sliceMat = sr.currentMatrix   // single source: SliceRotation (R2.3)
         let step = ws.subCellStep
-        var inst = 0
+        // PERF — clear the persistent buckets, keeping their capacity (entries persist across frames).
+        for key in assetBuckets.keys { assetBuckets[key]?.instances.removeAll(keepingCapacity: true) }
+
+        // Accumulate one instance into its (mesh, submesh, texture) bucket — packed + drawn instanced below.
+        func bucketAppend(_ mesh: AssetMesh, indexOffset: Int, indexCount: Int,
+                          diffuse: MTLTexture?, cutout: Bool, _ data: InstanceDataSwift) {
+            let key = AssetBucketKey(indexBuffer: ObjectIdentifier(mesh.indexBuffer),
+                                     indexOffset: indexOffset,
+                                     diffuse: diffuse.map(ObjectIdentifier.init))
+            if assetBuckets[key] == nil {
+                assetBuckets[key] = AssetBucket(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer,
+                                                indexOffset: indexOffset, indexCount: indexCount,
+                                                diffuse: diffuse, cutout: cutout)
+            }
+            assetBuckets[key]?.instances.append(data)
+        }
 
         // Emit one flat-colour sub-mesh or a whole textured mesh at `m`.
         func emit(_ mesh: AssetMesh, _ m: float4x4, diffuse: MTLTexture?, submeshMaterials: [SubmeshMaterial] = []) {
-            // Per-sub-mesh textures (a Quaternius tree: bark map + leaf map). One draw per sub-mesh,
+            // Per-sub-mesh textures (a Quaternius tree: bark map + leaf map). One bucket per sub-mesh,
             // each binding its own diffuse; a sub-mesh with no texture keeps its flat `Kd` colour.
             // A diffuse carrying alpha (leaves/flowers) uses the cutout material (20) instead of 11.
             if !submeshMaterials.isEmpty {
                 for (i, sm) in mesh.submeshes.enumerated() {
-                    guard inst < cap else { return }
                     let mat = i < submeshMaterials.count ? submeshMaterials[i] : SubmeshMaterial(diffuse: nil, cutout: false)
                     let matID: UInt32 = mat.diffuse == nil ? 10 : (mat.cutout ? 20 : 11)
-                    ptr[inst] = InstanceDataSwift(modelMatrix: m,
-                                                  baseColor: mat.diffuse != nil ? SIMD4(1, 1, 1, 1) : sm.color,
-                                                  materialID: matID,
-                                                  tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
-                    assetDrawCmds.append(AssetDrawCmd(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer,
-                                                      indexOffset: sm.indexOffset, indexCount: sm.indexCount,
-                                                      instanceIndex: inst, diffuse: mat.diffuse, cutout: mat.cutout))
-                    inst += 1
+                    bucketAppend(mesh, indexOffset: sm.indexOffset, indexCount: sm.indexCount,
+                                 diffuse: mat.diffuse, cutout: mat.cutout,
+                                 InstanceDataSwift(modelMatrix: m,
+                                                   baseColor: mat.diffuse != nil ? SIMD4(1, 1, 1, 1) : sm.color,
+                                                   materialID: matID,
+                                                   tileID: 0, discoveryAmount: 1.0, styleSeed: 0))
                 }
                 return
             }
             if let diff = diffuse {
-                guard inst < cap else { return }
-                ptr[inst] = InstanceDataSwift(modelMatrix: m, baseColor: SIMD4(1,1,1,1), materialID: 11, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
-                assetDrawCmds.append(AssetDrawCmd(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer, indexOffset: 0, indexCount: mesh.totalIndexCount, instanceIndex: inst, diffuse: diff))
-                inst += 1
+                bucketAppend(mesh, indexOffset: 0, indexCount: mesh.totalIndexCount, diffuse: diff, cutout: false,
+                             InstanceDataSwift(modelMatrix: m, baseColor: SIMD4(1,1,1,1), materialID: 11, tileID: 0, discoveryAmount: 1.0, styleSeed: 0))
             } else {
                 for sm in mesh.submeshes {
-                    guard inst < cap else { return }
-                    ptr[inst] = InstanceDataSwift(modelMatrix: m, baseColor: sm.color, materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
-                    assetDrawCmds.append(AssetDrawCmd(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer, indexOffset: sm.indexOffset, indexCount: sm.indexCount, instanceIndex: inst, diffuse: nil))
-                    inst += 1
+                    bucketAppend(mesh, indexOffset: sm.indexOffset, indexCount: sm.indexCount, diffuse: nil, cutout: false,
+                                 InstanceDataSwift(modelMatrix: m, baseColor: sm.color, materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0))
                 }
             }
         }
@@ -893,6 +924,22 @@ class Renderer: NSObject, MTKViewDelegate {
                     }
                 }
             }
+        }
+
+        // PERF — pack the buckets: write each bucket's instances contiguously into the shared buffer
+        // and emit ONE instanced draw command per bucket. 500 copies of the same wall piece = 1 draw
+        // (was 500, and 500 more in the shadow pass). Buckets that overflow the buffer are clamped,
+        // same silent-cap behaviour as the old per-instance path.
+        var inst = 0
+        for bucket in assetBuckets.values {
+            let count = min(bucket.instances.count, cap - inst)
+            guard count > 0 else { continue }
+            let base = inst
+            for k in 0..<count { ptr[inst] = bucket.instances[k]; inst += 1 }
+            assetDrawCmds.append(AssetDrawCmd(vertexBuffer: bucket.vertexBuffer, indexBuffer: bucket.indexBuffer,
+                                              indexOffset: bucket.indexOffset, indexCount: bucket.indexCount,
+                                              instanceIndex: base, diffuse: bucket.diffuse,
+                                              cutout: bucket.cutout, instanceCount: count))
         }
     }
 
@@ -1006,7 +1053,7 @@ class Renderer: NSObject, MTKViewDelegate {
                         primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
                         indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
                         indexBufferLength: cmd.indexBuffer.length - cmd.indexOffset * MemoryLayout<UInt32>.stride,
-                        instanceCount: 1, baseVertex: 0, baseInstance: cmd.instanceIndex)
+                        instanceCount: cmd.instanceCount, baseVertex: 0, baseInstance: cmd.instanceIndex)
                 }
                 vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
                 vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
@@ -1094,7 +1141,7 @@ class Renderer: NSObject, MTKViewDelegate {
                     primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
                     indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
                     indexBufferLength: cmd.indexBuffer.length - cmd.indexOffset * MemoryLayout<UInt32>.stride,
-                    instanceCount: 1, baseVertex: 0, baseInstance: cmd.instanceIndex)
+                    instanceCount: cmd.instanceCount, baseVertex: 0, baseInstance: cmd.instanceIndex)
             }
             // restore maze buffers for the translucent pass
             vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
