@@ -223,9 +223,16 @@ class CubeModel {
         // 4, the temple). The curtain's top is a ragged energy edge (see material 23).
         func elevator(_ col: Int, _ style: Int) {
             add(col, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                   // lit floor plate
-            add(col, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: style))        // streak curtain
-            part(column, col, 0.62, -0.18, 0)                                                         // left jamb column
-            part(column, col, 0.62,  0.18, 0)                                                         // right jamb column
+            // Two TRANSLUCENT streak layers a little apart in depth (Eddie): a denser back and a
+            // thinner front (opacity carried in `alignAnim` → screen-door dither in material 23).
+            var back = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: style)
+            back.offsetY = -0.05; back.alignAnim = 0.85
+            add(col, back)
+            var front = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: style)
+            front.offsetY = 0.02; front.alignAnim = 0.55
+            add(col, front)
+            part(column, col, 0.25, -0.09, 0)                                                         // left jamb column (~4 m)
+            part(column, col, 0.25,  0.09, 0)                                                         // right jamb column
         }
         elevator(c - 4, 3)                                                                            // surface (streaks down)
         elevator(c - 2, 4)                                                                            // temple  (streaks up)
@@ -235,11 +242,12 @@ class CubeModel {
         veil(c + 2, 1)
 
         // (3) LEVEL-TO-LEVEL at col c+4 — an overgrown arched WALL (a solid panel with a round-arch
-        // opening) so the vortex field fills the entire opening and the stonework frames it completely.
-        // The "Overgrown" model already wears its own moss/foliage, so no separate vines.
+        // opening). The field is stretched taller (extraScale) and arch-shaped so it fills the ENTIRE
+        // opening up into the curved top. The "Overgrown" model wears its own moss, so no separate vines.
         let aCol = c + 4
-        veil(aCol, 2)                                                                                 // vortex fill (+ ring)
-        part(archRuins, aCol, 0.78, 0, 0, 0)                                                          // the arched wall
+        add(aCol, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                      // base glow
+        add(aCol, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))               // vortex fill (~4 m, arch-masked)
+        part(archRuins, aCol, 0.35, 0, 0, 0)                                                          // the arched wall (opening ≈ 4 m)
     }
 
     /// M20 proof — lay `.importedAsset` eval cells (3D models) in their own revealed strip just SOUTH

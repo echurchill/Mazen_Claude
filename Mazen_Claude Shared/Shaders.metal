@@ -592,7 +592,20 @@ fragment float4 fragmentShader(
             float topFade = smoothstep(topLimit, topLimit - 0.16, uv.y);  // dissolve just below the ragged line
             float veil = energy * edge * topFade;
             if (veil < 0.10) discard_fragment();                          // wispy tendrils
-            color = tint * (0.45 + 1.7 * veil) + float3(0.65, 0.75, 1.0) * pow(veil, 3.0) * 0.8;
+            // Translucency (Eddie): screen-door dither by the layer's opacity (discoveryAmount) so a
+            // thinner front layer reveals the denser back one behind it — two layers reading as depth.
+            float opacity = in.discoveryAmount;
+            if (opacity < 0.999) {
+                float bayer[16] = { 0.5, 8.5, 2.5, 10.5, 12.5, 4.5, 14.5, 6.5,
+                                    3.5, 11.5, 1.5,  9.5, 15.5, 7.5, 13.5, 5.5 };
+                int bx = int(in.position.x) & 3, by = int(in.position.y) & 3;
+                if (opacity < bayer[by * 4 + bx] / 16.0) discard_fragment();
+            }
+            // Streaking motes — sparse bright particles racing along the flow (Eddie).
+            float2 pv = float2(uv.x * 7.0, uv.y * 5.0 + dir * tt * 1.3);
+            float mote = smoothstep(0.90, 0.996, valueNoise(pv)) * edge * topFade;
+            color = tint * (0.45 + 1.7 * veil) + float3(0.65, 0.75, 1.0) * pow(veil, 3.0) * 0.8
+                  + float3(0.90, 0.95, 1.0) * mote;
             lighting = float3(1.0);
         } else {
         bool arch = (in.styleSeed == 2u);
@@ -611,14 +624,19 @@ fragment float4 fragmentShader(
         float energy = mix(swirl, filament, 0.55);
         float rim = smoothstep(0.80, 1.0, ell) * smoothstep(1.15, 0.98, ell);   // glowing boundary ring
         if (arch) {
-            // Fill the WHOLE arch opening (Eddie): a rounded-RECTANGLE mask covering most of the quad,
-            // so the vortex fills the doorway and the overgrown stonework frames it — not a floating
-            // oval. The swirl still spins from the centre; only the shape mask changes.
-            float2 p = (uv - 0.5) * 2.0;                                        // [-1,1]
-            float2 q2 = abs(p) - float2(0.82, 0.94);
-            float sd = length(max(q2, 0.0)) + min(max(q2.x, q2.y), 0.0) - 0.14; // rounded-rect SDF (<0 inside)
-            float fill = smoothstep(0.10, -0.06, sd);                          // 1 inside → soft edge
-            float rimR = smoothstep(0.10, 0.0, abs(sd));                       // glow along the opening border
+            // Fill the WHOLE arch opening to its SHAPE (Eddie): straight jambs up to a springline, then
+            // a round arch to the apex. The field is also made taller (heightScale, set in SceneBuilder)
+            // so it reaches up into the stone arch instead of stopping short. Swirl spins from the centre.
+            float hw = 0.40, spring = 0.58;                                    // half-width, springline (uv)
+            float side = smoothstep(hw + 0.04, hw - 0.05, abs(uv.x - 0.5));    // within the jambs
+            float top;
+            if (uv.y <= spring) { top = 1.0; }                                 // straight lower part
+            else {                                                             // elliptical arch to the apex
+                float2 e = float2((uv.x - 0.5) / hw, (uv.y - spring) / (1.0 - spring));
+                top = smoothstep(1.02, 0.88, length(e));
+            }
+            float fill = side * top;
+            float rimR = smoothstep(0.45, 0.06, fill) * smoothstep(0.0, 0.06, fill);   // glow near the border
             float star = valueNoise(uv * 64.0);
             float tw = 0.5 + 0.5 * sin(tt * 3.0 + star * 40.0);
             float bright = smoothstep(0.90, 0.995, star) * tw;

@@ -837,8 +837,10 @@ class TileMeshLibrary {
     /// look (shimmer vs starfield). Double-sided so it reads from both approaches without back-face culls.
     private static func addPortalField(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
-        let hW: Float = 0.18          // half width (~a grand doorway; the arch fill wants to reach the jambs)
-        let hgt: Float = 0.52         // height (a touch taller than the old TARDIS body)
+        // Eddie: portals are ≤ 4 m tall. 1 m ≈ 0.0529 world units (eyeHeight 0.09u ≈ 1.7 m), so 4 m ≈
+        // 0.212u; width ~2.6 m for a grand-doorway proportion. (Arch fill re-shapes this via its mask.)
+        let hW: Float = 0.07          // half width (~2.6 m)
+        let hgt: Float = 0.212        // height (~4 m)
         let bl = SIMD3<Float>(-hW, 0, z0), br = SIMD3<Float>(hW, 0, z0)
         let tr = SIMD3<Float>(hW, 0, z0 + hgt), tl = SIMD3<Float>(-hW, 0, z0 + hgt)
         func v(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ u: Float, _ w: Float) -> MazeVertexSwift {
@@ -859,7 +861,7 @@ class TileMeshLibrary {
     /// pooling under an energy veil, or the lit floor plate of the elevator. An annulus on the floor.
     private static func addPortalRing(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z = ws.floorY + 0.006     // just above the floor to avoid z-fighting
-        let rO: Float = 0.21, rI: Float = 0.135
+        let rO: Float = 0.092, rI: Float = 0.055   // ~1.7 m / 1 m radius — a base ring under a ~4 m portal
         let seg = 40
         func v(_ p: SIMD3<Float>, _ u: Float) -> MazeVertexSwift {
             MazeVertexSwift(position: p, normal: SIMD3(0, 0, 1), texCoord: SIMD2(u, 0), aoFactor: 1.0)

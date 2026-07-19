@@ -229,7 +229,7 @@ final class SceneBuilder {
                                 treeScale = sizeBase * jitter
                             }
                             var pm = restM
-                                * float4x4.translation(Float(prop.subCol - 1) * step, Float(prop.subRow - 1) * step, 0)
+                                * float4x4.translation(Float(prop.subCol - 1) * step + prop.offsetX, Float(prop.subRow - 1) * step + prop.offsetY, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180), axis: SIMD3(0, 0, 1))
                                 * float4x4.scale(treeScale)
                             // M16.6/M20 — the alignment cylinder (GROW) and switch cap (flush↔out) animate
@@ -336,6 +336,12 @@ final class SceneBuilder {
                                 case 3, 4: color = SIMD4(0.36, 0.78, 0.95, 1.0) // elevator streaks (cyan) — 3 down, 4 up
                                 default: color = SIMD4(0.40, 0.56, 1.0, 1.0)   // blue/purple veil
                                 }
+                                // A portal field can be stretched taller than its mesh (extraScale) so
+                                // e.g. the arch fill reaches the apex; base stays pinned at the floor.
+                                if prop.extraScale != 1 {
+                                    heightScale = prop.extraScale
+                                    heightPivot = model.worldScale.floorY
+                                }
                             }
                             if prop.kind == .portalRing {
                                 materialID = 12                                 // emissive glow ring
@@ -353,7 +359,12 @@ final class SceneBuilder {
                             }
                             // M16.6 Phase 2b: the cylinder rides its align value in discoveryAmount
                             // (material 22 shears the square-wrap by it); every other prop is fully shown.
-                            let discovery: Float = prop.kind == .alignmentCylinder ? prop.alignAnim : 1.0
+                            // discoveryAmount doubles as the portal-field OPACITY (material 23 screen-door
+                            // dither) for the translucent elevator layers; alignAnim==0 ⇒ fully opaque.
+                            let discovery: Float
+                            if prop.kind == .alignmentCylinder { discovery = prop.alignAnim }
+                            else if prop.kind == .portalField && prop.alignAnim > 0 { discovery = prop.alignAnim }
+                            else { discovery = 1.0 }
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
                                 materialID: materialID, tileID: 0, discoveryAmount: discovery, styleSeed: propStyleSeed,
                                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief,
