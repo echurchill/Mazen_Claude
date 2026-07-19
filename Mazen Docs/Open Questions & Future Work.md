@@ -32,6 +32,23 @@ uses this; **the static "stone-in-hedges" look (`stampGardenWalls`) is kept avai
 liked it). Reusable for future wall models — just add them to `wallFlora()`. **Confirmed by Eddie
 (2026-07-18): looks good in the garden.**
 
+## Performance — done + deferred (2026-07-19 optimization pass)
+
+**Done (Fable):** instanced asset draws (1000s → tens, both passes); topology-versioned caches
+(dressed-wall derivation, clear-tiles, prop-tile list, switch/cylinder locations — ~12k `faceletAt`/frame
+→ cache hits, twist-safety proven by structural probe); one `restMatrix` per tile (was 2× in SceneBuilder,
+per-prop in the asset pass); Set-flattened per-prop membership tests; reused fog dictionaries.
+
+**Deferred candidates (medium confidence — need care or Eddie's eyes):**
+- **Counterpart (sky) world**: a full second `SceneBuilder.build` every frame while visible. Fix = build
+  its instances once, push the per-frame orbital offset as a uniform — a small shader-semantics change.
+- **Scene dirty-gating**: the active world also rebuilds every frame; but idle spin dirties every frame
+  unless spin too moves into a uniform. Bigger refactor, do together with the counterpart fix.
+- **Shader octave cuts** (grass 14 / regolith 16 / fog 4-5 FBM, fog layer overdraw): real GPU wins but
+  VISUAL changes — tune with Eddie looking.
+- **Garden first-entry hitch**: built once ever (registry-cached), but that one build lands mid-fade;
+  could pre-build at app load like the moon.
+
 ## Rendering / assets
 
 - **MegaKit custom shaders (Eddie, 2026-07-17).** The Stylized Nature MegaKit ships with *custom shaders* (in its `Engine Projects` / Unity+Unreal material graphs) that "might prove interesting." We currently use only the pack's diffuse atlases through our ModelIO path — the shaders aren't wired in and our pipeline can't consume Unity/Unreal material graphs directly. **Worth a look:** are any of the effects (e.g. wind sway on foliage, stylized rock/path shading) reproducible as a Metal material in our shader (`Shaders.metal`)? Could give the nature dressing motion/life beyond the flat/atlas look.
