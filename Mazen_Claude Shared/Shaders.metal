@@ -576,6 +576,25 @@ fragment float4 fragmentShader(
         float2 uv = in.texCoord;
         float tt = frame.time;
         float3 tint = in.color.rgb;
+        if (in.styleSeed >= 3u) {
+            // FLAT STREAKS — the ELEVATOR portal (outer world ↔ temple): a rectangular energy curtain
+            // wedged between two columns. Streaks flow DOWN (style 3, the surface world descending to
+            // the temple) or UP (style 4, the temple rising back out). The TOP is a ragged, noisy edge
+            // (not rounded, not a hard line) so it reads as raw energy rather than a panel.
+            float dir = (in.styleSeed == 4u) ? -1.0 : 1.0;                 // 4 = up, 3 = down
+            float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 + dir * tt * 0.6), 4);
+            float streak = 0.5 + 0.5 * sin(uv.x * 8.0 + flow * 4.0 + dir * tt * 1.4);
+            float energy = pow(streak, 2.0) * (0.55 + 0.7 * flow);
+            float edge = smoothstep(0.0, 0.30, uv.x) * smoothstep(1.0, 0.70, uv.x);   // side falloff
+            float topN = fbm(float2(uv.x * 6.0, 11.3), 3);                 // per-column top height
+            float topLimit = 0.70 + 0.22 * topN;                          // ragged top silhouette
+            if (uv.y > topLimit) discard_fragment();
+            float topFade = smoothstep(topLimit, topLimit - 0.16, uv.y);  // dissolve just below the ragged line
+            float veil = energy * edge * topFade;
+            if (veil < 0.10) discard_fragment();                          // wispy tendrils
+            color = tint * (0.45 + 1.7 * veil) + float3(0.65, 0.75, 1.0) * pow(veil, 3.0) * 0.8;
+            lighting = float3(1.0);
+        } else {
         bool arch = (in.styleSeed == 2u);
         float2 d = uv - 0.5;
         // Tall ellipse: `ell` is 0 at the eye, 1 on the boundary. The arch fill is fuller/softer.
@@ -615,6 +634,7 @@ fragment float4 fragmentShader(
             color += tint * rim * 1.7;                                          // glowing rim
             if (v + rim < 0.09) discard_fragment();                            // wispy filaments, not a disc
             lighting = float3(1.0);
+        }
         }
     } else if (in.materialID == 20) {
         // M20: imported sub-mesh whose diffuse carries alpha (Quaternius leaves/flowers) — cut it

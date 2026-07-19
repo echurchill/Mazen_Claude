@@ -463,9 +463,7 @@ class Renderer: NSObject, MTKViewDelegate {
                     w.cubeModel.stampGalleryPaths(pathStones())
                     // M20 (Eddie) — three new PORTAL styles in a showroom north of the catalog
                     // (retiring the TARDIS): elevator, spot-to-spot energy veils, level-to-level arch.
-                    w.cubeModel.stampGalleryPortals(barrel: namedProp("Dungeons Barrel2"),
-                                                    column: namedProp("Dungeons Column"),
-                                                    torch: namedProp("Dungeons Torch"),
+                    w.cubeModel.stampGalleryPortals(column: namedProp("Dungeons Column"),
                                                     archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
                 case "gallery-dungeons":
                     w = GameState(size: 25, name: dest, stamp: .bare)

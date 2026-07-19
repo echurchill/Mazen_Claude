@@ -175,7 +175,7 @@ class CubeModel {
     /// (a place on the world → another place / its moon), and a LEVEL-TO-LEVEL stone arch with a
     /// starfield fill (solved level → next). Imported model indices come from the Renderer (which owns
     /// the registry); pass `nil` for any it couldn't resolve and that part is skipped.
-    func stampGalleryPortals(barrel: Int?, column: Int?, torch: Int?, archRuins: Int?) {
+    func stampGalleryPortals(column: Int?, archRuins: Int?) {
         let n = size, c = n / 2
         let rLo = 3, rHi = 6                                  // showroom rows, north of the catalog (7–13)
         let cLo = max(1, c - 4), cHi = min(n - 1, c + 4)      // cols 8–16
@@ -218,23 +218,26 @@ class CubeModel {
             add(col, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: style))        // energy surface
         }
 
-        // (1) ELEVATOR at col c-3 — a lift cage: a barrel capsule ringed by 4 columns on a lit plate.
-        let eCol = c - 3
-        add(eCol, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                      // lit floor plate
-        part(barrel, eCol, 0.55, 0, 0, 0.02)                                                          // capsule
-        for (ox, oy) in [(-0.15, -0.15), (0.15, -0.15), (-0.15, 0.15), (0.15, 0.15)] {
-            part(column, eCol, 0.6, Float(ox), Float(oy))                                              // 4 shaft columns
+        // (1) ELEVATOR (outer world ↔ temple) — a flat energy CURTAIN wedged between two columns, on a
+        // lit plate. Two variants (Eddie): streaks flow DOWN (style 3, the surface world) and UP (style
+        // 4, the temple). The curtain's top is a ragged energy edge (see material 23).
+        func elevator(_ col: Int, _ style: Int) {
+            add(col, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                   // lit floor plate
+            add(col, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: style))        // streak curtain
+            part(column, col, 0.62, -0.18, 0)                                                         // left jamb column
+            part(column, col, 0.62,  0.18, 0)                                                         // right jamb column
         }
-        part(torch, eCol, 0.4, -0.15, 0.16); part(torch, eCol, 0.4, 0.15, 0.16)                       // front torches
+        elevator(c - 4, 3)                                                                            // surface (streaks down)
+        elevator(c - 2, 4)                                                                            // temple  (streaks up)
 
-        // (2) SPOT-TO-SPOT — two frameless energy veils (blue at c-1, pink at c+1), each on a glow ring.
-        veil(c - 1, 0)
-        veil(c + 1, 1)
+        // (2) SPOT-TO-SPOT — two frameless energy veils (blue, pink), each on a glow ring.
+        veil(c, 0)
+        veil(c + 2, 1)
 
-        // (3) LEVEL-TO-LEVEL at col c+3 — an overgrown arched WALL (a solid panel with a round-arch
+        // (3) LEVEL-TO-LEVEL at col c+4 — an overgrown arched WALL (a solid panel with a round-arch
         // opening) so the vortex field fills the entire opening and the stonework frames it completely.
         // The "Overgrown" model already wears its own moss/foliage, so no separate vines.
-        let aCol = c + 3
+        let aCol = c + 4
         veil(aCol, 2)                                                                                 // vortex fill (+ ring)
         part(archRuins, aCol, 0.78, 0, 0, 0)                                                          // the arched wall
     }

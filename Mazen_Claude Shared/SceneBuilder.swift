@@ -333,6 +333,7 @@ final class SceneBuilder {
                                 switch prop.state {
                                 case 1:  color = SIMD4(1.0, 0.42, 0.66, 1.0)   // pink/magenta veil
                                 case 2:  color = SIMD4(0.42, 0.34, 0.78, 1.0)  // starfield nebula (violet)
+                                case 3, 4: color = SIMD4(0.36, 0.78, 0.95, 1.0) // elevator streaks (cyan) — 3 down, 4 up
                                 default: color = SIMD4(0.40, 0.56, 1.0, 1.0)   // blue/purple veil
                                 }
                             }
