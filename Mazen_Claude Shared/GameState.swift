@@ -143,6 +143,7 @@ class GameState {
         if player.updateMovement(deltaTime: deltaTime) {
             onPlayerArrived()
         }
+        updateWalkThroughPortal()   // fires when you settle on a portal's sub-cell (before walk-chaining)
         player.updateTurn(deltaTime: deltaTime)
 
         // Chain held-key walking so movement is continuous (no waiting on OS key-repeat).
@@ -247,24 +248,9 @@ class GameState {
     // MARK: - Discovery
 
     private func onPlayerArrived(viaMove: Bool = true) {
-        // M11.2c: walk-through — stepping onto a portal tile switches worlds (no F). Fires only on a
-        // real tile crossing, so it never triggers at spawn while you're already standing on one.
-        // Also NOT on a twist (viaMove == false): a slice that rotates a portal under you must not
-        // teleport you home — you interact with F or walk onto it (Eddie, M19 — the moon's return
-        // portal sits by spawn, so a twist kept landing it under the player).
-        // M15.2: the portal's `state` says WHERE it leads (index into Renderer.portalDestinations).
-        // Fire only when the player is actually on the portal's SUB-CELL (its 3×3 author cell), not
-        // merely anywhere on the ~19 m tile — otherwise it triggers half a tile early, well before you
-        // reach the arch/curtain (Eddie: "sensitive"). Map the stand-grid position to the author 3×3.
-        if viaMove,
-           let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
-           let portal = cubeModel.cubies[pci].facelets[pfi].props.first(where: { $0.kind == .portal }),
-           player.subRow * 3 / player.standGrid == portal.subRow,
-           player.subCol * 3 / player.standGrid == portal.subCol,
-           !cubeModel.sealedPortalCubies.contains(pci) {   // M16.4: a sealed door is just a door
-            portalRequested = true
-            portalDestinationID = portal.state
-        }
+        // Walk-through portal triggering moved to `updateWalkThroughPortal` (checked continuously, so it
+        // fires when you reach the portal's sub-cell, not at the tile edge where this tile-crossing hook
+        // fires). This just handles discovery on tile entry.
         discoverTile(face: player.face, row: player.row, col: player.col)
         let n = cubeModel.size
         for dir in SurfaceDirection.allCases {
@@ -291,6 +277,35 @@ class GameState {
                 }
             }
         }
+    }
+
+    // Walk-through portals fire when the player reaches the portal's OWN sub-cell (its 3×3 author cell
+    // — the centre where the arch/curtain stands), not merely anywhere on the ~19 m tile (Eddie:
+    // "sensitive"). Checked every frame because sub-cell moves within a tile don't fire onPlayerArrived
+    // (that's tile-crossing only). Edge-triggered (fires once on entry, keyed by the portal cubie) and
+    // PRIMED — the first evaluation after a spawn or twist just records where you are, so a portal you
+    // start on (or that a twist rotates under you) doesn't teleport you; you must walk onto it.
+    private var portalZonePrimed = false
+    private var portalZoneCubie: Int? = nil
+
+    func reprimePortalZone() { portalZonePrimed = false }   // call after a twist finalizes
+
+    private func updateWalkThroughPortal() {
+        guard !player.isMoving, !sliceRotation.isActive else { return }   // only when settled
+        var zone: Int? = nil, dest = 0
+        if let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
+           let portal = cubeModel.cubies[pci].facelets[pfi].props.first(where: { $0.kind == .portal }),
+           !cubeModel.sealedPortalCubies.contains(pci),                  // M16.4: a sealed door is just a door
+           player.subRow * 3 / player.standGrid == portal.subRow,        // stand-grid → author 3×3
+           player.subCol * 3 / player.standGrid == portal.subCol {
+            zone = pci; dest = portal.state
+        }
+        if portalZonePrimed, let z = zone, z != portalZoneCubie {        // just stepped onto a portal
+            portalRequested = true
+            portalDestinationID = dest
+        }
+        portalZonePrimed = true
+        portalZoneCubie = zone
     }
 
     func discoverTile(face: CubeFace, row: Int, col: Int) {
@@ -401,7 +416,8 @@ class GameState {
             }
         }
 
-        onPlayerArrived(viaMove: false)   // a twist finalizing must not trigger a walk-through portal
+        onPlayerArrived(viaMove: false)
+        reprimePortalZone()   // a twist that rotates a portal under you must not teleport you — re-prime
     }
 
     // MARK: - Interaction (M10 Phase G)
