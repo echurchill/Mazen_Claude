@@ -250,7 +250,7 @@ class CubeModel {
         add(aCol, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                      // base glow
         // Rectangular fill, shorter than 4 m so it doesn't stick past the arch top, and centered
         // depthwise IN the opening (offsetY 0 = the arch's mid-plane), not set behind it (Eddie).
-        add(aCol, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2, extraScale: 0.75))  // ~3 m tall
+        add(aCol, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2, extraScale: 1.0))   // ~4 m tall (was too short)
         part(archRuins, aCol, 0.24, 0, 0, 0)                                                          // the arched wall
     }
 

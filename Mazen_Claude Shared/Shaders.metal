@@ -38,47 +38,50 @@ float fbm(float2 p, int octaves) {
 // A short march through a domain-warped fbm density field that churns over time, with a cheap
 // forward-scatter light term (silver lining) and a violet→cyan colour ramp. `uv` 0..1; `t` = frame.time.
 
-// Billowy density at a point, domain-warped so the volume churns/swirls (the "protean" motion).
+// Signed billow field at a point, domain-warped so the volume churns/swirls (the "protean" motion).
+// Six octaves for fine detail; returns a signed value the renderer thresholds into solid billows.
 float cloudField(float3 p, float t) {
-    p.xy += 0.6 * float2(sin(p.z * 0.7 + t * 0.35), cos(p.z * 0.6 - t * 0.30));
-    float d = 0.0, amp = 0.6;
-    for (int i = 0; i < 4; i++) {
+    p.xy += 0.55 * float2(sin(p.z * 0.8 + t * 0.40), cos(p.z * 0.7 - t * 0.35));   // churn
+    float d = 0.0, amp = 0.55, freq = 1.0;
+    for (int i = 0; i < 6; i++) {
         // pseudo-3D value noise: two orthogonal slices, the third axis shifting each.
-        float n = valueNoise(p.xy + float2(0.0, p.z * 0.8 + t * 0.15))
-                + valueNoise(p.zy + float2(p.x * 0.8 - t * 0.10, 0.0));
-        d += amp * n * 0.5;
-        p = p * 1.9 + 3.1;
-        amp *= 0.5;
+        float n = valueNoise(p.xy * freq + float2(p.z * 0.9, -p.z * 0.6 + t * 0.10))
+                + valueNoise(p.zx * freq + float2(p.y * 0.7 - t * 0.08, p.y * 0.5));
+        d += amp * (n - 1.0);                         // sum≈[0,2] → signed ≈[-1,1]
+        freq *= 2.05; amp *= 0.52;
     }
-    return clamp(d - 0.40, 0.0, 1.0);                // threshold into billows
+    return d;
 }
 
 float3 volumetricClouds(float2 uv, float t) {
     float2 pp = uv - 0.5;
-    float3 ro = float3(0.0, 0.0, t * 0.3);           // drift forward through the volume
-    float3 rd = normalize(float3(pp.x * 1.3, pp.y * 1.5, 1.0));
-    float a = 0.2 * sin(t * 0.18);                    // slow view swirl
+    float3 ro = float3(0.0, 0.0, t * 0.4);            // drift forward through the volume
+    float3 rd = normalize(float3(pp.x * 1.4, pp.y * 1.6, 1.0));
+    float a = 0.25 * sin(t * 0.20);                   // slow view swirl
     float ca = cos(a), sa = sin(a);
     rd.xy = float2(rd.x * ca - rd.y * sa, rd.x * sa + rd.y * ca);
+    float3 lgt = normalize(float3(0.5, 0.7, -0.4));   // light direction for the shading step
     float3 col = float3(0.0);
     float trans = 1.0;                                // transmittance (front-to-back compositing)
-    float march = 0.6;
-    for (int i = 0; i < 44; i++) {
+    float march = 0.4;
+    for (int i = 0; i < 42; i++) {
         float3 pos = ro + rd * march;
-        float den = cloudField(pos, t);
+        float den = saturate((cloudField(pos, t) + 0.12) * 1.7);          // sharpen into billows
         if (den > 0.01) {
-            float lit = cloudField(pos + float3(0.35, 0.45, 0.0), t);      // density toward a light
-            float dif = clamp((den - lit) * 3.0, 0.0, 1.0);
-            float3 shade = mix(float3(0.08, 0.05, 0.20), float3(0.45, 0.55, 0.90), dif);
-            shade += float3(0.7, 0.8, 1.0) * pow(dif, 3.0) * 0.9;          // silver lining
-            float op = den * 0.6;
-            col += trans * op * shade;
+            // Density a short step toward the light: a big drop means this is a lit, sun-facing face;
+            // little drop means a shadowed crevice → strong billow contrast (the missing detail).
+            float shd = saturate((cloudField(pos + lgt * 0.45, t) + 0.12) * 1.7);
+            float lit = saturate((den - shd) * 4.0 + 0.12);
+            float3 shade = mix(float3(0.12, 0.07, 0.26), float3(0.85, 0.78, 0.95), lit);  // violet → bright
+            shade += float3(0.4, 0.7, 1.0) * pow(lit, 4.0) * 0.6;         // cool cyan on the brightest edges
+            shade *= 0.45 + 0.55 * exp(-march * 0.22);                    // depth: nearer billows read brighter
+            float op = den * 0.55;
+            col += trans * op * shade * 1.5;
             trans *= (1.0 - op);
-            if (trans < 0.03) break;
+            if (trans < 0.02) break;
         }
-        march += 0.09;
+        march += 0.085;
     }
-    col += (1.0 - trans) * float3(0.04, 0.03, 0.09);  // faint ambient so gaps aren't pure black
     return col;
 }
 
@@ -678,7 +681,7 @@ fragment float4 fragmentShader(
             // Leave the fill RECTANGULAR (Eddie: don't trim it to the arch shape), with soft gradient
             // edges — full at the base, fading at the sides and top so it seats inside the opening.
             float sideF = smoothstep(0.5, 0.34, abs(uv.x - 0.5));
-            float topF  = smoothstep(1.0, 0.80, uv.y);
+            float topF  = smoothstep(1.0, 0.90, uv.y);   // fade only the very top so more of it shows
             float fill = sideF * topF;
             float rimR = smoothstep(0.35, 0.05, fill) * smoothstep(0.0, 0.05, fill);   // glow near the border
             // Our original volumetric clouds (above), in a soft rectangle.
