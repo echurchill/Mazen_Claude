@@ -32,6 +32,34 @@ float fbm(float2 p, int octaves) {
     return value;
 }
 
+// ── "Crossing storms" (ukeshet, Shadertoy M3BSWV; zozuar/nimitz lineage) ──────────
+// A raymarched volumetric plasma storm, ported to Metal for the level-to-level portal fill (Eddie).
+// `uv` is 0..1 over the portal quad; `t` = frame.time. Pure procedural (no texture channels). The
+// outer raymarch count is trimmed from the original 99 for a real-time portal region (a perf knob).
+float2x2 rot2(float a) { float c = cos(a), s = sin(a); return float2x2(c, s, -s, c); }
+
+float3 crossingStorms(float2 uv, float t) {
+    float4 O = float4(1.0);                          // for(O++; …) — accumulator starts at 1
+    float2 cc = uv - 0.5;                            // centered raymarch coordinate
+    float e, s, g = 0.0;
+    const float k = 0.01;
+    for (int it = 0; it < 44; it++) {                // was 99 in the original
+        float3 p = float3(cc * g + rot2(t + g * 0.5) * float2(0.5), g + t / 0.3);
+        e = 0.3 - dot(p.xy, p.xy);
+        for (s = 2.0; s < 200.0; s /= 0.6) {         // ~10 turbulence octaves
+            float2 yz = rot2(s) * p.yz;
+            p.y = yz.x; p.z = yz.y;
+            e += abs(dot(sin(p * s + t * s * 0.2) / s, float3(1.0)));
+        }
+        O += O.w * min(e * O + (sin(float4(1.0, 2.0, 3.0, 1.0) - p.z * 0.3) * 0.6 - 0.4), float4(k)) * k;
+        g += max(k, e * 0.2);
+    }
+    // periodic darkening + an occasional lightning flash
+    O *= min(1.0, 1.0 + cos(0.15 * t))
+       + min(1.0, max(0.0, -2.0 - 4.0 * cos(0.15 * t))) * smoothstep(0.85, 1.0, fract(sin(t) * 43758.5453));
+    return O.rgb;
+}
+
 // ── Sky pass ───────────────────────────────────────────────────
 
 struct SkyVertexOut {
@@ -633,11 +661,9 @@ fragment float4 fragmentShader(
             }
             float fill = side * top;
             float rimR = smoothstep(0.45, 0.06, fill) * smoothstep(0.0, 0.06, fill);   // glow near the border
-            float star = valueNoise(uv * 64.0);
-            float tw = 0.5 + 0.5 * sin(tt * 3.0 + star * 40.0);
-            float bright = smoothstep(0.90, 0.995, star) * tw;
-            float3 nebula = mix(float3(0.015, 0.02, 0.06), tint, saturate(energy * 1.25));
-            color = (nebula + float3(bright) * 1.7) * fill + tint * rimR * 0.7;
+            // "Crossing storms" volumetric plasma (Eddie's ref, ported above), masked to the arch shape.
+            float3 storm = crossingStorms(uv, tt);
+            color = storm * fill + tint * rimR * 0.7;
             lighting = float3(1.0);
             if (fill < 0.02) discard_fragment();
         } else {
