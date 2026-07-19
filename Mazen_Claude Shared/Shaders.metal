@@ -32,32 +32,54 @@ float fbm(float2 p, int octaves) {
     return value;
 }
 
-// ── "Crossing storms" (ukeshet, Shadertoy M3BSWV; zozuar/nimitz lineage) ──────────
-// A raymarched volumetric plasma storm, ported to Metal for the level-to-level portal fill (Eddie).
-// `uv` is 0..1 over the portal quad; `t` = frame.time. Pure procedural (no texture channels). The
-// outer raymarch count is trimmed from the original 99 for a real-time portal region (a perf knob).
-float2x2 rot2(float a) { float c = cos(a), s = sin(a); return float2x2(c, s, -s, c); }
+// ── Volumetric cloud portal (original — Claude) ──────────────────────────────────
+// OUR OWN raymarched volumetric clouds, in the *style* of "protean clouds" (the deformed-noise volume
+// technique) but written from scratch on our valueNoise, so nothing is a port of licensed shader code.
+// A short march through a domain-warped fbm density field that churns over time, with a cheap
+// forward-scatter light term (silver lining) and a violet→cyan colour ramp. `uv` 0..1; `t` = frame.time.
 
-float3 crossingStorms(float2 uv, float t) {
-    float4 O = float4(1.0);                          // for(O++; …) — accumulator starts at 1
-    float2 cc = uv - 0.5;                            // centered raymarch coordinate
-    float e, s, g = 0.0;
-    const float k = 0.01;
-    for (int it = 0; it < 44; it++) {                // was 99 in the original
-        float3 p = float3(cc * g + rot2(t + g * 0.5) * float2(0.5), g + t / 0.3);
-        e = 0.3 - dot(p.xy, p.xy);
-        for (s = 2.0; s < 200.0; s /= 0.6) {         // ~10 turbulence octaves
-            float2 yz = rot2(s) * p.yz;
-            p.y = yz.x; p.z = yz.y;
-            e += abs(dot(sin(p * s + t * s * 0.2) / s, float3(1.0)));
-        }
-        O += O.w * min(e * O + (sin(float4(1.0, 2.0, 3.0, 1.0) - p.z * 0.3) * 0.6 - 0.4), float4(k)) * k;
-        g += max(k, e * 0.2);
+// Billowy density at a point, domain-warped so the volume churns/swirls (the "protean" motion).
+float cloudField(float3 p, float t) {
+    p.xy += 0.6 * float2(sin(p.z * 0.7 + t * 0.35), cos(p.z * 0.6 - t * 0.30));
+    float d = 0.0, amp = 0.6;
+    for (int i = 0; i < 4; i++) {
+        // pseudo-3D value noise: two orthogonal slices, the third axis shifting each.
+        float n = valueNoise(p.xy + float2(0.0, p.z * 0.8 + t * 0.15))
+                + valueNoise(p.zy + float2(p.x * 0.8 - t * 0.10, 0.0));
+        d += amp * n * 0.5;
+        p = p * 1.9 + 3.1;
+        amp *= 0.5;
     }
-    // periodic darkening + an occasional lightning flash
-    O *= min(1.0, 1.0 + cos(0.15 * t))
-       + min(1.0, max(0.0, -2.0 - 4.0 * cos(0.15 * t))) * smoothstep(0.85, 1.0, fract(sin(t) * 43758.5453));
-    return O.rgb;
+    return clamp(d - 0.40, 0.0, 1.0);                // threshold into billows
+}
+
+float3 volumetricClouds(float2 uv, float t) {
+    float2 pp = uv - 0.5;
+    float3 ro = float3(0.0, 0.0, t * 0.3);           // drift forward through the volume
+    float3 rd = normalize(float3(pp.x * 1.3, pp.y * 1.5, 1.0));
+    float a = 0.2 * sin(t * 0.18);                    // slow view swirl
+    float ca = cos(a), sa = sin(a);
+    rd.xy = float2(rd.x * ca - rd.y * sa, rd.x * sa + rd.y * ca);
+    float3 col = float3(0.0);
+    float trans = 1.0;                                // transmittance (front-to-back compositing)
+    float march = 0.6;
+    for (int i = 0; i < 44; i++) {
+        float3 pos = ro + rd * march;
+        float den = cloudField(pos, t);
+        if (den > 0.01) {
+            float lit = cloudField(pos + float3(0.35, 0.45, 0.0), t);      // density toward a light
+            float dif = clamp((den - lit) * 3.0, 0.0, 1.0);
+            float3 shade = mix(float3(0.08, 0.05, 0.20), float3(0.45, 0.55, 0.90), dif);
+            shade += float3(0.7, 0.8, 1.0) * pow(dif, 3.0) * 0.9;          // silver lining
+            float op = den * 0.6;
+            col += trans * op * shade;
+            trans *= (1.0 - op);
+            if (trans < 0.03) break;
+        }
+        march += 0.09;
+    }
+    col += (1.0 - trans) * float3(0.04, 0.03, 0.09);  // faint ambient so gaps aren't pure black
+    return col;
 }
 
 // ── Sky pass ───────────────────────────────────────────────────
@@ -659,8 +681,8 @@ fragment float4 fragmentShader(
             float topF  = smoothstep(1.0, 0.80, uv.y);
             float fill = sideF * topF;
             float rimR = smoothstep(0.35, 0.05, fill) * smoothstep(0.0, 0.05, fill);   // glow near the border
-            // "Crossing storms" volumetric plasma (Eddie's ref, ported above), in a soft rectangle.
-            float3 storm = crossingStorms(uv, tt);
+            // Our original volumetric clouds (above), in a soft rectangle.
+            float3 storm = volumetricClouds(uv, tt);
             color = storm * fill + tint * rimR * 0.5;
             lighting = float3(1.0);
             if (fill < 0.02) discard_fragment();
