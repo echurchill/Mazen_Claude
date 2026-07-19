@@ -71,9 +71,12 @@ float3 volumetricClouds(float2 uv, float t) {
             // Density a short step toward the light: a big drop means this is a lit, sun-facing face;
             // little drop means a shadowed crevice → strong billow contrast (the missing detail).
             float shd = saturate((cloudField(pos + lgt * 0.45, t) + 0.12) * 1.7);
-            float lit = saturate((den - shd) * 4.0 + 0.12);
-            float3 shade = mix(float3(0.12, 0.07, 0.26), float3(0.85, 0.78, 0.95), lit);  // violet → bright
-            shade += float3(0.4, 0.7, 1.0) * pow(lit, 4.0) * 0.6;         // cool cyan on the brightest edges
+            float lit = saturate((den - shd) * 4.0 + 0.10);
+            // Richer, saturated ramp (Eddie): cool violet shadows → warm gold body → hot white, with a
+            // cool blue-white kiss on the very hottest edges — the warm-cloud / cool-hotspot reference look.
+            float3 shade = mix(float3(0.10, 0.06, 0.26), float3(0.95, 0.52, 0.20), smoothstep(0.0, 0.5, lit));
+            shade = mix(shade, float3(1.0, 0.93, 0.72), smoothstep(0.5, 1.0, lit));
+            shade += float3(0.45, 0.65, 1.0) * pow(lit, 5.0) * 0.5;       // cool blue-white hotspot
             shade *= 0.45 + 0.55 * exp(-march * 0.22);                    // depth: nearer billows read brighter
             float op = den * 0.55;
             col += trans * op * shade * 1.5;
