@@ -69,6 +69,12 @@ Each fades into / out of a separate world (press again to return).
 
 ## Notes
 
+- **The app boots into the first world** (M20): a pastoral home clearing whose stone arch leads to
+  the garden. The old demo hub is retired as the boot world; the debug world keys above still jump
+  anywhere.
+- **Walk-through portals** fire when you step onto the portal itself — its centre sub-cell — not
+  merely anywhere on its tile. A portal you spawn on (or that a twist rotates under you) stays
+  inert until you walk off and back on. `F` on the tile also works.
 - Movement and turning animate smoothly; inputs queue if pressed during an animation.
 - Slice rotation is only available when the player is stationary (not moving or turning).
 - Orbit auto-rotation pauses when you manually drag or pan the camera.

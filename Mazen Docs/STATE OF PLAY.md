@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-16. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-19. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
 
 ## The 60-second catch-up
 
@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), world toggles (`O` interior, `I` temple, `B` natural, `V` garden, `Y` prop/glyph gallery), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **218,002 checks**). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), world toggles (`O` interior, `I` temple, `B` natural, `V` garden, `Y` prop/glyph gallery + portal showroom), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **218,050 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -35,6 +35,34 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 ## Milestone road to a vertical slice (rough)
 
 M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 the lock→open→enter chain** (the single most important loop) → M18 densified-grid movement & solidity → M17 memory first pass → M19 natural & moon worlds → M20 the Journey Walkthrough (vertical slice) → M21 cozy/feel polish. Details + sequencing in the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md).
+
+## Where things stand — M20 sprint (2026-07-17 → 19)
+
+- **THE JOURNEY SPINE IS WIRED END-TO-END:** the app now **boots into the first world** — a
+  pastoral home clearing (the natural world re-used) whose one portal is a **stone arch** filled
+  with an original volumetric-cloud shader → walk through into the **garden** → solve the switch
+  lock → the temple door (an **elevator** portal, streaks flowing DOWN, hidden until unsealed) →
+  the inverted temple interior → return via the UP elevator. Home stays named "earth" so the moon
+  still hangs in its sky.
+- **TARDIS retired in the journey worlds.** Three portal styles built (prototypes in the gallery
+  showroom, north of the catalog): **elevator** (two columns + a two-layer desynced translucent
+  streak curtain + motes; down=surface, up=temple), **spot-to-spot** (frameless energy-veil ovals,
+  blue/pink — unused so far), **level-to-level** (stone arch + volumetric clouds). Material 23
+  drives all the animated energy; the clouds are an ORIGINAL clean-room raymarcher (the Shadertoy
+  references were CC BY-NC-SA — see the licence rule in [Asset Sourcing Guide](Asset%20Sourcing%20Guide.md)).
+- **Walk-through portals are sub-cell gated:** they fire when you step onto the portal's own
+  centre sub-cell (checked continuously, edge-triggered, primed on spawn/twist) — not on entering
+  the ~19 m tile. Both live regressions are now permanent tests.
+- **Dressed walls are the garden's walls** (the `WallStyle.dressed` framework): stone wall models +
+  graded overgrowth re-derived from live topology, fully rigid through twists (identity-owned,
+  canonical edge frames). The "stone-in-hedges" static look is kept as an option.
+- **Performance pass (Fable, 2026-07-19):** instanced asset draws (1000s → tens, both passes),
+  topology-versioned caches (~12k `faceletAt`/frame → cache hits, twist-safety proven structurally),
+  matrix + allocation cleanups. Deferred candidates recorded in
+  [Open Questions](Open%20Questions%20%26%20Future%20Work.md). **Eddie to verify fps on return.**
+- **Tests: 218,050** — the harness now compiles GameState (portal gating + cache invariants covered).
+- **Shipping landmine flagged:** imported models load from an absolute dev path — fine now, blocks
+  sharing builds ([Known Issues](Known%20Issues.md)).
 
 ## Immediate next actions on resume
 

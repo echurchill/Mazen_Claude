@@ -142,5 +142,16 @@ Per the plan's build order (spine first):
   new emissive-point rendering + a placement decision, and the door plinth already shows switch
   progress, so it's a legibility *nice-to-have*, not a blocker. Wants Eddie's eye.
 
-Then Arc 1 wraps the front (home world, arrival, counterpart sky, arch look), and Arc 3 (the
-inventions — PlayerKnowledge, memory, re-see, onward arch) comes last.
+- ✅ **(Arc 1 front) The HOME WORLD + threshold arch are LIVE (2026-07-19).** The app boots into
+  the first world — a pastoral clearing (the natural world reused, per Eddie) — and its one portal
+  is the **stone arch** (Ruins arched wall + an original volumetric-cloud fill) that walks through
+  to the garden. Forward-only holds: home → garden → temple, no way back home. *(The script's
+  "hedges + sandy path" dressing and a longer wander-to-the-arch are re-dress passes, not wiring.)*
+- ✅ **Portal styles (2026-07-18/19, Eddie-directed).** TARDIS retired on the journey: the garden's
+  temple door + the interior's return are **elevator portals** (columns + streak curtain; DOWN into
+  the temple, UP back out; the energy hidden while the door is sealed — the frame alone reads
+  "locked"). Walk-through triggers now fire on the portal's own sub-cell (with priming), so a twist
+  can't teleport you and approach doesn't feel hair-triggered.
+
+Then Arc 1 polish (arrival framing, counterpart sky, the wander), and Arc 3 (the inventions —
+PlayerKnowledge, memory, re-see, onward arch) comes last.
