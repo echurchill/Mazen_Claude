@@ -199,21 +199,9 @@ enum AssetRegistry {
         return (props + dungeons + naturePk + ruins + megakit, house, houseDoor)
     }
 
-    /// Stamp the imported decorations into a world as `.importedAsset` Props (one per registry entry,
-    /// at its `faceOffset` tile on +Z, `state` = registry index). As Props on facelets they ride
-    /// slice rotations and get carried like any other prop — instead of the old static placement.
-    static func stamp(_ props: [ImportedProp], into gs: GameState) {
-        let n = gs.cubeModel.size
-        for (assetID, p) in props.enumerated() {
-            if p.galleryOnly { continue }   // eval-grid props are placed only in the gallery world
-            let row = n / 2 + p.faceOffset.row
-            let col = n / 2 + p.faceOffset.col
-            if let (ci, fi) = gs.cubeModel.faceletAt(face: .positiveZ, row: row, col: col) {
-                gs.cubeModel.cubies[ci].facelets[fi].props.append(
-                    Prop(kind: .importedAsset, subRow: 1, subCol: 1, facing: .n, state: assetID))
-            }
-        }
-    }
+    // (The old `stamp(_:into:)` demo-decoration pass was retired with the demo overworld — the home
+    //  world is pastoral, and each world's stamps place their own imported props. `faceOffset` on
+    //  ImportedProp is its vestige; harmless, kept to avoid touching every constructor.)
 
     /// Normalize a kit module (1×1 Y-up, arbitrary authored size) to the quarter: scale its length
     /// (authored X) to `bw` and its height (authored Y) to `hS`, recentre it on its length/thickness

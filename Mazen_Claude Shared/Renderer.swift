@@ -291,9 +291,6 @@ class Renderer: NSObject, MTKViewDelegate {
         self.normalArray = TextureLoader.loadTextureArray(device: device,
             names: ["hedge_nor", "gravel_nor", "stone_nor"], srgb: false)
         self.skyboxTexture = TextureLoader.loadTexture2D(device: device, name: "skybox", srgb: true)
-        // M20: the alpha-cutout leaf array — one downsampled slice per ambientCG LeafSet (Color +
-        // Opacity composed to RGBA), so bushes vary. Dev absolute paths; bundle for shipping later.
-        let modelsRoot = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models"
         // LeafSets + misc_greenery asset folders were removed (Eddie) — leave these arrays nil so the
         // foliage materials fall back gracefully. Repoint here if new card assets land.
         self.leafArray = nil

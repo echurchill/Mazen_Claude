@@ -4,6 +4,16 @@
 features — that's the roadmap. This is "things that are wrong and we've decided to live with,
 for now, and why."*
 
+## Imported models load from absolute dev paths (M20)
+**Symptom:** none today — everything works on the dev machine. **Cause:** `AssetRegistry.loadAll`
+(and the MegaKit texture resolution) read `Mazen_Models` from the absolute path
+`/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models` — the models are NOT in the app bundle.
+On any other machine (or a notarized build) every imported prop silently fails to load: portal
+frames, dressed walls, garden vegetation all vanish (the app still boots — loaders degrade to
+empty). **Status:** flagged (Fable, 2026-07-19) — fine for the prototype, a hard blocker for
+shipping/sharing builds. **Fix when it matters:** copy the used subset of `Mazen_Models` into the
+bundle (a build phase) and point `modelsRoot` at `Bundle.main`, keeping the dev-path fallback.
+
 ## Cube-corner traversal glitchiness (M18)
 **Symptom:** walking across one of the cube's 8 triple-corner points (where three faces meet)
 has a visible hitch/jump. **Cause:** the corner is a geometric singularity — three tangent
