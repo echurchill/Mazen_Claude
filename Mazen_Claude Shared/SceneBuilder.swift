@@ -208,10 +208,11 @@ final class SceneBuilder {
                         let step = model.worldScale.subCellStep
                         for prop in facelet.props {
                             guard let mesh = tileMeshLib.propMesh(kind: prop.kind) else { continue }
-                            // M20 (Eddie) — elevator portals render as the streak curtain, not the TARDIS
-                            // box; and their energy field + ring only show while the portal is ACTIVE
-                            // (its cubie not sealed). The column frame (imported) is unaffected.
-                            if prop.kind == .portal, model.elevatorPortals.contains(where: { $0.ci == ci }) { continue }
+                            // M20 (Eddie) — styled portals (elevator streaks / cloud arch) render their
+                            // own visual, not the TARDIS box; and their energy field + ring only show
+                            // while the portal is ACTIVE (its cubie not sealed). The imported frame
+                            // (columns / arch) is unaffected.
+                            if prop.kind == .portal, model.styledPortals.contains(where: { $0.ci == ci }) { continue }
                             if (prop.kind == .portalField || prop.kind == .portalRing), model.sealedPortalCubies.contains(ci) { continue }
                             // M19: trees & boulders vary in size by `state` (0/1/2 = small/med/large)
                             // AND a per-instance jitter, so a stand / rock field reads as many

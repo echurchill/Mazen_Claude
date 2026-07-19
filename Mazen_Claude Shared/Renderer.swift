@@ -247,7 +247,9 @@ class Renderer: NSObject, MTKViewDelegate {
         // Game state (owns the per-world scale) — mark some tiles discovered for visual testing.
         // The overworld is the bottom of the world stack (M11.1). Use a local here: the computed
         // `gameState` getter can't be called before super.init().
-        let overworld = GameState(size: Self.initialCubeSize, name: "earth")
+        // M20 (Eddie) — the FIRST world: a pastoral natural clearing whose one portal is a stone arch
+        // to the garden. Kept named "earth" so the moon still hangs in its sky (moon↔earth binding).
+        let overworld = GameState(size: Self.initialCubeSize, name: "earth", stamp: .homeClearing)
         Self.setupInitialDiscovery(gameState: overworld)
         self.worldStack = [overworld]
         // The moon world exists from the start (persists across visits) so it can hang in earth's
@@ -361,9 +363,9 @@ class Renderer: NSObject, MTKViewDelegate {
     func resetGame(size: Int) {
         // Collapse to a single fresh overworld (drops any pushed portal-worlds). It keeps the
         // "earth" identity, so its sky edges (moon-earth) keep resolving; registry worlds persist.
-        worldStack = [GameState(size: size, name: "earth")]
+        worldStack = [GameState(size: size, name: "earth", stamp: .homeClearing)]
         Self.setupInitialDiscovery(gameState: gameState)
-        needsDecorativeStamp = true   // re-stamp the imported decorations into the fresh overworld
+        needsDecorativeStamp = true   // re-stamp the arch portal frame into the fresh home world
     }
 
     /// M14b debug: dial shape roundness on **every** world — the active stack *and* the persistent
@@ -436,7 +438,7 @@ class Renderer: NSObject, MTKViewDelegate {
                 case "temple-interior":
                     w = GameState(size: 5, name: dest, interior: true, stamp: .templeInterior)
                     // M20 — the return portal is an UP elevator; add its flanking columns (imported).
-                    w.cubeModel.stampElevatorColumns(namedProp("Dungeons Column"))
+                    w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"), archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
                 case "natural":
                     // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
                     w = GameState(size: 7, name: dest, stamp: .natural)
@@ -456,7 +458,7 @@ class Renderer: NSObject, MTKViewDelegate {
                     // M20 — a stone path marking the correct route between the puzzle elements (tapers off).
                     w.cubeModel.stampGardenPath(pathStones())
                     // M20 — the temple door is a DOWN elevator; add its flanking columns (imported).
-                    w.cubeModel.stampElevatorColumns(namedProp("Dungeons Column"))
+                    w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"), archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
                 case "gallery":
                     // M20 dev tool — procedural prop/glyph catalog (Y key) + the natural-wall
                     // prototype east of it. Size 25 to fit the catalog. Stamp partial-reveals.
@@ -757,10 +759,13 @@ class Renderer: NSObject, MTKViewDelegate {
     /// face reports its new position.
     private func updateAssetInstances() {
         assetDrawCmds.removeAll(keepingCapacity: true)
-        // Lazily stamp the decorations into the overworld (bottom of the stack) once the registry is
-        // loaded — overworld only, so portal-worlds (the test interior) stay clear of them.
-        if needsDecorativeStamp, let overworld = worldStack.first {
-            AssetRegistry.stamp(importedProps, into: overworld)
+        // M20 (Eddie) — the first world (natural home clearing) is built in init, before the registry
+        // is loaded, so stamp its imported PORTAL FRAME (the stone arch to the garden) lazily here on
+        // the first frame the registry is ready. (The old demo-decoration stamp is retired with the
+        // demo overworld — the home is pastoral, not the test hub.)
+        if needsDecorativeStamp, let home = worldStack.first, !importedProps.isEmpty {
+            home.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
+                                             archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
             needsDecorativeStamp = false
         }
         guard !importedProps.isEmpty || !houseAssembly.isEmpty else { return }

@@ -8,6 +8,7 @@ enum WorldStamp {
     case templeInterior  // the first hand-stamped interior: central hall, pedestal, return portal
     case bare            // nothing authored — the bare generated maze (tests; procedural worlds later)
     case natural         // M18 Phase 1: no walls anywhere — open ground + a few landmarks (the open-field testbed; M19 grows it into the Natureworld)
+    case homeClearing    // M20 (Eddie): the FIRST world — a pastoral natural clearing whose one portal is a stone arch to the garden
     case lunar           // M19: the Moon — open grey regolith + boulders (grey in the sky, walkable when visited)
     case gardenMaze      // M20 first cut: a hedge maze on a green planet — grass floors, some trees, roundness (the Journey garden)
     case gallery         // M20 dev tool: a flat grid of every prop/foliage variant, one per cell, for isolated evaluation
@@ -64,6 +65,10 @@ class CubeModel {
             stampNatural()
             roundness = 1.0         // M19: natural worlds are planets (Eddie) — authored per-world roundness
             reliefAmplitude = 0.05  // gentle rolling hills (tune live with ,/. )
+        case .homeClearing:
+            stampNatural(homePortalToGarden: true)   // M20: the first world; its portal is a stone arch → garden
+            roundness = 1.0
+            reliefAmplitude = 0.05
         case .lunar:
             stampLunar()
             roundness = 1.0         // M19: the moon is a round grey body, in the sky and underfoot
@@ -254,18 +259,24 @@ class CubeModel {
         part(archRuins, aCol, 0.24, 0, 0, 0)                                                          // the arched wall
     }
 
-    /// M20 (Eddie) — the two flanking COLUMNS of each real-world elevator portal (garden/temple). The
-    /// column model is imported, so the Renderer owns the index and calls this after the world builds
-    /// (pass `nil` if it isn't loaded). Non-solid frame, placed on the door tile astride the streak
-    /// field, perpendicular to the portal's facing. Always shown (the frame stays even while sealed).
-    func stampElevatorColumns(_ column: Int?) {
-        guard let column = column else { return }
-        for e in elevatorPortals {
-            let horiz = (e.facing == .n || e.facing == .s)   // doorway runs perpendicular to the facing
-            for s in [Float(-0.09), 0.09] {
-                var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: .s, state: column, extraScale: 0.25)
-                if horiz { p.offsetX = s } else { p.offsetY = s }
-                cubies[e.ci].facelets[e.fi].props.append(p)
+    /// M20 (Eddie) — the imported FRAME of each styled portal: a stone arch (fieldStyle 2) or two
+    /// flanking columns (streak elevators, 3/4). The Renderer owns the model indices and calls this
+    /// after the world builds (pass `nil` for any not loaded → that frame is skipped). Non-solid, so
+    /// you still walk through; always shown (the frame stays even while the energy field is sealed off).
+    func stampPortalFrames(column: Int?, archRuins: Int?) {
+        for e in styledPortals {
+            if e.fieldStyle == 2 {                           // ARCH (level-to-level cloud portal)
+                guard let a = archRuins else { continue }
+                cubies[e.ci].facelets[e.fi].props.append(
+                    Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: e.facing, state: a, extraScale: 0.24))
+            } else {                                         // ELEVATOR — two columns astride the streak curtain
+                guard let column = column else { continue }
+                let horiz = (e.facing == .n || e.facing == .s)   // doorway runs perpendicular to the facing
+                for s in [Float(-0.09), 0.09] {
+                    var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: .s, state: column, extraScale: 0.25)
+                    if horiz { p.offsetX = s } else { p.offsetY = s }
+                    cubies[e.ci].facelets[e.fi].props.append(p)
+                }
             }
         }
     }
@@ -1133,7 +1144,7 @@ class CubeModel {
     /// in place of hedges), and conifers scatter over the whole planet in varied sizes. The way
     /// home is a walk-through portal beside the spawn. (Also the M18 open-field testbed — B key.)
     /// A small deterministic hash drives the scatter so it's stable across runs without RNG.
-    private func stampNatural() {
+    private func stampNatural(homePortalToGarden: Bool = false) {
         let all: DirectionMask = [.north, .east, .south, .west]
         for ci in cubies.indices {
             for fi in cubies[ci].facelets.indices {
@@ -1214,10 +1225,21 @@ class CubeModel {
             }
         }
 
-        // The way home — a walk-through return portal one tile south of arrival.
         if let (ci, fi) = faceletAt(face: .positiveZ, row: portalTile.0, col: portalTile.1) {
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+            if homePortalToGarden {
+                // M20 (Eddie) — the FIRST world's one portal: a stone ARCH you step through to the
+                // GARDEN (destination index 3). Rendered as the arch model + volumetric-cloud field
+                // (material 23), not the TARDIS; always open (never sealed). Faces the approaching
+                // player (north, toward spawn). The Renderer stamps the arch model (stampPortalFrames).
+                cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 3))
+                styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 2))
+                cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+                cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2, extraScale: 0.9375))
+            } else {
+                // The way home — a walk-through return portal one tile south of arrival.
+                cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
+                cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+            }
         }
     }
 
@@ -1294,7 +1316,7 @@ class CubeModel {
         if let style = elevatorStyle {
             // M20 (Eddie) — an ELEVATOR portal, not the TARDIS: the streak field + ring (hidden while
             // sealed) and, via the Renderer, two flanking columns. No lamp.
-            elevatorPortals.append(ElevatorPortal(ci: dci, fi: dfi, facing: doorFacing, style: style))
+            styledPortals.append(StyledPortal(ci: dci, fi: dfi, facing: doorFacing, fieldStyle: style))
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: doorFacing, state: style))
         } else {
@@ -1486,7 +1508,7 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             // M20 (Eddie) — an ELEVATOR portal going UP (temple → surface); always active here (never
             // sealed), so its streak field is always shown. Columns added by the Renderer.
-            elevatorPortals.append(ElevatorPortal(ci: ci, fi: fi, facing: .n, style: 4))
+            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 4))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 4))
         }
@@ -1861,12 +1883,15 @@ class CubeModel {
     /// them here). Cubie indices, stable across turns like bonds.
     var sealedPortalCubies: Set<Int> = []
 
-    /// M20 (Eddie) — portals shown as the ELEVATOR (a flat streak curtain between two columns) instead
-    /// of the TARDIS box. `style` 3 = going DOWN (garden → temple), 4 = UP (temple → surface). The
-    /// energy streak field + base ring render only while the portal is ACTIVE (its cubie not in
-    /// `sealedPortalCubies`); the column frame is always shown. `fi`/`facing` locate it for the columns.
-    struct ElevatorPortal { let ci: Int; let fi: Int; let facing: Heading8; let style: Int }
-    var elevatorPortals: [ElevatorPortal] = []
+    /// M20 (Eddie) — portals shown with a STYLED visual instead of the TARDIS box. `fieldStyle` picks
+    /// the energy surface (material 23): 2 = the volumetric-cloud ARCH (level-to-level, home → garden),
+    /// 3 = elevator streaks DOWN (garden → temple), 4 = streaks UP (temple → surface). The frame is
+    /// derived from the style — a stone arch for 2, two flanking columns for 3/4 — and stamped by the
+    /// Renderer (`stampPortalFrames`), which owns the imported indices. The energy field + base ring
+    /// render only while the portal is ACTIVE (its cubie not in `sealedPortalCubies`); the frame always
+    /// shows. `fi`/`facing` locate/orient it.
+    struct StyledPortal { let ci: Int; let fi: Int; let facing: Heading8; let fieldStyle: Int }
+    var styledPortals: [StyledPortal] = []
 
     /// Bonded cubie groups: each set of cubie indices must move together, so a slice twist that
     /// would cut through a group — some of its cubies in the rotating slice, some out — is illegal
