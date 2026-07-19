@@ -254,6 +254,22 @@ class CubeModel {
         part(archRuins, aCol, 0.24, 0, 0, 0)                                                          // the arched wall
     }
 
+    /// M20 (Eddie) — the two flanking COLUMNS of each real-world elevator portal (garden/temple). The
+    /// column model is imported, so the Renderer owns the index and calls this after the world builds
+    /// (pass `nil` if it isn't loaded). Non-solid frame, placed on the door tile astride the streak
+    /// field, perpendicular to the portal's facing. Always shown (the frame stays even while sealed).
+    func stampElevatorColumns(_ column: Int?) {
+        guard let column = column else { return }
+        for e in elevatorPortals {
+            let horiz = (e.facing == .n || e.facing == .s)   // doorway runs perpendicular to the facing
+            for s in [Float(-0.09), 0.09] {
+                var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: .s, state: column, extraScale: 0.25)
+                if horiz { p.offsetX = s } else { p.offsetY = s }
+                cubies[e.ci].facelets[e.fi].props.append(p)
+            }
+        }
+    }
+
     /// M20 proof — lay `.importedAsset` eval cells (3D models) in their own revealed strip just SOUTH
     /// of the catalog grid, connected to the spawn by a short corridor so the player can walk down to
     /// them. `states` are registry indices into `Renderer.importedProps`; the Renderer owns those
@@ -627,7 +643,7 @@ class CubeModel {
         }
         stampTempleLock(doorRow: c - 3, doorCol: c, doorFacing: .s,
                         plinthRow: c - 2, plinthSubRow: 2,
-                        switchCenter: c, spread: 3)
+                        switchCenter: c, spread: 3, elevatorStyle: 3)   // M20: elevator DOWN into the temple
         // M20 dressing — the clue (Player Journey: "a fallen slab carved four dots, three filled"):
         // a plinth wearing the caustic `threeOfFour` glyph (index 8), the lock's GOAL. Placed east on
         // the approach, off the door-plinth column so it doesn't read as the live progress display, and
@@ -1272,10 +1288,18 @@ class CubeModel {
     /// identically on a flat or curved (roundness 1) world (2026-07-17). All on face `.positiveZ`.
     private func stampTempleLock(doorRow: Int, doorCol: Int, doorFacing: Heading8,
                                  plinthRow: Int, plinthSubRow: Int,
-                                 switchCenter: Int, spread: Int) {
+                                 switchCenter: Int, spread: Int, elevatorStyle: Int? = nil) {
         guard let (dci, dfi) = faceletAt(face: .positiveZ, row: doorRow, col: doorCol) else { return }
         cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: doorFacing, state: 1))
-        cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        if let style = elevatorStyle {
+            // M20 (Eddie) — an ELEVATOR portal, not the TARDIS: the streak field + ring (hidden while
+            // sealed) and, via the Renderer, two flanking columns. No lamp.
+            elevatorPortals.append(ElevatorPortal(ci: dci, fi: dfi, facing: doorFacing, style: style))
+            cubies[dci].facelets[dfi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+            cubies[dci].facelets[dfi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: doorFacing, state: style))
+        } else {
+            cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        }
         sealedPortalCubies.insert(dci)   // M16.4: closed until unlocked AND twisted open
         // The door plinth — seated on the tile in front of the door (the side the player approaches
         // from), NOT the walk-through door tile. Falls back onto the door tile on a tiny cube.
@@ -1460,7 +1484,11 @@ class CubeModel {
         // Its exit direction is north: arrivals emerge facing the hall and the pedestal.
         if let (ci, fi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+            // M20 (Eddie) — an ELEVATOR portal going UP (temple → surface); always active here (never
+            // sealed), so its streak field is always shown. Columns added by the Renderer.
+            elevatorPortals.append(ElevatorPortal(ci: ci, fi: fi, facing: .n, style: 4))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 4))
         }
     }
 
@@ -1832,6 +1860,13 @@ class CubeModel {
     /// finalized twist of their slice swings them open (GameState.finalizeSliceRotation removes
     /// them here). Cubie indices, stable across turns like bonds.
     var sealedPortalCubies: Set<Int> = []
+
+    /// M20 (Eddie) — portals shown as the ELEVATOR (a flat streak curtain between two columns) instead
+    /// of the TARDIS box. `style` 3 = going DOWN (garden → temple), 4 = UP (temple → surface). The
+    /// energy streak field + base ring render only while the portal is ACTIVE (its cubie not in
+    /// `sealedPortalCubies`); the column frame is always shown. `fi`/`facing` locate it for the columns.
+    struct ElevatorPortal { let ci: Int; let fi: Int; let facing: Heading8; let style: Int }
+    var elevatorPortals: [ElevatorPortal] = []
 
     /// Bonded cubie groups: each set of cubie indices must move together, so a slice twist that
     /// would cut through a group — some of its cubies in the rotating slice, some out — is illegal

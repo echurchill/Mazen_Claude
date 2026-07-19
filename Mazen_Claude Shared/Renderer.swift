@@ -435,6 +435,8 @@ class Renderer: NSObject, MTKViewDelegate {
                 switch dest {
                 case "temple-interior":
                     w = GameState(size: 5, name: dest, interior: true, stamp: .templeInterior)
+                    // M20 — the return portal is an UP elevator; add its flanking columns (imported).
+                    w.cubeModel.stampElevatorColumns(namedProp("Dungeons Column"))
                 case "natural":
                     // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
                     w = GameState(size: 7, name: dest, stamp: .natural)
@@ -453,6 +455,8 @@ class Renderer: NSObject, MTKViewDelegate {
                     wallDressingPalette = wallFlora()
                     // M20 — a stone path marking the correct route between the puzzle elements (tapers off).
                     w.cubeModel.stampGardenPath(pathStones())
+                    // M20 — the temple door is a DOWN elevator; add its flanking columns (imported).
+                    w.cubeModel.stampElevatorColumns(namedProp("Dungeons Column"))
                 case "gallery":
                     // M20 dev tool — procedural prop/glyph catalog (Y key) + the natural-wall
                     // prototype east of it. Size 25 to fit the catalog. Stamp partial-reveals.
