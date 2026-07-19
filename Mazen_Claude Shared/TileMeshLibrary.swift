@@ -839,7 +839,7 @@ class TileMeshLibrary {
         let z0 = ws.floorY
         // Eddie: portals are ≤ 4 m tall. 1 m ≈ 0.0529 world units (eyeHeight 0.09u ≈ 1.7 m), so 4 m ≈
         // 0.212u; width ~2.6 m for a grand-doorway proportion. (Arch fill re-shapes this via its mask.)
-        let hW: Float = 0.07          // half width (~2.6 m)
+        let hW: Float = 0.085         // half width (~3.2 m — wide enough to reach the arch jambs)
         let hgt: Float = 0.212        // height (~4 m)
         let bl = SIMD3<Float>(-hW, 0, z0), br = SIMD3<Float>(hW, 0, z0)
         let tr = SIMD3<Float>(hW, 0, z0 + hgt), tl = SIMD3<Float>(-hW, 0, z0 + hgt)

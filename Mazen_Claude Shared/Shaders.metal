@@ -582,30 +582,26 @@ fragment float4 fragmentShader(
             // the temple) or UP (style 4, the temple rising back out). The TOP is a ragged, noisy edge
             // (not rounded, not a hard line) so it reads as raw energy rather than a panel.
             float dir = (in.styleSeed == 4u) ? -1.0 : 1.0;                 // 4 = up, 3 = down
-            float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 + dir * tt * 0.6), 4);
-            float streak = 0.5 + 0.5 * sin(uv.x * 8.0 + flow * 4.0 + dir * tt * 1.4);
+            // Per-layer desync (Eddie): the layer's opacity (0.55 front / 0.85 back) doubles as a phase
+            // seed, so the two layers evolve OUT of step — a flame-like interplay, not one doubled image.
+            float phase = in.discoveryAmount * 11.0;
+            float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 + dir * tt * 0.6 + phase), 4);
+            float streak = 0.5 + 0.5 * sin(uv.x * 8.0 + flow * 4.0 + dir * tt * 1.4 + phase);
             float energy = pow(streak, 2.0) * (0.55 + 0.7 * flow);
             float edge = smoothstep(0.0, 0.30, uv.x) * smoothstep(1.0, 0.70, uv.x);   // side falloff
-            float topN = fbm(float2(uv.x * 6.0, 11.3), 3);                 // per-column top height
+            float topN = fbm(float2(uv.x * 6.0 + phase, 11.3), 3);         // per-column top height
             float topLimit = 0.70 + 0.22 * topN;                          // ragged top silhouette
             if (uv.y > topLimit) discard_fragment();
-            float topFade = smoothstep(topLimit, topLimit - 0.16, uv.y);  // dissolve just below the ragged line
+            float topFade = smoothstep(topLimit, topLimit - 0.16, uv.y);
             float veil = energy * edge * topFade;
-            if (veil < 0.10) discard_fragment();                          // wispy tendrils
-            // Translucency (Eddie): screen-door dither by the layer's opacity (discoveryAmount) so a
-            // thinner front layer reveals the denser back one behind it — two layers reading as depth.
-            float opacity = in.discoveryAmount;
-            if (opacity < 0.999) {
-                float bayer[16] = { 0.5, 8.5, 2.5, 10.5, 12.5, 4.5, 14.5, 6.5,
-                                    3.5, 11.5, 1.5,  9.5, 15.5, 7.5, 13.5, 5.5 };
-                int bx = int(in.position.x) & 3, by = int(in.position.y) & 3;
-                if (opacity < bayer[by * 4 + bx] / 16.0) discard_fragment();
-            }
-            // Streaking motes — sparse bright particles racing along the flow (Eddie).
-            float2 pv = float2(uv.x * 7.0, uv.y * 5.0 + dir * tt * 1.3);
-            float mote = smoothstep(0.90, 0.996, valueNoise(pv)) * edge * topFade;
-            color = tint * (0.45 + 1.7 * veil) + float3(0.65, 0.75, 1.0) * pow(veil, 3.0) * 0.8
-                  + float3(0.90, 0.95, 1.0) * mote;
+            if (veil < 0.08) discard_fragment();                          // wispy tendrils
+            // Translucency via MOVING noise holes (Eddie: a static screen-door grain read cheesy). The
+            // holes scroll with the flow; the layer's opacity (discoveryAmount) sets how many.
+            float holes = valueNoise(float2(uv.x * 11.0, uv.y * 7.0 + dir * tt * 1.7) + flow);
+            if (holes > in.discoveryAmount) discard_fragment();
+            // Bright motes racing along the flow (denser + brighter so they actually read).
+            float mote = smoothstep(0.80, 0.95, valueNoise(float2(uv.x * 6.0 + phase, uv.y * 4.5 + dir * tt * 1.8)));
+            color = tint * (0.5 + 1.6 * veil) + float3(0.75, 0.88, 1.0) * mote * 1.4;
             lighting = float3(1.0);
         } else {
         bool arch = (in.styleSeed == 2u);
@@ -627,8 +623,8 @@ fragment float4 fragmentShader(
             // Fill the WHOLE arch opening to its SHAPE (Eddie): straight jambs up to a springline, then
             // a round arch to the apex. The field is also made taller (heightScale, set in SceneBuilder)
             // so it reaches up into the stone arch instead of stopping short. Swirl spins from the centre.
-            float hw = 0.40, spring = 0.58;                                    // half-width, springline (uv)
-            float side = smoothstep(hw + 0.04, hw - 0.05, abs(uv.x - 0.5));    // within the jambs
+            float hw = 0.47, spring = 0.52;                                    // half-width, springline (uv)
+            float side = smoothstep(hw + 0.03, hw - 0.05, abs(uv.x - 0.5));    // within the jambs
             float top;
             if (uv.y <= spring) { top = 1.0; }                                 // straight lower part
             else {                                                             // elliptical arch to the apex

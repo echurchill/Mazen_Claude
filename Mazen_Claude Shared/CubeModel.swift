@@ -225,11 +225,13 @@ class CubeModel {
             add(col, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                   // lit floor plate
             // Two TRANSLUCENT streak layers a little apart in depth (Eddie): a denser back and a
             // thinner front (opacity carried in `alignAnim` → screen-door dither in material 23).
+            // Centered, ~10 cm apart (Eddie): 0.1 m ≈ 0.0053u ⇒ ±0.0026u. Opacity (alignAnim) both
+            // sets the screen-door translucency AND desyncs the two layers (see material 23).
             var back = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: style)
-            back.offsetY = -0.05; back.alignAnim = 0.85
+            back.offsetY = -0.0026; back.alignAnim = 0.85
             add(col, back)
             var front = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: style)
-            front.offsetY = 0.02; front.alignAnim = 0.55
+            front.offsetY = 0.0026; front.alignAnim = 0.55
             add(col, front)
             part(column, col, 0.25, -0.09, 0)                                                         // left jamb column (~4 m)
             part(column, col, 0.25,  0.09, 0)                                                         // right jamb column
@@ -246,8 +248,10 @@ class CubeModel {
         // opening up into the curved top. The "Overgrown" model wears its own moss, so no separate vines.
         let aCol = c + 4
         add(aCol, Prop(kind: .portalRing, subRow: 1, subCol: 1))                                      // base glow
-        add(aCol, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))               // vortex fill (~4 m, arch-masked)
-        part(archRuins, aCol, 0.35, 0, 0, 0)                                                          // the arched wall (opening ≈ 4 m)
+        var archField = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2)          // vortex fill (~4 m, arch-masked)
+        archField.offsetY = -0.015                                                                    // set just behind the stone so overshoot is cropped
+        add(aCol, archField)
+        part(archRuins, aCol, 0.24, 0, 0, 0)                                                          // the arched wall, opening shrunk to ≈ the 4 m field
     }
 
     /// M20 proof — lay `.importedAsset` eval cells (3D models) in their own revealed strip just SOUTH
