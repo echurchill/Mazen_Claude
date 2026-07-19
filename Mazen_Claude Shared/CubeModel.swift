@@ -1824,7 +1824,13 @@ class CubeModel {
     /// them per-vertex. `roundness == 0` returns the flat placement (offset applied in the tile
     /// plane) — identical to the old `worldMatrix · translation` seating.
     func inflatedPlacement(face: CubeFace, row: Int, col: Int, localX: Float, localY: Float) -> float4x4 {
-        let base = restMatrix(face: face, row: row, col: col)
+        return inflatedPlacement(base: restMatrix(face: face, row: row, col: col), localX: localX, localY: localY)
+    }
+
+    /// PERF overload — same computation with the tile's rest matrix precomputed, so callers placing
+    /// many points on ONE tile (SceneBuilder's per-tile pass, the Renderer's per-prop pass) build the
+    /// rest matrix once per tile instead of once per point.
+    func inflatedPlacement(base: float4x4, localX: Float, localY: Float) -> float4x4 {
         // Offset the origin within the tile plane, in the base frame (avoids the render-side
         // `float4x4.translation` extension so this stays compilable in the test target).
         let baseRight = SIMD3<Float>(base.columns.0.x, base.columns.0.y, base.columns.0.z)

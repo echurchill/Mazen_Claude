@@ -105,21 +105,26 @@ final class SceneBuilder {
         // M16.2: while a refused twist strains, the LOCKED structure flares — a red pulse on the
         // bonded tiles' props (the Player Journey's "glow tracing the structure" image).
         let refusalGlow: Float = (sr.isActive && sr.isRefusal) ? sinf(sr.progress * .pi) : 0
+        // PERF: flatten the per-prop membership tests to O(1) set lookups (they ran a linear
+        // contains(where:) per prop per frame on the hot path).
+        let bondedCubies = model.bondedGroups.reduce(into: Set<Int>()) { $0.formUnion($1) }
+        let styledPortalCubies = Set(model.styledPortals.map { $0.ci })
 
         for face in CubeFace.allCases {
             for row in 0..<model.size {
                 for col in 0..<model.size {
+                    guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
+                    let facelet = model.cubies[ci].facelets[fi]
+
                     // M14b: the maze surface (floors/walls/posts/frame/props) inflates per-vertex in
                     // the shader from the *un-spun rest* placement + per-instance spin/roundness.
                     // `matrix` — a rigid seat ON the curved surface at the tile centre — anchors only
                     // the translucent fog layers (R2.1: via inflatedPlacement, not the old per-tile-
-                    // inflated worldMatrix).
-                    var matrix = model.inflatedPlacement(face: face, row: row, col: col, localX: 0, localY: 0)
-
-                    guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else { continue }
-                    let facelet = model.cubies[ci].facelets[fi]
-
+                    // inflated worldMatrix). PERF: the rest matrix is built ONCE per tile and shared
+                    // by the inflated fog seat (was built twice).
                     var restM = model.restMatrix(face: face, row: row, col: col)
+                    var matrix = model.inflatedPlacement(base: restM, localX: 0, localY: 0)
+
                     if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) {
                         matrix = animMat * matrix
                         restM = animMat * restM
@@ -212,7 +217,7 @@ final class SceneBuilder {
                             // own visual, not the TARDIS box; and their energy field + ring only show
                             // while the portal is ACTIVE (its cubie not sealed). The imported frame
                             // (columns / arch) is unaffected.
-                            if prop.kind == .portal, model.styledPortals.contains(where: { $0.ci == ci }) { continue }
+                            if prop.kind == .portal, styledPortalCubies.contains(ci) { continue }
                             if (prop.kind == .portalField || prop.kind == .portalRing), model.sealedPortalCubies.contains(ci) { continue }
                             // M19: trees & boulders vary in size by `state` (0/1/2 = small/med/large)
                             // AND a per-instance jitter, so a stand / rock field reads as many
@@ -255,7 +260,7 @@ final class SceneBuilder {
                             }
                             var color = Self.propColors[prop.kind] ?? SIMD4(0.6, 0.6, 0.6, 1.0)
                             var materialID: UInt32 = 10
-                            if model.bondedGroups.contains(where: { $0.contains(ci) }) {
+                            if bondedCubies.contains(ci) {
                                 // Locked-structure livery: GOLD on the engineered overworld (a lock
                                 // findable at a glance). But the M20 garden temple wants to be
                                 // *discovered, not advertised* (Player Journey) — so on a natural-dressed

@@ -846,15 +846,16 @@ class Renderer: NSObject, MTKViewDelegate {
             }
         }
 
-        // Place ONE prop at (face,row,col). M14b: seat each rigid asset at the inflated sub-cell
-        // footprint, tilted to the local surface normal (roundness==0 → flat, exactly as before). Then
-        // facing + slice animation + spin. The asset stays rigid (its instance roundness stays 0); only
-        // its anchor rides the curve, so it no longer pokes through / floats. Shared by the stored props
-        // and the dynamic dressed walls, so both take the identical placement + slice-twist path.
-        func placeProp(_ prop: Prop, face: CubeFace, row: Int, col: Int, ci: Int) {
+        // Place ONE prop on the tile whose rest matrix is `base`. M14b: seat each rigid asset at the
+        // inflated sub-cell footprint, tilted to the local surface normal (roundness==0 → flat, exactly
+        // as before). Then facing + slice animation + spin. The asset stays rigid (its instance
+        // roundness stays 0); only its anchor rides the curve. Shared by the stored props and the
+        // dynamic dressed walls. PERF: `base` is computed once per TILE by the callers (was a fresh
+        // restMatrix per prop — the garden places 1500+ props/frame).
+        func placeProp(_ prop: Prop, base: float4x4, ci: Int) {
             let localX = Float(prop.subCol - 1) * step + prop.offsetX
             let localY = Float(prop.subRow - 1) * step + prop.offsetY
-            var placement = model.inflatedPlacement(face: face, row: row, col: col, localX: localX, localY: localY)
+            var placement = model.inflatedPlacement(base: base, localX: localX, localY: localY)
             if sr.isActive && sr.affectedCubies.contains(ci) { placement = sliceMat * placement }
             let tileM = spin * placement
                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
@@ -889,8 +890,9 @@ class Renderer: NSObject, MTKViewDelegate {
         // PERF: iterate only the facelets that CARRY props (cached per topologyVersion) instead of
         // scanning all 6×n² tiles per frame. Prop fields are read live; a twist bumps the version.
         for e in model.propTiles() {
+            let base = model.restMatrix(face: e.face, row: e.row, col: e.col)
             let props = model.cubies[e.ci].facelets[e.fi].props
-            for prop in props { placeProp(prop, face: e.face, row: e.row, col: e.col, ci: e.ci) }
+            for prop in props { placeProp(prop, base: base, ci: e.ci) }
         }
 
         // M20 — DYNAMIC dressed walls (twist-safe stone walls). For a `.dressed` world the hedge mesh is
@@ -908,9 +910,8 @@ class Renderer: NSObject, MTKViewDelegate {
             let pal = wallDressingPalette
             for entry in model.dressedWallEntries(walls: pal.walls, rocks: pal.rocks, bushes: pal.bushes,
                                                   wallScale: wallScale, rockScale: rockScale, bushScale: bushScale) {
-                for prop in entry.props {
-                    placeProp(prop, face: entry.loc.face, row: entry.loc.row, col: entry.loc.col, ci: entry.loc.ci)
-                }
+                let base = model.restMatrix(face: entry.loc.face, row: entry.loc.row, col: entry.loc.col)
+                for prop in entry.props { placeProp(prop, base: base, ci: entry.loc.ci) }
             }
         }
 
