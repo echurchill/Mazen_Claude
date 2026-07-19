@@ -39,11 +39,11 @@ float fbm(float2 p, int octaves) {
 // forward-scatter light term (silver lining) and a violet→cyan colour ramp. `uv` 0..1; `t` = frame.time.
 
 // Signed billow field at a point, domain-warped so the volume churns/swirls (the "protean" motion).
-// Six octaves for fine detail; returns a signed value the renderer thresholds into solid billows.
-float cloudField(float3 p, float t) {
+// `oct` octaves — the renderer uses more for the visible density, fewer for the cheap shadow tap.
+float cloudField(float3 p, float t, int oct) {
     p.xy += 0.55 * float2(sin(p.z * 0.8 + t * 0.40), cos(p.z * 0.7 - t * 0.35));   // churn
     float d = 0.0, amp = 0.55, freq = 1.0;
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < oct; i++) {
         // pseudo-3D value noise: two orthogonal slices, the third axis shifting each.
         float n = valueNoise(p.xy * freq + float2(p.z * 0.9, -p.z * 0.6 + t * 0.10))
                 + valueNoise(p.zx * freq + float2(p.y * 0.7 - t * 0.08, p.y * 0.5));
@@ -64,13 +64,15 @@ float3 volumetricClouds(float2 uv, float t) {
     float3 col = float3(0.0);
     float trans = 1.0;                                // transmittance (front-to-back compositing)
     float march = 0.4;
-    for (int i = 0; i < 42; i++) {
+    // Perf (Eddie): adaptive step size races through empty space and only crawls through billows, so
+    // far fewer of the expensive density taps are spent on nothing; the shadow tap uses coarse octaves.
+    for (int i = 0; i < 34; i++) {
         float3 pos = ro + rd * march;
-        float den = saturate((cloudField(pos, t) + 0.12) * 1.7);          // sharpen into billows
+        float den = saturate((cloudField(pos, t, 5) + 0.12) * 1.7);       // 5 octaves for visible detail
         if (den > 0.01) {
             // Density a short step toward the light: a big drop means this is a lit, sun-facing face;
-            // little drop means a shadowed crevice → strong billow contrast (the missing detail).
-            float shd = saturate((cloudField(pos + lgt * 0.45, t) + 0.12) * 1.7);
+            // little drop means a shadowed crevice → strong billow contrast. Coarse (3 octaves) is enough.
+            float shd = saturate((cloudField(pos + lgt * 0.45, t, 3) + 0.12) * 1.7);
             float lit = saturate((den - shd) * 4.0 + 0.08);
             // Richer, saturated ramp (Eddie): cool violet shadows → warm gold body → hot gold (NOT
             // white — a white hot-stop + additive build-up blew out to flat white), cool blue kiss.
@@ -83,7 +85,7 @@ float3 volumetricClouds(float2 uv, float t) {
             trans *= (1.0 - op);
             if (trans < 0.02) break;
         }
-        march += 0.085;
+        march += mix(0.17, 0.06, den);                                    // adaptive: fast in gaps, slow in billows
     }
     col = 1.0 - exp(-col * 1.4);                                          // tonemap: highlights stay coloured, not clipped to white
     return col;
@@ -642,7 +644,7 @@ fragment float4 fragmentShader(
             // Per-layer desync (Eddie): the layer's opacity (0.55 front / 0.85 back) doubles as a phase
             // seed, so the two layers evolve OUT of step — a flame-like interplay, not one doubled image.
             float phase = in.discoveryAmount * 11.0;
-            float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 + dir * tt * 0.6 + phase), 4);
+            float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 + dir * tt * 0.6 + phase), 3);
             float streak = 0.5 + 0.5 * sin(uv.x * 8.0 + flow * 4.0 + dir * tt * 1.4 + phase);
             float energy = pow(streak, 2.0) * (0.55 + 0.7 * flow);
             float edge = smoothstep(0.0, 0.42, uv.x) * smoothstep(1.0, 0.58, uv.x);   // softer side falloff (Eddie)
@@ -674,7 +676,7 @@ fragment float4 fragmentShader(
         float rot = tt * 0.5 + (1.25 - ell) * 3.6;
         float cs = cos(rot), sn = sin(rot);
         float2 rv = float2(d.x * cs - d.y * sn, d.x * sn + d.y * cs);
-        float swirl = fbm(rv * 7.0 + float2(0.0, -tt * 0.25), 5);
+        float swirl = fbm(rv * 7.0 + float2(0.0, -tt * 0.25), 4);
         float filament = 0.5 + 0.5 * sin(swirl * 6.2831853 + ell * 9.0 - tt * 1.4);
         float energy = mix(swirl, filament, 0.55);
         float rim = smoothstep(0.80, 1.0, ell) * smoothstep(1.15, 0.98, ell);   // glowing boundary ring
