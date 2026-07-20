@@ -293,6 +293,8 @@ enum PropKind: UInt8 {
                          // fill. NON-solid (you step through it). The new portal styles replacing the TARDIS.
     case portalRing      // M20: a flat glowing ring on the ground at a portal's base (emissive, material
                          // 12) — the light pooling under an energy veil / the lit floor of the elevator.
+    case signpost        // M20 (Eddie): a wooden post + board naming the portal it stands beside
+                         // (material 24). `state` = the label-array slice (a hub destination index).
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the
@@ -301,7 +303,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .portalRing: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .portalRing, .signpost: return false
         default: return true
         }
     }

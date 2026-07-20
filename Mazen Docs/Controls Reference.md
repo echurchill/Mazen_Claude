@@ -37,6 +37,7 @@
 Each fades into / out of a separate world (press again to return).
 | Input | Action |
 |---|---|
+| `` ` `` (grave) | **Portal hub** — a plaza of labeled TARDIS portals to every world (walk up, read the sign, step through). The navigable alternative to the single-key jumps below. |
 | O | Temple/interior inverted-cube world |
 | I | Temple-interior world |
 | B | Natural open-field world |

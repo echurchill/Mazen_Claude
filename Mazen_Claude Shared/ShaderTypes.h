@@ -29,6 +29,7 @@ typedef NS_ENUM(EnumBackingType, TextureIndex)
     TextureIndexGreenery     = 6,   // M20: misc-greenery card array (RGBA) — ferns/flowers/plants
     TextureIndexTreeSprite   = 7,   // M20: WenrexaTrees billboard-sprite array (RGBA)
     TextureIndexCaustic      = 8,   // M16.6: Builder-glyph caustic symbols (r8 intensity array)
+    TextureIndexLabel        = 9,   // M20: rendered text sign-board array (RGBA) for portal signposts
 };
 
 typedef struct

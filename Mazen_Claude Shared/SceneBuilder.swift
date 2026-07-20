@@ -53,6 +53,7 @@ final class SceneBuilder {
         .portalLamp:  SIMD4(1.0, 1.0, 1.0, 1.0),     // overridden per-frame by the blink (below)
         .portalField: SIMD4(0.42, 0.55, 1.0, 1.0),   // M20 — energy-veil tint (overridden per style below)
         .portalRing:  SIMD4(0.55, 0.72, 1.0, 1.0),   // M20 — base-glow ring (emissive)
+        .signpost:    SIMD4(1.0, 1.0, 1.0, 1.0),     // M20 — material 24 colours itself (wood + label)
         .dial:        SIMD4(0.52, 0.52, 0.58, 1.0),  // M16.3 — overridden by state below
         .glyph:       SIMD4(0.68, 0.65, 0.59, 1.0),  // M16.5 — carved stone (lock livery may gild it)
         .plinth:      SIMD4(1.0, 1.0, 1.0, 1.0),     // M16.6 — material 21 does the colouring itself
@@ -359,6 +360,10 @@ final class SceneBuilder {
                             }
                             if prop.kind == .portalRing {
                                 materialID = 12                                 // emissive glow ring
+                            }
+                            if prop.kind == .signpost {
+                                materialID = 24                                 // wood + rendered label
+                                propStyleSeed = UInt32(max(0, prop.state))      // state = label-array slice
                             }
                             if prop.kind == .portalLamp {
                                 if model.sealedPortalCubies.contains(ci) {

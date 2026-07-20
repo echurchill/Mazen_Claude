@@ -361,6 +361,7 @@ fragment float4 fragmentShader(
     texture2d_array<float> greeneryTex [[texture(TextureIndexGreenery)]],
     texture2d_array<float> treeTex [[texture(TextureIndexTreeSprite)]],
     texture2d_array<float> causticTex [[texture(TextureIndexCaustic)]],
+    texture2d_array<float> labelTex [[texture(TextureIndexLabel)]],
     sampler texSampler [[sampler(0)]]
 ) {
     float3 lightDir = normalize(frame.lightDirection);
@@ -705,6 +706,17 @@ fragment float4 fragmentShader(
             lighting = float3(1.0);
         }
         }
+    } else if (in.materialID == 24) {
+        // M20 (Eddie) — a portal SIGNPOST. The board FACE (texCoord u >= 0) shows the rendered word(s)
+        // from the label array (styleSeed = slice); the post + board back/edges (u < 0) are plain wood.
+        // Lit like an ordinary matte prop so it reads as a physical sign in the world.
+        float3 amb = skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor;
+        if (in.texCoord.x >= 0.0) {
+            color = labelTex.sample(texSampler, in.texCoord, in.styleSeed % labelTex.get_array_size()).rgb;
+        } else {
+            color = float3(0.40, 0.28, 0.16);   // wood post / board back + edges
+        }
+        lighting = amb;
     } else if (in.materialID == 20) {
         // M20: imported sub-mesh whose diffuse carries alpha (Quaternius leaves/flowers) — cut it
         // out so foliage reads as leaves instead of solid quads. Otherwise identical to 11.

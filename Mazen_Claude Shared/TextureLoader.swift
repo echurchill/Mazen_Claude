@@ -2,10 +2,81 @@ import Foundation
 import Metal
 import ImageIO
 import CoreGraphics
+import CoreText
 
 /// Bundle- and file-based `MTLTexture` loading (R2.8 — extracted verbatim from Renderer, which
 /// had grown three texture decoders alongside the frame loop; logic unchanged).
 enum TextureLoader {
+
+    /// M20 (Eddie) — a texture ARRAY of rendered TEXT signs, one slice per label. Each slice is a
+    /// wooden sign-board face: a warm plank fill with a dark border and the word(s) drawn centred in
+    /// bold, wrapped to up to two lines. Used by the signpost prop (material 24, slice = styleSeed) to
+    /// name the portal it stands beside — so the portal hub is navigable by reading, not memorised keys.
+    /// CoreText only (no AppKit/UIKit), so it builds identically on macOS and iOS.
+    static func makeLabelArray(device: MTLDevice, labels: [String], size: Int = 256) -> MTLTexture? {
+        guard !labels.isEmpty else { return nil }
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type2DArray
+        desc.pixelFormat = .rgba8Unorm_srgb
+        desc.width = size; desc.height = size
+        desc.arrayLength = labels.count
+        desc.storageMode = .shared; desc.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        texture.label = "PortalSignLabels"
+
+        let bpr = size * 4, bpi = bpr * size
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let font = CTFontCreateWithName("Helvetica-Bold" as CFString, CGFloat(size) * 0.13, nil)
+        let plank = CGColor(red: 0.78, green: 0.63, blue: 0.42, alpha: 1)   // warm wood
+        let border = CGColor(red: 0.34, green: 0.24, blue: 0.14, alpha: 1)  // dark frame
+        let ink = CGColor(red: 0.16, green: 0.10, blue: 0.05, alpha: 1)     // burnt-in text
+
+        for (slice, raw) in labels.enumerated() {
+            var pixels = [UInt8](repeating: 0, count: bpi)
+            guard let ctx = CGContext(data: &pixels, width: size, height: size, bitsPerComponent: 8,
+                                      bytesPerRow: bpr, space: cs,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+            // Plank + inset frame.
+            ctx.setFillColor(plank); ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
+            ctx.setStrokeColor(border); ctx.setLineWidth(CGFloat(size) * 0.045)
+            let inset = CGFloat(size) * 0.06
+            ctx.stroke(CGRect(x: inset, y: inset, width: CGFloat(size) - 2 * inset, height: CGFloat(size) - 2 * inset))
+            // Wrap the label to <= 2 lines by splitting on the middle-most space if it's long.
+            let lines = Self.wrapLabel(raw)
+            // CoreText attribute keys (CFString) — no AppKit/UIKit dependency, so this is cross-platform.
+            let attrs = [kCTFontAttributeName: font, kCTForegroundColorAttributeName: ink] as CFDictionary
+            let lineH = CGFloat(size) * 0.19
+            let totalH = lineH * CGFloat(lines.count)
+            for (i, line) in lines.enumerated() {
+                let attr = CFAttributedStringCreate(nil, line as CFString, attrs)!
+                let ctLine = CTLineCreateWithAttributedString(attr)
+                // Typographic advance width — position-independent (image bounds depend on the context's
+                // current text position, which pollutes line 2's centering).
+                let width = CGFloat(CTLineGetTypographicBounds(ctLine, nil, nil, nil))
+                let y = (CGFloat(size) + totalH) / 2 - lineH * CGFloat(i + 1) + lineH * 0.28
+                ctx.textPosition = CGPoint(x: (CGFloat(size) - width) / 2, y: y)
+                CTLineDraw(ctLine, ctx)
+            }
+            texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                              size: MTLSize(width: size, height: size, depth: 1)),
+                            mipmapLevel: 0, slice: slice, withBytes: pixels, bytesPerRow: bpr, bytesPerImage: bpi)
+        }
+        return texture
+    }
+
+    /// Split a label onto up to two lines: at the space nearest the middle if it's long enough to wrap.
+    private static func wrapLabel(_ s: String) -> [String] {
+        let words = s.split(separator: " ").map(String.init)
+        guard words.count > 1, s.count > 11 else { return [s] }
+        var best = 1, bestDelta = Int.max
+        for i in 1..<words.count {
+            let left = words[0..<i].joined(separator: " ").count
+            let right = words[i...].joined(separator: " ").count
+            let d = abs(left - right)
+            if d < bestDelta { bestDelta = d; best = i }
+        }
+        return [words[0..<best].joined(separator: " "), words[best...].joined(separator: " ")]
+    }
 
     /// A 2D-array texture from bundled 512×512 PNGs (the maze's diffuse / normal-map stacks).
     static func loadTextureArray(device: MTLDevice, names: [String], srgb: Bool) -> MTLTexture? {

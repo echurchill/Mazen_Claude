@@ -122,6 +122,12 @@ class Renderer: NSObject, MTKViewDelegate {
     var placeholderArray: MTLTexture!
     /// M16.6: Builder-glyph caustic symbols (r8 intensity array); slice = Prop.state. Generated, not loaded.
     var causticArray: MTLTexture!
+    /// M20 (Eddie): rendered text sign-boards (RGBA array); slice = a portal-hub destination. `nil` ⇒
+    /// signposts fall back to plain wood. Order matches `Renderer.portalDestinations` (+0 = "Home").
+    var labelArray: MTLTexture?
+    /// Human-readable sign text for each hub destination, index-aligned with `portalDestinations`.
+    static let destinationLabels = ["Moon", "Temple Interior", "Natural World", "The Garden", "Gallery",
+                                    "Dungeons Gallery", "Nature Gallery", "Ruins Gallery", "MegaKit Gallery"]
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
         "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
@@ -195,7 +201,8 @@ class Renderer: NSObject, MTKViewDelegate {
     /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
     /// sub-world a portal simply pops back out; the destination only matters from the root.
     static let portalDestinations = ["moon", "temple-interior", "natural", "garden", "gallery",
-                                     "gallery-dungeons", "gallery-nature", "gallery-ruins", "gallery-megakit"]
+                                     "gallery-dungeons", "gallery-nature", "gallery-ruins", "gallery-megakit",
+                                     "portal-hub"]   // index 9 — the labeled hub (reached by the ` key)
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -235,7 +242,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.maxBufferBindCount = 4
         self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
-        argDesc.maxTextureBindCount = 9   // +6 greenery +7 tree-sprite arrays (M20), +8 caustic symbols (M16.6)
+        argDesc.maxTextureBindCount = 10   // …+8 caustic symbols (M16.6), +9 portal-sign labels (M20)
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
@@ -297,6 +304,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.greeneryArray = nil
         self.treeSpriteArray = nil   // M20: WenrexaTrees billboards removed (Eddie) — folder no longer used
         self.causticArray = TextureLoader.makeCausticArray(device: device)
+        self.labelArray = TextureLoader.makeLabelArray(device: device, labels: Self.destinationLabels)
         self.texSampler = PipelineFactory.makeSampler(device: device)
         // A 1×1 array-texture placeholder for the unconditionally-declared foliage slots (see the
         // `placeholderArray` doc comment). Never sampled — just keeps the binding legal.
@@ -362,6 +370,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let t = self.treeSpriteArray { rs.addAllocation(t) }
         rs.addAllocation(self.placeholderArray)
         if let c = self.causticArray { rs.addAllocation(c) }
+        if let l = self.labelArray { rs.addAllocation(l) }
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
@@ -444,8 +453,12 @@ class Renderer: NSObject, MTKViewDelegate {
         // garden) — must PUSH a new world, not pop the way the toggle worlds do. (Toggling the interior
         // off with the I key still pops, because then we're already IN it: gameState.name == dest.)
         let nestedEnter = dest == "temple-interior" && gameState.name != dest
+        // M20 (Eddie) — the portal HUB pushes, like a descent: stepping from the hub onto one of its
+        // portals must PUSH the target world (so its return portal pops you back to the hub), not pop
+        // the way the root's toggle keys do. Toggling the hub off with the ` key still pops (dest == name).
+        let hubEnter = gameState.name == "portal-hub" && dest != gameState.name
         let pushed: Bool
-        if worldStack.count > 1 && !nestedEnter {
+        if worldStack.count > 1 && !nestedEnter && !hubEnter {
             exitWorld()
             pushed = false
         } else {
@@ -507,11 +520,14 @@ class Renderer: NSObject, MTKViewDelegate {
                     w = GameState(size: 25, name: dest, stamp: .bare)
                     w.cubeModel.stampPackGallery(packIndices("MegaKit "))
                     w.cubeModel.noFog = true
+                case "portal-hub":
+                    // M20 (Eddie) — the labeled hub of TARDIS portals + signposts. Size 15 fits the 3×3.
+                    w = GameState(size: 15, name: dest, stamp: .portalHub)
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }
-                // Gardens & all gallery worlds reveal only their own stamped region (no reveal-all).
-                if !dest.hasPrefix("gallery") && dest != "garden" { Self.setupInitialDiscovery(gameState: w) }
+                // Gardens, gallery worlds, and the hub reveal only their own stamped region (no reveal-all).
+                if !dest.hasPrefix("gallery") && dest != "garden" && dest != "portal-hub" { Self.setupInitialDiscovery(gameState: w) }
                 return w
             }
             enterWorld(world)
@@ -1079,6 +1095,7 @@ class Renderer: NSObject, MTKViewDelegate {
         fragmentArgTable.setTexture((greeneryArray ?? placeholderArray).gpuResourceID, index: TextureIndex.greenery.rawValue)
         fragmentArgTable.setTexture((treeSpriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.treeSprite.rawValue)
         fragmentArgTable.setTexture((causticArray ?? placeholderArray).gpuResourceID, index: TextureIndex.caustic.rawValue)
+        fragmentArgTable.setTexture((labelArray ?? placeholderArray).gpuResourceID, index: TextureIndex.label.rawValue)
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
         // Keep the asset-diffuse slot bound to a valid texture for the maze draws (they don't
         // sample it, but the shader declares it); the prop loop rebinds it per-prop below.

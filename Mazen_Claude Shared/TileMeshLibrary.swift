@@ -210,6 +210,10 @@ class TileMeshLibrary {
         Self.addPortalRing(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.portalRing.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalRingStart, indexCount: allIndices.count - portalRingStart)
 
+        let signpostStart = allIndices.count
+        Self.addSignpost(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.signpost.rawValue] = TileMesh(vertexOffset: 0, indexOffset: signpostStart, indexCount: allIndices.count - signpostStart)
+
         let dialStart = allIndices.count
         Self.addDial(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.dial.rawValue] = TileMesh(vertexOffset: 0, indexOffset: dialStart, indexCount: allIndices.count - dialStart)
@@ -855,6 +859,46 @@ class TileMeshLibrary {
         }
         face(SIMD3(0, -1, 0), false)   // front (faces −Y toward the player)
         face(SIMD3(0,  1, 0), true)    // back
+    }
+
+    /// M20 (Eddie) — a wooden SIGNPOST naming a portal: a square post + a square board whose FRONT
+    /// face (facing +Y, toward a player approaching from the south) carries the label (texCoord u,v in
+    /// [0,1] → material 24 samples the label array by `state`). Every other face flags wood (u = −1).
+    private static func addSignpost(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let z0 = ws.floorY
+        let ph: Float = 0.012                 // post half-thickness
+        let boardBot = z0 + 0.06              // board sits at the top of the post
+        let bw: Float = 0.055, bt: Float = 0.008, boardTop = boardBot + 0.11   // ~square board
+        func v(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ u: Float, _ w: Float) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(u, w), aoFactor: 0.95)
+        }
+        func woodQuad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+            let n = normalize(cross(b - a, d - a))
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [v(a, n, -1, -1), v(b, n, -1, -1), v(c, n, -1, -1), v(d, n, -1, -1)])
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+        }
+        func woodBox(_ lo: SIMD3<Float>, _ hi: SIMD3<Float>) {
+            let x0 = lo.x, y0 = lo.y, zb = lo.z, x1 = hi.x, y1 = hi.y, zt = hi.z
+            woodQuad(SIMD3(x0,y0,zb), SIMD3(x1,y0,zb), SIMD3(x1,y0,zt), SIMD3(x0,y0,zt))   // −Y
+            woodQuad(SIMD3(x1,y1,zb), SIMD3(x0,y1,zb), SIMD3(x0,y1,zt), SIMD3(x1,y1,zt))   // +Y
+            woodQuad(SIMD3(x1,y0,zb), SIMD3(x1,y1,zb), SIMD3(x1,y1,zt), SIMD3(x1,y0,zt))   // +X
+            woodQuad(SIMD3(x0,y1,zb), SIMD3(x0,y0,zb), SIMD3(x0,y0,zt), SIMD3(x0,y1,zt))   // −X
+            woodQuad(SIMD3(x0,y0,zt), SIMD3(x1,y0,zt), SIMD3(x1,y1,zt), SIMD3(x0,y1,zt))   // +Z top
+            woodQuad(SIMD3(x0,y1,zb), SIMD3(x1,y1,zb), SIMD3(x1,y0,zb), SIMD3(x0,y0,zb))   // −Z bottom
+        }
+        woodBox(SIMD3(-ph, -ph, z0), SIMD3(ph, ph, boardBot + 0.02))   // post
+        woodBox(SIMD3(-bw, -bt, boardBot), SIMD3(bw, bt, boardTop))    // board (wood; the +Y face is hidden by the label below)
+        // Label face, proud of the board on +Y. u: 0 left(−X) → 1 right(+X); v: 0 top(+Z) → 1 bottom.
+        let y1 = bt + 0.001, n = SIMD3<Float>(0, 1, 0)
+        let base = UInt32(verts.count)
+        verts.append(contentsOf: [
+            v(SIMD3( bw, y1, boardBot), n, 1, 1),   // bottom-right
+            v(SIMD3(-bw, y1, boardBot), n, 0, 1),   // bottom-left
+            v(SIMD3(-bw, y1, boardTop), n, 0, 0),   // top-left
+            v(SIMD3( bw, y1, boardTop), n, 1, 0),   // top-right
+        ])
+        indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
     }
 
     /// M20 — a flat glowing RING on the ground at a portal's base (emissive, material 12): the light

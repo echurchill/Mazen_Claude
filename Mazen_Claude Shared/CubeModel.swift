@@ -12,6 +12,7 @@ enum WorldStamp {
     case lunar           // M19: the Moon — open grey regolith + boulders (grey in the sky, walkable when visited)
     case gardenMaze      // M20 first cut: a hedge maze on a green planet — grass floors, some trees, roundness (the Journey garden)
     case gallery         // M20 dev tool: a flat grid of every prop/foliage variant, one per cell, for isolated evaluation
+    case portalHub       // M20 (Eddie): a flat plaza of labeled portals — one TARDIS + signpost per world, to navigate by reading not memorised keys
 }
 
 /// M20 — how a world's maze WALLS are rendered.
@@ -80,6 +81,9 @@ class CubeModel {
         case .gallery:
             stampGallery()          // flat (roundness stays 0) so each item reads in isolation
             noFog = true            // a showroom, not a story world — no fog
+        case .portalHub:
+            stampPortalHub()        // flat plaza of labeled portals
+            noFog = true
         }
     }
 
@@ -172,6 +176,43 @@ class CubeModel {
         if let (ci, fi) = faceletAt(face: .positiveZ, row: min(n - 1, c + 1), col: c) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+        }
+    }
+
+    /// M20 (Eddie) — the PORTAL HUB: a flat grass plaza with a 3×3 grid of simple TARDIS portals, each
+    /// with a wooden SIGNPOST naming its destination, so the dev worlds are navigable by walking up and
+    /// reading rather than remembering `O I B V Y 1-4`. Spawn is south of the grid; the signs face the
+    /// player. Portal + sign `state` = the destination index (== `Renderer.portalDestinations` /
+    /// `destinationLabels`), so the 9 cells map 1:1 to the 9 labeled destinations.
+    private func stampPortalHub() {
+        let n = size, c = n / 2
+        let all: DirectionMask = [.north, .east, .south, .west]
+        let rLo = max(0, c - 6), rHi = min(n - 1, c + 2)
+        let cLo = max(0, c - 5), cHi = min(n - 1, c + 5)
+        for r in rLo...rHi {
+            for col in cLo...cHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                var op = all
+                if r == rLo { op.remove(.north) }
+                if r == rHi { op.remove(.south) }
+                if col == cLo { op.remove(.west) }
+                if col == cHi { op.remove(.east) }
+                cubies[ci].facelets[fi].mazeTile.openings = op
+                cubies[ci].facelets[fi].mazeTile.openEdges = op
+                cubies[ci].facelets[fi].terrain = .grass
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+            }
+        }
+        // 9 destinations, laid out 3×3 NORTH of spawn (spawn = face centre, kept clear).
+        let gridRows = [c - 5, c - 3, c - 1], gridCols = [c - 3, c, c + 3]
+        for idx in 0..<9 {
+            let gr = gridRows[idx / 3], gc = gridCols[idx % 3]
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: idx))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
+            // Signpost on the south sub-cell of the same tile, facing the approaching player.
+            cubies[ci].facelets[fi].props.append(Prop(kind: .signpost, subRow: 2, subCol: 1, facing: .n, state: idx))
         }
     }
 
