@@ -34,19 +34,9 @@
 | H | Toggle debug HUD (face, position, camera, cube size, fps, twist pacing) |
 
 ### Debug — worlds & views (macOS)
-Each fades into / out of a separate world (press again to return).
 | Input | Action |
 |---|---|
-| `` ` `` (grave) | **Portal hub** — a plaza of labeled TARDIS portals to every world (walk up, read the sign, step through). The navigable alternative to the single-key jumps below. |
-| O | Temple/interior inverted-cube world |
-| I | Temple-interior world |
-| B | Natural open-field world |
-| V | Garden (natural-maze hybrid, the Journey entry world) |
-| Y | Prop/foliage gallery (Quaternius Stylized Nature) |
-| 1 | Dungeons pack evaluation gallery (full-face grid) |
-| 2 | Nature pack evaluation gallery (full-face grid) |
-| 3 | Ruins pack evaluation gallery (full-face grid) |
-| 4 | Stylized Nature MegaKit evaluation gallery (textured, full-face grid) |
+| `` ` `` (grave) | **Portal hub** — the single entry point to every world: a plaza of labeled TARDIS portals (Moon, Temple Interior, Natural, Garden, Gallery, and the four pack galleries). Walk up, read the signpost, step through. Press again to leave. *(This replaced the per-world jump keys O / I / B / V / Y / 1–4.)* |
 | U | Make the garden door lock READY (bypass the switches, for testing the turn) |
 | M | Toggle flat matte shading (read raw geometry) |
 | J | Toggle idle world spin |

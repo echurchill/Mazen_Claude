@@ -199,8 +199,6 @@ class GameViewController: NSViewController {
             gs.stepSlice(0.06)
         case 33:      // [ — scrub a held twist backward
             gs.stepSlice(-0.06)
-        case 31:      // O — debug: toggle a 3³ interior world (portal in / out), through the fade
-            renderer.beginWorldTransition()
         case 35:      // P — toggle auto-rotation
             gs.camera.orbitAutoRotate.toggle()
         case 4:       // H — toggle debug HUD
@@ -216,23 +214,8 @@ class GameViewController: NSViewController {
             renderer.adjustRoundness(-0.1)
         case 46:      // M — M14 debug: toggle flat matte shading (read raw geometry, no texture/fog)
             renderer.debugPlainShading.toggle()
-        case 34:      // I — M15.2 debug: fade into / out of the temple-interior world
-            renderer.beginWorldTransition(destinationID: 1)
-        case 11:      // B — M18 Phase 1 debug: fade into / out of the "natural" open-field world
-            renderer.beginWorldTransition(destinationID: 2)
-        case 9:       // V — M20 first cut: fade into / out of the natural-maze "garden" hybrid
-            renderer.beginWorldTransition(destinationID: 3)
-        case 16:      // Y — M20 dev tool: fade into / out of the prop/foliage gallery (Quaternius)
-            renderer.beginWorldTransition(destinationID: 4)
-        case 18:      // 1 — M20: Dungeons pack evaluation gallery
-            renderer.beginWorldTransition(destinationID: 5)
-        case 19:      // 2 — M20: Nature pack evaluation gallery
-            renderer.beginWorldTransition(destinationID: 6)
-        case 20:      // 3 — M20: Ruins pack evaluation gallery
-            renderer.beginWorldTransition(destinationID: 7)
-        case 21:      // 4 — M20: Stylized Nature MegaKit evaluation gallery
-            renderer.beginWorldTransition(destinationID: 8)
-        case 50:      // ` (grave) — M20 (Eddie): the labeled PORTAL HUB (navigate by reading signs)
+        case 50:      // ` (grave) — M20 (Eddie): the labeled PORTAL HUB — the single entry point to every
+                      // world (retired the per-world O/I/B/V/Y/1-4 jumps; navigate by reading signs).
             renderer.beginWorldTransition(destinationID: 9)
         case 43:      // , — M19 debug: lower relief (hill amplitude) on the active world
             renderer.adjustRelief(-0.01)
