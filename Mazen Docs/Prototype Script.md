@@ -165,3 +165,32 @@ Earth-Home @Glade
 * @Portal2: From (Garden-Home) to (Garden-Temple)
 
 ##
+
+---
+
+# Appendix — As-built worlds (from code, 2026-07-20)
+
+*The worlds that actually exist in the build today, gleaned from `Renderer.portalDestinations`, the
+`performPortalSwap` build cases, and the `WorldStamp` dispatch. These are the **current reality** the
+spec above is re-scoping — kept here so the delta is visible (e.g. today's "first world" is the reused
+natural world, not the specced glade + vase-maze; today's garden is 25×/1.0, not the specced 11×/0.33).*
+
+| World (id) | Reached by | Size | Roundness | What's there |
+|---|---|---|---|---|
+| **earth** *(home clearing — the boot world)* | app launch | 9 | 1.0 | a natural clearing (grass, meandering stream, conifers); a stone **ARCH portal → garden**; the moon hangs in its sky |
+| **moon** (0) | `O` key; also the sky object over earth | 3 | 1.0 | open grey regolith + scattered boulders |
+| **temple-interior** (1) | `I` key; and the garden's temple door | 5 | 0 *(interior — inverted cube)* | a 3×3 hall, a pedestal (M17 memory placeholder), an **UP-elevator return portal** |
+| **natural** (2) | `B` key | 7 | 1.0 | open grass field, stream, lake, conifers; a return portal |
+| **garden** (3) | `V` key; and earth's arch | 25 | 1.0 | the sealed **11×11 hedge/dressed-wall maze** region: the four-switch **lock**, the mossy temple with a **DOWN-elevator door** (sealed until solved), the tapering stone path, heavy greenery |
+| **gallery** (4) | `Y` key | 25 | 0 *(flat, no fog)* | prop/glyph catalog + natural-wall & rock-path prototypes + the **portal-styles showroom** (north of the catalog) |
+| **gallery-dungeons** (5) | `1` key | 25 | 0 | full-face grid of the Dungeons pack |
+| **gallery-nature** (6) | `2` key | 25 | 0 | full-face grid of the Nature pack |
+| **gallery-ruins** (7) | `3` key | 25 | 0 | full-face grid of the Ruins pack |
+| **gallery-megakit** (8) | `4` key | 25 | 0 | full-face grid of the Stylized Nature MegaKit (textured) |
+
+**Defined `WorldStamp`s not currently reachable:** `overworldDemo` (the old demo hub — retired as the
+boot world; no key jumps to it now), `moonDemo` (a demo-plaza moon variant — unused; the sky moon uses
+`lunar`). `bare` is the empty-maze base the pack galleries build on.
+
+**Navigation today** is by single key (`O I B V Y 1 2 3 4`) — which is the pain point the **portal hub**
+below is meant to replace with a walkable, labeled space.
