@@ -889,14 +889,15 @@ class TileMeshLibrary {
         }
         woodBox(SIMD3(-ph, -ph, z0), SIMD3(ph, ph, boardBot + 0.02))   // post
         woodBox(SIMD3(-bw, -bt, boardBot), SIMD3(bw, bt, boardTop))    // board (wood; the +Y face is hidden by the label below)
-        // Label face, proud of the board on +Y. u: 0 left(−X) → 1 right(+X); v: 0 top(+Z) → 1 bottom.
+        // Label face, proud of the board on +Y. The viewer faces the sign looking −Y, so THEIR left is
+        // +X — the text's left edge (u=0) must map to +X, else it reads mirrored (Eddie). v: 0 top(+Z).
         let y1 = bt + 0.001, n = SIMD3<Float>(0, 1, 0)
         let base = UInt32(verts.count)
         verts.append(contentsOf: [
-            v(SIMD3( bw, y1, boardBot), n, 1, 1),   // bottom-right
-            v(SIMD3(-bw, y1, boardBot), n, 0, 1),   // bottom-left
-            v(SIMD3(-bw, y1, boardTop), n, 0, 0),   // top-left
-            v(SIMD3( bw, y1, boardTop), n, 1, 0),   // top-right
+            v(SIMD3( bw, y1, boardBot), n, 0, 1),   // +X, viewer-left, text-left  → u=0, bottom
+            v(SIMD3(-bw, y1, boardBot), n, 1, 1),   // −X, viewer-right, text-right → u=1, bottom
+            v(SIMD3(-bw, y1, boardTop), n, 1, 0),   // −X → u=1, top
+            v(SIMD3( bw, y1, boardTop), n, 0, 0),   // +X → u=0, top
         ])
         indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
     }
