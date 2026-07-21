@@ -41,6 +41,12 @@ class GameState {
         /// wobble); nothing is finalized. The cue that teaches "locked" without a word of UI.
         var isRefusal = false
 
+        /// M20 (Eddie): the switch-trip "turn the world" spectacle rotates the BACK slab (a distant
+        /// wall for impact), which needn't contain the sealed door — so this flags the finalize to
+        /// open the (unbonded) door regardless. Manual Q/E twists leave it false and stay coupled to
+        /// the rotated slab.
+        var opensSealedDoors = false
+
         // R2.3: the ONE definition of the in-flight twist transform. SceneBuilder, the asset
         // instancer, and the camera all animate off these — previously three hand-copied
         // smoothstep+rotation constructions that had to be kept in sync by comment.
@@ -357,6 +363,52 @@ class GameState {
         )
     }
 
+    /// M20 (Eddie) — the switch-trip "the world turns" spectacle. Rather than spinning the slab the
+    /// player stands on (the ground underfoot, barely visible in first person — the old top-slice
+    /// turn), rotate the BACK slab: the slice of the face you'd step onto by walking forward over the
+    /// far edge — a vertical wall in the distance that visibly swings. The sealed door isn't in that
+    /// slab, so `opensSealedDoors` tells the finalize to open it anyway; the puzzle payoff is
+    /// decoupled from which slab provides the spectacle (the door's own opening flourish is a later
+    /// visual pass). Manual Q/E keep using `startSliceRotation` (the player's own slab).
+    func startBackSliceRotation(clockwise: Bool) {
+        guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else { return }
+
+        // The face across the far edge in the player's forward direction is the "back" wall. Diagonal
+        // headings fall back to north (the garden solve faces the door dead-on, a cardinal heading).
+        let forward = player.facing.cardinal ?? .north
+        let backFace = cubeModel.edgeCrossing(face: player.face, direction: forward,
+                                              row: player.row, col: player.col).face
+        let (axis, index) = cubeModel.sliceAxisAndIndex(for: backFace)
+        let angle: Float = clockwise ? -.pi / 2 : .pi / 2
+        let cubieIndices = cubeModel.cubieIndicesInSlice(axis: axis, index: index)
+
+        // If a bond would refuse the back slab, still deliver the payoff so the puzzle completes.
+        guard cubeModel.canRotateSlice(axis: axis, index: index) else {
+            openSealedDoors()
+            return
+        }
+
+        // playerCubieIndex −1: the player isn't in the distant slab, so they stay put and watch it turn.
+        sliceRotation = SliceRotation(
+            isActive: true, axis: axis, index: index, angle: angle,
+            progress: 0, speed: 2.5,
+            affectedCubies: Set(cubieIndices), playerCubieIndex: -1
+        )
+        sliceRotation.opensSealedDoors = true
+    }
+
+    /// Open every unbonded sealed door (the temple door) and refresh its plinth. The switch-trip turn
+    /// uses this because its spectacle slab need not contain the door (see `startBackSliceRotation`).
+    private func openSealedDoors() {
+        var opened = false
+        for ci in Array(cubeModel.sealedPortalCubies)
+        where !cubeModel.bondedGroups.contains(where: { $0.contains(ci) }) {
+            cubeModel.sealedPortalCubies.remove(ci)
+            opened = true
+        }
+        if opened { updateDoorPlinths() }
+    }
+
     /// Debug: manually scrub an in-progress twist (single-step verification, `.step` pacing only).
     /// Advances/retreats `progress`; finalizes when it reaches 1, and can be scrubbed back toward 0.
     func stepSlice(_ delta: Float) {
@@ -384,6 +436,10 @@ class GameState {
             }
         }
         if opened { updateDoorPlinths() }    // the twist swings it open ⇒ the plinth shows the portal
+
+        // M20 (Eddie): the switch-trip turn rotates a distant back slab that need not contain the
+        // door — open it here so the payoff still lands (see startBackSliceRotation).
+        if sliceRotation.opensSealedDoors { openSealedDoors() }
 
         if playerCI >= 0 {
             let cubie = cubeModel.cubies[playerCI]
@@ -507,7 +563,7 @@ class GameState {
                 cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = a
                 if a >= 1 {
                     cylinderEngaged = false
-                    startSliceRotation(clockwise: true)   // whole → the world turns → door opens → cylinder retracts
+                    startBackSliceRotation(clockwise: true)   // M20 (Eddie): the distant BACK wall visibly turns, then the door opens
                 }
             }
         }
