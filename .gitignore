@@ -18,3 +18,12 @@ Mazen_Models/modular_fort_01_2k/
 # Quaternius Ultimate Stylized Nature Pack — heavy, multi-format (36 MB .blend + FBX + glTF
 # duplicates we don't use). Loaded locally from OBJ/ + Textures/ at runtime, like WenrexaTrees.
 Mazen_Models/Quaternius Ultimate Stylized Nature Pack/
+
+# In-use imported asset packs (gallery + garden dressing), held out of plain git like the packs
+# above — loaded locally at runtime. Together ~1.3 GB; MegaKit alone is 1 GB and ships engine-
+# project .zips over GitHub's 100 MB per-file limit, so these cannot live in plain git (a git-LFS
+# decision is pending). Keep local copies; do not delete.
+Mazen_Models/Dungeons Pack/
+Mazen_Models/Nature Pack/
+Mazen_Models/Ruins Pack/
+Mazen_Models/Stylized Nature MegaKit/
