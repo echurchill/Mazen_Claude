@@ -115,6 +115,19 @@ fragment float4 fadeFragmentShader(
     return float4(0.0, 0.0, 0.0, frame.fadeAmount);
 }
 
+// Triangular-PDF screen-space dither — breaks up 8-bit framebuffer banding on the smooth sky
+// gradient without an HDR target. Applied per fragment (output resolution), so texture
+// magnification can't average it away the way it does dither baked into the skybox image.
+// PCG-style integer hash: true white noise. (A cheap fract(p*k) hash degrades into a periodic
+// pattern at large screen coords — visible as faint screen-locked vertical bands.)
+inline float skyHash(uint2 q) {
+    uint n = q.x * 1597334677u ^ q.y * 3812015801u;
+    n = (n ^ (n >> 16)) * 2246822519u;
+    n = (n ^ (n >> 13)) * 3266489917u;
+    n =  n ^ (n >> 16);
+    return float(n) * (1.0 / 4294967296.0);
+}
+
 fragment float4 skyFragmentShader(
     SkyVertexOut in [[stage_in]],
     const device FrameUniforms& frame [[buffer(BufferIndexFrameUniforms)]],
@@ -159,6 +172,16 @@ fragment float4 skyFragmentShader(
 
     // Night = stars; day = sky with stars faintly showing through (keeps the space identity).
     float3 skyColor = mix(stars, daySky + stars * 0.12, skyDay);
+
+    // TPDF dither (1.0/255, textbook-minimum) at output resolution so the 8-bit target's ~1-LSB
+    // steps dissolve — but scaled by skyDay so it only acts where there's a gradient to smooth. The
+    // daytime sky ramp benefits; the night sky is just points on black (no gradient), so dither
+    // fades to ZERO at night, leaving the clean starfield untouched. (skyDay is the exact signal:
+    // the smooth daySky term is only mixed in when skyDay > 0.)
+    uint2 q = uint2(in.position.xy);
+    float dither = (skyHash(q) - skyHash(q ^ uint2(0x9E3779B9u, 0x85EBCA6Bu))) * (1.0 / 255.0);
+    skyColor += dither * skyDay;
+
     return float4(skyColor, 1.0);
 }
 
