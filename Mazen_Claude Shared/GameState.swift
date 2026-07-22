@@ -12,6 +12,11 @@ class GameState {
     var player: PlayerState
     var camera = CameraState()
     var celestialSystem = CelestialSystem()
+
+    /// M20 (Eddie) — this world's own skybox, as a Skyboxes/ file basename (no extension); nil ⇒ the
+    /// shipped default `skybox.png`. The Renderer resolves it per frame, so a world carries its sky
+    /// with it. First user: the garden (Eagle Nebula).
+    var skyboxName: String? = nil
     // M9.5-3: slow idle spin of the whole game cube (a planet turning under its sun).
     var spinEnabled = true
     var spinPeriod: Float = 120   // seconds per full rotation

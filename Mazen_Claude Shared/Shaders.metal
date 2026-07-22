@@ -174,13 +174,16 @@ fragment float4 skyFragmentShader(
     float3 skyColor = mix(stars, daySky + stars * 0.12, skyDay);
 
     // TPDF dither (1.0/255, textbook-minimum) at output resolution so the 8-bit target's ~1-LSB
-    // steps dissolve — but scaled by skyDay so it only acts where there's a gradient to smooth. The
-    // daytime sky ramp benefits; the night sky is just points on black (no gradient), so dither
-    // fades to ZERO at night, leaving the clean starfield untouched. (skyDay is the exact signal:
-    // the smooth daySky term is only mixed in when skyDay > 0.)
+    // steps dissolve — gated on the LOCAL GRADIENT so it only acts where a ramp actually exists.
+    // fwidth is exactly 0 on flat black (a plain starfield's empty sky stays perfectly grain-free)
+    // and non-zero across any ramp — nebula haze, the daytime sky — which is precisely where 8-bit
+    // contour banding forms. This replaces the old skyDay gate, which couldn't tell a nebula night
+    // sky (needs dither) from a clean starfield night sky (must not have it).
+    float lum  = dot(skyColor, float3(0.299, 0.587, 0.114));
+    float ramp = smoothstep(0.0, 6.0e-5, fwidth(lum));
     uint2 q = uint2(in.position.xy);
     float dither = (skyHash(q) - skyHash(q ^ uint2(0x9E3779B9u, 0x85EBCA6Bu))) * (1.0 / 255.0);
-    skyColor += dither * skyDay;
+    skyColor += dither * ramp;
 
     return float4(skyColor, 1.0);
 }

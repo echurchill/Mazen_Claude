@@ -145,11 +145,23 @@ class Renderer: NSObject, MTKViewDelegate {
     var debugSkyboxes: [MTLTexture] = []
     var debugSkyboxNames: [String] = []
     var debugSkyboxIndex = 0
+    /// Skyboxes addressable by file basename, so a world can name its own sky (GameState.skyboxName).
+    var skyboxesByName: [String: MTLTexture] = [:]
     func cycleDebugSkybox() {
         guard debugSkyboxes.count > 1 else { return }
+        // Only move the override index — `skyboxTexture` stays the pristine default so that
+        // returning to index 0 hands control back to each world's own skyboxName.
         debugSkyboxIndex = (debugSkyboxIndex + 1) % debugSkyboxes.count
-        skyboxTexture = debugSkyboxes[debugSkyboxIndex]
         NSLog("[skybox] %@ (%d/%d)", debugSkyboxNames[debugSkyboxIndex], debugSkyboxIndex + 1, debugSkyboxes.count)
+    }
+    /// The sky to bind this frame: the `L` debug override if engaged, else this world's own
+    /// `skyboxName`, else the shipped default. Resolved per frame, so it follows world switches.
+    var activeSkyboxTexture: MTLTexture? {
+        if debugSkyboxIndex != 0, debugSkyboxes.indices.contains(debugSkyboxIndex) {
+            return debugSkyboxes[debugSkyboxIndex]
+        }
+        if let name = gameState.skyboxName, let tex = skyboxesByName[name] { return tex }
+        return skyboxTexture
     }
     var shadowMapTexture: MTLTexture!
     var texSampler: MTLSamplerState!
@@ -316,6 +328,8 @@ class Renderer: NSObject, MTKViewDelegate {
                     .filter { $0.hasSuffix("Composite.png") }.sorted()) {
             if let t = TextureLoader.loadTextureFromFile(url: URL(fileURLWithPath: "\(skyDir)/\(f)"), device: device, srgb: true) {
                 self.debugSkyboxes.append(t); self.debugSkyboxNames.append(f)
+                // Addressable by basename so a world can name it (GameState.skyboxName).
+                self.skyboxesByName[(f as NSString).deletingPathExtension] = t
             }
         }
         NSLog("[skybox] %d cyclable (press L)", self.debugSkyboxes.count)
@@ -503,6 +517,10 @@ class Renderer: NSObject, MTKViewDelegate {
                     // from 25). Trade-off: a smaller cube shows more surface curvature. The stamp
                     // reveals ONLY its region, so DON'T reveal-all here.
                     w = GameState(size: 11, name: dest, stamp: .gardenMaze)
+                    // M20 (Eddie) — the garden's own sky: the Eagle Nebula composite. Measured as the
+                    // most banding-prone of the five (widest, faintest soft haze), so it's also the
+                    // best showcase for the gradient-aware sky dither.
+                    w.skyboxName = "SynthStarfield_5_EagleNebulaComposite"
                     // Reskin the garden with Quaternius plants — the Renderer owns the registry
                     // indices, so it groups them by kind and stamps the vegetation after the build.
                     w.cubeModel.stampGardenVegetation(gardenFlora())
@@ -1110,7 +1128,7 @@ class Renderer: NSObject, MTKViewDelegate {
         )
         if let d = diffuseArray { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.diffuseArray.rawValue) }
         if let n = normalArray { fragmentArgTable.setTexture(n.gpuResourceID, index: TextureIndex.normalArray.rawValue) }
-        if let sb = skyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
+        if let sb = activeSkyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
         // Every declared foliage slot must be bound even when its asset array is nil (the shader's
         // `*Loaded` flags gate sampling, but Metal validation still requires a bound texture) — fall
         // back to the 1×1 placeholder array so the first draw doesn't abort under Xcode's validation.
