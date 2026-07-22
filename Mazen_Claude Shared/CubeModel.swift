@@ -1554,6 +1554,18 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 4))
         }
+        // M20 (Eddie) — an obelisk on each of the five OTHER interior surfaces, so the hall is marked
+        // on every side rather than only the pedestal wall. Each is dropped at a random spot inside
+        // that face's middle 3×3 (never the rim, so it never crowds an edge), from a fixed seed — so
+        // the five positions are scattered but identical every run.
+        let mid = max(0, (n - 3) / 2)                  // the middle 3×3 spans mid ..< mid+3
+        var obeliskRNG = FaceSeededRNG(seed: 4242)
+        for face in CubeFace.allCases where face != .positiveZ {
+            let r = mid + Int(obeliskRNG.next() % 3)
+            let col = mid + Int(obeliskRNG.next() % 3)
+            guard let (oci, ofi) = faceletAt(face: face, row: r, col: col) else { continue }
+            cubies[oci].facelets[ofi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+        }
     }
 
     private static func directionMask(_ dir: SurfaceDirection) -> DirectionMask {
@@ -1732,6 +1744,11 @@ class CubeModel {
 
     func faceletAt(face: CubeFace, row: Int, col: Int) -> (cubieIndex: Int, faceletIndex: Int)? {
         if projectionDirty { rebuildProjection() }
+        // Bounds-guard row/col: the `?[row][col]` below only guards the missing-FACE case (the `?`),
+        // NOT the array subscript — so an out-of-face (row, col) crashes "Index out of range" instead
+        // of returning nil. Callers like dressedWallProps.neighbor() pass row±1/col±1 and rely on nil
+        // at the face edge. Latent until a maze filled a whole face (the size-11 garden — Eddie).
+        guard (0..<size).contains(row), (0..<size).contains(col) else { return nil }
         guard let fid = cachedProjection[face]?[row][col] else { return nil }
         return findFaceletIndices(id: fid)
     }

@@ -140,6 +140,17 @@ class Renderer: NSObject, MTKViewDelegate {
     static let treeSprites = (1...27).map { String(format: "%02d", $0) }
     var normalArray: MTLTexture!
     var skyboxTexture: MTLTexture!
+    // DEBUG (Eddie, skybox eval): the 'L' key cycles skyboxTexture through these — index 0 is the
+    // shipped default, then every Skyboxes/*Composite.png. Dev-only (absolute path, like modelsRoot).
+    var debugSkyboxes: [MTLTexture] = []
+    var debugSkyboxNames: [String] = []
+    var debugSkyboxIndex = 0
+    func cycleDebugSkybox() {
+        guard debugSkyboxes.count > 1 else { return }
+        debugSkyboxIndex = (debugSkyboxIndex + 1) % debugSkyboxes.count
+        skyboxTexture = debugSkyboxes[debugSkyboxIndex]
+        NSLog("[skybox] %@ (%d/%d)", debugSkyboxNames[debugSkyboxIndex], debugSkyboxIndex + 1, debugSkyboxes.count)
+    }
     var shadowMapTexture: MTLTexture!
     var texSampler: MTLSamplerState!
 
@@ -298,6 +309,16 @@ class Renderer: NSObject, MTKViewDelegate {
         self.normalArray = TextureLoader.loadTextureArray(device: device,
             names: ["hedge_nor", "gravel_nor", "stone_nor"], srgb: false)
         self.skyboxTexture = TextureLoader.loadTexture2D(device: device, name: "skybox", srgb: true)
+        // DEBUG (Eddie): preload the composite skyboxes so 'L' can cycle them in place. Dev-only path.
+        if let sb = self.skyboxTexture { self.debugSkyboxes = [sb]; self.debugSkyboxNames = ["default"] }
+        let skyDir = "/Volumes/Code Work/xCode work/Mazen_Claude/Skyboxes"
+        for f in (((try? FileManager.default.contentsOfDirectory(atPath: skyDir)) ?? [])
+                    .filter { $0.hasSuffix("Composite.png") }.sorted()) {
+            if let t = TextureLoader.loadTextureFromFile(url: URL(fileURLWithPath: "\(skyDir)/\(f)"), device: device, srgb: true) {
+                self.debugSkyboxes.append(t); self.debugSkyboxNames.append(f)
+            }
+        }
+        NSLog("[skybox] %d cyclable (press L)", self.debugSkyboxes.count)
         // LeafSets + misc_greenery asset folders were removed (Eddie) — leave these arrays nil so the
         // foliage materials fall back gracefully. Repoint here if new card assets land.
         self.leafArray = nil
@@ -365,6 +386,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let d = self.diffuseArray { rs.addAllocation(d) }
         if let n = self.normalArray { rs.addAllocation(n) }
         if let s = self.skyboxTexture { rs.addAllocation(s) }
+        for t in self.debugSkyboxes { rs.addAllocation(t) }   // DEBUG: keep every cyclable skybox resident
         if let lf = self.leafArray { rs.addAllocation(lf) }
         if let g = self.greeneryArray { rs.addAllocation(g) }
         if let t = self.treeSpriteArray { rs.addAllocation(t) }
@@ -476,10 +498,11 @@ class Renderer: NSObject, MTKViewDelegate {
                     // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
                     w = GameState(size: 7, name: dest, stamp: .natural)
                 case "garden":
-                    // M20 — the entry world: size 25 so the local surface reads flat (little
-                    // apparent curvature), with the natural-maze confined to a sealed entry region
-                    // (Eddie). The stamp reveals ONLY that region, so DON'T reveal-all here.
-                    w = GameState(size: 25, name: dest, stamp: .gardenMaze)
+                    // M20 — the entry world. Size 11 = exactly the sealed maze play region (R=5),
+                    // so the world IS the garden with no fog border on the play face (Eddie shrank it
+                    // from 25). Trade-off: a smaller cube shows more surface curvature. The stamp
+                    // reveals ONLY its region, so DON'T reveal-all here.
+                    w = GameState(size: 11, name: dest, stamp: .gardenMaze)
                     // Reskin the garden with Quaternius plants — the Renderer owns the registry
                     // indices, so it groups them by kind and stamps the vegetation after the build.
                     w.cubeModel.stampGardenVegetation(gardenFlora())

@@ -228,6 +228,8 @@ class GameViewController: NSViewController {
             gs.debugMakeDoorReady()
         case 40:      // K — debug: freeze/unfreeze time *in place* (no reset to noon, unlike Shift+T)
             gs.timeScale = gs.timeScale == 0 ? 1 : 0
+        case 37:      // L — debug (Eddie): cycle the skybox through the Skyboxes/*Composite.png set in place
+            renderer.cycleDebugSkybox()
         default:
             break
         }

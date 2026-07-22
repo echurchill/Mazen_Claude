@@ -43,8 +43,25 @@ struct CoordinateMathTests {
         if cond { passed += 1 } else { failed += 1; failures.append(msg()) }
     }
 
+    /// Regression (Eddie, size-11 garden): a maze that fills the WHOLE face makes dressedWallProps'
+    /// `neighbor()` ask faceletAt for out-of-face (row±1/col±1) tiles. faceletAt must return nil there,
+    /// not crash "Index out of range" on the `cachedProjection[face]![row][col]` subscript. This never
+    /// fired while the garden was an interior region of a size-25 face.
+    static func testFaceletAtBoundsFullFace() {
+        let m = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
+        check(m.faceletAt(face: .positiveZ, row: -1, col: 0) == nil, "faceletAt row -1 must be nil")
+        check(m.faceletAt(face: .positiveZ, row: 11, col: 0) == nil, "faceletAt row=size must be nil")
+        check(m.faceletAt(face: .positiveZ, row: 0, col: -1) == nil, "faceletAt col -1 must be nil")
+        check(m.faceletAt(face: .positiveZ, row: 0, col: 11) == nil, "faceletAt col=size must be nil")
+        check(m.faceletAt(face: .positiveZ, row: 5, col: 5) != nil, "faceletAt in-range must resolve")
+        // The render-time dressed-wall pass drives faceletAt at the face boundary — must not crash.
+        let e = m.dressedWallEntries(walls: [8, 9], rocks: [7], bushes: [3, 4],
+                                     wallScale: 1, rockScale: 1, bushScale: 1)
+        check(e.count > 0, "full-face garden should emit dressed-wall entries")
+    }
+
     static func main() {
-        let sizes = [3, 5, 7, 9, 25]   // 25 = the R2.16 hard cap — the math must hold at the ceiling
+        let sizes = [3, 5, 7, 9, 11, 25]   // 11 = the garden world; 25 = the R2.16 hard cap — the math must hold at the ceiling
         for n in sizes {
             testProjectionBijection(size: n)
             testGridWorldConsistency(size: n)
@@ -71,6 +88,7 @@ struct CoordinateMathTests {
         testStandGridPathCross()
         testWalkThroughPortalGating()
         testTopologyVersionCaches()
+        testFaceletAtBoundsFullFace()
 
         print("")
         if failed == 0 {
