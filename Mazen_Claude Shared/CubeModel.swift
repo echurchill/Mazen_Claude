@@ -179,6 +179,43 @@ class CubeModel {
         // the plinth — NOT at the hidden chamber, which is where the default arrival would land.
         spawnLocation = (face: .positiveZ, row: min(n - 1, c + 1), col: c, facing: .n)
 
+        // SCENE 2I — the approach that only completes after the turn. "A route that previously
+        // terminated at the far wall now continues onto the rotated slice."
+        //
+        // The assembly arrives in column 0 of this face (measured: the twist slab's `+Z` column), which
+        // is outside the sealed play region — so a corridor runs west out of the clearing, breaches the
+        // region border, and then runs the full height of column 1, ending against the world's edge.
+        // Before the turn it is a dead end against blank wall. After it, column 0 holds the assembly,
+        // whose tiles are open on all four sides, and the corridor simply continues onto them.
+        //
+        // The column-1 run is deliberately full height rather than a single spur: the rotation remaps
+        // rows as well as faces, so authoring one row would be betting on where the assembly lands.
+        // Meeting it along the whole edge is robust to that, and reads as a perimeter route.
+        let approachRow = c
+        for r in 0..<n {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: 1) else { continue }
+            var op: DirectionMask = [.east, .west]                 // through to the region, and out to the edge
+            if r > 0 { op.insert(.north) }
+            if r < n - 1 { op.insert(.south) }
+            cubies[ci].facelets[fi].mazeTile.openings = op
+            cubies[ci].facelets[fi].mazeTile.openEdges = op
+            cubies[ci].facelets[fi].tileState = .discovered
+            cubies[ci].facelets[fi].discoveryAmount = 1.0
+            cubies[ci].facelets[fi].mazeTile.wallType = 0          // the perimeter is the best-preserved stone
+        }
+        // Run the approach east from that corridor to the spine's western arm, breaching the region's
+        // sealed west border on the way. INSERT rather than assign: this row crosses the north–south
+        // corridor that serves the western corner switches, and replacing its openings would sever it.
+        for col in 1...(c - spread) {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: approachRow, col: col) else { continue }
+            cubies[ci].facelets[fi].mazeTile.openings.insert(.east)
+            cubies[ci].facelets[fi].mazeTile.openings.insert(.west)
+            cubies[ci].facelets[fi].mazeTile.openEdges.insert(.east)
+            cubies[ci].facelets[fi].mazeTile.openEdges.insert(.west)
+            cubies[ci].facelets[fi].tileState = .discovered
+            cubies[ci].facelets[fi].discoveryAmount = 1.0
+        }
+
         stampSceneTwoHiddenAssembly()
 
         // The slab that the solved lock turns: the outer X slab carrying the hidden face, turned

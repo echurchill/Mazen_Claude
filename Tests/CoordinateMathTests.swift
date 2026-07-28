@@ -141,6 +141,49 @@ struct CoordinateMathTests {
         check(!m.sealedPortalCubies.contains(ci), "the player must not spawn on the sealed hidden chamber")
     }
 
+    /// Scene 2I — the turn must make the exit WALKABLE, not merely visible. Flood-fills the playable
+    /// face from the arrival tile across open edges and checks the chamber: unreachable before the
+    /// turn (the corridor dead-ends against the world's edge) and reachable after it (the assembly has
+    /// rotated into that column). This is the payoff the whole scene is built on, and it depends on a
+    /// rotation that remaps rows and faces — far too easy to get subtly wrong by eye.
+    static func testSceneTwoExitIsWalkableOnlyAfterTheTurn() {
+        func chamberReachable(_ m: CubeModel) -> Bool {
+            let n = m.size
+            guard let spawn = m.spawnLocation else { return false }
+            // Locate the chamber (the portal that leads onward) on the playable face.
+            var target: (Int, Int)? = nil
+            for r in 0..<n { for c in 0..<n {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .portal && $0.state == 1 }) { target = (r, c) }
+            } }
+            guard let goal = target else { return false }
+            // Flood fill across open edges, staying on the playable face.
+            var seen = Set([[spawn.row, spawn.col]])
+            var queue = [[spawn.row, spawn.col]]
+            while let cur = queue.popLast() {
+                if cur[0] == goal.0 && cur[1] == goal.1 { return true }
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: cur[0], col: cur[1]) else { continue }
+                let op = m.cubies[ci].facelets[fi].mazeTile.openings
+                for (dir, dr, dc) in [(DirectionMask.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)] {
+                    guard op.contains(dir) else { continue }
+                    let nxt = [cur[0] + dr, cur[1] + dc]
+                    guard nxt[0] >= 0, nxt[0] < n, nxt[1] >= 0, nxt[1] < n, !seen.contains(nxt) else { continue }
+                    seen.insert(nxt); queue.append(nxt)
+                }
+            }
+            return false
+        }
+
+        let before = GameState(size: 15, name: "scene-2", stamp: .sceneTwo).cubeModel
+        check(!chamberReachable(before), "before the turn the exit must NOT be walkable (the route dead-ends)")
+
+        let after = GameState(size: 15, name: "scene-2", stamp: .sceneTwo).cubeModel
+        let s = after.scriptedTwistSlice!
+        after.bondedGroups.removeAll()                       // what the fourth switch does
+        after.applySliceRotation(axis: s.axis, index: s.index, angle: s.clockwise ? -.pi / 2 : .pi / 2)
+        check(chamberReachable(after), "after the turn the exit must be walkable from the arrival point")
+    }
+
     /// Scene 2's lock must actually gate the turn. Before the fourth switch the bond straddles the
     /// twistable slab, so the world refuses to move and the rotation control cannot be raised; after
     /// it, the turn is legal. Without this the control is available from the first frame and the
@@ -215,6 +258,7 @@ struct CoordinateMathTests {
         testSceneTwoHiddenFaceTurnsIntoView()
         testSceneTwoLockGatesTheTurn()
         testSceneTwoSpawnsInTheMaze()
+        testSceneTwoExitIsWalkableOnlyAfterTheTurn()
 
         print("")
         if failed == 0 {
