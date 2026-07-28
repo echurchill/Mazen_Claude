@@ -126,8 +126,11 @@ class Renderer: NSObject, MTKViewDelegate {
     /// signposts fall back to plain wood. Order matches `Renderer.portalDestinations` (+0 = "Home").
     var labelArray: MTLTexture?
     /// Human-readable sign text for each hub destination, index-aligned with `portalDestinations`.
+    /// Signpost text, indexed the same way as `portalDestinations`. Index 9 is the hub itself, which
+    /// is never its own signpost — hence the blank placeholder keeping the two lists aligned.
     static let destinationLabels = ["Moon", "Temple Interior", "Natural World", "The Garden", "Gallery",
-                                    "Dungeons Gallery", "Nature Gallery", "Ruins Gallery", "MegaKit Gallery"]
+                                    "Dungeons Gallery", "Nature Gallery", "Ruins Gallery", "MegaKit Gallery",
+                                    "", "Scene 2 Four Corners"]
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
         "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
@@ -226,7 +229,8 @@ class Renderer: NSObject, MTKViewDelegate {
     /// sub-world a portal simply pops back out; the destination only matters from the root.
     static let portalDestinations = ["moon", "temple-interior", "natural", "garden", "gallery",
                                      "gallery-dungeons", "gallery-nature", "gallery-ruins", "gallery-megakit",
-                                     "portal-hub"]   // index 9 — the labeled hub (reached by the ` key)
+                                     "portal-hub",   // index 9 — the labeled hub (reached by the ` key)
+                                     "scene-2"]      // index 10 — prologue Scene 2 (APPEND only: portal props store this index)
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -569,6 +573,15 @@ class Renderer: NSObject, MTKViewDelegate {
                 case "portal-hub":
                     // M20 (Eddie) — the labeled hub of TARDIS portals + signposts. Size 15 fits the 3×3.
                     w = GameState(size: 15, name: dest, stamp: .portalHub)
+                case "scene-2":
+                    // Prologue Scene 2 — "The Four Corners". The twist is the puzzle's reward, not a
+                    // tool the player owns yet, so the player's own Q/E stays withheld here.
+                    w = GameState(size: 15, name: dest, stamp: .sceneTwo)
+                    w.twistEnabled = false
+                    w.cubeModel.stampGardenVegetation(gardenFlora())
+                    wallDressingPalette = wallFlora()
+                    w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
+                                                  archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
                 default:
                     w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
                 }

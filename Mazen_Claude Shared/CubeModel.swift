@@ -13,6 +13,7 @@ enum WorldStamp {
     case gardenMaze      // M20 first cut: a hedge maze on a green planet — grass floors, some trees, roundness (the Journey garden)
     case gallery         // M20 dev tool: a flat grid of every prop/foliage variant, one per cell, for isolated evaluation
     case portalHub       // M20 (Eddie): a flat plaza of labeled portals — one TARDIS + signpost per world, to navigate by reading not memorised keys
+    case sceneTwo        // Prologue Scene 2 "The Four Corners": four corner switches, a central progress plinth, and the way onward hidden on a face that must be TURNED into view
 }
 
 /// M20 — how a world's maze WALLS are rendered.
@@ -84,6 +85,139 @@ class CubeModel {
         case .portalHub:
             stampPortalHub()        // flat plaza of labeled portals
             noFog = true
+        case .sceneTwo:
+            stampSceneTwo()
+            naturalDressing = true
+            roundness = 0.35        // ancient world: reads planetary, but the grid stays legible for the turn
+        }
+    }
+
+    // MARK: - Prologue Scene 2 — "The Four Corners"
+
+    /// Scene 2: four corner switches control a hidden slab, and the way onward is already built on a
+    /// face the player cannot see. Solving the lock raises a control; turning it rotates that slab so
+    /// the exit swings into view. Nothing is spawned by the puzzle — the assembly exists from the
+    /// first frame, riding facelets on the hidden face (props travel with their tiles through a twist,
+    /// so this needs no special support).
+    ///
+    /// **Geometry** (measured, not assumed — see `sceneTwoHiddenSlice`): the player walks `+Z`; the
+    /// assembly sits on `+Y`, the face over the top edge; both have tiles in the outer **X** slab.
+    /// One counter-clockwise quarter-turn of that slab carries `+Y` tiles onto `+Z` — the exit arrives
+    /// on the player's own surface. The same slab also carries one edge column of `+Z`, which is why
+    /// the far side of the maze visibly travels with it.
+    private func stampSceneTwo() {
+        let n = size, c = n / 2
+        let R = 5                                            // play region half-extent → an (2R+1)² arena
+        let rLo = max(0, c - R), rHi = min(n - 1, c + R)
+        let cLo = max(0, c - R), cHi = min(n - 1, c + R)
+        wallStyle = .dressed                                 // ruined stone, re-derived from topology (twist-safe)
+
+        // A clearing at the centre — done BEFORE sealing so it can't reopen the region wall.
+        stampRoom(face: .positiveZ, top: max(rLo, c - 1), left: max(cLo, c - 1), height: 3, width: 3)
+
+        for r in rLo...rHi {
+            for col in cLo...cHi {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                var op = cubies[ci].facelets[fi].mazeTile.openings
+                if r == rLo { op.remove(.north) }             // seal the region border
+                if r == rHi { op.remove(.south) }
+                if col == cLo { op.remove(.west) }
+                if col == cHi { op.remove(.east) }
+                cubies[ci].facelets[fi].mazeTile.openings = op
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+                // Scene 2's ruin gradient runs the OPPOSITE way to the garden's: the centre is the
+                // most collapsed ("age has radiated outward from the centre") and the perimeter is
+                // nearly intact. wallType 0 = cleanest … 3 = most broken.
+                let d = min(min(r - rLo, rHi - r), min(col - cLo, cHi - col))
+                cubies[ci].facelets[fi].mazeTile.wallType = UInt8(d >= 4 ? 0 : (d == 3 ? 1 : (d >= 1 ? 2 : 3)))
+            }
+        }
+
+        // Carve the spine so the puzzle is solvable through the procedural maze: the spawn row, the
+        // four corridors out to the corner switches, and the spur north to the central plinth.
+        let spread = 3
+        var spine = Set<[Int]>()
+        for col in (c - spread)...(c + spread) { spine.insert([c, col]) }
+        for row in (c - spread)...(c + spread) { spine.insert([row, c - spread]); spine.insert([row, c + spread]) }
+        for row in (c - spread)...c { spine.insert([row, c]) }
+        for rc in spine {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: rc[0], col: rc[1]) else { continue }
+            var op = cubies[ci].facelets[fi].mazeTile.openings
+            if spine.contains([rc[0] - 1, rc[1]]) { op.insert(.north) }
+            if spine.contains([rc[0] + 1, rc[1]]) { op.insert(.south) }
+            if spine.contains([rc[0], rc[1] - 1]) { op.insert(.west) }
+            if spine.contains([rc[0], rc[1] + 1]) { op.insert(.east) }
+            cubies[ci].facelets[fi].mazeTile.openings = op
+            cubies[ci].facelets[fi].mazeTile.openEdges = op
+        }
+
+        // The four corner switches — three engaged, the fourth off (the one to find). Reuses the
+        // proven switch cap/base pair and the shared switchMask() bookkeeping.
+        let switchSpots: [(Int, Int, Int, Int)] = [
+            (c - spread, c - spread, 1, 1), (c - spread, c + spread, 1, 2),
+            (c + spread, c - spread, 1, 3), (c + spread, c + spread, 0, 4),
+        ]
+        for (r, col, engaged, ordinal) in switchSpots {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+            cubies[ci].facelets[fi].props.append(Prop(kind: .switchBase, subRow: 1, subCol: 1, facing: .n))
+            var cap = Prop(kind: .switchCap, subRow: 1, subCol: 1, facing: .n, state: ordinal)
+            cap.anim = Float(engaged); cap.alignAnim = Float(engaged)
+            cubies[ci].facelets[fi].props.append(cap)
+        }
+
+        // The central plinth — a map of CONDITIONS, not of the maze: one dot per switch, filled when
+        // that switch is engaged. `updateDoorPlinths` drives it from switchMask().
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: c - 1, col: c) {
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .plinth, subRow: 2, subCol: 1, facing: .s, state: TextureLoader.progressMaskBase + 0b0111))
+        }
+
+        stampSceneTwoHiddenAssembly()
+    }
+
+    /// The outer X-slab that carries the hidden face into view, and the `+Y` tiles riding it.
+    /// Derived from live cubie positions rather than hardcoded, so it stays correct at any size.
+    /// Returns the slab index plus the hidden-face tiles in it, ordered along the strip.
+    func sceneTwoHiddenSlice() -> (axis: Int, index: Int, strip: [(row: Int, col: Int)]) {
+        let n = size
+        let index = 0                                     // the x == 0 outer slab
+        var strip: [(row: Int, col: Int)] = []
+        for r in 0..<n {
+            for col in 0..<n {
+                guard let (ci, _) = faceletAt(face: .positiveY, row: r, col: col) else { continue }
+                if cubies[ci].position.x == Int32(index) { strip.append((r, col)) }
+            }
+        }
+        return (0, index, strip)
+    }
+
+    /// The exit, built on the hidden `+Y` face from the first frame: two obelisks flanking a portal
+    /// chamber, sealed and dark until the slab turns. They ride their facelets, so the twist carries
+    /// them onto `+Z` with no spawning.
+    private func stampSceneTwoHiddenAssembly() {
+        let slice = sceneTwoHiddenSlice()
+        guard slice.strip.count >= 3 else { return }
+        // Centre three tiles of the strip: obelisk · chamber · obelisk.
+        let mid = slice.strip.count / 2
+        let trio = [slice.strip[mid - 1], slice.strip[mid], slice.strip[mid + 1]]
+        for (i, t) in trio.enumerated() {
+            guard let (ci, fi) = faceletAt(face: .positiveY, row: t.row, col: t.col) else { continue }
+            cubies[ci].facelets[fi].tileState = .discovered   // it exists; it is simply facing away
+            cubies[ci].facelets[fi].discoveryAmount = 1.0
+            cubies[ci].facelets[fi].mazeTile.openings = [.north, .east, .south, .west]
+            cubies[ci].facelets[fi].mazeTile.openEdges = [.north, .east, .south, .west]
+            if i == 1 {
+                // The chamber: a DOWNWARD elevator into the world's interior (Scene 3).
+                cubies[ci].facelets[fi].props.append(
+                    Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1, transition: .push))
+                styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 3))
+                cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+                cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 3))
+                sealedPortalCubies.insert(ci)     // dark until the slab has turned
+            } else {
+                cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+            }
         }
     }
 
@@ -204,10 +338,14 @@ class CubeModel {
                 cubies[ci].facelets[fi].discoveryAmount = 1.0
             }
         }
-        // 9 destinations, laid out 3×3 NORTH of spawn (spawn = face centre, kept clear).
-        let gridRows = [c - 5, c - 3, c - 1], gridCols = [c - 3, c, c + 3]
-        for idx in 0..<9 {
-            let gr = gridRows[idx / 3], gc = gridCols[idx % 3]
+        // Destination indices into Renderer.portalDestinations, laid out in a grid NORTH of spawn
+        // (spawn = face centre, kept clear). Index 9 is the hub itself, so it is skipped. Dev
+        // navigation: the prologue's scenes chain forward through their own portals, and this hub
+        // exists so any of them can be reached directly while building.
+        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10]
+        let gridRows = [c - 5, c - 3, c - 1], gridCols = [c - 5, c - 2, c + 1, c + 4]
+        for (slot, idx) in hubDestinations.enumerated() {
+            let gr = gridRows[slot / 4], gc = gridCols[slot % 4]
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
             // `.push`: stepping off the hub onto a destination ENTERS it, so that world's return
             // portal pops you back to the hub. (Phase 0 — this used to be inferred by the Renderer

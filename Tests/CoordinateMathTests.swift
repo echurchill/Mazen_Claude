@@ -59,7 +59,9 @@ struct CoordinateMathTests {
                 check(p.transition == .push, "hub portal at (\(r),\(c)) must be .push, got \(p.transition)")
             }
         } }
-        check(hubPortals == 9, "expected 9 hub portals, found \(hubPortals)")
+        // One per entry in CubeModel's hubDestinations (the 9 legacy worlds + Scene 2; the hub itself
+        // is skipped). Grows as prologue scenes are added — update alongside that list.
+        check(hubPortals == 10, "expected 10 hub portals, found \(hubPortals)")
 
         // The garden's temple door: a descent from an already-pushed world, so it must PUSH too.
         let garden = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
@@ -72,6 +74,53 @@ struct CoordinateMathTests {
             }
         } }
         check(descents == 1, "expected 1 temple-descent portal in the garden, found \(descents)")
+    }
+
+    /// Scene 2's load-bearing claim: the exit is built on a face the player cannot see, and ONE
+    /// quarter-turn of the outer X slab carries it onto the player's own surface (+Z). If this ever
+    /// stops holding, the scene's whole premise — "the world is carrying its own exit behind its
+    /// back" — silently breaks, and no headless boot would notice.
+    static func testSceneTwoHiddenFaceTurnsIntoView() {
+        let gs = GameState(size: 15, name: "scene-2", stamp: .sceneTwo)
+        let m = gs.cubeModel
+        let slice = m.sceneTwoHiddenSlice()
+        check(slice.strip.count == 15, "the hidden strip should be one full column of +Y, got \(slice.strip.count)")
+
+        // Find the assembly (2 obelisks + 1 portal) and confirm it starts on +Y, hidden.
+        var assembly: [(id: Int, isPortal: Bool)] = []
+        for t in slice.strip {
+            guard let (ci, fi) = m.faceletAt(face: .positiveY, row: t.row, col: t.col) else { continue }
+            let props = m.cubies[ci].facelets[fi].props
+            if props.contains(where: { $0.kind == .obelisk }) {
+                assembly.append((m.cubies[ci].facelets[fi].id.rawValue, false))
+            } else if props.contains(where: { $0.kind == .portal }) {
+                assembly.append((m.cubies[ci].facelets[fi].id.rawValue, true))
+                check(m.sealedPortalCubies.contains(ci), "the hidden chamber must start SEALED (dark until it turns)")
+            }
+        }
+        check(assembly.count == 3, "expected obelisk·chamber·obelisk on the hidden face, got \(assembly.count)")
+
+        // Turn the slab counter-clockwise — the scripted twist the solved lock performs.
+        m.applySliceRotation(axis: slice.axis, index: slice.index, angle: .pi / 2)
+
+        // Every assembly facelet must now be on +Z, the face the player walks.
+        for entry in assembly {
+            var landedOn: CubeFace? = nil
+            outer: for cu in m.cubies.indices {
+                for f in m.cubies[cu].facelets.indices where m.cubies[cu].facelets[f].id.rawValue == entry.id {
+                    let nrm = m.cubies[cu].orientation.act(m.cubies[cu].facelets[f].localFace.normal)
+                    var best = CubeFace.positiveZ, bestD = -Float.infinity
+                    for cf in CubeFace.allCases {
+                        let d = simd_dot(nrm, cf.normal)
+                        if d > bestD { bestD = d; best = cf }
+                    }
+                    landedOn = best
+                    break outer
+                }
+            }
+            check(landedOn == .positiveZ,
+                  "assembly facelet \(entry.id) should land on +Z after the turn, landed on \(String(describing: landedOn))")
+        }
     }
 
     /// Regression (Eddie, size-11 garden): a maze that fills the WHOLE face makes dressedWallProps'
@@ -121,6 +170,7 @@ struct CoordinateMathTests {
         testTopologyVersionCaches()
         testFaceletAtBoundsFullFace()
         testPortalTransitionsAreExplicit()
+        testSceneTwoHiddenFaceTurnsIntoView()
 
         print("")
         if failed == 0 {
