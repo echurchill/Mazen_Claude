@@ -333,6 +333,23 @@ enum TerrainKind: UInt8 {
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.
 /// Props live on the 3×3 AUTHOR grid; a solid one removes the stand cells under it (M18 P2).
+/// How entering a portal moves the world stack. Phase 0 (the prologue rebuild): this is DATA on the
+/// portal, not inferred from world names. The old code decided push-vs-pop with hardcoded name
+/// matching (`dest == "temple-interior"`, `name == "portal-hub"`) — two special cases for four
+/// worlds, which doesn't scale to the six-scene prologue and can't express Scene 6's return to an
+/// already-visited world.
+/// - `auto`: the legacy toggle — pop if we're in a sub-world, else push. Right for return portals
+///   and for the debug keys that toggle a world on and off.
+/// - `push`: always enter the destination as a new world, keeping the current one on the stack.
+/// - `pop`: always leave the current world (no-op at the root).
+/// (Scene 6 will need a `goto` — travel to an already-visited world without nesting. Deliberately
+/// not added yet: its stack semantics are undecided, and a case with no implementation would lie.)
+enum WorldTransition {
+    case auto
+    case push
+    case pop
+}
+
 struct Prop {
     var kind: PropKind
     /// Sub-cell it stands on (subRow 0 = north … 2 = south, subCol 0 = west … 2 = east).
@@ -342,6 +359,11 @@ struct Prop {
     var facing: Heading8 = .n
     /// Free-form per-prop state (e.g. chest open = 1 / closed = 0).
     var state: Int = 0
+    /// `.portal` only — how entering it moves the world stack (see `WorldTransition`). Defaults to
+    /// `.auto`, so every existing portal behaves exactly as before; a portal that must always descend
+    /// (the garden's temple elevator, the hub's nine doors) declares `.push` instead of relying on
+    /// the Renderer recognising its destination by name.
+    var transition: WorldTransition = .auto
     /// M20 — extra rotation about the vertical axis, in degrees (on top of `facing`). Lets several
     /// billboard cards of ONE tree intersect at even angles (a multi-view "billboard cloud"). 0 = none.
     var viewAngle: Float = 0

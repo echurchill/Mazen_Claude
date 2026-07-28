@@ -209,7 +209,10 @@ class CubeModel {
         for idx in 0..<9 {
             let gr = gridRows[idx / 3], gc = gridCols[idx % 3]
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: idx))
+            // `.push`: stepping off the hub onto a destination ENTERS it, so that world's return
+            // portal pops you back to the hub. (Phase 0 — this used to be inferred by the Renderer
+            // recognising the name "portal-hub"; the portal now says so itself.)
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: idx, transition: .push))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
             // Signpost on the south sub-cell of the same tile, facing the approaching player.
             cubies[ci].facelets[fi].props.append(Prop(kind: .signpost, subRow: 2, subCol: 1, facing: .n, state: idx))
@@ -1354,7 +1357,10 @@ class CubeModel {
                                  plinthRow: Int, plinthSubRow: Int,
                                  switchCenter: Int, spread: Int, elevatorStyle: Int? = nil) {
         guard let (dci, dfi) = faceletAt(face: .positiveZ, row: doorRow, col: doorCol) else { return }
-        cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: doorFacing, state: 1))
+        // `.push`: the temple door is a DESCENT — entering it from the garden (itself already a pushed
+        // world) must nest, not pop. (Phase 0 — this used to be inferred by the Renderer recognising
+        // the destination name "temple-interior"; the portal now carries the fact.)
+        cubies[dci].facelets[dfi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: doorFacing, state: 1, transition: .push))
         if let style = elevatorStyle {
             // M20 (Eddie) — an ELEVATOR portal, not the TARDIS: the streak field + ring (hidden while
             // sealed) and, via the Renderer, two flanking columns. No lamp.

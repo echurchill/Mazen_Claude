@@ -219,6 +219,7 @@ class Renderer: NSObject, MTKViewDelegate {
     private var transitionPhase: TransitionPhase = .none
     private var transitionT: Float = 0          // 0 clear … 1 fully black
     private var pendingPortalDestination: Int?  // destination id queued for the fade midpoint (M15.2)
+    private var pendingPortalTransition: WorldTransition = .auto   // Phase 0: how that swap moves the stack
     private let transitionSpeed: Float = 5.5    // ~0.18 s per half (fade out, then fade in)
 
     /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
@@ -478,23 +479,26 @@ class Renderer: NSObject, MTKViewDelegate {
     /// Perform the world swap (at the fade midpoint): inside any sub-world, pop back out;
     /// from the root, enter the destination — resolved by route through the registry (M15.2),
     /// created on first visit, persistent forever after.
-    private func performPortalSwap(destinationID: Int) {
+    private func performPortalSwap(destinationID: Int, transition: WorldTransition = .auto) {
         // Stop the departing world walking, so neither world auto-continues across the switch —
         // with walk-through portals, an un-cleared "forward held" would ping-pong through gates.
         gameState.forwardHeld = false; gameState.backwardHeld = false
         let departingMode = gameState.camera.mode   // FPV stays FPV across worlds (Eddie, M15.2)
+        let departingName = gameState.name          // Phase 0: recorded on the arriving world
         let dest = Self.portalDestinations.indices.contains(destinationID)
             ? Self.portalDestinations[destinationID] : "moon"
-        // M20: a nested DESCEND — stepping into the temple interior from an already-pushed world (the
-        // garden) — must PUSH a new world, not pop the way the toggle worlds do. (Toggling the interior
-        // off with the I key still pops, because then we're already IN it: gameState.name == dest.)
-        let nestedEnter = dest == "temple-interior" && gameState.name != dest
-        // M20 (Eddie) — the portal HUB pushes, like a descent: stepping from the hub onto one of its
-        // portals must PUSH the target world (so its return portal pops you back to the hub), not pop
-        // the way the root's toggle keys do. Toggling the hub off with the ` key still pops (dest == name).
-        let hubEnter = gameState.name == "portal-hub" && dest != gameState.name
+        // Phase 0 — the portal says how it travels (see `WorldTransition`). This replaces the old
+        // name-matching (`dest == "temple-interior"` / `name == "portal-hub"`), which was two special
+        // cases for four worlds and had no way to express the six-scene prologue. `.auto` preserves
+        // the legacy toggle exactly: inside a sub-world pop, otherwise push.
+        let popping: Bool
+        switch transition {
+        case .push: popping = false
+        case .pop:  popping = true
+        case .auto: popping = worldStack.count > 1
+        }
         let pushed: Bool
-        if worldStack.count > 1 && !nestedEnter && !hubEnter {
+        if popping && worldStack.count > 1 {
             exitWorld()
             pushed = false
         } else {
@@ -578,6 +582,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // Arrival = stepping OUT of a door (Eddie, M15.2): same camera mode as you left in, and
         // you emerge looking the portal's exit direction — the door at your back.
         let arriving = gameState
+        arriving.lastArrivalOrigin = departingName   // Phase 0: "how you got here", for route-keyed behaviour
         arriving.camera.mode = departingMode
         arriving.camera.lookYaw = 0
         arriving.camera.lookPitch = 0
@@ -608,11 +613,12 @@ class Renderer: NSObject, MTKViewDelegate {
     /// Begin a fade-to-black, swap the world at the midpoint, then fade back (M11.2b). Ignored if
     /// a transition is already running. Walk-through portals, the O key (moon), and the I key
     /// (temple) all route through here with their destination id (M15.2).
-    func beginWorldTransition(destinationID: Int = 0) {
+    func beginWorldTransition(destinationID: Int = 0, transition: WorldTransition = .auto) {
         guard transitionPhase == .none else { return }
         transitionPhase = .fadingOut
         transitionT = 0
         pendingPortalDestination = destinationID
+        pendingPortalTransition = transition
     }
 
     /// Advance the fade each frame; performs the queued world swap at the fully-black midpoint.
@@ -623,7 +629,11 @@ class Renderer: NSObject, MTKViewDelegate {
             transitionT += dt * transitionSpeed
             if transitionT >= 1 {
                 transitionT = 1
-                if let id = pendingPortalDestination { performPortalSwap(destinationID: id); pendingPortalDestination = nil }
+                if let id = pendingPortalDestination {
+                    performPortalSwap(destinationID: id, transition: pendingPortalTransition)
+                    pendingPortalDestination = nil
+                    pendingPortalTransition = .auto
+                }
                 transitionPhase = .fadingIn
             }
         case .fadingIn:
@@ -1008,7 +1018,8 @@ class Renderer: NSObject, MTKViewDelegate {
         // the requesting world and start the transition; the swap happens at the fully-black midpoint.
         if gameState.portalRequested {
             gameState.portalRequested = false
-            beginWorldTransition(destinationID: gameState.portalDestinationID)
+            beginWorldTransition(destinationID: gameState.portalDestinationID,
+                                 transition: gameState.portalTransition)
         }
         updateTransition(dt: dt)
 

@@ -43,6 +43,37 @@ struct CoordinateMathTests {
         if cond { passed += 1 } else { failed += 1; failures.append(msg()) }
     }
 
+    /// Phase 0 — the portals that used to depend on the Renderer's hardcoded name-matching must now
+    /// carry their own `.push`. If either of these regresses to `.auto`, the hub's doors and the
+    /// garden's temple descent would POP instead of nesting (you'd fall out of the world you're in
+    /// rather than descend into the next), which is exactly the bug the name-matching existed to
+    /// prevent. Cheap to assert, and it can't be caught by a headless boot.
+    static func testPortalTransitionsAreExplicit() {
+        // The hub's nine doors: entering a destination must PUSH so its return portal comes back here.
+        let hub = GameState(size: 15, name: "portal-hub", stamp: .portalHub).cubeModel
+        var hubPortals = 0
+        for r in 0..<15 { for c in 0..<15 {
+            guard let (ci, fi) = hub.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+            for p in hub.cubies[ci].facelets[fi].props where p.kind == .portal {
+                hubPortals += 1
+                check(p.transition == .push, "hub portal at (\(r),\(c)) must be .push, got \(p.transition)")
+            }
+        } }
+        check(hubPortals == 9, "expected 9 hub portals, found \(hubPortals)")
+
+        // The garden's temple door: a descent from an already-pushed world, so it must PUSH too.
+        let garden = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
+        var descents = 0
+        for r in 0..<11 { for c in 0..<11 {
+            guard let (ci, fi) = garden.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+            for p in garden.cubies[ci].facelets[fi].props where p.kind == .portal && p.state == 1 {
+                descents += 1
+                check(p.transition == .push, "garden temple descent must be .push, got \(p.transition)")
+            }
+        } }
+        check(descents == 1, "expected 1 temple-descent portal in the garden, found \(descents)")
+    }
+
     /// Regression (Eddie, size-11 garden): a maze that fills the WHOLE face makes dressedWallProps'
     /// `neighbor()` ask faceletAt for out-of-face (row±1/col±1) tiles. faceletAt must return nil there,
     /// not crash "Index out of range" on the `cachedProjection[face]![row][col]` subscript. This never
@@ -89,6 +120,7 @@ struct CoordinateMathTests {
         testWalkThroughPortalGating()
         testTopologyVersionCaches()
         testFaceletAtBoundsFullFace()
+        testPortalTransitionsAreExplicit()
 
         print("")
         if failed == 0 {

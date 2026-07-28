@@ -17,6 +17,17 @@ class GameState {
     /// shipped default `skybox.png`. The Renderer resolves it per frame, so a world carries its sky
     /// with it. First user: the garden (Eagle Nebula).
     var skyboxName: String? = nil
+
+    /// Phase 0 — whether the player may twist a slice here (Q/E). The prologue withholds the verb:
+    /// Scenes 1-3 disable it and Scene 4 grants it, which is the moment the game hands the player its
+    /// defining action. Default true, so every existing world keeps today's always-on behaviour.
+    /// Only the PLAYER path is gated — scripted twists (a solved puzzle turning the world) ignore it.
+    var twistEnabled = true
+
+    /// Phase 0 — the name of the world the player arrived FROM, recorded on every portal swap (nil at
+    /// boot). Scene 6's orb reacts to the route by which the player re-entered a solved world; this is
+    /// the minimum that has to be remembered for "how you got here" to be answerable at all.
+    var lastArrivalOrigin: String? = nil
     // M9.5-3: slow idle spin of the whole game cube (a planet turning under its sun).
     var spinEnabled = true
     var spinPeriod: Float = 120   // seconds per full rotation
@@ -304,17 +315,18 @@ class GameState {
 
     private func updateWalkThroughPortal() {
         guard !player.isMoving, !sliceRotation.isActive else { return }   // only when settled
-        var zone: Int? = nil, dest = 0
+        var zone: Int? = nil, dest = 0, transition: WorldTransition = .auto
         if let (pci, pfi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
            let portal = cubeModel.cubies[pci].facelets[pfi].props.first(where: { $0.kind == .portal }),
            !cubeModel.sealedPortalCubies.contains(pci),                  // M16.4: a sealed door is just a door
            player.subRow * 3 / player.standGrid == portal.subRow,        // stand-grid → author 3×3
            player.subCol * 3 / player.standGrid == portal.subCol {
-            zone = pci; dest = portal.state
+            zone = pci; dest = portal.state; transition = portal.transition
         }
         if portalZonePrimed, let z = zone, z != portalZoneCubie {        // just stepped onto a portal
             portalRequested = true
             portalDestinationID = dest
+            portalTransition = transition
         }
         portalZonePrimed = true
         portalZoneCubie = zone
@@ -332,6 +344,10 @@ class GameState {
     // MARK: - Slice Rotation
 
     func startSliceRotation(clockwise: Bool) {
+        // Phase 0: the PLAYER's twist is a per-world privilege (the prologue withholds it until
+        // Scene 4). Scripted twists — a solved puzzle turning the world — call
+        // `startBackSliceRotation` and are deliberately not gated.
+        guard twistEnabled else { return }
         guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else { return }
 
         let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
@@ -491,6 +507,9 @@ class GameState {
     /// Which world the requesting portal leads to (M15.2) — the portal Prop's `state`, indexing
     /// `Renderer.portalDestinations`. Ignored when the swap is a pop (leaving a sub-world).
     var portalDestinationID = 0
+    /// Phase 0 — how the requesting portal moves the world stack (copied from the Prop's
+    /// `transition`), so the Renderer no longer has to infer push-vs-pop from world names.
+    var portalTransition: WorldTransition = .auto
 
     /// The interaction hook: act on any interactive props on the player's current tile.
     /// A portal takes priority (stepping "through the door" switches worlds); otherwise chests
@@ -604,6 +623,7 @@ class GameState {
            !cubeModel.sealedPortalCubies.contains(ci) {    // M16.4: sealed = inert
             portalRequested = true
             portalDestinationID = portal.state
+            portalTransition = portal.transition
             return
         }
         // M16.6 (Eddie): a SWITCH — F toggles it engaged (poking out) ↔ disengaged (flush). All four
