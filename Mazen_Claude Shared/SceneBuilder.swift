@@ -274,6 +274,11 @@ final class SceneBuilder {
                                                               : SIMD4(0.95, 0.78, 0.20, 1.0)
                                 if refusalGlow > 0 { color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow) }
                             }
+                            if prop.kind == .portal, prop.state == Renderer.sceneTwoDestinationID {
+                                // The door to the prologue proper wears DARSIT red instead of TARDIS
+                                // blue (Eddie) — the one box in the hub that isn't a dev world.
+                                color = SIMD4(0.58, 0.10, 0.11, 1.0)
+                            }
                             if prop.kind == .portal, model.sealedPortalCubies.contains(ci) {
                                 color = SIMD4(0.16, 0.17, 0.22, 1.0)   // M16.4: sealed — dark, inert
                             }

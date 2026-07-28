@@ -231,6 +231,10 @@ class Renderer: NSObject, MTKViewDelegate {
                                      "gallery-dungeons", "gallery-nature", "gallery-ruins", "gallery-megakit",
                                      "portal-hub",   // index 9 — the labeled hub (reached by the ` key)
                                      "scene-2"]      // index 10 — prologue Scene 2 (APPEND only: portal props store this index)
+    /// The prologue's doors wear their own livery so they read apart from the legacy dev worlds.
+    /// Named rather than a bare literal in SceneBuilder, so appending destinations can't silently
+    /// repaint the wrong door.
+    static let sceneTwoDestinationID = 10
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -611,8 +615,18 @@ class Renderer: NSObject, MTKViewDelegate {
         arriving.player.isMoving = false
         arriving.player.isTurning = false
         if pushed {
-            // Emerge FROM the destination's own doorway, wherever it stands.
-            if let door = arriving.cubeModel.firstPortalLocation() {
+            // Arrive where the world says, if it says; otherwise emerge FROM its own doorway, wherever
+            // that stands. The fallback assumes a world's first portal is its entrance, which is only
+            // true for the older worlds — a scene whose exit is hidden on another face (Scene 2) would
+            // otherwise drop the player onto that face, walled in.
+            if let spawn = arriving.cubeModel.spawnLocation {
+                arriving.player.face = spawn.face
+                arriving.player.row = spawn.row
+                arriving.player.col = spawn.col
+                arriving.player.subRow = arriving.player.standCenter
+                arriving.player.subCol = arriving.player.standCenter
+                arriving.player.facing = spawn.facing
+            } else if let door = arriving.cubeModel.firstPortalLocation() {
                 arriving.player.face = door.face
                 arriving.player.row = door.row
                 arriving.player.col = door.col

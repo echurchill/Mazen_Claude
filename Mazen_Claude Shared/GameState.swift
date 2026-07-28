@@ -392,28 +392,43 @@ class GameState {
     /// decoupled from which slab provides the spectacle (the door's own opening flourish is a later
     /// visual pass). Manual Q/E keep using `startSliceRotation` (the player's own slab).
     func startBackSliceRotation(clockwise: Bool) {
-        guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else { return }
-
         // The face across the far edge in the player's forward direction is the "back" wall. Diagonal
         // headings fall back to north (the garden solve faces the door dead-on, a cardinal heading).
         let forward = player.facing.cardinal ?? .north
         let backFace = cubeModel.edgeCrossing(face: player.face, direction: forward,
                                               row: player.row, col: player.col).face
         let (axis, index) = cubeModel.sliceAxisAndIndex(for: backFace)
+        startScriptedSliceRotation(axis: axis, index: index, clockwise: clockwise)
+    }
+
+    /// Turn one NAMED slab as a puzzle's reward — the world moving itself, not the player twisting.
+    /// Deliberately not gated by `twistEnabled`: that withholds the player's own verb, and a scene
+    /// that turns the world for you (Scene 2) is exactly how the verb is introduced before it is
+    /// granted. The player rides the slab only if they are actually standing in it.
+    func startScriptedSliceRotation(axis: Int, index: Int, clockwise: Bool) {
+        guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else { return }
         let angle: Float = clockwise ? -.pi / 2 : .pi / 2
         let cubieIndices = cubeModel.cubieIndicesInSlice(axis: axis, index: index)
 
-        // If a bond would refuse the back slab, still deliver the payoff so the puzzle completes.
+        // If a bond would refuse the slab, still deliver the payoff so the puzzle completes.
         guard cubeModel.canRotateSlice(axis: axis, index: index) else {
             openSealedDoors()
             return
         }
 
-        // playerCubieIndex −1: the player isn't in the distant slab, so they stay put and watch it turn.
+        // Usually the player watches a distant slab turn from outside it — but the slab carries one
+        // edge column of the face they walk on, so they CAN be standing in it. Carry them if so
+        // (position, facing and standing sub-cell all rotate); otherwise leave them still.
+        var playerCI = -1
+        if let (ci, _) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col),
+           cubieIndices.contains(ci) {
+            playerCI = ci
+        }
+
         sliceRotation = SliceRotation(
             isActive: true, axis: axis, index: index, angle: angle,
             progress: 0, speed: 2.5,
-            affectedCubies: Set(cubieIndices), playerCubieIndex: -1
+            affectedCubies: Set(cubieIndices), playerCubieIndex: playerCI
         )
         sliceRotation.opensSealedDoors = true
     }
@@ -525,6 +540,24 @@ class GameState {
     /// destination temple-interior; the moon portal's state is 0) and drive the plinth on its north
     /// neighbour — falling back to the door tile itself for the tiny-cube case.
     private func updateDoorPlinths() {
+        // A scene may name the plinth that reports the lock, when it isn't beside the door it reports
+        // on (Scene 2's central plinth is deliberately remote — "a map of conditions, not of the
+        // maze"). Same glyph language either way: filled dots per engaged switch, the portal glyph
+        // once the way is open.
+        if let pp = cubeModel.progressPlinth {
+            let opened = !templeDoorStillSealed()
+            let symbol = opened ? TextureLoader.CausticSymbol.portal.rawValue
+                                : (TextureLoader.progressMaskBase + switchMask())
+            if let pi = cubeModel.cubies[pp.ci].facelets[pp.fi].props.firstIndex(where: { $0.kind == .plinth }),
+               cubeModel.cubies[pp.ci].facelets[pp.fi].props[pi].state != symbol {
+                cubeModel.cubies[pp.ci].facelets[pp.fi].props[pi].state = symbol
+            }
+            if opened, cubeModel.cubies[pp.ci].facelets[pp.fi].props.contains(where: { $0.kind == .alignmentCylinder }) {
+                cubeModel.cubies[pp.ci].facelets[pp.fi].props.removeAll { $0.kind == .alignmentCylinder }
+                cubeModel.markTopologyChanged()   // PERF: prop removed — location caches re-derive
+            }
+            return
+        }
         let n = cubeModel.size
         for r in 0..<n {
             for c in 0..<n {
@@ -587,7 +620,13 @@ class GameState {
                 cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = a
                 if a >= 1 {
                     cylinderEngaged = false
-                    startBackSliceRotation(clockwise: true)   // M20 (Eddie): the distant BACK wall visibly turns, then the door opens
+                    // A scene may name the slab its lock turns (Scene 2 turns the one carrying the
+                    // hidden exit); otherwise the distant BACK wall turns, relative to the player.
+                    if let s = cubeModel.scriptedTwistSlice {
+                        startScriptedSliceRotation(axis: s.axis, index: s.index, clockwise: s.clockwise)
+                    } else {
+                        startBackSliceRotation(clockwise: true)
+                    }
                 }
             }
         }

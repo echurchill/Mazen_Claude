@@ -171,9 +171,31 @@ class CubeModel {
         if let (ci, fi) = faceletAt(face: .positiveZ, row: c - 1, col: c) {
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .plinth, subRow: 2, subCol: 1, facing: .s, state: TextureLoader.progressMaskBase + 0b0111))
+            progressPlinth = (ci, fi)
         }
 
+        // "The player stands near the southern edge of a broad, irregular clearing… Directly ahead
+        // stands a single stone plinth." Arrive south of centre looking north, across the clearing to
+        // the plinth — NOT at the hidden chamber, which is where the default arrival would land.
+        spawnLocation = (face: .positiveZ, row: min(n - 1, c + 1), col: c, facing: .n)
+
         stampSceneTwoHiddenAssembly()
+
+        // The slab that the solved lock turns: the outer X slab carrying the hidden face, turned
+        // counter-clockwise so `+Y` lands on `+Z` (verified by testSceneTwoHiddenFaceTurnsIntoView).
+        let hidden = sceneTwoHiddenSlice()
+        scriptedTwistSlice = (axis: hidden.axis, index: hidden.index, clockwise: false)
+
+        // The LOCK. Without a bond the rotation control could be raised before the puzzle is solved
+        // (the gate is `bondedGroups.isEmpty`), and the twist itself would already be legal. Bond the
+        // hidden chamber's cubie to the central plinth's: the group STRADDLES the twistable slab, so
+        // `canRotateSlice` refuses the turn, and dissolving it on the fourth switch is what makes the
+        // world movable. Stored in `templeDoorBond` so disengaging a switch re-applies it.
+        if let pp = progressPlinth, let chamberCI = sealedPortalCubies.first {
+            let bond: Set<Int> = [chamberCI, pp.ci]
+            addBond(bond)
+            templeDoorBond = bond
+        }
     }
 
     /// The outer X-slab that carries the hidden face into view, and the `+Y` tiles riding it.
@@ -2195,6 +2217,27 @@ class CubeModel {
     /// and refused. Indices are into `cubies` and stay valid across turns (`applySliceRotation`
     /// moves cubies but never reindexes the array). A cubie should belong to at most one group.
     var bondedGroups: [Set<Int>] = []
+
+    /// Scene 2 — the slab the solved lock turns, named by the world rather than derived from where
+    /// the player happens to face. `startBackSliceRotation` picks a slice relative to the player,
+    /// which is right when the turn is a flourish near them; Scene 2 instead has to turn one specific
+    /// distant slab — the one carrying the hidden exit — no matter where the player is standing.
+    var scriptedTwistSlice: (axis: Int, index: Int, clockwise: Bool)? = nil
+
+    /// Where the player arrives in this world, when the world authors it. Otherwise arrival falls back
+    /// to `firstPortalLocation()` — "emerge from the destination's own doorway" — which is only right
+    /// when a world's first portal is its entrance. It isn't for Scene 2: the enum order searches `+Y`
+    /// before `+Z`, so the hidden exit was found first and dropped the player onto the far face,
+    /// sealed inside three tiles. Every prologue scene specifies its opening image, so scenes state
+    /// their arrival point instead of having it inferred.
+    var spawnLocation: (face: CubeFace, row: Int, col: Int, facing: Heading8)? = nil
+
+    /// Scene 2 — the plinth that reports lock progress, when it is NOT adjacent to the door it
+    /// reports on. The garden's plinth sits beside its door, so `updateDoorPlinths` can find it by
+    /// looking around the door; Scene 2's central plinth is deliberately far from the exit ("a map of
+    /// conditions, not a map of the maze"), so the world states which plinth to drive.
+    /// Cubie indices are stable across twists, like bonds and sealed portals.
+    var progressPlinth: (ci: Int, fi: Int)? = nil
     /// M16.6 (Eddie) — the temple-door bond, stored so the lock can be RE-applied when the player
     /// disengages a switch after unlocking (goof-and-fix), and cleared when all switches re-engage.
     var templeDoorBond: Set<Int> = []

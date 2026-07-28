@@ -123,6 +123,48 @@ struct CoordinateMathTests {
         }
     }
 
+    /// Scene 2 must land the player in the maze, not on the hidden face. The default arrival picks
+    /// `firstPortalLocation()`, and CubeFace order searches +Y before +Z — so the hidden chamber was
+    /// found first and the player spawned sealed inside the three-tile assembly strip. The world now
+    /// states its arrival point; this pins that it is on the playable face and standable.
+    static func testSceneTwoSpawnsInTheMaze() {
+        let m = GameState(size: 15, name: "scene-2", stamp: .sceneTwo).cubeModel
+        guard let spawn = m.spawnLocation else { check(false, "Scene 2 must author its arrival point"); return }
+        check(spawn.face == .positiveZ, "Scene 2 spawns on the playable face, got \(spawn.face)")
+        guard let (ci, fi) = m.faceletAt(face: spawn.face, row: spawn.row, col: spawn.col) else {
+            check(false, "Scene 2 spawn tile must exist"); return
+        }
+        check(m.cubies[ci].facelets[fi].tileState == .discovered, "the spawn tile must be revealed, not fogged")
+        // Not walled in: the arrival tile must open onto at least one neighbour.
+        check(!m.cubies[ci].facelets[fi].mazeTile.openings.isEmpty, "the spawn tile must not be sealed on all four sides")
+        // And it must not be the hidden assembly.
+        check(!m.sealedPortalCubies.contains(ci), "the player must not spawn on the sealed hidden chamber")
+    }
+
+    /// Scene 2's lock must actually gate the turn. Before the fourth switch the bond straddles the
+    /// twistable slab, so the world refuses to move and the rotation control cannot be raised; after
+    /// it, the turn is legal. Without this the control is available from the first frame and the
+    /// puzzle is decorative.
+    static func testSceneTwoLockGatesTheTurn() {
+        let gs = GameState(size: 15, name: "scene-2", stamp: .sceneTwo)
+        let m = gs.cubeModel
+        guard let s = m.scriptedTwistSlice else { check(false, "Scene 2 must name the slab its lock turns"); return }
+
+        check(!m.bondedGroups.isEmpty, "Scene 2 must start bonded (else the control is free from frame one)")
+        check(!m.canRotateSlice(axis: s.axis, index: s.index), "the designated slab must be REFUSED while bonded")
+
+        // The bond has to straddle the slab — inside it only, or outside it only, would not refuse.
+        let slab = Set(m.cubieIndicesInSlice(axis: s.axis, index: s.index))
+        for g in m.bondedGroups {
+            check(!g.isDisjoint(with: slab) && !g.isSubset(of: slab),
+                  "the lock bond must straddle the twistable slab to refuse it")
+        }
+
+        // Dissolving it (what the fourth switch does) makes the same turn legal.
+        m.bondedGroups.removeAll()
+        check(m.canRotateSlice(axis: s.axis, index: s.index), "the slab must turn once the lock is dissolved")
+    }
+
     /// Regression (Eddie, size-11 garden): a maze that fills the WHOLE face makes dressedWallProps'
     /// `neighbor()` ask faceletAt for out-of-face (row±1/col±1) tiles. faceletAt must return nil there,
     /// not crash "Index out of range" on the `cachedProjection[face]![row][col]` subscript. This never
@@ -171,6 +213,8 @@ struct CoordinateMathTests {
         testFaceletAtBoundsFullFace()
         testPortalTransitionsAreExplicit()
         testSceneTwoHiddenFaceTurnsIntoView()
+        testSceneTwoLockGatesTheTurn()
+        testSceneTwoSpawnsInTheMaze()
 
         print("")
         if failed == 0 {
