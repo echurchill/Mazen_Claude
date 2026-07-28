@@ -491,11 +491,12 @@ class Renderer: NSObject, MTKViewDelegate {
         // name-matching (`dest == "temple-interior"` / `name == "portal-hub"`), which was two special
         // cases for four worlds and had no way to express the six-scene prologue. `.auto` preserves
         // the legacy toggle exactly: inside a sub-world pop, otherwise push.
-        let popping: Bool
+        let popping: Bool, replacing: Bool
         switch transition {
-        case .push: popping = false
-        case .pop:  popping = true
-        case .auto: popping = worldStack.count > 1
+        case .push: popping = false; replacing = false
+        case .pop:  popping = true;  replacing = false
+        case .auto: popping = worldStack.count > 1; replacing = false
+        case .goto: popping = false; replacing = true   // sideways: swap the top, don't nest
         }
         let pushed: Bool
         if popping && worldStack.count > 1 {
@@ -575,7 +576,15 @@ class Renderer: NSObject, MTKViewDelegate {
                 if !dest.hasPrefix("gallery") && dest != "garden" && dest != "portal-hub" { Self.setupInitialDiscovery(gameState: w) }
                 return w
             }
-            enterWorld(world)
+            if replacing {
+                // `goto` — the destination becomes the current world in place. The world we leave
+                // stays in the registry with all its state, so this loses nothing; it just doesn't
+                // nest. (Arrival is treated as an entry, hence pushed = true: you emerge from the
+                // destination's own doorway rather than turning round on the door you left by.)
+                worldStack[worldStack.count - 1] = world
+            } else {
+                enterWorld(world)
+            }
             pushed = true
         }
 

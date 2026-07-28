@@ -342,12 +342,21 @@ enum TerrainKind: UInt8 {
 ///   and for the debug keys that toggle a world on and off.
 /// - `push`: always enter the destination as a new world, keeping the current one on the stack.
 /// - `pop`: always leave the current world (no-op at the root).
-/// (Scene 6 will need a `goto` — travel to an already-visited world without nesting. Deliberately
-/// not added yet: its stack semantics are undecided, and a case with no implementation would lie.)
+/// - `goto`: travel SIDEWAYS — the destination replaces the current world as the top of the stack
+///   instead of nesting under it. The world you leave is not lost: every world lives in the
+///   `WorldRegistry` forever, so it keeps its twists and scars and can be returned to later.
+///
+/// `goto` is how a one-way chain of scenes travels. The prologue has no return portals at all —
+/// every scene destroys the way back — so nesting each scene under the last would grow a stack that
+/// is never popped, and would leave the wrong world as `worldStack[count-2]` (which is what the
+/// counterpart-in-sky falls back to). Revisiting a world is NOT going back: Scene 6 re-enters
+/// Scene 2's world through a forward portal from Scene 5, and `goto` expresses exactly that without
+/// the same world appearing on the stack twice.
 enum WorldTransition {
     case auto
     case push
     case pop
+    case goto
 }
 
 struct Prop {
