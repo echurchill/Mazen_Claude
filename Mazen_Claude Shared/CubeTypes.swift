@@ -329,6 +329,7 @@ enum TerrainKind: UInt8 {
     case grass
     case water
     case regolith   // M19 moon — grey dust; walkable like grass, no walls
+    case plating    // riveted metal plate (material 25) — the exposed shell of a turning slab, and Scene 3's interior language
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.

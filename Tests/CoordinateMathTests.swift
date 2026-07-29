@@ -81,10 +81,10 @@ struct CoordinateMathTests {
     /// stops holding, the scene's whole premise — "the world is carrying its own exit behind its
     /// back" — silently breaks, and no headless boot would notice.
     static func testSceneTwoHiddenFaceTurnsIntoView() {
-        let gs = GameState(size: 15, name: "scene-2", stamp: .sceneTwo)
+        let gs = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
         let m = gs.cubeModel
         let slice = m.sceneTwoHiddenSlice()
-        check(slice.strip.count == 15, "the hidden strip should be one full column of +Y, got \(slice.strip.count)")
+        check(slice.strip.count == PrologueSize.sceneTwo, "the hidden strip should be one full column of +Y, got \(slice.strip.count)")
 
         // Find the assembly (2 obelisks + 1 portal) and confirm it starts on +Y, hidden.
         var assembly: [(id: Int, isPortal: Bool)] = []
@@ -121,6 +121,55 @@ struct CoordinateMathTests {
             check(landedOn == .positiveZ,
                   "assembly facelet \(entry.id) should land on +Z after the turn, landed on \(String(describing: landedOn))")
         }
+
+        // WHERE it lands is load-bearing, not incidental: the control plinth is authored two tiles
+        // from the chamber so the exit swings in directly ahead of the player. If the rotation ever
+        // remapped rows differently, the plinth would end up pointing at empty ground and the scene's
+        // payoff would quietly stop reading — with nothing failing.
+        let c = m.size / 2
+        var chamberAt: (Int, Int)? = nil
+        for r in 0..<m.size { for col in 0..<m.size {
+            guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+            if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .portal && $0.state == 1 }) { chamberAt = (r, col) }
+        } }
+        check(chamberAt?.0 == c && chamberAt?.1 == 0,
+              "the chamber should land at (centre row, col 0); landed at \(String(describing: chamberAt))")
+        if let pp = m.progressPlinth {
+            // The plinth must be on the same row, a short line of sight away.
+            var plinthAt: (Int, Int)? = nil
+            for r in 0..<m.size { for col in 0..<m.size {
+                if let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: col), ci == pp.ci, fi == pp.fi { plinthAt = (r, col) }
+            } }
+            check(plinthAt?.0 == c, "the control plinth must share the chamber's row so the turn arrives in view")
+        }
+
+        // A prop's `facing` is NOT rotated by a twist, so the chamber is authored in its FINAL
+        // orientation: facing EAST, toward the plinth the player triggers it from. Authored as north
+        // it arrived edge-on and read as a slab rather than a doorway (Eddie, playtest).
+        if let ch = chamberAt, let (ci, fi) = m.faceletAt(face: .positiveZ, row: ch.0, col: ch.1),
+           let portal = m.cubies[ci].facelets[fi].props.first(where: { $0.kind == .portal }) {
+            check(portal.facing == .e, "the chamber must face east (the approach side); got \(portal.facing)")
+        }
+
+        // EVERY tile of the turning slab must be revealed, on whichever face it belongs to —
+        // undiscovered tiles render nothing, and a partly-revealed slab turns as a band of floating
+        // fragments with sky between them. Checked on a FRESH model: `m` has already been rotated.
+        let fresh = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo).cubeModel
+        let slab = fresh.scriptedTwistSlice!
+        var inSlab = 0, revealed = 0
+        for face in CubeFace.allCases {
+            for r in 0..<fresh.size { for col in 0..<fresh.size {
+                guard let (ci, fi) = fresh.faceletAt(face: face, row: r, col: col) else { continue }
+                let p = fresh.cubies[ci].position
+                guard (slab.axis == 0 && p.x == Int32(slab.index))
+                   || (slab.axis == 1 && p.y == Int32(slab.index))
+                   || (slab.axis == 2 && p.z == Int32(slab.index)) else { continue }
+                inSlab += 1
+                if fresh.cubies[ci].facelets[fi].tileState == .discovered { revealed += 1 }
+            } }
+        }
+        check(inSlab > 0 && revealed == inSlab,
+              "the whole turning slab must be revealed so it reads as a plate; \(revealed)/\(inSlab)")
     }
 
     /// Scene 2 must land the player in the maze, not on the hidden face. The default arrival picks
@@ -128,7 +177,7 @@ struct CoordinateMathTests {
     /// found first and the player spawned sealed inside the three-tile assembly strip. The world now
     /// states its arrival point; this pins that it is on the playable face and standable.
     static func testSceneTwoSpawnsInTheMaze() {
-        let m = GameState(size: 15, name: "scene-2", stamp: .sceneTwo).cubeModel
+        let m = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo).cubeModel
         guard let spawn = m.spawnLocation else { check(false, "Scene 2 must author its arrival point"); return }
         check(spawn.face == .positiveZ, "Scene 2 spawns on the playable face, got \(spawn.face)")
         guard let (ci, fi) = m.faceletAt(face: spawn.face, row: spawn.row, col: spawn.col) else {
@@ -174,10 +223,10 @@ struct CoordinateMathTests {
             return false
         }
 
-        let before = GameState(size: 15, name: "scene-2", stamp: .sceneTwo).cubeModel
+        let before = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo).cubeModel
         check(!chamberReachable(before), "before the turn the exit must NOT be walkable (the route dead-ends)")
 
-        let after = GameState(size: 15, name: "scene-2", stamp: .sceneTwo).cubeModel
+        let after = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo).cubeModel
         let s = after.scriptedTwistSlice!
         after.bondedGroups.removeAll()                       // what the fourth switch does
         after.applySliceRotation(axis: s.axis, index: s.index, angle: s.clockwise ? -.pi / 2 : .pi / 2)
@@ -189,7 +238,7 @@ struct CoordinateMathTests {
     /// it, the turn is legal. Without this the control is available from the first frame and the
     /// puzzle is decorative.
     static func testSceneTwoLockGatesTheTurn() {
-        let gs = GameState(size: 15, name: "scene-2", stamp: .sceneTwo)
+        let gs = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
         let m = gs.cubeModel
         guard let s = m.scriptedTwistSlice else { check(false, "Scene 2 must name the slab its lock turns"); return }
 

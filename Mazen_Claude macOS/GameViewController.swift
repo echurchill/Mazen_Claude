@@ -175,10 +175,18 @@ class GameViewController: NSViewController {
         case 49:      // Space — toggle camera mode
             gs.camera.mode = gs.camera.mode == .orbit ? .firstPerson : .orbit
             setPointerLock(gs.camera.mode == .firstPerson)
-        case 12:      // Q — rotate face clockwise
-            gs.startSliceRotation(clockwise: true)
-        case 14:      // E — rotate face counterclockwise
-            gs.startSliceRotation(clockwise: false)
+        case 12:      // Q — rotate face clockwise;  Shift+Q — replay the scene's scripted turn (debug)
+            if event.modifierFlags.contains(.shift) {
+                gs.debugReplayScriptedTwist(clockwise: true)
+            } else {
+                gs.startSliceRotation(clockwise: true)
+            }
+        case 14:      // E — rotate face counterclockwise;  Shift+E — replay it the other way (debug)
+            if event.modifierFlags.contains(.shift) {
+                gs.debugReplayScriptedTwist(clockwise: false)
+            } else {
+                gs.startSliceRotation(clockwise: false)
+            }
         case 3:       // F — interact with a prop on the current tile
             gs.interact()
         case 17:      // T — time-scale 1x→8x→60x;  Shift+T — toggle "noon at the player" sun-lock

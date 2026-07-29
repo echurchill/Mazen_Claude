@@ -19,6 +19,7 @@
 |---|---|
 | Q | Rotate the current face's slice clockwise |
 | E | Rotate the current face's slice counter-clockwise |
+| Shift + Q / Shift + E | **Replay the scene's scripted turn** (debug) — turns the slab a scene names for its puzzle payoff (Scene 2's hidden-exit slab), so a one-off reveal can be watched repeatedly. Respects bonds: does nothing while the lock still refuses that slab. Pair with **G** to slow it and **[** / **]** to scrub it frame by frame. |
 | G | Cycle slice-twist pacing: **normal → slow (0.15×) → single-step** |
 | ] | Scrub a held twist **forward** (single-step pacing) |
 | [ | Scrub a held twist **backward** (single-step pacing) |

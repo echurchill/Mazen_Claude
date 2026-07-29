@@ -70,6 +70,13 @@ final class SceneBuilder {
     private var fogByMesh: [Int: [TileEntry]] = [:]
     private var dissolveByMesh: [Int: [TileEntry]] = [:]
     private var frameTiles: [TileEntry] = []
+    /// The CUT FACES of a slab in mid-twist — the inner side of each cubie in the turning slice,
+    /// where it separates from the rest of the cube. Those faces are not cube faces, so no facelet
+    /// exists for them and nothing is ever rendered there: at rest they are buried and invisible, but
+    /// the moment a slice swings out they are exactly the surface that would show its THICKNESS.
+    /// Without them a slab reads as a couple of one-tile rim strips with sky between (Eddie,
+    /// playtest), and the props riding it appear to float. Built only while a twist is in flight.
+    private var cutFaceTiles: [TileEntry] = []
     private var celestialTiles: [TileEntry] = []
     private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
     private var mazePathFloorTiles: [UInt8: [TileEntry]] = [:]
@@ -95,6 +102,7 @@ final class SceneBuilder {
         opaqueFogTiles.removeAll(keepingCapacity: true)
         dissolveTiles.removeAll(keepingCapacity: true)
         frameTiles.removeAll(keepingCapacity: true)
+        cutFaceTiles.removeAll(keepingCapacity: true)
         celestialTiles.removeAll(keepingCapacity: true)
         for key in mazeFloorTiles.keys { mazeFloorTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazePathFloorTiles.keys { mazePathFloorTiles[key]?.removeAll(keepingCapacity: true) }
@@ -196,10 +204,12 @@ final class SceneBuilder {
                             emitMazeTile(facelet, restM: restM, spin: spin,
                                          roundness: roundness, invHalf: invHalf, relief: relief,
                                          naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed, tileMeshLib: tileMeshLib)
-                        case .grass, .water, .regolith:
+                        case .grass, .water, .regolith, .plating:
                             // M19: a full-tile ground quad, no walls. Grass (14) / water (15) /
                             // regolith (16) share the fieldFloor mesh, so they batch into one draw.
-                            let mat: UInt32 = facelet.terrain == .water ? 15 : (facelet.terrain == .regolith ? 16 : 14)
+                            let mat: UInt32 = facelet.terrain == .water ? 15
+                                            : facelet.terrain == .regolith ? 16
+                                            : facelet.terrain == .plating ? 25 : 14
                             let fieldInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
                                 materialID: mat,
                                 tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
@@ -454,13 +464,79 @@ final class SceneBuilder {
             }
         }
 
+        // CUT FACES — give a turning slab its thickness (see `cutFaceTiles`).
+        //
+        // A slice is one cubie thick. Its outward side is a real cube face and renders normally; its
+        // INNER side — where it parts from the rest of the cube — is not a cube face at all, so no
+        // facelet exists there and nothing is drawn. At rest that is right (it is buried). Mid-twist
+        // it is the surface that shows the slab has depth, and without it the slab reads as a couple
+        // of thin rim strips with sky between them.
+        //
+        // Each cubie of the slice has exactly one facelet on the slice's outward face, so walking
+        // that face enumerates the slice one-to-one. The cut plane sits one cell inward from it, so
+        // the quad is that facelet's own transform slid along the inward normal — no new mesh, no new
+        // coordinate math, and it inherits the twist automatically by being built the same way.
+        if let animMat = sliceAnimMatrix, !sr.isRefusal {
+            let outward: CubeFace
+            switch (sr.axis, sr.index == 0) {
+            case (0, true):  outward = .negativeX
+            case (0, false): outward = .positiveX
+            case (1, true):  outward = .negativeY
+            case (1, false): outward = .positiveY
+            case (2, true):  outward = .negativeZ
+            default:         outward = .positiveZ
+            }
+            // Only an OUTER slice has an outward face to enumerate from; a middle slice (latent in
+            // the engine, unused so far) has two cut planes and no such face, so skip it rather than
+            // draw something wrong.
+            if sr.index == 0 || sr.index == model.size - 1 {
+                let inward = -outward.normal * model.worldScale.cellSpacing
+                for row in 0..<model.size {
+                    for col in 0..<model.size {
+                        guard let (ci, _) = model.faceletAt(face: outward, row: row, col: col),
+                              sr.affectedCubies.contains(ci) else { continue }
+                        var cutM = model.restMatrix(face: outward, row: row, col: col)
+                        cutM.columns.3 += SIMD4(inward.x, inward.y, inward.z, 0)
+                        // NO `spin` here. Ground tiles submit their matrix WITHOUT the idle world
+                        // spin and hand it to the shader separately as `spinMatrix`; baking it into
+                        // the model matrix as well applies it twice. Because that spin advances
+                        // continuously, the doubled version drifted — the cut plane sat at a
+                        // different angle on every replay, and looked right only in the instant the
+                        // spin passed through identity (Eddie: "it tracked the slice once but I
+                        // couldn't duplicate it").
+                        let m = animMat * cutM
+                        // Roundness 0: a cut through the cube's interior is FLAT, and inflating it
+                        // like a surface tile would bow it the wrong way and push it out of the slab.
+                        //
+                        // CONSTRAINT: this only lines up on a world whose own roundness is 0. Above
+                        // that, surface tiles are inflated onto a curved shell while these interior
+                        // quads stay on the flat cube, so the cut planes visibly detach and shear
+                        // through the world. A rounded world with scripted twists would need the cut
+                        // plane inflated to match — worth solving when one actually needs it, since
+                        // the failure is spectacular rather than subtle (Eddie liked the look enough
+                        // to want it deliberately one day; see Open Questions).
+                        let inst = InstanceDataSwift(
+                            modelMatrix: m,
+                            baseColor: SIMD4(1, 1, 1, 1),
+                            materialID: 25,                      // the same plating as the slab's shell
+                            tileID: 0,
+                            discoveryAmount: 1.0,
+                            styleSeed: UInt32(truncatingIfNeeded: row &* 73856093 ^ col &* 19349663),
+                            spinMatrix: spin, roundness: 0, invHalfExtent: 1.0 / model.worldScale.faceDistance,
+                            reliefAmplitude: 0)
+                        cutFaceTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.fieldFloor))
+                    }
+                }
+            }
+        }
+
         // Pack instances — opaque first, then translucent.
         // R2.16 hard guard: the writes below are raw `ptr[idx]` stores with no per-store bounds
         // check, so prove the whole frame fits BEFORE writing — a silent buffer overrun (the old
         // failure mode beyond ~size 13) must never be possible again. Provisioning in Renderer
         // budgets 8 instances/tile, so this should be unreachable; if it ever fires, the budget
         // (not this check) is what needs raising.
-        let totalInstances = frameTiles.count
+        let totalInstances = frameTiles.count + cutFaceTiles.count
             + mazeFloorTiles.values.reduce(0) { $0 + $1.count }
             + mazePathFloorTiles.values.reduce(0) { $0 + $1.count }
             + mazeWallTiles.values.reduce(0) { $0 + $1.count }
@@ -487,6 +563,22 @@ final class SceneBuilder {
                 indexCount: mesh.indexCount,
                 instanceOffset: startIdx,
                 instanceCount: frameTiles.count
+            ))
+        }
+
+        // Cut faces of the turning slab (mid-twist only)
+        if !cutFaceTiles.isEmpty {
+            let mesh = cutFaceTiles[0].mesh
+            let startIdx = idx
+            for entry in cutFaceTiles {
+                ptr[idx] = entry.instance
+                idx += 1
+            }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset,
+                indexCount: mesh.indexCount,
+                instanceOffset: startIdx,
+                instanceCount: cutFaceTiles.count
             ))
         }
 

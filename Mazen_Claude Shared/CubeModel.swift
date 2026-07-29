@@ -13,7 +13,15 @@ enum WorldStamp {
     case gardenMaze      // M20 first cut: a hedge maze on a green planet — grass floors, some trees, roundness (the Journey garden)
     case gallery         // M20 dev tool: a flat grid of every prop/foliage variant, one per cell, for isolated evaluation
     case portalHub       // M20 (Eddie): a flat plaza of labeled portals — one TARDIS + signpost per world, to navigate by reading not memorised keys
-    case sceneTwo        // Prologue Scene 2 "The Four Corners": four corner switches, a central progress plinth, and the way onward hidden on a face that must be TURNED into view
+    case sceneTwo        // Prologue Scene 2 "The Four Corners": four corner switches, a control plinth, and the way onward hidden on a face that must be TURNED into view
+}
+
+/// Authored sizes for the prologue's worlds, so the Renderer and the tests cannot drift apart.
+enum PrologueSize {
+    /// Scene 2. Was 15, which put ~130 m between the control plinth and the slab that turns — far
+    /// enough that the payoff was easy to miss (Eddie, playtest). At 11 the play region fills the
+    /// whole face and the turn happens within sight of where you trigger it.
+    static let sceneTwo = 11
 }
 
 /// M20 — how a world's maze WALLS are rendered.
@@ -88,7 +96,12 @@ class CubeModel {
         case .sceneTwo:
             stampSceneTwo()
             naturalDressing = true
-            roundness = 0.35        // ancient world: reads planetary, but the grid stays legible for the turn
+            // HARD CUBE (Eddie, playtest). Roundness inflates each surface tile out onto a curved
+            // shell, but a slab's CUT faces are interior — they stay on the flat cube — so any
+            // roundness above 0 makes the two disagree and the cut planes float away from the slab
+            // they belong to. A world whose puzzle is watching a slice turn wants its grid legible
+            // anyway; curvature was fighting the very thing the scene is about.
+            roundness = 0.0
         }
     }
 
@@ -166,11 +179,18 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(cap)
         }
 
-        // The central plinth — a map of CONDITIONS, not of the maze: one dot per switch, filled when
+        // The control plinth — a map of CONDITIONS, not of the maze: one dot per switch, filled when
         // that switch is engaged. `updateDoorPlinths` drives it from switchMask().
-        if let (ci, fi) = faceletAt(face: .positiveZ, row: c - 1, col: c) {
+        //
+        // It stands TWO tiles from where the assembly arrives (Eddie, playtest): the turn happens at
+        // the world's edge, and from the middle of the face that is ~100 m away — far enough that the
+        // payoff was easy to miss entirely, and invisible if you happened to be facing the other way.
+        // Standing here you commit the turn and the exit swings in directly ahead of you, with only
+        // the approach corridor between. It also makes the script's "nothing stands behind it" literal:
+        // the empty ground beyond the plinth is exactly where the way onward will appear.
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: c, col: 2) {
             cubies[ci].facelets[fi].props.append(
-                Prop(kind: .plinth, subRow: 2, subCol: 1, facing: .s, state: TextureLoader.progressMaskBase + 0b0111))
+                Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .w, state: TextureLoader.progressMaskBase + 0b0111))
             progressPlinth = (ci, fi)
         }
 
@@ -216,12 +236,50 @@ class CubeModel {
             cubies[ci].facelets[fi].discoveryAmount = 1.0
         }
 
-        stampSceneTwoHiddenAssembly()
-
-        // The slab that the solved lock turns: the outer X slab carrying the hidden face, turned
-        // counter-clockwise so `+Y` lands on `+Z` (verified by testSceneTwoHiddenFaceTurnsIntoView).
+        // Reveal the ENTIRE turning slab (Eddie, playtest: "as the slice rotates, it is very
+        // transparent" — a band of floating fragments with sky between them).
+        //
+        // A slab is a plate: its `-X` face is the outer shell, and its RIM is one column each of `+Z`,
+        // `-Z`, `+Y` and `-Y`. Only the `+Z` column and the three assembly tiles had ever been
+        // revealed, and undiscovered tiles render nothing — so most of the plate was simply absent.
+        // Revealing `-X` alone does not help either: its normal is parallel to the rotation axis, so
+        // it never tilts into view; it is the rim that sweeps past the player.
+        //
+        // So: reveal every tile whose cubie lies in the slab, on whichever face it belongs to. The
+        // plate then turns as a continuous surface, with its own dressed walls riding it.
+        // Named BEFORE the reveal below, which needs to know which slab is the turning one. (Verified
+        // by testSceneTwoHiddenFaceTurnsIntoView: this slab, counter-clockwise, lands `+Y` on `+Z`.)
         let hidden = sceneTwoHiddenSlice()
         scriptedTwistSlice = (axis: hidden.axis, index: hidden.index, clockwise: false)
+        let turning = hidden
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
+                    let p = cubies[ci].position
+                    let inSlab = (turning.axis == 0 && p.x == Int32(turning.index))
+                              || (turning.axis == 1 && p.y == Int32(turning.index))
+                              || (turning.axis == 2 && p.z == Int32(turning.index))   // (axis is 0 today; kept general)
+                    guard inSlab, cubies[ci].facelets[fi].tileState != .discovered else { continue }
+                    cubies[ci].facelets[fi].tileState = .discovered
+                    cubies[ci].facelets[fi].discoveryAmount = 1.0
+                    cubies[ci].facelets[fi].mazeTile.wallType = 0   // the outer shell is the best-preserved stone
+                    // Terrain by role, now that the cut faces carry their own plating:
+                    //  • `-X` — the slab's outer SHELL. Plated: it is the underside of a slab of
+                    //    world, and reads as built structure rather than a floating lawn.
+                    //  • `+Z` — playable ground the player walks. Left as maze, untouched.
+                    //  • the rest — the slab's RIM columns. Ordinary ground, so grass: these are the
+                    //    world's surface seen edge-on, not part of the machine (Eddie).
+                    switch face {
+                    case .negativeX: cubies[ci].facelets[fi].terrain = .plating
+                    case .positiveZ: break
+                    default:         cubies[ci].facelets[fi].terrain = .grass
+                    }
+                }
+            }
+        }
+
+        stampSceneTwoHiddenAssembly()
 
         // The LOCK. Without a bond the rotation control could be raised before the puzzle is solved
         // (the gate is `bondedGroups.isEmpty`), and the twist itself would already be legal. Bond the
@@ -268,11 +326,15 @@ class CubeModel {
             cubies[ci].facelets[fi].mazeTile.openEdges = [.north, .east, .south, .west]
             if i == 1 {
                 // The chamber: a DOWNWARD elevator into the world's interior (Scene 3).
+                // Faces EAST — the side the player arrives from, since the control plinth stands two
+                // tiles east of where this lands. A prop's `facing` is NOT rotated by a twist (only
+                // its tile's openings and uv are), so this is authored in FINAL orientation: pointing
+                // north here would leave the chamber edge-on to the player after the turn.
                 cubies[ci].facelets[fi].props.append(
-                    Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 1, transition: .push))
-                styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 3))
+                    Prop(kind: .portal, subRow: 1, subCol: 1, facing: .e, state: 1, transition: .push))
+                styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e, fieldStyle: 3))
                 cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
-                cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 3))
+                cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .e, state: 3))
                 sealedPortalCubies.insert(ci)     // dark until the slab has turned
             } else {
                 cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))

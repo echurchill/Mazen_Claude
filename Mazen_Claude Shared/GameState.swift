@@ -405,7 +405,11 @@ class GameState {
     /// Deliberately not gated by `twistEnabled`: that withholds the player's own verb, and a scene
     /// that turns the world for you (Scene 2) is exactly how the verb is introduced before it is
     /// granted. The player rides the slab only if they are actually standing in it.
-    func startScriptedSliceRotation(axis: Int, index: Int, clockwise: Bool) {
+    /// `speed` is progress-per-second, so 0.7 ≈ a 1.4 s turn. Deliberately far slower than a player's
+    /// own twist (2.5, ≈0.4 s): this one happens at the far edge of the world, and at that distance a
+    /// snap was over before you could find it — or missed completely if you were facing away. The
+    /// slower sweep also reads as the script asks, "a machine executing an ancient, exact motion."
+    func startScriptedSliceRotation(axis: Int, index: Int, clockwise: Bool, speed: Float = 0.7) {
         guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else { return }
         let angle: Float = clockwise ? -.pi / 2 : .pi / 2
         let cubieIndices = cubeModel.cubieIndicesInSlice(axis: axis, index: index)
@@ -427,7 +431,7 @@ class GameState {
 
         sliceRotation = SliceRotation(
             isActive: true, axis: axis, index: index, angle: angle,
-            progress: 0, speed: 2.5,
+            progress: 0, speed: speed,
             affectedCubies: Set(cubieIndices), playerCubieIndex: playerCI
         )
         sliceRotation.opensSealedDoors = true
@@ -443,6 +447,24 @@ class GameState {
             opened = true
         }
         if opened { updateDoorPlinths() }
+    }
+
+    /// Debug (Shift+Q / Shift+E) — replay the scene's scripted turn on demand, so the one-off puzzle
+    /// payoff can be watched as many times as it takes to judge it. Turns the slab the scene names
+    /// (Scene 2's hidden-exit slab), or the back slab in a world that names none. Combine with `G` to
+    /// slow it right down, and `[` / `]` to scrub a held turn frame by frame.
+    ///
+    /// Respects bonds: if the lock still refuses this slab, nothing happens — deliberately, so the
+    /// key cannot quietly desync a puzzle by turning a world that shouldn't move yet. It also skips
+    /// the `openSealedDoors` fallback the puzzle path uses, since replaying a view should not unseal
+    /// anything.
+    func debugReplayScriptedTwist(clockwise: Bool) {
+        guard let s = cubeModel.scriptedTwistSlice else {
+            startBackSliceRotation(clockwise: clockwise)
+            return
+        }
+        guard cubeModel.canRotateSlice(axis: s.axis, index: s.index) else { return }
+        startScriptedSliceRotation(axis: s.axis, index: s.index, clockwise: clockwise)
     }
 
     /// Debug: manually scrub an in-progress twist (single-step verification, `.step` pacing only).

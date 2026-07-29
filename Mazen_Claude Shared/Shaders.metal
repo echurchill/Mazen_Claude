@@ -800,6 +800,42 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 25) {
+        // Riveted PLATING (Eddie, ref: weathered steel bridge plate) — the exposed shell of a slab
+        // that turns, so it reads as built structure rather than lawn. One facelet per cubie is a
+        // ~19 m rectangle, far too coarse to read as metal on its own, so each tile is subdivided
+        // into panels; every panel picks its own tone and weathering, giving the "multiple bits of
+        // metal" look. Deliberately generic: Scene 3's interior is specified in the same language
+        // ("dark iron, tarnished brass, dull steel, oxidized copper"), so this is written to be its
+        // material too rather than a Scene 2 one-off.
+        float2 uv = in.texCoord;
+        float2 panels = float2(3.0, 2.0);                 // panels per tile — ~6 m plates
+        float2 g = uv * panels;
+        float2 pid2 = floor(g), f = fract(g);
+        float pid = valueNoise(pid2 * 7.31 + seedF * 13.0);
+
+        float3 iron  = float3(0.26, 0.27, 0.30);          // dark iron
+        float3 steel = float3(0.40, 0.44, 0.49);          // dull blue steel
+        float3 oxide = float3(0.36, 0.29, 0.24);          // rust / tarnish
+        float3 base = mix(iron, steel, smoothstep(0.05, 0.65, pid));
+        base = mix(base, oxide, smoothstep(0.60, 1.0, pid) * 0.65);
+
+        // Weathering: broad staining plus a finer grain, biased per panel so neighbours differ.
+        float stain = fbm(uv * 5.0 + pid * 9.0, 3);
+        float grain = fbm(uv * 26.0 + pid * 3.0, 2);
+        base *= 0.82 + 0.30 * stain + 0.07 * grain;
+
+        // Seams: a dark groove between panels, and a deeper one at the cubie boundary, so the plate
+        // reads as many pieces bolted together rather than one sheet.
+        float2 dp = min(f, 1.0 - f);
+        float panelSeam = smoothstep(0.0, 0.05, min(dp.x, dp.y));
+        float2 dt = min(uv, 1.0 - uv);
+        float tileSeam = smoothstep(0.0, 0.022, min(dt.x, dt.y));
+        base *= (0.52 + 0.48 * panelSeam) * (0.62 + 0.38 * tileSeam);
+
+        color = clamp(base, 0.04, 0.95);
+        // Metal takes a harder light than ground: less ambient fill, a touch more directional.
+        lighting = skyAmbient * 0.26 + sunColor * 0.80 * halfLambert * shadowFactor;
     } else if (in.materialID == 17) {
         // M20 alpha-cutout foliage card. Sample the real leaf atlas (RGB colour + opacity in alpha)
         // when one is bound; else fall back to a procedural leaf mask. Discard the gaps so a flat

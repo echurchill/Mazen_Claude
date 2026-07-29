@@ -69,3 +69,30 @@ Nature MegaKit** (eval packs), **Modular Temple** (flags/vase), **horse_statue_0
 Modular Village, modular_fort_01_2k, modular_terrain_collections, othertrees, pinetree,
 para_CC0_tex-pack-hedges (its `hedge_*` textures are already bundled in the app), old_military_crate_2k,
 stone_fire_pit_2k, WenrexaTrees (billboard sprites removed), tree_stump_01/02_2k. All re-downloadable if needed.
+
+## Shearing planes — an accident worth keeping (2026-07-28)
+
+While building the **cut faces** that give a turning slab its thickness (Scene 2), a mismatch produced
+an effect Eddie wants to use deliberately later.
+
+The cut faces are quads on a slice's *interior* plane — flat, because a cut through a cube's inside is
+flat. But a world with `roundness > 0` inflates its **surface** tiles out onto a curved shell. The two
+then disagree, and the interior planes detach from the slab and **shear through the world** as it
+turns: large flat sheets slicing across the cube at angles that have nothing to do with its geometry.
+
+Wrong for Scene 2 (fixed by taking that world to roundness 0, which its puzzle wanted anyway), but a
+striking image in its own right — a world coming apart along planes that were never surfaces.
+
+Candidate uses:
+- a world being *unmade*, or one whose structure is failing
+- a Builder-scale operation the player is not meant to understand yet
+- an Act III higher-order world operation (the roadmap wants those to feel mythic)
+- a route-variant world glimpsed mid-transition
+
+To do it on purpose the effect needs to be **authored rather than emergent**: drive the plane count,
+angles and drift explicitly, instead of relying on a roundness mismatch. The mismatch is not a stable
+mechanism — it changes with roundness, size and slab index.
+
+Related constraint, worth remembering: **cut faces only line up on a roundness-0 world.** A rounded
+world with scripted twists needs the cut plane inflated to match the shell, which is unsolved. See
+`SceneBuilder.build`'s cut-face block.

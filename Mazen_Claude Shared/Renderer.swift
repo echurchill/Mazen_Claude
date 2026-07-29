@@ -580,7 +580,7 @@ class Renderer: NSObject, MTKViewDelegate {
                 case "scene-2":
                     // Prologue Scene 2 — "The Four Corners". The twist is the puzzle's reward, not a
                     // tool the player owns yet, so the player's own Q/E stays withheld here.
-                    w = GameState(size: 15, name: dest, stamp: .sceneTwo)
+                    w = GameState(size: PrologueSize.sceneTwo, name: dest, stamp: .sceneTwo)
                     w.twistEnabled = false
                     w.cubeModel.stampGardenVegetation(gardenFlora())
                     wallDressingPalette = wallFlora()
@@ -1201,7 +1201,13 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // Scene state
         encoder.setRenderPipelineState(pipelineState)
-        encoder.setCullMode(.back)
+        // A turning slab is one cubie thick and has no interior faces, so with back-face culling on
+        // it renders as a couple of one-tile rim strips with sky between them — the props riding it
+        // appear to float (Eddie, playtest). Its body is the outward face of the slice, a full n×n
+        // plane whose normal points AWAY from the player, so culling discards exactly the surface
+        // that would read as the plate. Draw two-sided while a twist is in flight: the slab becomes
+        // solid for the second or so it moves, and normal rendering resumes the moment it settles.
+        encoder.setCullMode(gameState.sliceRotation.isActive ? .none : .back)
         encoder.setFrontFacing(.counterClockwise)
 
         // Pass 1: opaque geometry (depth write ON)
