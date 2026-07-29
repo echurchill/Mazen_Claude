@@ -148,8 +148,19 @@ class CubeModel {
         let n = size, c = n / 2
         wallStyle = .dressed
 
-        // The whole face is the arena — this world is small on purpose ("the maze is not intended to
-        // occupy the player for long; its purpose is to make the effect of a twist easy to read").
+        // Reveal EVERY face. The anchors are deliberately spread across the world so releasing them
+        // circumnavigates it, and the script asks for "fog of discovery: minimal or disabled" — a
+        // world you are meant to walk right around should not be hidden from you.
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
+                    cubies[ci].facelets[fi].tileState = .discovered
+                    cubies[ci].facelets[fi].discoveryAmount = 1.0
+                    cubies[ci].facelets[fi].mazeTile.wallType = 0
+                }
+            }
+        }
         for r in 0..<n {
             for col in 0..<n {
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
@@ -201,9 +212,9 @@ class CubeModel {
             cubies[ci].facelets[fi].tileState = .discovered
             cubies[ci].facelets[fi].discoveryAmount = 1.0
             cubies[ci].facelets[fi].props.append(Prop(kind: .switchBase, subRow: 1, subCol: 1, facing: .n))
-            var cap = Prop(kind: .switchCap, subRow: 1, subCol: 1, facing: .n, state: i + 1)
-            cap.anim = 1; cap.alignAnim = 1        // anchors start ENGAGED: the world is bound
-            cubies[ci].facelets[fi].props.append(cap)
+            var plate = Prop(kind: .anchor, subRow: 1, subCol: 1, facing: .n, state: i + 1)
+            plate.anim = 1                          // 1 = still holding its bond; 0 = released
+            cubies[ci].facelets[fi].props.append(plate)
             // One bond per anchor, straddling the twistable slab: the portal's cubie is inside it,
             // the anchor's is outside, so `canRotateSlice` refuses while ANY of the three remain.
             addBond([pc, ci])

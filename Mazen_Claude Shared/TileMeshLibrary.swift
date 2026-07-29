@@ -237,6 +237,9 @@ class TileMeshLibrary {
         let switchCapStart = allIndices.count
         Self.addSwitchCap(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.switchCap.rawValue] = TileMesh(vertexOffset: 0, indexOffset: switchCapStart, indexCount: allIndices.count - switchCapStart)
+        // Scene 4's anchor borrows the switch cap's plate — a recessed control in a plate is the same
+        // shape — until it has a mesh of its own.
+        propMeshes[PropKind.anchor.rawValue] = propMeshes[PropKind.switchCap.rawValue]
 
         let treeStart = allIndices.count
         Self.addTree(to: &allVerts, indices: &allIndices, ws: ws)

@@ -234,6 +234,25 @@ struct CoordinateMathTests {
     }
 
 
+
+    /// Every prologue door in the hub must be a DARSIT, not a TARDIS (Eddie). The livery is keyed to
+    /// a set of destination ids, and it is easy to add a scene and forget to add its id — at which
+    /// point its door silently comes up blue and looks like a dev world.
+    static func testEveryPrologueSceneHasADarsitDoor() {
+        // The prologue worlds that exist so far, by destination index.
+        let prologue = [10, 11]
+        let hub = GameState(size: 15, name: "portal-hub", stamp: .portalHub).cubeModel
+        var found = Set<Int>()
+        for r in 0..<15 { for c in 0..<15 {
+            guard let (ci, fi) = hub.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+            for p in hub.cubies[ci].facelets[fi].props where p.kind == .portal {
+                if prologue.contains(p.state) { found.insert(p.state) }
+            }
+        } }
+        check(found == Set(prologue),
+              "every prologue scene needs a hub door: expected \(prologue), found \(found.sorted())")
+    }
+
     /// Scene 4's three anchors must gate the player's own twist, and must do it with NO new lock
     /// machinery: each anchor is one bond straddling the slab the player stands on, so
     /// `canRotateSlice` refuses while any remain. Releasing them one at a time must keep the turn
@@ -342,6 +361,7 @@ struct CoordinateMathTests {
         testSceneTwoSpawnsInTheMaze()
         testSceneTwoExitIsWalkableOnlyAfterTheTurn()
         testSceneFourAnchorsGateThePlayersTwist()
+        testEveryPrologueSceneHasADarsitDoor()
 
         print("")
         if failed == 0 {

@@ -61,6 +61,7 @@ final class SceneBuilder {
         .treeTrunk:   SIMD4(0.34, 0.24, 0.15, 1.0),  // M19 — bark brown
         .boulder:     SIMD4(0.44, 0.44, 0.47, 1.0),  // M19 — moon rock grey
         .foliageCard: SIMD4(0.26, 0.46, 0.22, 1.0),  // M20 — leafy green (alpha-cutout card)
+        .anchor:      SIMD4(0.72, 0.68, 0.45, 1.0),  // Scene 4 — brass plate; dims once released
     ]
 
     // Reusable scratch buffers (kept across frames to avoid per-frame allocation).
@@ -284,9 +285,9 @@ final class SceneBuilder {
                                                               : SIMD4(0.95, 0.78, 0.20, 1.0)
                                 if refusalGlow > 0 { color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow) }
                             }
-                            if prop.kind == .portal, prop.state == Renderer.sceneTwoDestinationID {
-                                // The door to the prologue proper wears DARSIT red instead of TARDIS
-                                // blue (Eddie) — the one box in the hub that isn't a dev world.
+                            if prop.kind == .portal, Renderer.prologueDestinationIDs.contains(prop.state) {
+                                // Doors to the prologue wear DARSIT red instead of TARDIS blue
+                                // (Eddie) — the boxes in the hub that aren't dev worlds.
                                 color = SIMD4(0.58, 0.10, 0.11, 1.0)
                             }
                             if prop.kind == .portal, model.sealedPortalCubies.contains(ci) {
@@ -338,6 +339,15 @@ final class SceneBuilder {
                                 // A dormant obelisk (anim == 0) stays on the plain lit material.
                                 materialID = 26
                                 color = SIMD4(1, 1, 1, 1)
+                            }
+                            if prop.kind == .anchor {
+                                // Bound anchors carry the lock's livery so they read as part of one
+                                // structure; a released one goes dull and stays that way.
+                                color = prop.anim > 0.5 ? SIMD4(0.95, 0.78, 0.20, 1.0)
+                                                        : SIMD4(0.34, 0.33, 0.30, 1.0)
+                                if refusalGlow > 0 && prop.anim > 0.5 {
+                                    color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow)
+                                }
                             }
                             if prop.kind == .plinth {
                                 // M16.6: the Builder plinth — material 21 reads stone/resin vs glyph

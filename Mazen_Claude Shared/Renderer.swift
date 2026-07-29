@@ -236,10 +236,12 @@ class Renderer: NSObject, MTKViewDelegate {
                                      "portal-hub",   // index 9 — the labeled hub (reached by the ` key)
                                      "scene-2",      // index 10 — prologue Scene 2 (APPEND only: portal props store this index)
                                      "scene-4"]      // index 11 — prologue Scene 4
-    /// The prologue's doors wear their own livery so they read apart from the legacy dev worlds.
-    /// Named rather than a bare literal in SceneBuilder, so appending destinations can't silently
-    /// repaint the wrong door.
-    static let sceneTwoDestinationID = 10
+    /// Destination indices belonging to the PROLOGUE, as opposed to the legacy dev worlds. Their
+    /// hub doors wear DARSIT red rather than TARDIS blue, so the scenes read apart at a glance
+    /// (Eddie: every scene added from the script gets one). Named rather than bare literals in
+    /// SceneBuilder, so appending destinations cannot silently repaint the wrong door — and ADD to
+    /// this whenever a scene is added, or its door will come up blue.
+    static let prologueDestinationIDs: Set<Int> = [10, 11]   // scene-2, scene-4
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false

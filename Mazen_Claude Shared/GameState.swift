@@ -776,6 +776,20 @@ class GameState {
             portalTransition = portal.transition
             return
         }
+        // Scene 4 — an ANCHOR. Unlike a switch this does not toggle: activating it RELEASES the bond
+        // it holds, and that release is permanent ("The anchors may be released in any order. Each
+        // release is permanent."). The turn stays refused until the last one is gone, because
+        // canRotateSlice refuses while ANY bonded group straddles the slab.
+        if let aIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .anchor }) {
+            guard cubeModel.cubies[ci].facelets[fi].props[aIdx].anim > 0.5 else { return }  // already released
+            cubeModel.cubies[ci].facelets[fi].props[aIdx].anim = 0
+            cubeModel.removeBond(containing: ci)
+            pendingAudioCues.append(.switchDisengaged(at: nil))   // released, at the player's hand
+            // The last one going frees the world: let that land as its own sound.
+            if cubeModel.bondedGroups.isEmpty { pendingAudioCues.append(.controlRaised(at: nil)) }
+            cubeModel.markTopologyChanged()
+            return
+        }
         // M16.6 (Eddie): a SWITCH — F toggles it engaged (poking out) ↔ disengaged (flush). All four
         // engaged dissolves the lock; disengaging any one re-applies it (goof-and-fix). The door
         // plinth's progress display + the lock are refreshed together.

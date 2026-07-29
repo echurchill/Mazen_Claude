@@ -312,6 +312,7 @@ enum PropKind: UInt8 {
                             // waldo). `anim` = grow/align progress 0…1; walk-through (sits on the plinth).
     case switchBase   // M16.6 (Eddie): a switch = a disc-less plinth base + a switchCap. Replaces the dial.
     case switchCap    // M16.6: the switch's number cylinder — flush (disengaged) ↔ poking out (engaged).
+    case anchor       // Scene 4: a plate embedded in its tile, holding one BOND. Activating it RELEASES that bond — permanently, unlike a switch, which toggles.
                       // `state` = the number glyph; `anim` = height (0 flush disc … 1 fully out). F toggles.
     case importedFoliage // M20: a Quaternius plant dressing the garden — same imported-mesh render path as
                          // `.importedAsset` (`state` = registry index), but NON-solid (the hedges block, the
