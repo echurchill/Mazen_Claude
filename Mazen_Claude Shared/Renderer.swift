@@ -130,7 +130,7 @@ class Renderer: NSObject, MTKViewDelegate {
     /// is never its own signpost — hence the blank placeholder keeping the two lists aligned.
     static let destinationLabels = ["Moon", "Temple Interior", "Natural World", "The Garden", "Gallery",
                                     "Dungeons Gallery", "Nature Gallery", "Ruins Gallery", "MegaKit Gallery",
-                                    "", "Scene 2 Four Corners"]
+                                    "", "Scene 2 Four Corners", "Scene 4 First Turn"]
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
         "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
@@ -234,7 +234,8 @@ class Renderer: NSObject, MTKViewDelegate {
     static let portalDestinations = ["moon", "temple-interior", "natural", "garden", "gallery",
                                      "gallery-dungeons", "gallery-nature", "gallery-ruins", "gallery-megakit",
                                      "portal-hub",   // index 9 — the labeled hub (reached by the ` key)
-                                     "scene-2"]      // index 10 — prologue Scene 2 (APPEND only: portal props store this index)
+                                     "scene-2",      // index 10 — prologue Scene 2 (APPEND only: portal props store this index)
+                                     "scene-4"]      // index 11 — prologue Scene 4
     /// The prologue's doors wear their own livery so they read apart from the legacy dev worlds.
     /// Named rather than a bare literal in SceneBuilder, so appending destinations can't silently
     /// repaint the wrong door.
@@ -581,6 +582,14 @@ class Renderer: NSObject, MTKViewDelegate {
                 case "portal-hub":
                     // M20 (Eddie) — the labeled hub of TARDIS portals + signposts. Size 15 fits the 3×3.
                     w = GameState(size: 15, name: dest, stamp: .portalHub)
+                case "scene-4":
+                    // Prologue Scene 4 — the player is GRANTED the twist here; this is the moment the
+                    // game hands over its defining verb, so twistEnabled stays true.
+                    w = GameState(size: PrologueSize.sceneFour, name: dest, stamp: .sceneFour)
+                    w.cubeModel.stampGardenVegetation(gardenFlora())
+                    wallDressingPalette = wallFlora()
+                    w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
+                                                  archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
                 case "scene-2":
                     // Prologue Scene 2 — "The Four Corners". The twist is the puzzle's reward, not a
                     // tool the player owns yet, so the player's own Q/E stays withheld here.

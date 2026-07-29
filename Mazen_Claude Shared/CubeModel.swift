@@ -14,6 +14,7 @@ enum WorldStamp {
     case gallery         // M20 dev tool: a flat grid of every prop/foliage variant, one per cell, for isolated evaluation
     case portalHub       // M20 (Eddie): a flat plaza of labeled portals — one TARDIS + signpost per world, to navigate by reading not memorised keys
     case sceneTwo        // Prologue Scene 2 "The Four Corners": four corner switches, a control plinth, and the way onward hidden on a face that must be TURNED into view
+    case sceneFour       // Prologue Scene 4 "The First Turn": the player is handed the twist, and must first read and release a bond before the world will move
 }
 
 /// Authored sizes for the prologue's worlds, so the Renderer and the tests cannot drift apart.
@@ -22,6 +23,9 @@ enum PrologueSize {
     /// enough that the payoff was easy to miss (Eddie, playtest). At 11 the play region fills the
     /// whole face and the turn happens within sight of where you trigger it.
     static let sceneTwo = 11
+    /// Scene 4. Small on purpose: the script wants a world the player can circumnavigate quickly,
+    /// because its job is to make the effect of a twist easy to READ, not to occupy them.
+    static let sceneFour = 5
 }
 
 /// M20 — how a world's maze WALLS are rendered.
@@ -93,6 +97,14 @@ class CubeModel {
         case .portalHub:
             stampPortalHub()        // flat plaza of labeled portals
             noFog = true
+        case .sceneFour:
+            stampSceneFour()
+            naturalDressing = true
+            // Hard cube, like Scene 2: the player TWISTS here, so the cut faces that give a moving
+            // slab its thickness must line up, and those only do so at roundness 0. The script asks
+            // for "low to moderate, visibly softened" — worth revisiting once the cut plane can be
+            // inflated to match a curved shell (see Open Questions).
+            roundness = 0.0
         case .sceneTwo:
             stampSceneTwo()
             naturalDressing = true
@@ -118,6 +130,86 @@ class CubeModel {
     /// One counter-clockwise quarter-turn of that slab carries `+Y` tiles onto `+Z` — the exit arrives
     /// on the player's own surface. The same slab also carries one edge column of `+Z`, which is why
     /// the far side of the maze visibly travels with it.
+    // MARK: - Prologue Scene 4 — "The First Turn"
+
+    /// Scene 4: the player is handed the twist, and the world refuses it.
+    ///
+    /// The portal is present from the first frame but **sealed**, and the route to it does not line
+    /// up. Turning the slab would fix both — except three anchors bind that slab to the rest of the
+    /// world, so the turn strains and springs back. Releasing all three makes the turn *legal*; the
+    /// player still has to perform it. "Understanding prepares the world. Choice moves it."
+    ///
+    /// **The lock needs no new engine code.** Each anchor is its own BOND, and `canRotateSlice`
+    /// already refuses a turn when *any* bonded group straddles the slice, while `dissolveBond`
+    /// already removes one. So three bonds, each with one cubie inside the twistable slab and one
+    /// outside, reproduce the scripted behaviour exactly — including the turn staying refused until
+    /// the third is gone — using only machinery the garden's temple lock already proved.
+    private func stampSceneFour() {
+        let n = size, c = n / 2
+        wallStyle = .dressed
+
+        // The whole face is the arena — this world is small on purpose ("the maze is not intended to
+        // occupy the player for long; its purpose is to make the effect of a twist easy to read").
+        for r in 0..<n {
+            for col in 0..<n {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
+                cubies[ci].facelets[fi].mazeTile.wallType = 0
+            }
+        }
+
+        // The player TWISTS here, so the slab that moves is the one under their feet: the outer slice
+        // of the face they walk. Everything the scene needs — portal, route, bonds — is arranged
+        // around that one slab.
+        let (tAxis, tIndex) = sliceAxisAndIndex(for: .positiveZ)
+        scriptedTwistSlice = (axis: tAxis, index: tIndex, clockwise: false)   // used by the debug replay key
+
+        // Arrival, and the sealed gate it cannot yet reach.
+        spawnLocation = (face: .positiveZ, row: min(n - 1, c + 1), col: c, facing: .n)
+        var portalCubie: Int? = nil
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: max(0, c - 1), col: max(0, c - 1)) {
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .portal, subRow: 1, subCol: 1, facing: .s, state: 1, transition: .push))
+            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .s, fieldStyle: 2))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))
+            sealedPortalCubies.insert(ci)          // dark until the bond is gone AND the turn is made
+            portalCubie = ci
+        }
+
+        // The layered vessel: it demonstrates the turn, and reflects the state of the lock. Stands
+        // beside the arrival so it is met before anything else. (Stone plinth wearing the swirl —
+        // the symbol Scene 2 introduced for MOTION — until it has a mesh of its own.)
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: c, col: c) {
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .s,
+                     state: TextureLoader.CausticSymbol.swirl.rawValue))
+        }
+
+        // THREE ANCHORS, on three different faces, so releasing them circumnavigates the world.
+        // Each is a switch (a plate with a recessed control — the same interaction, and it already
+        // has the engaged/flush animation), and each anchors one bond.
+        let anchorSpots: [(CubeFace, Int, Int)] = [
+            (.negativeZ, c, c),          // directly opposite: the far side
+            (.positiveY, c, c),          // over the top edge
+            (.negativeY, c, c),          // and under the bottom
+        ]
+        guard let pc = portalCubie else { return }
+        for (i, spot) in anchorSpots.enumerated() {
+            guard let (ci, fi) = faceletAt(face: spot.0, row: spot.1, col: spot.2) else { continue }
+            cubies[ci].facelets[fi].tileState = .discovered
+            cubies[ci].facelets[fi].discoveryAmount = 1.0
+            cubies[ci].facelets[fi].props.append(Prop(kind: .switchBase, subRow: 1, subCol: 1, facing: .n))
+            var cap = Prop(kind: .switchCap, subRow: 1, subCol: 1, facing: .n, state: i + 1)
+            cap.anim = 1; cap.alignAnim = 1        // anchors start ENGAGED: the world is bound
+            cubies[ci].facelets[fi].props.append(cap)
+            // One bond per anchor, straddling the twistable slab: the portal's cubie is inside it,
+            // the anchor's is outside, so `canRotateSlice` refuses while ANY of the three remain.
+            addBond([pc, ci])
+        }
+    }
+
     private func stampSceneTwo() {
         let n = size, c = n / 2
         let R = 5                                            // play region half-extent → an (2R+1)² arena
@@ -463,7 +555,7 @@ class CubeModel {
         // (spawn = face centre, kept clear). Index 9 is the hub itself, so it is skipped. Dev
         // navigation: the prologue's scenes chain forward through their own portals, and this hub
         // exists so any of them can be reached directly while building.
-        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10]
+        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11]
         let gridRows = [c - 5, c - 3, c - 1], gridCols = [c - 5, c - 2, c + 1, c + 4]
         for (slot, idx) in hubDestinations.enumerated() {
             let gr = gridRows[slot / 4], gc = gridCols[slot % 4]

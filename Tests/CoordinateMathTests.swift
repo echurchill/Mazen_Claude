@@ -61,7 +61,7 @@ struct CoordinateMathTests {
         } }
         // One per entry in CubeModel's hubDestinations (the 9 legacy worlds + Scene 2; the hub itself
         // is skipped). Grows as prologue scenes are added — update alongside that list.
-        check(hubPortals == 10, "expected 10 hub portals, found \(hubPortals)")
+        check(hubPortals == 11, "expected 11 hub portals, found \(hubPortals)")
 
         // The garden's temple door: a descent from an already-pushed world, so it must PUSH too.
         let garden = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
@@ -233,6 +233,39 @@ struct CoordinateMathTests {
         check(chamberReachable(after), "after the turn the exit must be walkable from the arrival point")
     }
 
+
+    /// Scene 4's three anchors must gate the player's own twist, and must do it with NO new lock
+    /// machinery: each anchor is one bond straddling the slab the player stands on, so
+    /// `canRotateSlice` refuses while any remain. Releasing them one at a time must keep the turn
+    /// refused until the third is gone — "partial progress may weaken a lock without yet making a
+    /// turn legal" — and only then become legal.
+    static func testSceneFourAnchorsGateThePlayersTwist() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        let (axis, index) = m.sliceAxisAndIndex(for: .positiveZ)
+
+        check(m.bondedGroups.count == 3, "expected three anchor bonds, got \(m.bondedGroups.count)")
+        let slab = Set(m.cubieIndicesInSlice(axis: axis, index: index))
+        for g in m.bondedGroups {
+            check(!g.isDisjoint(with: slab) && !g.isSubset(of: slab),
+                  "each anchor bond must STRADDLE the player's slab, or it would not refuse the turn")
+        }
+        check(!m.canRotateSlice(axis: axis, index: index), "the turn must be refused while anchored")
+
+        // Release them one at a time: still refused until the last.
+        for remaining in [2, 1, 0] {
+            m.bondedGroups.removeLast()
+            check(m.bondedGroups.count == remaining, "bond bookkeeping")
+            let legal = m.canRotateSlice(axis: axis, index: index)
+            check(legal == (remaining == 0),
+                  "with \(remaining) anchors left the turn should be \(remaining == 0 ? "legal" : "refused")")
+        }
+
+        // The gate itself must start sealed, and the player must own the verb here.
+        check(!m.sealedPortalCubies.isEmpty, "Scene 4's portal starts sealed")
+        check(gs.twistEnabled, "Scene 4 is where the player is GRANTED the twist")
+    }
+
     /// Scene 2's lock must actually gate the turn. Before the fourth switch the bond straddles the
     /// twistable slab, so the world refuses to move and the rotation control cannot be raised; after
     /// it, the turn is legal. Without this the control is available from the first frame and the
@@ -308,6 +341,7 @@ struct CoordinateMathTests {
         testSceneTwoLockGatesTheTurn()
         testSceneTwoSpawnsInTheMaze()
         testSceneTwoExitIsWalkableOnlyAfterTheTurn()
+        testSceneFourAnchorsGateThePlayersTwist()
 
         print("")
         if failed == 0 {
