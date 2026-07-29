@@ -791,7 +791,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // Drain whatever the world asked to be heard this frame (same hand-off shape as
         // `portalRequested`): the model describes sounds, the renderer plays them.
         if !gameState.pendingAudioCues.isEmpty {
-            audio?.play(cues: gameState.pendingAudioCues)
+            audio?.play(cues: gameState.pendingAudioCues, worldSpin: gameState.worldSpinMatrix())
             gameState.pendingAudioCues.removeAll(keepingCapacity: true)
         }
 

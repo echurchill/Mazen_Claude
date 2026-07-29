@@ -153,17 +153,28 @@ final class AudioEngine {
     }
 
     /// Play everything the world queued this frame.
-    func play(cues: [AudioCue]) {
+    ///
+    /// `worldSpin` is the world's slow idle rotation. Cue positions arrive in UNSPUN world space (the
+    /// model does not know about presentation), but the listener is placed in SPUN space — the first
+    /// person pose is built with the spin folded in, and in orbit the world turns beneath a fixed
+    /// camera. Leaving it out drifts every sound away from its object as the world turns, and at the
+    /// half-cycle puts it exactly 180° out: sounds on the left arrive from the right (Eddie).
+    func play(cues: [AudioCue], worldSpin: float4x4) {
         guard ready else { return }
+        func spun(_ p: SIMD3<Float>?) -> SIMD3<Float>? {
+            guard let p else { return nil }
+            let v = worldSpin * SIMD4(p.x, p.y, p.z, 1)
+            return SIMD3(v.x, v.y, v.z)
+        }
         for cue in cues {
             switch cue {
             case .twistStrain:                 fire(EventID.twistStrain, at: nil)
             case .controlRaised:               fire(EventID.controlRaised, at: nil)
-            case .twistTurning(let p, let slow): fire(slow ? EventID.turnSlow : EventID.turnFast, at: p)
-            case .twistLocked(let p):          fire(EventID.twistLocked, at: p)
-            case .switchEngaged(let p):        fire(EventID.switchUp, at: p)
-            case .switchDisengaged(let p):     fire(EventID.switchDown, at: p)
-            case .portalOpened(let p):         fire(EventID.portalOpen, at: p)
+            case .twistTurning(let p, let slow): fire(slow ? EventID.turnSlow : EventID.turnFast, at: spun(p))
+            case .twistLocked(let p):          fire(EventID.twistLocked, at: spun(p))
+            case .switchEngaged(let p):        fire(EventID.switchUp, at: spun(p))
+            case .switchDisengaged(let p):     fire(EventID.switchDown, at: spun(p))
+            case .portalOpened(let p):         fire(EventID.portalOpen, at: spun(p))
             }
         }
     }
