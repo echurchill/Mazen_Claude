@@ -122,7 +122,7 @@ enum AssetRegistry {
                 lock.lock(); out[i] = p; lock.unlock()
             }
             let loaded = out.compactMap { $0 }
-            print("[AssetRegistry] \(prefix): \(loaded.count)/\(files.count) models loaded")
+            if verboseDebugLog { print("[AssetRegistry] \(prefix): \(loaded.count)/\(files.count) models loaded") }
             return loaded
         }
         let dungeons = loadFlatPack("Dungeons Pack", "Dungeons")
@@ -179,7 +179,7 @@ enum AssetRegistry {
                                     name: "MegaKit \(file)", galleryOnly: true, submeshMaterials: mats)
             }
         }()
-        print("[AssetRegistry] MegaKit: \(megakit.count) models loaded")
+        if verboseDebugLog { print("[AssetRegistry] MegaKit: \(megakit.count) models loaded") }
 
         // M12-E: imported modular house. Load the kit's solid-colour OBJ pieces and assemble one
         // canonical quarter (authored for facing.n — two outer walls on the −X/−Y tile edges +

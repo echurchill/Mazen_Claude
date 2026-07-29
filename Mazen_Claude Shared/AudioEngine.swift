@@ -52,6 +52,24 @@ final class AudioEngine {
     private var spatialMixer: PHASESpatialMixerDefinition?
     /// One-shot sources are retained until their event completes, then released.
     private var liveSources: [ObjectIdentifier: PHASESource] = [:]
+    /// Which registered assets live on the SPATIAL mixer. A spatial asset cannot be started without
+    /// source/listener binding — it throws — so a cue that omits a position must still be given one.
+    /// Tracking this here means registration and call sites can never silently disagree, which they
+    /// did: the refused-twist strain was registered spatial but always fired positionless, so it
+    /// never sounded at all (Eddie: "I see strain/spring back but no audio").
+    private var spatialAssets: Set<String> = []
+    /// Last listener position, so a positionless spatial sound can be played AT the player.
+    private var listenerPosition = SIMD3<Float>(0, 0, 0)
+    /// Which sounds have already reported a failure. A broken sound fires on every keypress, so
+    /// without this one mistake buries the console — the spatial-mixer bug produced dozens of
+    /// identical lines and made the genuinely interesting logs hard to find (Eddie).
+    private var reportedFailures: Set<String> = []
+
+    private func reportOnce(_ identifier: String, _ error: Error) {
+        guard reportedFailures.insert(identifier).inserted else { return }
+        NSLog("[audio] could not start %@ (further failures for this sound are suppressed): %@",
+              identifier, String(describing: error))
+    }
 
     init?() {
         engine = PHASEEngine(updateMode: .automatic)
@@ -107,7 +125,7 @@ final class AudioEngine {
 
             try engine.start()
             ready = true
-            NSLog("[audio] PHASE engine started")
+            if verboseDebugLog { NSLog("[audio] PHASE engine started") }
         } catch {
             NSLog("[audio] PHASE failed to start: %@", String(describing: error))
             return nil
@@ -124,6 +142,7 @@ final class AudioEngine {
     /// from the same `FramePose` the renderer uses, so sound and image cannot disagree.
     func updateListener(position: SIMD3<Float>, forward: SIMD3<Float>, up: SIMD3<Float>) {
         guard ready else { return }
+        listenerPosition = position * Self.metresPerUnit
         let f = simd_normalize(forward)
         // Re-orthogonalise: `up` is the surface normal and `forward` the look direction, and after a
         // twist they are not exactly perpendicular.
@@ -148,7 +167,7 @@ final class AudioEngine {
             let event = try PHASESoundEvent(engine: engine, assetIdentifier: EventID.testTone)
             event.start()
         } catch {
-            NSLog("[audio] could not start test tone: %@", String(describing: error))
+            reportOnce(EventID.testTone, error)
         }
     }
 
@@ -187,9 +206,13 @@ final class AudioEngine {
         do {
             var params: PHASEMixerParameters? = nil
             var source: PHASESource? = nil
-            if let p = position, let sm = spatialMixer {
+            // A spatial asset MUST be bound to a source, so one without a position is placed at the
+            // listener — heard as happening here, which is exactly what "no position" means (the
+            // world straining around you; a plate under your hand).
+            let needsSource = spatialAssets.contains(identifier)
+            if needsSource, let sm = spatialMixer {
                 let src = PHASESource(engine: engine)
-                let m = p * Self.metresPerUnit
+                let m = position.map { $0 * Self.metresPerUnit } ?? listenerPosition
                 var t = matrix_identity_float4x4
                 t.columns.3 = SIMD4(m.x, m.y, m.z, 1)
                 src.transform = t
@@ -215,7 +238,7 @@ final class AudioEngine {
                 event.start()
             }
         } catch {
-            NSLog("[audio] could not start %@: %@", identifier, String(describing: error))
+            reportOnce(identifier, error)
         }
     }
 
@@ -278,6 +301,7 @@ final class AudioEngine {
         let mixer: PHASEMixerDefinition
         if spatial, let sm = spatialMixer {
             mixer = sm
+            spatialAssets.insert(identifier)
         } else {
             // Non-spatial: the Phase A bring-up tone, and anything that happens AT the player.
             mixer = PHASEChannelMixerDefinition(channelLayout: AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_Mono)!)

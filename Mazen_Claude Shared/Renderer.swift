@@ -348,7 +348,7 @@ class Renderer: NSObject, MTKViewDelegate {
                 self.skyboxesByName[(f as NSString).deletingPathExtension] = t
             }
         }
-        NSLog("[skybox] %d cyclable (press L)", self.debugSkyboxes.count)
+        if verboseDebugLog { NSLog("[skybox] %d cyclable (press L)", self.debugSkyboxes.count) }
         // LeafSets + misc_greenery asset folders were removed (Eddie) — leave these arrays nil so the
         // foliage materials fall back gracefully. Repoint here if new card assets land.
         self.leafArray = nil
