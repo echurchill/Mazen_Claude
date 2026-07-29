@@ -142,6 +142,10 @@ class Renderer: NSObject, MTKViewDelegate {
     /// WenrexaTrees sprite filenames "01".."27" (order = slice index).
     static let treeSprites = (1...27).map { String(format: "%02d", $0) }
     var normalArray: MTLTexture!
+    /// Audio Phase A — PHASE engine + listener. Optional: if it fails to start the game simply runs
+    /// silent rather than refusing to launch, and nothing in the model layer depends on it.
+    let audio = AudioEngine()
+
     var skyboxTexture: MTLTexture!
     // DEBUG (Eddie, skybox eval): the 'L' key cycles skyboxTexture through these — index 0 is the
     // shipped default, then every Skyboxes/*Composite.png. Dev-only (absolute path, like modelsRoot).
@@ -781,11 +785,31 @@ class Renderer: NSObject, MTKViewDelegate {
         // size 7+.
         let isOrbit = gameState.camera.mode == .orbit
         let halfDiagonal = 1.7320508 * ws.faceDistance
+        // Audio Phase A: the listener rides the SAME pose as the camera, so a face crossing or a
+        // twist can never desync what you see from where a sound seems to come from.
+        audio?.updateListener(position: framePose.position, forward: framePose.forward, up: framePose.up)
+        // Drain whatever the world asked to be heard this frame (same hand-off shape as
+        // `portalRequested`): the model describes sounds, the renderer plays them.
+        if !gameState.pendingAudioCues.isEmpty {
+            audio?.play(cues: gameState.pendingAudioCues)
+            gameState.pendingAudioCues.removeAll(keepingCapacity: true)
+        }
+
         let camDist = simd_length(framePose.position)
         // Interior worlds (M15.1) and no-fog worlds (M20 gallery): fog off (pushed past everything).
         let noFog = interior || gameState.cubeModel.noFog
-        let fogNear: Float = noFog ? 1e6 : (isOrbit ? camDist + halfDiagonal : 1.0)
-        let fogFar: Float = noFog ? 2e6 : (isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5)
+        var fogNear: Float = noFog ? 1e6 : (isOrbit ? camDist + halfDiagonal : 1.0)
+        var fogFar: Float = noFog ? 2e6 : (isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5)
+        // While a slab turns, PULL THE FOG BACK. In first person the turn happens across the world —
+        // ~90 m away at the far edge — and the depth-cue fog reduced the one moment the scene is built
+        // around to a pale ghost, crisp only from orbit (Eddie, playtest). Eased in and out over the
+        // turn (fast in, hold, fast out) so it never pops; at rest the fog is exactly as before.
+        let sr = gameState.sliceRotation
+        if sr.isActive && !sr.isRefusal && !noFog {
+            let relief = min(1.0, min(sr.progress, 1 - sr.progress) * 8.0)
+            fogNear += (fogFar - fogNear) * 1.5 * relief
+            fogFar *= 1.0 + 2.0 * relief
+        }
         // Everything local lies within camDist + halfDiagonal of the camera (the far corner of the
         // active world); beyond that is SKY — the counterpart world hanging up there — which sits
         // outside the local atmosphere and must not take fog (from FP it was reading as a silver

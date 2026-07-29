@@ -63,6 +63,35 @@ enum SurfaceDirection: Int, CaseIterable {
     }
 }
 
+/// A sound the world wants to make, queued by the model layer and drained by the renderer.
+///
+/// Deliberately a plain enum with no audio types in it: `GameState` compiles into the headless test
+/// harness, which has no audio framework, so the model may only ever *describe* a sound — never
+/// reach for one. Same shape as the existing `portalRequested` hand-off.
+///
+/// `at` is a world-space position for sounds that come from somewhere (the latch on the far side of
+/// the world, a slab locking); nil means it happens at the player, or to the world as a whole.
+enum AudioCue {
+    /// A twist strained against a bond and sprang back. The player is standing on it, so: no position.
+    /// Only ever fires on a REFUSED turn — once the lock is dissolved there is nothing to strain
+    /// against, so a successful solve is deliberately silent here.
+    case twistStrain
+    /// The rotation control rose from the plinth: the world offering the player an action. Rising and
+    /// unresolved on purpose — it should hint that something is about to MOVE.
+    case controlRaised(at: SIMD3<Float>?)
+    /// A slab is turning, right now. Sustained for the length of the turn, so the motion has a voice
+    /// instead of a silence with a thud at the end.
+    case twistTurning(at: SIMD3<Float>?, slow: Bool)
+    /// A twist finalized. Positioned at the slab that moved — the cue that says WHERE to look, which
+    /// is exactly what the prologue's no-interface rule needs sound to carry.
+    case twistLocked(at: SIMD3<Float>?)
+    /// A switch cap rose (engaged) or dropped (disengaged) — the second is the first reversed.
+    case switchEngaged(at: SIMD3<Float>?)
+    case switchDisengaged(at: SIMD3<Float>?)
+    /// A sealed portal came alive.
+    case portalOpened(at: SIMD3<Float>?)
+}
+
 enum TileState: Int {
     case unknown = 0
     case adjacent

@@ -800,6 +800,30 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 26) {
+        // AWAKENING OBELISK. `discoveryAmount` is the activation level 0→1, and the light climbs the
+        // shaft with it: pale stone below the front, a bright leading edge, and a lit, faintly
+        // pulsing column behind. Script (Scene 2H): "A line of light appears at the base of the left
+        // obelisk. It climbs toward the tip." The same material serves Scene 3's six obelisks, whose
+        // activation is the identical gesture.
+        float tipH = 1.16;                                   // matches addObelisk's tip height
+        float h = clamp(in.localPosition.z / tipH, 0.0, 1.0);
+        float level = clamp(in.discoveryAmount, 0.0, 1.0);
+
+        float3 stone = float3(0.62, 0.60, 0.55);             // the dormant obelisk's colour
+        float3 lit   = float3(0.55, 0.80, 1.00);             // cold Builder light
+
+        // Behind the front: lit, with a slow breathing pulse so it reads alive, not painted.
+        float pulse = 0.85 + 0.15 * sin(frame.time * 2.2 - h * 6.0);
+        float below = smoothstep(level, level - 0.06, h);     // 1 under the front, 0 above it
+        // The front itself — a bright narrow band riding the boundary.
+        float edge = exp(-pow((h - level) / 0.035, 2.0)) * step(0.001, level) * step(level, 0.999);
+
+        float3 base = mix(stone, lit * pulse, below * 0.85);
+        color = base + lit * edge * 1.6;
+        // Emissive-leaning: the lit portion should carry its own glow rather than depend on the sun.
+        lighting = skyAmbient * 0.35 + sunColor * 0.55 * halfLambert * shadowFactor
+                 + float3(0.55, 0.75, 1.0) * (below * 0.35 + edge * 0.9);
     } else if (in.materialID == 25) {
         // Riveted PLATING (Eddie, ref: weathered steel bridge plate) — the exposed shell of a slab
         // that turns, so it reads as built structure rather than lawn. One facelet per cubie is a

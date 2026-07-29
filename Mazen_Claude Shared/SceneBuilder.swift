@@ -253,7 +253,7 @@ final class SceneBuilder {
                                 }
                                 treeScale = sizeBase * jitter
                             }
-                            var pm = restM
+                            let pm = restM
                                 * float4x4.translation(Float(prop.subCol - 1) * step + prop.offsetX, Float(prop.subRow - 1) * step + prop.offsetY, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180), axis: SIMD3(0, 0, 1))
                                 * float4x4.scale(treeScale)
@@ -332,6 +332,13 @@ final class SceneBuilder {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }
+                            if prop.kind == .obelisk && prop.anim > 0 {
+                                // M20 Scene 2 — an AWAKENING obelisk: material 26 climbs a line of
+                                // light up the shaft, driven by `anim` (carried in discoveryAmount).
+                                // A dormant obelisk (anim == 0) stays on the plain lit material.
+                                materialID = 26
+                                color = SIMD4(1, 1, 1, 1)
+                            }
                             if prop.kind == .plinth {
                                 // M16.6: the Builder plinth — material 21 reads stone/resin vs glyph
                                 // from the mesh's UV flag; `state` selects the caustic symbol slice.
@@ -397,6 +404,7 @@ final class SceneBuilder {
                             // dither) for the translucent elevator layers; alignAnim==0 ⇒ fully opaque.
                             let discovery: Float
                             if prop.kind == .alignmentCylinder { discovery = prop.alignAnim }
+                            else if prop.kind == .obelisk && prop.anim > 0 { discovery = prop.anim }
                             else if prop.kind == .portalField && prop.alignAnim > 0 { discovery = prop.alignAnim }
                             else { discovery = 1.0 }
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,

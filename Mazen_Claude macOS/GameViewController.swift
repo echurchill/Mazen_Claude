@@ -238,6 +238,8 @@ class GameViewController: NSViewController {
             gs.timeScale = gs.timeScale == 0 ? 1 : 0
         case 37:      // L — debug (Eddie): cycle the skybox through the Skyboxes/*Composite.png set in place
             renderer.cycleDebugSkybox()
+        case 11:      // B — audio Phase A: fire the synthesised test tone (proves the PHASE path)
+            renderer.audio?.playTestTone()
         default:
             break
         }

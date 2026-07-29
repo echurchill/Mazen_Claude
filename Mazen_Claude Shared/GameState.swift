@@ -94,6 +94,24 @@ class GameState {
     /// (visual/audio, TODO) reads and clears it. Harmless until bonds exist.
     var twistRefused = false
 
+    /// Sounds the world wants to make this frame. The model only ever DESCRIBES them (see
+    /// `AudioCue`); the renderer drains this and plays them, so nothing here depends on an audio
+    /// framework and the headless harness still links.
+    var pendingAudioCues: [AudioCue] = []
+
+    /// World-space centre of a slab, for positioning the sound of it moving.
+    func sliceCentre(axis: Int, index: Int) -> SIMD3<Float>? {
+        let idx = cubeModel.cubieIndicesInSlice(axis: axis, index: index)
+        guard !idx.isEmpty else { return nil }
+        var sum = SIMD3<Float>(0, 0, 0)
+        let half = Float(cubeModel.size) / 2.0
+        for ci in idx {
+            let p = cubeModel.cubies[ci].position
+            sum += SIMD3(Float(p.x) + 0.5 - half, Float(p.y) + 0.5 - half, Float(p.z) + 0.5 - half)
+        }
+        return sum / Float(idx.count) * cubeModel.worldScale.cellSpacing
+    }
+
     /// M16.6 Phase 2b — true while the door plinth's alignment cylinder is running its ALIGN
     /// animation (engage → the two half-squares pivot together → the world twists). See
     /// `tickAlignmentCylinder`.
@@ -183,6 +201,7 @@ class GameState {
         }
 
         tickAlignmentCylinder(deltaTime)
+        tickObeliskAwakening(deltaTime)
 
         if sliceRotation.isActive {
             // .step holds the twist for manual scrubbing (see stepSlice); .slow crawls; .normal auto.
@@ -237,6 +256,9 @@ class GameState {
         let viewProjection: float4x4
         let position: SIMD3<Float>
         let up: SIMD3<Float>
+        /// Look direction — carried so the audio listener can be oriented the same way the camera is
+        /// without having to invert the view-projection.
+        let forward: SIMD3<Float>
     }
 
     func framePose(aspect: Float) -> FramePose {
@@ -247,7 +269,8 @@ class GameState {
         return FramePose(
             viewProjection: camera.viewProjectionMatrix(aspect: aspect, cubeModel: cubeModel, pose: pose),
             position: camera.cameraPosition(cubeModel: cubeModel, pose: pose),
-            up: camera.cameraUp(pose: pose)
+            up: camera.cameraUp(pose: pose),
+            forward: camera.cameraForward(cubeModel: cubeModel, pose: pose)
         )
     }
 
@@ -363,6 +386,7 @@ class GameState {
         // rides the strain), while the bonded structure flares (SceneBuilder). No finalize.
         guard cubeModel.canRotateSlice(axis: axis, index: index) else {
             twistRefused = true
+            pendingAudioCues.append(.twistStrain)
             sliceRotation = SliceRotation(
                 isActive: true, axis: axis, index: index, angle: angle,
                 progress: 0, speed: 4.0,
@@ -372,6 +396,7 @@ class GameState {
             return
         }
 
+        pendingAudioCues.append(.twistTurning(at: sliceCentre(axis: axis, index: index), slow: false))
         sliceRotation = SliceRotation(
             isActive: true,
             axis: axis,
@@ -429,6 +454,9 @@ class GameState {
             playerCI = ci
         }
 
+        // Give the motion a voice for its whole length — otherwise a turn is silence then a thud.
+        pendingAudioCues.append(.twistTurning(at: sliceCentre(axis: axis, index: index), slow: speed < 1.5))
+
         sliceRotation = SliceRotation(
             isActive: true, axis: axis, index: index, angle: angle,
             progress: 0, speed: speed,
@@ -439,6 +467,62 @@ class GameState {
 
     /// Open every unbonded sealed door (the temple door) and refresh its plinth. The switch-trip turn
     /// uses this because its spectacle slab need not contain the door (see `startBackSliceRotation`).
+    /// Scene 2H — after the turn finalizes, the obelisks flanking the revealed chamber WAKE: a line
+    /// of light climbs each shaft. They are stabilizers, not monuments; their lighting up is what
+    /// says the rotated slab has locked into the correct orientation. Driven by `anim` on the props
+    /// (material 26 climbs the light with it), ticked in `tickObeliskAwakening`.
+    ///
+    /// Deliberately only the obelisks sharing a face with a now-open portal: a world may carry other
+    /// obelisks as scenery (the temple interior does), and those must stay dormant.
+    private func beginObeliskAwakening() {
+        var openFaces = Set<Int>()
+        for cu in cubeModel.cubies.indices where !cubeModel.sealedPortalCubies.contains(cu) {
+            for f in cubeModel.cubies[cu].facelets
+            where f.props.contains(where: { $0.kind == .portal && $0.state == 1 }) {
+                openFaces.insert(cu)
+            }
+        }
+        guard !openFaces.isEmpty else { return }
+        for cu in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[cu].facelets.indices {
+                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .obelisk {
+                    // Wake an obelisk if it stands within a tile of an opened chamber's cubie.
+                    if openFaces.contains(cu) || openFaces.contains(where: { abs($0 - cu) <= 1 }) {
+                        if cubeModel.cubies[cu].facelets[fi].props[pi].anim <= 0 {
+                            cubeModel.cubies[cu].facelets[fi].props[pi].anim = 0.0001   // > 0 ⇒ awakening
+                            obeliskAwakening = true
+                        }
+                    }
+                }
+            }
+        }
+        if obeliskAwakening { cubeModel.markTopologyChanged() }
+    }
+
+    /// True while any obelisk's light is still climbing; cleared when they all reach full.
+    private var obeliskAwakening = false
+
+    /// Climb each waking obelisk's light 0→1 (~1.4 s), a beat slower than the turn itself so it
+    /// reads as a response to the world settling rather than part of the same motion.
+    private func tickObeliskAwakening(_ dt: Float) {
+        guard obeliskAwakening else { return }
+        let rate: Float = 1.0 / 1.4
+        var stillRunning = false
+        for cu in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[cu].facelets.indices {
+                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .obelisk {
+                    let a = cubeModel.cubies[cu].facelets[fi].props[pi].anim
+                    guard a > 0, a < 1 else { continue }
+                    cubeModel.cubies[cu].facelets[fi].props[pi].anim = min(1, a + dt * rate)
+                    if cubeModel.cubies[cu].facelets[fi].props[pi].anim < 1 { stillRunning = true }
+                }
+            }
+        }
+        obeliskAwakening = stillRunning
+    }
+
     private func openSealedDoors() {
         var opened = false
         for ci in Array(cubeModel.sealedPortalCubies)
@@ -446,7 +530,7 @@ class GameState {
             cubeModel.sealedPortalCubies.remove(ci)
             opened = true
         }
-        if opened { updateDoorPlinths() }
+        if opened { updateDoorPlinths(); beginObeliskAwakening() }
     }
 
     /// Debug (Shift+Q / Shift+E) — replay the scene's scripted turn on demand, so the one-off puzzle
@@ -481,6 +565,8 @@ class GameState {
 
     private func finalizeSliceRotation() {
         let playerCI = sliceRotation.playerCubieIndex
+        // Positioned BEFORE the permutation, so it marks where the slab was as it settled.
+        pendingAudioCues.append(.twistLocked(at: sliceCentre(axis: sliceRotation.axis, index: sliceRotation.index)))
         cubeModel.applySliceRotation(axis: sliceRotation.axis, index: sliceRotation.index, angle: sliceRotation.angle)
 
         // M16.4: the opening — a completed twist of an UNLOCKED sealed door's slice swings it
@@ -493,7 +579,10 @@ class GameState {
                 opened = true
             }
         }
-        if opened { updateDoorPlinths() }    // the twist swings it open ⇒ the plinth shows the portal
+        if opened {
+            updateDoorPlinths(); beginObeliskAwakening()   // the twist swings it open ⇒ the plinth shows the portal
+            pendingAudioCues.append(.portalOpened(at: sliceCentre(axis: sliceRotation.axis, index: sliceRotation.index)))
+        }
 
         // M20 (Eddie): the switch-trip turn rotates a distant back slab that need not contain the
         // door — open it here so the payoff still lands (see startBackSliceRotation).
@@ -695,6 +784,9 @@ class GameState {
             guard templeDoorStillSealed() else { return }
             let engaged = cubeModel.cubies[ci].facelets[fi].props[capIdx].alignAnim > 0.5
             cubeModel.cubies[ci].facelets[fi].props[capIdx].alignAnim = engaged ? 0 : 1
+            // "A short tone sounds… the tone plays in reverse" on disengage (Scene 2E).
+            let where_ = sliceCentre(axis: 0, index: cubeModel.cubies[ci].position.x >= 0 ? Int(cubeModel.cubies[ci].position.x) : 0)
+            pendingAudioCues.append(engaged ? .switchDisengaged(at: where_) : .switchEngaged(at: where_))
             refreshSwitchLock()
             return
         }
@@ -717,6 +809,7 @@ class GameState {
                          facing: plinthProp.facing, state: 0))
                 cubeModel.markTopologyChanged()   // PERF: prop added — location caches re-derive
                 lastCylinderRaiseTime = time
+                pendingAudioCues.append(.controlRaised(at: nil))   // at the player: they are AT the plinth
             }
             return
         }

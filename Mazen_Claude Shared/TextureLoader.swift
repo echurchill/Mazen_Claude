@@ -195,7 +195,10 @@ enum TextureLoader {
            let tex = makeTexture(device: device, srgb: srgb, pixels: pixels, w: w, h: h, label: url.lastPathComponent) {
             return (tex, cutout)
         }
-        guard var (pixels, w, h) = decodeRGBA(url) else { return nil }
+        // `guard var (a, b, c)` makes ALL three mutable; only the pixels are. Split so w/h stay let.
+        guard let decoded = decodeRGBA(url) else { return nil }
+        var pixels = decoded.pixels
+        let w = decoded.w, h = decoded.h
         // Same criterion the shader's discard uses: any texel below half-alpha.
         let cutout = pixels.withUnsafeBufferPointer { buf -> Bool in
             let p = buf.baseAddress!

@@ -161,6 +161,21 @@ struct CameraState {
         }
     }
 
+    /// Which way the camera is LOOKING. Needed as its own value (rather than pulled back out of the
+    /// view-projection) by anything that has to orient itself the way the player is oriented — the
+    /// audio listener, whose whole job is knowing which direction a sound arrives from. In orbit the
+    /// camera looks at the cube's centre from its orbit position; in first person the pose says so.
+    func cameraForward(cubeModel: CubeModel, pose: FirstPersonPose?) -> SIMD3<Float> {
+        switch mode {
+        case .orbit:
+            let p = cameraPosition(cubeModel: cubeModel, pose: pose)
+            let len = simd_length(p)
+            return len > 1e-5 ? -p / len : SIMD3(0, 0, -1)
+        case .firstPerson:
+            return pose?.forward ?? SIMD3(0, 0, -1)
+        }
+    }
+
     // MARK: - Helpers
 
     /// World-space direction a heading points, in a face's local (tangent, bitangent) plane.
