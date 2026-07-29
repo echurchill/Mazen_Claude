@@ -235,6 +235,49 @@ struct CoordinateMathTests {
 
 
 
+
+    /// Scene 4's bond bands must actually trace the lock. A bond is otherwise invisible — the turn
+    /// refuses and the reason is nowhere — so this is what turns a refusal into information.
+    /// Checks the three properties the script demands: one band per bond, each band genuinely
+    /// CONNECTED (every step adjacent, including where it bends around a face edge), reaching the
+    /// cubies it ties together, and gone the moment the bond is released.
+    static func testSceneFourBondBandsTraceTheLock() {
+        let m = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour).cubeModel
+        let bands = m.bondBands()
+        check(bands.count == m.bondedGroups.count,
+              "one band per bond: \(bands.count) bands for \(m.bondedGroups.count) bonds")
+
+        for (i, band) in bands.enumerated() {
+            check(band.count >= 2, "band \(i) should span tiles, got \(band.count)")
+            // Endpoints must be cubies of the bond it describes.
+            if let first = band.first, let last = band.last {
+                let group = m.bondedGroups[i]
+                check(group.contains(first.ci) && group.contains(last.ci),
+                      "band \(i) must run between the cubies its bond ties together")
+            }
+            // Every consecutive pair must be neighbours — same face and adjacent, or across an edge.
+            for k in 1..<band.count {
+                let a = band[k - 1], b = band[k]
+                var adjacent = false
+                if a.face == b.face {
+                    adjacent = abs(a.row - b.row) + abs(a.col - b.col) == 1
+                } else {
+                    for dir in [SurfaceDirection.north, .east, .south, .west] {
+                        let x = m.edgeCrossing(face: a.face, direction: dir, row: a.row, col: a.col)
+                        if x.face == b.face && x.row == b.row && x.col == b.col { adjacent = true; break }
+                    }
+                }
+                check(adjacent, "band \(i) breaks between (\(a.face),\(a.row),\(a.col)) and (\(b.face),\(b.row),\(b.col))")
+            }
+        }
+
+        // Release one anchor: that band must go, and only that one.
+        let before = bands.count
+        m.removeBond(containing: m.bondedGroups[0].first!)
+        m.markTopologyChanged()
+        check(m.bondBands().count == before - 1, "releasing a bond must remove exactly its band")
+    }
+
     /// Every prologue door in the hub must be a DARSIT, not a TARDIS (Eddie). The livery is keyed to
     /// a set of destination ids, and it is easy to add a scene and forget to add its id — at which
     /// point its door silently comes up blue and looks like a dev world.
@@ -362,6 +405,7 @@ struct CoordinateMathTests {
         testSceneTwoExitIsWalkableOnlyAfterTheTurn()
         testSceneFourAnchorsGateThePlayersTwist()
         testEveryPrologueSceneHasADarsitDoor()
+        testSceneFourBondBandsTraceTheLock()
 
         print("")
         if failed == 0 {

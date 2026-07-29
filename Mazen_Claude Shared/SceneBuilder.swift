@@ -78,6 +78,9 @@ final class SceneBuilder {
     /// Without them a slab reads as a couple of one-tile rim strips with sky between (Eddie,
     /// playtest), and the props riding it appear to float. Built only while a twist is in flight.
     private var cutFaceTiles: [TileEntry] = []
+    /// Bond bands — the luminous seams tracing what holds the world rigid (Scene 4). Rebuilt from
+    /// live topology each frame, so they follow a twist and vanish with the bond they describe.
+    private var bondBandTiles: [TileEntry] = []
     private var celestialTiles: [TileEntry] = []
     private var mazeFloorTiles: [UInt8: [TileEntry]] = [:]
     private var mazePathFloorTiles: [UInt8: [TileEntry]] = [:]
@@ -104,6 +107,7 @@ final class SceneBuilder {
         dissolveTiles.removeAll(keepingCapacity: true)
         frameTiles.removeAll(keepingCapacity: true)
         cutFaceTiles.removeAll(keepingCapacity: true)
+        bondBandTiles.removeAll(keepingCapacity: true)
         celestialTiles.removeAll(keepingCapacity: true)
         for key in mazeFloorTiles.keys { mazeFloorTiles[key]?.removeAll(keepingCapacity: true) }
         for key in mazePathFloorTiles.keys { mazePathFloorTiles[key]?.removeAll(keepingCapacity: true) }
@@ -482,6 +486,26 @@ final class SceneBuilder {
             }
         }
 
+        // BOND BANDS — draw what the world is holding on to.
+        for band in model.bondBands() {
+            for t in band {
+                var restM = model.restMatrix(face: t.face, row: t.row, col: t.col)
+                if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(t.ci) { restM = animMat * restM }
+                // Lift a hair off the ground so the seam is not z-fighting the floor it sits in.
+                let lift = SIMD3<Float>(restM.columns.2.x, restM.columns.2.y, restM.columns.2.z) * 0.004
+                restM.columns.3 += SIMD4(lift.x, lift.y, lift.z, 0)
+                let inst = InstanceDataSwift(
+                    modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
+                    materialID: 27, tileID: 0,
+                    discoveryAmount: refusalGlow,          // the band runs hot while a turn strains
+                    styleSeed: 0,
+                    spinMatrix: spin, roundness: model.roundness,
+                    invHalfExtent: 1.0 / model.worldScale.faceDistance,
+                    reliefAmplitude: model.reliefAmplitude)
+                bondBandTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.fieldFloor))
+            }
+        }
+
         // CUT FACES — give a turning slab its thickness (see `cutFaceTiles`).
         //
         // A slice is one cubie thick. Its outward side is a real cube face and renders normally; its
@@ -554,7 +578,7 @@ final class SceneBuilder {
         // failure mode beyond ~size 13) must never be possible again. Provisioning in Renderer
         // budgets 8 instances/tile, so this should be unreachable; if it ever fires, the budget
         // (not this check) is what needs raising.
-        let totalInstances = frameTiles.count + cutFaceTiles.count
+        let totalInstances = frameTiles.count + cutFaceTiles.count + bondBandTiles.count
             + mazeFloorTiles.values.reduce(0) { $0 + $1.count }
             + mazePathFloorTiles.values.reduce(0) { $0 + $1.count }
             + mazeWallTiles.values.reduce(0) { $0 + $1.count }
@@ -582,6 +606,16 @@ final class SceneBuilder {
                 instanceOffset: startIdx,
                 instanceCount: frameTiles.count
             ))
+        }
+
+        // Bond bands
+        if !bondBandTiles.isEmpty {
+            let mesh = bondBandTiles[0].mesh
+            let startIdx = idx
+            for entry in bondBandTiles { ptr[idx] = entry.instance; idx += 1 }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset, indexCount: mesh.indexCount,
+                instanceOffset: startIdx, instanceCount: bondBandTiles.count))
         }
 
         // Cut faces of the turning slab (mid-twist only)

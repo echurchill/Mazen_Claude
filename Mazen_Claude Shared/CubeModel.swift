@@ -2342,6 +2342,94 @@ class CubeModel {
     /// Facelets that carry props, as grid locations (the Renderer's asset pass iterates this instead of
     /// scanning all 6×n² tiles per frame). Only LOCATIONS are cached — prop fields are read live by the
     /// consumer; a twist relocates props ⇒ version bump ⇒ rescan.
+
+    private var bondBandCache: (version: UInt64, bands: [[PropTileEntry]]) = (0, [])
+
+    /// The BONDS, drawn as bands of light across the world's surface.
+    ///
+    /// Scene 4 asks the player to READ a lock before they can release it, and a bond is otherwise
+    /// invisible — the turn simply refuses and the reason is nowhere. Each band traces a path over the
+    /// surface between the cubies a bond ties together, crossing face edges as it goes, so the player
+    /// can see *what is holding what*.
+    ///
+    /// The script's requirement — "all bond indicators must be derived from the bonded cubies' current
+    /// facelets and orientations… no indicator may depend on fixed world coordinates" — is met by
+    /// recomputing from live topology and keying the cache on `topologyVersion`. A twist relocates the
+    /// bonded cubies and the band is simply rebuilt along the new route; dissolving a bond removes its
+    /// band because the band never existed independently of it.
+    ///
+    /// Paths ignore maze walls: this is dressing set INTO the world, which the script describes as
+    /// passing "beneath maze walls and reappearing elsewhere", not a route to walk.
+    func bondBands() -> [[PropTileEntry]] {
+        if bondBandCache.version != topologyVersion {
+            // One representative tile per cubie (a corner cubie has three facelets; any will do, and
+            // taking the first keeps it deterministic).
+            var tileOf: [Int: PropTileEntry] = [:]
+            for face in CubeFace.allCases {
+                for r in 0..<size {
+                    for c in 0..<size {
+                        guard let (ci, fi) = faceletAt(face: face, row: r, col: c), tileOf[ci] == nil else { continue }
+                        tileOf[ci] = PropTileEntry(face: face, row: r, col: c, ci: ci, fi: fi)
+                    }
+                }
+            }
+
+            var bands: [[PropTileEntry]] = []
+            for group in bondedGroups {
+                let members = group.compactMap { tileOf[$0] }
+                guard members.count >= 2 else { continue }
+                // Chain the members in order, so a bond of three or more reads as one continuous run
+                // rather than a star.
+                var band: [PropTileEntry] = []
+                for i in 0..<(members.count - 1) {
+                    let leg = surfacePath(from: members[i], to: members[i + 1], tileOf: tileOf)
+                    band.append(contentsOf: i == 0 ? leg : Array(leg.dropFirst()))
+                }
+                if !band.isEmpty { bands.append(band) }
+            }
+            bondBandCache = (topologyVersion, bands)
+        }
+        return bondBandCache.bands
+    }
+
+    /// Shortest tile path over the cube's SURFACE, walking face to face through `edgeCrossing` — the
+    /// same adjacency movement uses, so a band bends around an edge exactly where a walker would.
+    private func surfacePath(from a: PropTileEntry, to b: PropTileEntry,
+                             tileOf: [Int: PropTileEntry]) -> [PropTileEntry] {
+        struct Key: Hashable { let f: Int; let r: Int; let c: Int }
+        func key(_ t: PropTileEntry) -> Key { Key(f: t.face.rawValue, r: t.row, c: t.col) }
+        let goal = key(b)
+        var came: [Key: PropTileEntry] = [:]
+        var seen: Set<Key> = [key(a)]
+        var queue: [PropTileEntry] = [a]
+        var head = 0
+        while head < queue.count {
+            let cur = queue[head]; head += 1
+            if key(cur) == goal {
+                var path = [cur], node = cur
+                while let prev = came[key(node)] { path.append(prev); node = prev }
+                return path.reversed()
+            }
+            for dir in [SurfaceDirection.north, .east, .south, .west] {
+                let nr = cur.row + (dir == .north ? -1 : dir == .south ? 1 : 0)
+                let nc = cur.col + (dir == .west ? -1 : dir == .east ? 1 : 0)
+                let next: (face: CubeFace, row: Int, col: Int)
+                if (0..<size).contains(nr) && (0..<size).contains(nc) {
+                    next = (cur.face, nr, nc)
+                } else {
+                    let x = edgeCrossing(face: cur.face, direction: dir, row: cur.row, col: cur.col)
+                    next = (x.face, x.row, x.col)
+                }
+                guard let (ci, fi) = faceletAt(face: next.face, row: next.row, col: next.col) else { continue }
+                let entry = PropTileEntry(face: next.face, row: next.row, col: next.col, ci: ci, fi: fi)
+                guard seen.insert(key(entry)).inserted else { continue }
+                came[key(entry)] = cur
+                queue.append(entry)
+            }
+        }
+        return [a]
+    }
+
     func propTiles() -> [PropTileEntry] {
         if propTilesCache.version != topologyVersion {
             var entries: [PropTileEntry] = []

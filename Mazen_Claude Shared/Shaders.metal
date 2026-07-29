@@ -800,6 +800,28 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 27) {
+        // BOND BAND — a luminous seam set into the ground, tracing what holds the world rigid.
+        // `discoveryAmount` carries the refusal flare: while a twist strains against this bond the
+        // band runs hot, which is what turns a refusal from a dead end into information.
+        float2 uv = in.texCoord;
+        // A stripe down the middle of the tile, so a run of tiles reads as one continuous line
+        // rather than a row of squares.
+        float across = abs(uv.y - 0.5);
+        float core = smoothstep(0.16, 0.02, across);
+        float halo = smoothstep(0.34, 0.06, across);
+        // Travelling pulse along the band: slow, so it reads as something held under tension.
+        float travel = fract(uv.x * 0.5 - frame.time * 0.22);
+        float bead = smoothstep(0.72, 1.0, 1.0 - abs(travel - 0.5) * 2.0);
+
+        float flare = clamp(in.discoveryAmount, 0.0, 1.0);
+        float3 cold = float3(0.42, 0.72, 0.95);          // held
+        float3 hot  = float3(1.00, 0.36, 0.16);          // straining
+        float3 tint = mix(cold, hot, flare);
+
+        color = tint * (core * 1.5 + halo * 0.45 + bead * 0.8 * core);
+        // Emissive: a seam of light does not wait for the sun.
+        lighting = float3(1.0) * (0.55 + 0.45 * flare) + skyAmbient * 0.15;
     } else if (in.materialID == 26) {
         // AWAKENING OBELISK. `discoveryAmount` is the activation level 0→1, and the light climbs the
         // shaft with it: pale stone below the front, a bright leading edge, and a lit, faintly
