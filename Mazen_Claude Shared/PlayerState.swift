@@ -178,15 +178,42 @@ struct PlayerState {
             ? 1
             : Self.lateralSign(cubeModel: cubeModel, face: face, dir: dir, row: row, col: col)
         let arrLat = c + sign * (depLat - c)
-        let toSub: (Int, Int)
+        var toSub: (Int, Int)
         switch entryDir {
         case .north: toSub = (0, arrLat)
         case .south: toSub = (d - 1, arrLat)
         case .west:  toSub = (arrLat, 0)
         case .east:  toSub = (arrLat, d - 1)
         }
-        guard arrTile.isStandable(toSub.0, toSub.1, grid: d, fullWidthGateways: cubeModel.fullWidthGateways) else { return }
-        guard !arrProps.contains(where: { $0.blocks(toSub.0, toSub.1, grid: d, standStep: cubeModel.worldScale.standStep) }) else { return }
+        // SLIDE along the seam rather than stopping dead. Carrying the lateral across verbatim lands
+        // you on the arrival tile's matching cell — and if you were walking ALONG a wall, at the far
+        // edge of your tile, that cell is the arrival tile's corner, which a PERPENDICULAR wall has
+        // claimed. The edge you are crossing is wide open on both sides, so nothing is drawn where
+        // you stop: an invisible wall, and one that appears only when you hug a wall (Eddie hit
+        // several; 156 of these exist in Scene 4 alone).
+        //
+        // Stepping the lateral toward the middle until the cell is free is what a person does
+        // without thinking — you round the corner slightly rather than walking into it. It can only
+        // permit moves that were refused before, and never lands anywhere unstandable.
+        func free(_ sub: (Int, Int)) -> Bool {
+            arrTile.isStandable(sub.0, sub.1, grid: d, fullWidthGateways: cubeModel.fullWidthGateways)
+                && !arrProps.contains(where: { $0.blocks(sub.0, sub.1, grid: d, standStep: cubeModel.worldScale.standStep) })
+        }
+        if !free(toSub) {
+            let centre = standCenter
+            var slid = false
+            var lat = arrLat
+            while lat != centre {
+                lat += lat < centre ? 1 : -1
+                let candidate: (Int, Int)
+                switch entryDir {
+                case .north: candidate = (0, lat); case .south: candidate = (d - 1, lat)
+                case .west:  candidate = (lat, 0); case .east:  candidate = (lat, d - 1)
+                }
+                if free(candidate) { toSub = candidate; slid = true; break }
+            }
+            guard slid else { return }
+        }
 
         // Rotate the travel heading by however much the crossing rotated the surface frame
         // (same-face: not at all — a diagonal walk stays diagonal), then let arrivalFacing

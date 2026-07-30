@@ -745,6 +745,69 @@ struct CoordinateMathTests {
         check(checkedTiles == 3, "Scene 4 has three anchors to check, found \(checkedTiles)")
     }
 
+    /// The third flavour of invisible wall, and the meanest: you are walking ALONG a wall, at the far
+    /// edge of your tile, and you cross an edge that is open on BOTH sides — but the lateral carries
+    /// over verbatim and lands you on the arrival tile's corner, which a PERPENDICULAR wall has
+    /// claimed. Refused, with nothing drawn where you stopped, and only when you hug a wall. There
+    /// were 156 such spots in Scene 4 alone.
+    ///
+    /// Movement now slides the lateral toward the middle until the cell is free — rounding the corner
+    /// rather than walking into it. This asserts none of those refusals remain: crossing an edge the
+    /// topology says is open must always find somewhere to land.
+    static func testCrossingAnOpenEdgeAlwaysFindsSomewhereToLand() {
+        for (label, gs) in [("scene-4", GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour)),
+                            ("scene-2", GameState(size: PrologueSize.sceneTwo, name: "s2", stamp: .sceneTwo)),
+                            ("garden",  GameState(size: 11, name: "g", stamp: .gardenMaze))] {
+            let m = gs.cubeModel
+            let n = m.size, d = m.worldScale.standGrid, step = m.worldScale.standStep
+            let fw = m.fullWidthGateways
+            var stranded = 0
+            var sample = ""
+            for face in CubeFace.allCases {
+                for r in 0..<n {
+                    for c in 0..<n {
+                        guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                        let tile = m.cubies[ci].facelets[fi].mazeTile
+                        for (dir, dr, dc) in [(SurfaceDirection.north, -1, 0), (.south, 1, 0),
+                                              (.west, 0, -1), (.east, 0, 1)] {
+                            for lat in 0..<d {
+                                guard tile.edgeAllows(dir, lateral: lat, grid: d, fullWidthGateways: fw) else { continue }
+                                let nr = r + dr, nc = c + dc
+                                let arr: (f: CubeFace, r: Int, c: Int, back: SurfaceDirection)
+                                if (0..<n).contains(nr) && (0..<n).contains(nc) { arr = (face, nr, nc, dir.opposite) }
+                                else {
+                                    let cr = m.edgeCrossing(face: face, direction: dir, row: r, col: c)
+                                    arr = (cr.face, cr.row, cr.col, cr.facing.opposite)
+                                }
+                                guard let (nci, nfi) = m.faceletAt(face: arr.f, row: arr.r, col: arr.c) else { continue }
+                                let arrTile = m.cubies[nci].facelets[nfi].mazeTile
+                                let arrProps = m.cubies[nci].facelets[nfi].props
+                                // Somewhere along that seam must be standable — that is what sliding needs.
+                                var landed = false
+                                for l in 0..<d {
+                                    let sub: (Int, Int)
+                                    switch arr.back {
+                                    case .north: sub = (0, l); case .south: sub = (d - 1, l)
+                                    case .west:  sub = (l, 0); case .east:  sub = (l, d - 1)
+                                    }
+                                    if arrTile.isStandable(sub.0, sub.1, grid: d, fullWidthGateways: fw)
+                                        && !arrProps.contains(where: { $0.blocks(sub.0, sub.1, grid: d, standStep: step) }) {
+                                        landed = true; break
+                                    }
+                                }
+                                if !landed {
+                                    stranded += 1
+                                    if sample.isEmpty { sample = "\(face)(\(r),\(c)) \(dir) lat \(lat)" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            check(stranded == 0, "\(label): \(stranded) open edges with nowhere to land  \(sample)")
+        }
+    }
+
     static func testVesselCanBeApproached() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -978,6 +1041,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
+        testCrossingAnOpenEdgeAlwaysFindsSomewhereToLand()
         testFlatPropsDoNotWallOffTheirOwnTile()
         testEveryStampHasConsistentEdges()
         testClosingDoorwayLeavesTheRealPortalAlone()
