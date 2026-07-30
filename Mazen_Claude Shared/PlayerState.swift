@@ -131,7 +131,7 @@ struct PlayerState {
         if (0..<d).contains(tr) && (0..<d).contains(tc) {
             // Within-tile hop — target must be standable (grass minus walls) and clear of
             // any solid prop's footprint (M18 Phase 2 — stand-point removal).
-            guard tile.isStandable(tr, tc, grid: d) else { return }
+            guard tile.isStandable(tr, tc, grid: d, fullWidthGateways: cubeModel.fullWidthGateways) else { return }
             guard !props.contains(where: { $0.blocks(tr, tc, grid: d) }) else { return }
             beginMove(toFace: face, toRow: row, toCol: col, toSub: (tr, tc), newFacing: facing)
             return
@@ -147,7 +147,7 @@ struct PlayerState {
         // so a NE walk exits the north edge one cell east of where it stood.
         let depLat = rowOut ? tc : tr
         guard (0..<d).contains(depLat) else { return }
-        guard tile.edgeAllows(dir, lateral: depLat, grid: d) else { return }
+        guard tile.edgeAllows(dir, lateral: depLat, grid: d, fullWidthGateways: cubeModel.fullWidthGateways) else { return }
 
         let n = cubeModel.size
         let (tdr, tdc) = Self.deltaForDirection(dir)
@@ -185,7 +185,7 @@ struct PlayerState {
         case .west:  toSub = (arrLat, 0)
         case .east:  toSub = (arrLat, d - 1)
         }
-        guard arrTile.isStandable(toSub.0, toSub.1, grid: d) else { return }
+        guard arrTile.isStandable(toSub.0, toSub.1, grid: d, fullWidthGateways: cubeModel.fullWidthGateways) else { return }
         guard !arrProps.contains(where: { $0.blocks(toSub.0, toSub.1, grid: d) }) else { return }
 
         // Rotate the travel heading by however much the crossing rotated the surface frame

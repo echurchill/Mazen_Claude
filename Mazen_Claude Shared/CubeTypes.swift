@@ -268,9 +268,16 @@ struct MazeTile {
     /// natural worlds) allow anywhere; gateway edges only through the centered gap (the
     /// middle third — exactly the visual gap `gatewayGapFraction` cuts, jambs flank it);
     /// closed edges never (the hedge wall occupies the border strip).
-    func edgeAllows(_ dir: SurfaceDirection, lateral: Int, grid: Int) -> Bool {
+    /// `fullWidthGateways` drops the centred-gap restriction for OPEN edges — for worlds whose walls
+    /// are dressed models rather than hedge meshes. Those worlds emit stone only on CLOSED edges and
+    /// no jamb posts at all, so the middle-third rule was fencing off the outer two-thirds of every
+    /// passage with nothing standing there: you could see clear grass and simply not walk on it
+    /// (Eddie mapped it — a narrow walkable lane with invisible barriers either side). Closed edges
+    /// are unaffected; they still block outright, which is what the stone in them is doing.
+    func edgeAllows(_ dir: SurfaceDirection, lateral: Int, grid: Int, fullWidthGateways: Bool = false) -> Bool {
         if openEdges.contains(direction: dir) { return true }
         guard openings.contains(direction: dir) else { return false }
+        if fullWidthGateways { return true }
         let gapLo = grid / 3
         return lateral >= gapLo && lateral < grid - gapLo
     }
@@ -278,11 +285,12 @@ struct MazeTile {
     /// M18 Phase 1 — the walkability rule: every stand cell is walkable (grass!) except
     /// border cells claimed by their edge's wall geometry. A corner cell answers to both
     /// of its edges. (Prop footprints subtract on top of this in M18 Phase 2.)
-    func isStandable(_ subRow: Int, _ subCol: Int, grid: Int) -> Bool {
-        if subRow == 0 && !edgeAllows(.north, lateral: subCol, grid: grid) { return false }
-        if subRow == grid - 1 && !edgeAllows(.south, lateral: subCol, grid: grid) { return false }
-        if subCol == 0 && !edgeAllows(.west, lateral: subRow, grid: grid) { return false }
-        if subCol == grid - 1 && !edgeAllows(.east, lateral: subRow, grid: grid) { return false }
+    func isStandable(_ subRow: Int, _ subCol: Int, grid: Int, fullWidthGateways: Bool = false) -> Bool {
+        let f = fullWidthGateways
+        if subRow == 0 && !edgeAllows(.north, lateral: subCol, grid: grid, fullWidthGateways: f) { return false }
+        if subRow == grid - 1 && !edgeAllows(.south, lateral: subCol, grid: grid, fullWidthGateways: f) { return false }
+        if subCol == 0 && !edgeAllows(.west, lateral: subRow, grid: grid, fullWidthGateways: f) { return false }
+        if subCol == grid - 1 && !edgeAllows(.east, lateral: subRow, grid: grid, fullWidthGateways: f) { return false }
         return true
     }
 }

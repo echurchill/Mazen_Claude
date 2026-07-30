@@ -275,6 +275,41 @@ struct CoordinateMathTests {
     /// count is derived from live bond state rather than tallied separately, so it cannot drift out
     /// of step with the thing it is reporting on — the failure mode that would matter most, because
     /// a vessel that lies is worse than no vessel at all.
+    /// Eddie mapped a lane of walkable ground with invisible barriers either side of it in the
+    /// garden. Cause: an OPEN edge was still being narrowed to the centred gap between jamb posts —
+    /// correct for a hedge gateway, which really is a gap in a wall, but a dressed world draws stone
+    /// only on CLOSED edges and no jambs at all, so two thirds of every passage was fenced off by
+    /// nothing. The rule is now "collision matches what you can see".
+    static func testDressedWorldsDoNotFenceOffOpenEdges() {
+        let grid = 15
+        var tile = MazeTile(openings: [.north, .east, .south, .west], styleSeed: 0)
+        var hedgeOK = 0, dressedOK = 0
+        for lat in 0..<grid {
+            if tile.edgeAllows(.north, lateral: lat, grid: grid) { hedgeOK += 1 }
+            if tile.edgeAllows(.north, lateral: lat, grid: grid, fullWidthGateways: true) { dressedOK += 1 }
+        }
+        check(hedgeOK == grid - 2 * (grid / 3), "a hedge gateway keeps its centred gap (\(hedgeOK)/\(grid))")
+        check(hedgeOK < dressedOK, "the old rule really was narrower — otherwise this test proves nothing")
+        check(dressedOK == grid, "a dressed world's open edge is crossable at full width")
+        // Every border cell along that edge becomes standable too — the barrier was there, not just
+        // at the moment of crossing.
+        for lat in 0..<grid {
+            check(tile.isStandable(0, lat, grid: grid, fullWidthGateways: true),
+                  "border cell \(lat) on an open edge should be standable in a dressed world")
+        }
+        // A CLOSED edge still blocks outright whatever the style — the wall is genuinely there.
+        tile.openings = []
+        for lat in 0..<grid {
+            check(!tile.edgeAllows(.north, lateral: lat, grid: grid, fullWidthGateways: true),
+                  "a closed edge blocks whatever the wall style")
+        }
+        // And it is the dressed worlds, and only those, that ask for it.
+        check(GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel.fullWidthGateways,
+              "the garden's walls are dressed models, so it draws no jambs")
+        check(!GameState(size: 7, name: "natural", stamp: .natural).cubeModel.fullWidthGateways,
+              "hedge worlds keep the jamb rule their geometry earns")
+    }
+
     static func testSceneFourVesselReadsTheLock() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -492,6 +527,7 @@ struct CoordinateMathTests {
         testSceneFourHangsSceneTwoOverhead()
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
+        testDressedWorldsDoNotFenceOffOpenEdges()
 
         print("")
         if failed == 0 {

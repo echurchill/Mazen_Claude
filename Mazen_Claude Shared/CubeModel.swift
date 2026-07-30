@@ -1142,10 +1142,23 @@ class CubeModel {
             let sr = corner ? Int((h >> 3) & 1) * 2 : Int((h >> 3) % 3)
             let sc = corner ? Int((h >> 4) & 1) * 2 : Int((h >> 5) % 3)
             let jitter = 0.85 + Float((h >> 6) % 30) / 100.0    // 0.85…1.15 size variety
+            // The 3×3 sub-cell lattice is an AUTHORING grid, not where a plant should actually
+            // stand. Nine possible points per ~19 m tile — and a second pass dropping four more
+            // plants onto the same nine — is a pattern the eye picks out instantly (Eddie:
+            // "unnaturally regular"). Nudge within the cell and add a continuous yaw on top of the
+            // 8-way facing, so both position and orientation stop landing on round numbers. These
+            // are non-solid props, so nothing here moves a collision footprint.
+            var g = h &* 2654435761
+            g ^= g >> 16; g = g &* 2246822519; g ^= g >> 13
+            let cell = worldScale.subCellStep
+            let ox = (Float(g & 0x3FF) / 1023.0 - 0.5) * 0.86 * cell     // ±0.43 of a sub-cell:
+            let oy = (Float((g >> 10) & 0x3FF) / 1023.0 - 0.5) * 0.86 * cell  // spread, but still
+            let yaw = Float((g >> 20) & 0x3F) * (45.0 / 64.0)             // inside its own cell
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .importedFoliage, subRow: sr, subCol: sc,
                      facing: Heading8(rawValue: Int(h % 8)) ?? .n,
-                     state: idx, extraScale: base * jitter))
+                     state: idx, viewAngle: yaw, extraScale: base * jitter,
+                     offsetX: ox, offsetY: oy))
         }
 
         for r in rLo...rHi {
@@ -2149,9 +2162,19 @@ class CubeModel {
 
     /// M20 — how this world's maze walls render (see `WallStyle`). `.dressed` ⇒ SceneBuilder skips the
     /// hedge wall + post meshes and the Renderer emits imported wall models per closed edge instead
-    /// (twist-safe, re-derived from topology). Movement is unaffected either way (the maze topology
-    /// blocks closed edges). Default `.hedge` ⇒ other worlds are byte-identical.
+    /// (twist-safe, re-derived from topology). Default `.hedge` ⇒ other worlds are byte-identical.
+    ///
+    /// This used to say "movement is unaffected either way", which was half true and the reason the
+    /// garden had invisible walls: closed edges do block from topology alone, but OPEN edges were
+    /// still being narrowed to a centred gap between jamb posts that a dressed world never draws.
+    /// See `fullWidthGateways`.
     var wallStyle: WallStyle = .hedge
+
+    /// Whether an open edge may be crossed at its full width. True where the world draws no jamb
+    /// posts to justify a narrower gap — i.e. dressed walls, where the stone sits on closed edges
+    /// and an open edge is genuinely empty. The rule is "collision matches what you can see": a
+    /// hedge gateway really is a gap in a wall, and is still crossed through its middle third.
+    var fullWidthGateways: Bool { wallStyle == .dressed }
 
     /// M20 — suppress ALL fog for this world (both the unknown-tile fog cubes and the distance
     /// fog): a dev/showroom world (the gallery) shouldn't have atmosphere. Fog is opt-out — only
