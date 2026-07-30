@@ -368,6 +368,72 @@ struct CoordinateMathTests {
         check(counts.count >= 4, "clumpField should give a real spread of densities, got \(counts.sorted())")
     }
 
+    /// The dressed walls put a FIXED three props along every wall of every tile, at exactly even
+    /// spacing and a constant distance out — a fence, and the last visible regularity once open
+    /// ground was fixed. It hid on the player's start face because the garden's continuous scatter
+    /// is layered over that one face and no other.
+    ///
+    /// Also pins the constraint that makes this awkward: the dressing must be derived from
+    /// twist-INVARIANT inputs (tile seed, canonical edge, k) so it rides its tile rigidly through a
+    /// rotation. Varying it by row/col would look just as good standing still and shear on the first
+    /// twist.
+    static func testDressedWallDressingIsNotAFence() {
+        let gs = GameState(size: 11, name: "garden", stamp: .gardenMaze)
+        let m = gs.cubeModel
+        let pools = [0, 1, 2, 3]
+        func dressing(_ ci: Int, _ fi: Int, _ face: CubeFace, _ r: Int, _ c: Int) -> [Prop] {
+            m.dressedWallProps(m.cubies[ci].facelets[fi], face: face, row: r, col: c,
+                               walls: pools, rocks: pools, bushes: pools,
+                               wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: false)
+        }
+        var counts = Set<Int>(), radii = Set<Int>(), sample: [Prop] = []
+        var idOf: [Int: (Int, Int)] = [:]
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                idOf[m.cubies[ci].facelets[fi].id.rawValue] = (ci, fi)
+                let props = dressing(ci, fi, .positiveZ, r, c)
+                guard !props.isEmpty else { continue }
+                counts.insert(props.count)
+                for p in props { radii.insert(Int((p.offsetX * p.offsetX + p.offsetY * p.offsetY).squareRoot() * 500)) }
+                if props.count > sample.count { sample = props }
+            }
+        }
+        check(counts.count > 1, "how many props dress a tile should vary, got \(counts.sorted())")
+        check(radii.count > 8, "distance from the wall should vary, got \(radii.count) distinct radii")
+        check(sample.contains { $0.viewAngle != 0 }, "dressing should not be quantised to 45° facings")
+        // Positions along a wall must not be evenly spaced.
+        let xs = sample.map { $0.offsetX }.sorted()
+        if xs.count >= 3 {
+            let gaps = (1..<xs.count).map { xs[$0] - xs[$0 - 1] }
+            check(Set(gaps.map { Int($0 * 1000) }).count > 1, "props along a wall are still evenly spaced")
+        }
+        // Twist-rigidity: a tile's own OVERGROWTH follows the tile, not its position on the face.
+        // (Structural wall pieces are excluded — a shared wall is drawn by one of the two tiles that
+        // meet at it, and which one legitimately changes when a twist changes who is adjacent.)
+        func overgrowth(_ ci: Int, _ fi: Int, _ r: Int, _ c: Int) -> [Int] {
+            m.dressedWallProps(m.cubies[ci].facelets[fi], face: .positiveZ, row: r, col: c,
+                               walls: [], rocks: pools, bushes: pools,
+                               wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: false)
+                .map(\.state).sorted()   // as a MULTISET: the edges are visited in N/E/S/W order of
+        }                                 // the CURRENT rotation, so the sequence turns with the tile
+        let (axis, index) = m.sliceAxisAndIndex(for: .positiveZ)
+        let before = idOf.mapValues { overgrowth($0.0, $0.1, 0, 0) }
+        m.applySliceRotation(axis: axis, index: index, angle: .pi / 2)
+        var checkedTiles = 0
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                let id = m.cubies[ci].facelets[fi].id.rawValue
+                guard let was = before[id] else { continue }
+                check(overgrowth(ci, fi, r, c) == was,
+                      "tile \(id) regrew its overgrowth differently after a twist")
+                checkedTiles += 1
+            }
+        }
+        check(checkedTiles > 0, "the twist should have left tiles on this face to re-check")
+    }
+
     static func testSceneFourVesselReadsTheLock() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -587,6 +653,7 @@ struct CoordinateMathTests {
         testSceneFourVesselReadsTheLock()
         testDressedWorldsDoNotFenceOffOpenEdges()
         testJitteredSolidPropsBlockWhereTheyAreDrawn()
+        testDressedWallDressingIsNotAFence()
 
         print("")
         if failed == 0 {

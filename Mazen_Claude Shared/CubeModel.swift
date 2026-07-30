@@ -1390,11 +1390,15 @@ class CubeModel {
             guard let f = faceletAt(face: face, row: row + dr, col: col + dc) else { return nil }
             return (f.cubieIndex, f.faceletIndex)
         }
-        func put(_ pool: [Int], _ scale: Float, _ sink: Float, _ facing: Heading8, _ h: UInt32, _ ox: Float, _ oy: Float) {
+        func put(_ pool: [Int], _ scale: Float, _ sink: Float, _ facing: Heading8, _ h: UInt32,
+                 _ ox: Float, _ oy: Float, yawDeg: Float = 0) {
             guard !pool.isEmpty else { return }
             var p = Prop(kind: .importedFoliage, subRow: 1, subCol: 1, facing: facing,
                          state: pool[Int(h % UInt32(pool.count))], extraScale: scale * (0.85 + Float((h >> 6) % 30) / 100.0))
             p.offsetX = ox; p.offsetY = oy; p.sink = sink
+            // Fills in between `facing`'s 45° steps. Safe under a twist: `facing` carries the tile's
+            // rotation, this is a fixed extra angle in the tile's own frame.
+            p.viewAngle = yawDeg
             out.append(p)
         }
         // Rigid edge frame: outward normal (nx,ny), a tangent (tx,ty) that rotates WITH the edge through
@@ -1417,25 +1421,46 @@ class CubeModel {
         func wallPieces(_ dir: DirectionMask) {
             let f = frame(dir)
             for k in 0..<6 {
-                let t = -0.5 + (Float(k) + 0.5) / 6.0
                 let h = hash(seed, canon(dir) &* 31 &+ 1, k &* 7 &+ type)
-                put(walls, wallScale, 0.03, f.facing, h, f.nx * 0.46 + f.tx * t, f.ny * 0.46 + f.ty * t)
+                // Small jitter only — these are the WALL. Enough that a ruin stops looking milled,
+                // not enough to open a gap you could see through (the pieces overlap at six a side).
+                let t = -0.5 + (Float(k) + 0.5) / 6.0
+                    + (Float((h >> 13) & 0xFF) / 255.0 - 0.5) * 0.055
+                let radial = 0.46 + (Float((h >> 21) & 0x3F) / 63.0 - 0.5) * 0.03
+                put(walls, wallScale, 0.03 + Float((h >> 9) & 0xF) / 15.0 * 0.02, f.facing, h,
+                    f.nx * radial + f.tx * t, f.ny * radial + f.ty * t,
+                    yawDeg: (Float((h >> 27) & 0x1F) / 31.0 - 0.5) * 7)
             }
         }
         // (2) Foliage on this tile's INNER face (radius 0.34, toward centre), same rigid frame + canon.
         // Gentle gradient (outer cleaner → inner lusher; a steep one pooled it into the 3×3 centre).
         func foliage(_ dir: DirectionMask) {
-            let overgrowth = [3, 4, 4, 5][type]
-            guard overgrowth > 0 else { return }
+            // This was a FIXED count at exactly even spacing and a constant 0.34 from the wall, which
+            // is "three props along every wall of every tile" — the regularity Eddie could still see
+            // once the open-ground scatter was fixed. The player's start face hid it, because the
+            // garden's continuous vegetation is layered over that one face and nothing else.
+            //
+            // Everything here is still derived from twist-INVARIANT inputs only (the tile's seed, the
+            // canonical edge id, k, type — never row/col), so the dressing stays rigid through a
+            // twist. That is the constraint that makes this fiddly rather than free.
+            let hN = hash(seed, canon(dir) &* 31 &+ 9, type &* 5 &+ 3)
+            let overgrowth = max(1, [3, 4, 4, 5][type] - 2 + Int(hN % 4))
             let f = frame(dir)
             for k in 0..<overgrowth {
-                let t = -0.5 + (Float(k) + 0.5) / Float(overgrowth)
                 let h = hash(seed, canon(dir) &* 31 &+ 2, k &* 7 &+ type)
+                // Along the wall: jitter within the slot rather than dead centre of it.
+                let slot = (Float(k) + 0.5) / Float(overgrowth)
+                let t = -0.5 + slot + (Float((h >> 11) & 0xFF) / 255.0 - 0.5) * (0.9 / Float(overgrowth))
+                // And away from it: a constant radius drew a line of evenly-spaced dots parallel to
+                // every wall, which reads as a fence. Kept clear of the wall itself (0.46) and short
+                // of the tile centre.
+                let radial = 0.23 + Float((h >> 19) & 0xFF) / 255.0 * 0.18
                 let rock = h % 100 < 45 && !rocks.isEmpty
                 // Yaw advances with the tile's turns so an asymmetric bush spins rigidly too.
                 let yaw = Heading8(rawValue: (Int(h % 8) + 2 * uvTurns) % 8) ?? .n
                 put(rock ? rocks : bushes, rock ? rockScale : bushScale, rock ? 0.20 : 0.10,
-                    yaw, h >> 3, f.nx * 0.34 + f.tx * t, f.ny * 0.34 + f.ty * t)
+                    yaw, h >> 3, f.nx * radial + f.tx * t, f.ny * radial + f.ty * t,
+                    yawDeg: Float((h >> 24) & 0x3F) * (45.0 / 64.0))
             }
         }
         // Structural-wall ownership by tile IDENTITY (not N/W): the shared wall is drawn once, by the
