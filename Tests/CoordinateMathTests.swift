@@ -336,13 +336,36 @@ struct CoordinateMathTests {
               "and no longer blocks where it used to stand")
         // Passing no standStep keeps the old lattice-centred behaviour for callers that want it.
         check(rock.blocks(centre, centre, grid: grid), "without standStep the footprint stays on the cell")
-        // Jitter stays inside the prop's own sub-cell, so nothing wanders into a wall.
-        for seed in 0..<400 {
-            let (ox, oy, yaw) = gs.cubeModel.scatterJitter(UInt32(truncatingIfNeeded: seed &* 2654435761 &+ 17))
-            check(abs(ox) <= 0.5 * ws.subCellStep && abs(oy) <= 0.5 * ws.subCellStep,
-                  "seed \(seed) nudged a prop out of its own sub-cell")
-            check(yaw >= 0 && yaw < 45, "seed \(seed) yaw \(yaw) should fill in between the 45° steps")
+        // Placement must be CONTINUOUS across the tile — the failure Eddie kept seeing was props
+        // landing on a small set of positions, so assert they land on many, spread over the whole
+        // tile, and that each stays inside the sub-cell it reports (or its footprint would lie).
+        var xs: [Float] = [], ys: [Float] = []
+        var distinct = Set<Int>()
+        let half = ws.floorHalfSize
+        for seed in 0..<600 {
+            let p = gs.cubeModel.scatterPlacement(UInt32(truncatingIfNeeded: seed &* 2654435761 &+ 17))
+            check(abs(p.ox) <= 0.5 * ws.subCellStep + 1e-5 && abs(p.oy) <= 0.5 * ws.subCellStep + 1e-5,
+                  "seed \(seed) offset escapes the sub-cell it claims")
+            check(p.yaw >= 0 && p.yaw <= 360, "seed \(seed) yaw \(p.yaw) out of range")
+            let x = Float(p.subCol - 1) * ws.subCellStep + p.ox    // where it is actually drawn
+            let y = Float(p.subRow - 1) * ws.subCellStep + p.oy
+            check(abs(x) <= half && abs(y) <= half, "seed \(seed) placed outside its own tile")
+            xs.append(x); ys.append(y)
+            distinct.insert(Int(x * 4000) &* 31 &+ Int(y * 4000))
         }
+        check(distinct.count > 550, "placement should be continuous, got \(distinct.count) distinct spots of 600")
+        // And it should actually USE the tile: cover every third of it in both axes.
+        for band in 0..<3 {
+            let lo = -half + Float(band) * (2 * half / 3), hi = lo + (2 * half / 3)
+            check(xs.contains { $0 >= lo && $0 < hi }, "no prop landed in x band \(band)")
+            check(ys.contains { $0 >= lo && $0 < hi }, "no prop landed in y band \(band)")
+        }
+        // Density must VARY, or an even sprinkle reads as a grid however good the positions are.
+        var counts = Set<Int>()
+        for r in 0..<24 { for c in 0..<24 {
+            counts.insert(Int((gs.cubeModel.clumpField(r, c, salt: 11) * 8).rounded()))
+        } }
+        check(counts.count >= 4, "clumpField should give a real spread of densities, got \(counts.sorted())")
     }
 
     static func testSceneFourVesselReadsTheLock() {

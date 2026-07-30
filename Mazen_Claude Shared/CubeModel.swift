@@ -1098,24 +1098,63 @@ class CubeModel {
     /// M20 (Eddie) — tiles that must stay CLEAR of dressing so nothing hides a puzzle element: every
     /// tile holding a switch / plinth / temple pillar / sealed door / cylinder, plus its 4 neighbours.
     /// Scanned from the actual placed props (so it tracks whatever the lock stamped). +Z face only.
-    /// Continuous placement jitter for a SCATTERED decorative prop, from a seed.
+    /// Where a SCATTERED decorative prop actually stands: anywhere in the tile, continuously.
     ///
-    /// Sub-cells are an authoring grid: three by three per ~19 m tile. Anything placed straight onto
-    /// them lands on one of nine points, and the eye reads that lattice immediately however well the
-    /// *choice* of plant is randomised (Eddie, twice — the second time after only the front face was
-    /// fixed). This returns a nudge within the cell plus a yaw filling in between the 8-way facing's
-    /// 45° steps, so position and orientation both stop landing on round numbers.
+    /// The first attempt at this jittered props *within* their authoring sub-cell, which did nothing
+    /// visible (Eddie, twice). The lattice the eye reads is the TILE grid — one prop per ~19 m tile —
+    /// and a nudge of ±2.7 m cannot break a 19 m rhythm. Placement has to be continuous across the
+    /// whole tile, and the number of props per tile has to VARY, or the regularity survives whatever
+    /// you do to the positions.
     ///
-    /// Kept to ±0.43 of a sub-cell so a prop stays inside its own cell — it must not wander into a
-    /// wall, and for solid props the footprint follows the offset (`Prop.blocks`) rather than the
-    /// two drifting apart.
-    func scatterJitter(_ seed: UInt32) -> (ox: Float, oy: Float, yaw: Float) {
+    /// Returns the authoring sub-cell that CONTAINS the point plus the offset from that sub-cell's
+    /// centre, so `Prop.blocks` (which reasons in sub-cell + offset) keeps a solid prop's footprint
+    /// exactly under its mesh. Yaw is a full turn, so callers can leave `facing` at `.n`.
+    /// `clearCells` keeps a SOLID prop's centre far enough from the tile border that its footprint
+    /// cannot reach the border strip — where gateways are, and where a rock would silently wall off
+    /// a passage. (The headless reachability tests caught exactly that the first time this went
+    /// continuous: 280 severed gateway cells on the moon.) Non-solid scatter passes 0.
+    func scatterPlacement(_ seed: UInt32, avoidCentre: Bool = false, clearCells: Int = 0)
+        -> (subRow: Int, subCol: Int, ox: Float, oy: Float, yaw: Float) {
         var g = seed &* 2654435761
         g ^= g >> 16; g = g &* 2246822519; g ^= g >> 13
-        let cell = worldScale.subCellStep
-        return ((Float(g & 0x3FF) / 1023.0 - 0.5) * 0.86 * cell,
-                (Float((g >> 10) & 0x3FF) / 1023.0 - 0.5) * 0.86 * cell,
-                Float((g >> 20) & 0x3F) * (45.0 / 64.0))
+        var u = Float(g & 0xFFF) / 4095.0
+        var v = Float((g >> 12) & 0xFFF) / 4095.0
+        if avoidCentre {
+            // Big plants stay off the line through the middle of the tile — that is where a player
+            // walks, and a bush in the face reads as an obstacle even when it cannot block you.
+            u = (g & 0x0100_0000) != 0 ? 0.06 + u * 0.27 : 0.67 + u * 0.27
+            v = (g & 0x0200_0000) != 0 ? 0.06 + v * 0.27 : 0.67 + v * 0.27
+        } else {
+            // A margin off the tile edge so nothing grows inside a wall; widened for solid props so
+            // their whole footprint clears the border strip.
+            let m = max(0.06, (Float(clearCells) + 2.0) / Float(worldScale.standGrid))
+            u = m + u * (1 - 2 * m)
+            v = m + v * (1 - 2 * m)
+        }
+        let hs = worldScale.floorHalfSize, step = worldScale.subCellStep
+        let x = (u - 0.5) * 2 * hs, y = (v - 0.5) * 2 * hs
+        let sc = min(2, max(0, Int(u * 3))), sr = min(2, max(0, Int(v * 3)))
+        return (sr, sc, x - Float(sc - 1) * step, y - Float(sr - 1) * step,
+                Float((g >> 4) & 0x3FF) * (360.0 / 1023.0))
+    }
+
+    /// A smooth 0…1 field over TILE coordinates, wavelength ~4 tiles — used to make scatter DENSITY
+    /// vary from place to place. Without it every tile rolls its own count independently, which is
+    /// uniform noise: statistically random, visually a grid, because no tile is ever much emptier or
+    /// fuller than its neighbours. This is what turns an even sprinkle into thickets and clearings.
+    func clumpField(_ r: Int, _ c: Int, salt: Int) -> Float {
+        let cell = 4
+        func corner(_ a: Int, _ b: Int) -> Float {
+            var v = UInt32(truncatingIfNeeded: a &* 73856093 ^ b &* 19349663 ^ salt &* 83492791)
+            v ^= v >> 15; v = v &* 2246822519; v ^= v >> 13
+            return Float(v & 0xFFFF) / 65535.0
+        }
+        let r0 = Int(floor(Float(r) / Float(cell))), c0 = Int(floor(Float(c) / Float(cell)))
+        let fr = Float(r - r0 * cell) / Float(cell), fc = Float(c - c0 * cell) / Float(cell)
+        let sr = fr * fr * (3 - 2 * fr), sc = fc * fc * (3 - 2 * fc)   // smoothstep, so no seams
+        let top = corner(r0, c0) + (corner(r0, c0 + 1) - corner(r0, c0)) * sc
+        let bot = corner(r0 + 1, c0) + (corner(r0 + 1, c0 + 1) - corner(r0 + 1, c0)) * sc
+        return top + (bot - top) * sr
     }
 
     private func gardenClearTiles() -> Set<[Int]> {
@@ -1157,23 +1196,15 @@ class CubeModel {
         func place(_ ci: Int, _ fi: Int, _ pool: [Int], _ base: Float, _ h: UInt32, corner: Bool) {
             guard !pool.isEmpty else { return }
             let idx = pool[Int(h % UInt32(pool.count))]
-            // Corner plants avoid the tile centre (the path runs through the middle); ground cover
-            // (non-solid, small) can sit anywhere. Sub-cell + yaw + size all fall out of the hash.
-            let sr = corner ? Int((h >> 3) & 1) * 2 : Int((h >> 3) % 3)
-            let sc = corner ? Int((h >> 4) & 1) * 2 : Int((h >> 5) % 3)
             let jitter = 0.85 + Float((h >> 6) % 30) / 100.0    // 0.85…1.15 size variety
-            // The 3×3 sub-cell lattice is an AUTHORING grid, not where a plant should actually
-            // stand. Nine possible points per ~19 m tile — and a second pass dropping four more
-            // plants onto the same nine — is a pattern the eye picks out instantly (Eddie:
-            // "unnaturally regular"). Nudge within the cell and add a continuous yaw on top of the
-            // 8-way facing, so both position and orientation stop landing on round numbers. These
-            // are non-solid props, so nothing here moves a collision footprint.
-            let (ox, oy, yaw) = scatterJitter(h)
+            // Continuous across the whole tile (`scatterPlacement`), not one of nine sub-cell points:
+            // at ~19 m per tile the sub-cell lattice was never what the eye was reading. `corner`
+            // now means "keep off the walking line through the middle", not "sit on a lattice point".
+            let p = scatterPlacement(h, avoidCentre: corner)
             cubies[ci].facelets[fi].props.append(
-                Prop(kind: .importedFoliage, subRow: sr, subCol: sc,
-                     facing: Heading8(rawValue: Int(h % 8)) ?? .n,
-                     state: idx, viewAngle: yaw, extraScale: base * jitter,
-                     offsetX: ox, offsetY: oy))
+                Prop(kind: .importedFoliage, subRow: p.subRow, subCol: p.subCol,
+                     state: idx, viewAngle: p.yaw, extraScale: base * jitter,
+                     offsetX: p.ox, offsetY: p.oy))
         }
 
         for r in rLo...rHi {
@@ -1204,7 +1235,13 @@ class CubeModel {
             for col in cLo...cHi {
                 if (r, col) == (c, c) || clear.contains([r, col]) { continue }
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
-                for k in 0..<4 {          // Eddie: don't over-thin — keep it lush (still even + clear of puzzles)
+                // How many, not just where. A fixed four-per-tile is uniform noise: statistically
+                // random, visually a grid, because no tile is ever emptier or fuller than its
+                // neighbours. Draw the count from a field that varies over ~4 tiles so the garden
+                // gets thickets and clearings — which is what actually reads as natural.
+                let density = clumpField(r, col, salt: 11)
+                let n2 = Int((0.35 + density * density * 7.4).rounded())     // ~0…8 per tile
+                for k in 0..<n2 {
                     let h = hash(r &* 53 &+ col &* 3, k &* 29 &+ 11, r &* col &+ k &* 7)
                     let roll = h % 100
                     if roll < 55       { place(ci, fi, flora.bushes,  bushScale,  h, corner: false) }
@@ -1544,19 +1581,16 @@ class CubeModel {
                     // Rock fields (patchy) that thicken heavily toward the corners (random thicket).
                     let rockProb = min(0.98, 0.30 + 0.28 * patchField(dir) + 0.90 * boost)
                     guard Float(h % 1000) / 1000.0 < rockProb else { continue }
-                    let ar = Int((h >> 4) % 3), ac = Int((h >> 6) % 3)
-                    // A rubble field is the last place a 3×3 lattice should be readable.
-                    let (jx, jy, jyaw) = scatterJitter(h)
-                    cubies[ci].facelets[fi].props.append(
-                        Prop(kind: .boulder, subRow: ar, subCol: ac, state: Int((h >> 8) % 3),
-                             viewAngle: jyaw, offsetX: jx, offsetY: jy))
-                    // Near a corner, drop a second rock at another cell — a denser rubble thicket.
-                    if boost > 0.4 {
-                        let h2 = hash(faceIdx &* 733 + row, col &* 11, row &+ col &+ 5)
-                        let (j2x, j2y, j2yaw) = scatterJitter(h2)
+                    // A rubble field is the last place a lattice should be readable — place rocks
+                    // continuously across the tile, and vary how many land on it.
+                    let rocks = boost > 0.4 ? 2 : 1     // solid, 5×5 footprint each — a third would seal the tile
+                    for k in 0..<rocks {
+                        let hk = hash(faceIdx &* 733 &+ row, col &* 11 &+ k &* 7, row &+ col &+ k &* 13)
+                        let p = scatterPlacement(hk, clearCells: PropKind.boulder.footprintRadius(grid: worldScale.standGrid))
                         cubies[ci].facelets[fi].props.append(
-                            Prop(kind: .boulder, subRow: Int(h2 % 3), subCol: Int((h2 / 3) % 3),
-                                 state: Int((h2 >> 8) % 3), viewAngle: j2yaw, offsetX: j2x, offsetY: j2y))
+                            Prop(kind: .boulder, subRow: p.subRow, subCol: p.subCol,
+                                 state: Int((hk >> 8) % 3), viewAngle: p.yaw,
+                                 offsetX: p.ox, offsetY: p.oy))
                     }
                 }
             }
@@ -1662,31 +1696,45 @@ class CubeModel {
                             let th = hash(faceIdx &* 991 + row &* 17, col &* 13 &+ i, i &* 7 &+ row &- col)
                             let ar = Int(th % 3), ac = Int((th / 3) % 3)
                             let st = Int((th >> 8) % 3)
-                            // Off the 3×3 lattice (see `scatterJitter`). Trunk takes the SAME nudge
-                            // as its crown, or the tree stands beside its own trunk.
-                            let (jx, jy, jyaw) = scatterJitter(th)
+                            // Anywhere in the tile (`scatterPlacement`). The trunk takes the SAME
+                            // placement as its crown, or the tree stands beside its own trunk.
+                            let p = scatterPlacement(th, clearCells: PropKind.treeTrunk.footprintRadius(grid: worldScale.standGrid))
+                            _ = (ar, ac)
                             cubies[ci].facelets[fi].props.append(
-                                Prop(kind: .tree, subRow: ar, subCol: ac, state: st, viewAngle: jyaw,
-                                     offsetX: jx, offsetY: jy))
+                                Prop(kind: .tree, subRow: p.subRow, subCol: p.subCol, state: st,
+                                     viewAngle: p.yaw, offsetX: p.ox, offsetY: p.oy))
                             if i == 0 {   // one solid trunk (keeps collision light while trees spread)
                                 cubies[ci].facelets[fi].props.append(
-                                    Prop(kind: .treeTrunk, subRow: ar, subCol: ac, state: st, viewAngle: jyaw,
-                                         offsetX: jx, offsetY: jy))
+                                    Prop(kind: .treeTrunk, subRow: p.subRow, subCol: p.subCol, state: st,
+                                         viewAngle: p.yaw, offsetX: p.ox, offsetY: p.oy))
                             }
                         }
                     } else {
                         let r2 = (h >> 12) % 100
-                        // These sit on the tile CENTRE (1,1), so without a nudge every bush and rock
-                        // on the world lands dead centre of its tile — the strongest lattice of all.
-                        let (jx, jy, jyaw) = scatterJitter(h &* 31 &+ 7)
-                        if r2 < 20 {   // leafy bush — M20 alpha-cutout foliage card; state = LeafSet slice
-                            cubies[ci].facelets[fi].props.append(
-                                Prop(kind: .foliageCard, subRow: 1, subCol: 1, state: Int((h >> 10) % 8),
-                                     viewAngle: jyaw, offsetX: jx, offsetY: jy))
-                        } else if r2 < 28 {
-                            cubies[ci].facelets[fi].props.append(
-                                Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3),
-                                     viewAngle: jyaw, offsetX: jx, offsetY: jy))
+                        // These used to sit on the tile CENTRE (1,1) — every bush and rock on the
+                        // world dead centre of its own tile, the strongest lattice available. Now
+                        // placed continuously, in counts that vary over ~4 tiles so open ground and
+                        // rocky patches both exist instead of an even sprinkle everywhere.
+                        let dens = clumpField(row, col, salt: faceIdx &* 17 &+ 3)
+                        // Bushes are non-solid and can be lush; boulders are solid with a 5×5
+                        // footprint, so a tile full of them is a sealed tile.
+                        let count = r2 < 20 ? Int((dens * dens * 5.0).rounded())
+                                            : min(2, Int((dens * 2.4).rounded()))
+                        for k in 0..<count {
+                            let hk = hash(row &* 61 &+ col, k &* 23 &+ 5, faceIdx &* 9 &+ k)
+                            let p = scatterPlacement(hk, clearCells: r2 < 20 ? 0
+                                : PropKind.boulder.footprintRadius(grid: worldScale.standGrid))
+                            if r2 < 20 {   // leafy bush — alpha-cutout foliage card; state = LeafSet slice
+                                cubies[ci].facelets[fi].props.append(
+                                    Prop(kind: .foliageCard, subRow: p.subRow, subCol: p.subCol,
+                                         state: Int((hk >> 10) % 8), viewAngle: p.yaw,
+                                         offsetX: p.ox, offsetY: p.oy))
+                            } else if r2 < 28 {
+                                cubies[ci].facelets[fi].props.append(
+                                    Prop(kind: .boulder, subRow: p.subRow, subCol: p.subCol,
+                                         state: Int((hk >> 8) % 3), viewAngle: p.yaw,
+                                         offsetX: p.ox, offsetY: p.oy))
+                            }
                         }
                     }
                 }
