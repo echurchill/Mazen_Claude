@@ -126,6 +126,52 @@ class CubeModel {
             // anyway; curvature was fighting the very thing the scene is about.
             roundness = 0.0
         }
+        reconcileSharedEdges()
+    }
+
+    /// An edge is one thing, but it is STORED twice — once in each tile that meets at it. Nothing
+    /// enforced that the two halves agree, and several stamps carve a passage by opening one side
+    /// only (`openings.insert(.east)` and friends, never a matching insert on the neighbour). The
+    /// halves then disagreed, with two consequences that look unrelated:
+    ///
+    ///   • Movement is checked on the DEPARTING tile, so the edge was passable one way and solid the
+    ///     other. Walk east freely, then find you cannot walk back west.
+    ///   • The dressed wall is drawn once, by whichever of the two tiles owns it. If the owner is the
+    ///     side that thinks the edge is OPEN, nothing is drawn at all — an invisible wall. That is
+    ///     what Eddie hit beside Scene 2's control plinth (18 disagreeing halves there, 38 in the hub).
+    ///
+    /// OPEN wins, and that is not arbitrary: every one-sided edit in this file is an `insert` — there
+    /// is no one-sided `remove` anywhere — so a disagreement always means "someone carved a passage
+    /// and did not tell the far side". Opening both halves is what they meant. It also cannot seal a
+    /// route, so it can only ever fix reachability, never break it.
+    private func reconcileSharedEdges() {
+        let dirs: [(SurfaceDirection, DirectionMask, Int, Int)] = [
+            (.north, .north, -1, 0), (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)
+        ]
+        for face in CubeFace.allCases {
+            for r in 0..<size {
+                for c in 0..<size {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { continue }
+                    for (sdir, mask, dr, dc) in dirs {
+                        guard cubies[ci].facelets[fi].mazeTile.openings.contains(mask) else { continue }
+                        let nr = r + dr, nc = c + dc
+                        let far: (face: CubeFace, row: Int, col: Int, back: SurfaceDirection)
+                        if nr >= 0, nr < size, nc >= 0, nc < size {
+                            far = (face, nr, nc, sdir.opposite)
+                        } else {
+                            // Across a cube edge the far side's "back" direction is conjugated, so ask
+                            // the crossing rather than assuming north pairs with south.
+                            let cr = edgeCrossing(face: face, direction: sdir, row: r, col: c)
+                            far = (cr.face, cr.row, cr.col, cr.facing.opposite)
+                        }
+                        guard let (nci, nfi) = faceletAt(face: far.face, row: far.row, col: far.col) else { continue }
+                        let backMask: DirectionMask = far.back == .north ? .north : far.back == .south ? .south
+                                                    : far.back == .west ? .west : .east
+                        cubies[nci].facelets[nfi].mazeTile.openings.insert(backMask)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Prologue Scene 2 — "The Four Corners"

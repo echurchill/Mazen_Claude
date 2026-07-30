@@ -716,8 +716,8 @@ class GameState {
     /// having just moved. Deterministic per tile, so a replayed twist shakes the same dust.
     private func shakeDustFromJoints() {
         let n = cubeModel.size, face = player.face
-        for dr in -2...2 {
-            for dc in -2...2 {
+        for dr in -3...3 {
+            for dc in -3...3 {
                 let r = player.row + dr, c = player.col + dc
                 guard r >= 0, r < n, c >= 0, c < n,
                       let (ci, fi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
@@ -725,7 +725,7 @@ class GameState {
                 guard !closed.isEmpty else { continue }
                 var h = UInt32(truncatingIfNeeded: r &* 73856093 ^ c &* 19349663)
                 h ^= h >> 15; h = h &* 2246822519; h ^= h >> 13
-                let motes = 1 + Int(h % 3)
+                let motes = 3 + Int(h % 4)      // was 1–3; too sparse to notice while the world turns
                 for k in 0..<motes {
                     let p = cubeModel.scatterPlacement(h &+ UInt32(k &* 977))
                     var mote = Prop(kind: .dustMote, subRow: p.subRow, subCol: p.subCol,
@@ -745,7 +745,7 @@ class GameState {
                 guard cubeModel.cubies[cu].facelets[fi].props.contains(where: { $0.kind == .dustMote }) else { continue }
                 for pi in cubeModel.cubies[cu].facelets[fi].props.indices
                 where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .dustMote {
-                    cubeModel.cubies[cu].facelets[fi].props[pi].anim -= dt / 1.6
+                    cubeModel.cubies[cu].facelets[fi].props[pi].anim -= dt / 2.6   // longer, so it can be looked AT
                 }
                 let before = cubeModel.cubies[cu].facelets[fi].props.count
                 cubeModel.cubies[cu].facelets[fi].props.removeAll { $0.kind == .dustMote && $0.anim <= 0 }

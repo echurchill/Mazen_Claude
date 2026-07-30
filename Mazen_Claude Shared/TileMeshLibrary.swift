@@ -1492,7 +1492,7 @@ class TileMeshLibrary {
     /// of a subsystem.
     private static func addDustMote(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let mUnit: Float = ws.eyeHeight / 1.7
-        let hw = 0.045 * mUnit                      // ~4.5 cm across
+        let hw = 0.16 * mUnit                       // ~16 cm: a speck at 4.5 cm was unfindable (Eddie)
         let z0 = ws.floorY + 1.35 * mUnit           // shaken loose at about joint height
         func quad(_ ax: Float, _ ay: Float) {
             let n = SIMD3<Float>(-ay, ax, 0)

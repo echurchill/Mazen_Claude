@@ -820,9 +820,14 @@ fragment float4 fragmentShader(
         if (noise > life) discard_fragment();
         // Round the square card off, so a mote is a speck and not a chip.
         if (length(in.texCoord - 0.5) > 0.5) discard_fragment();
-        float3 amb = skyAmbient * 0.65 + sunColor * 0.35 * shadowFactor;
-        color = float3(0.78, 0.75, 0.70) * amb;
-        lighting = float3(1.0);
+        // Eddie could not find it at all: a grey speck against grey stone in the middle of a turning
+        // world is invisible even when you know where to look. It now GLOWS — emissive, so it reads
+        // in shadow and at night, brightest as it is shaken loose and cooling as it settles. Dust
+        // that lights up is not physical, but this has a job: to say "the world just moved, HERE".
+        float glow = life * life;                       // hottest at the moment it breaks free
+        float3 ember = mix(float3(0.72, 0.70, 0.66), float3(1.00, 0.93, 0.72), glow);
+        color = ember * (0.55 + 2.2 * glow);
+        lighting = float3(1.0);                         // unlit: a mote should not go dark in shade
     } else if (in.materialID == 28) {
         // THE LAYERED VESSEL (Scene 4D). Smooth stone/ceramic with faint green-blue traces in the
         // grooves, three major rings each crossed by a narrow luminous seam, and the swirl on its cap.

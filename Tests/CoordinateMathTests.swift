@@ -577,6 +577,50 @@ struct CoordinateMathTests {
         check(arrivals == 0, "the arrival doorway itself is gone, not merely invisible")
     }
 
+    /// An edge is ONE thing stored TWICE, once in each tile that meets at it, and nothing enforced
+    /// that the halves agree. Several stamps carve a passage by opening one side only, which gave
+    /// edges that were passable one way and solid the other — and, because a dressed wall is drawn by
+    /// whichever tile owns it, walls that blocked you while drawing nothing at all. Eddie walked into
+    /// one beside Scene 2's control plinth; there were 18 disagreeing halves there and 38 in the hub.
+    ///
+    /// This is the assertion that makes the whole class impossible, so it runs over every stamp.
+    static func testEveryStampHasConsistentEdges() {
+        let worlds: [(String, GameState)] = [
+            ("scene-2", GameState(size: PrologueSize.sceneTwo, name: "s2", stamp: .sceneTwo)),
+            ("scene-4", GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour)),
+            ("garden",  GameState(size: 11, name: "g", stamp: .gardenMaze)),
+            ("hub",     GameState(size: 15, name: "h", stamp: .portalHub)),
+            ("temple",  GameState(size: 5, name: "t", interior: true, stamp: .templeInterior)),
+            ("natural", GameState(size: 7, name: "n", stamp: .natural)),
+            ("lunar",   GameState(size: 5, name: "l", stamp: .lunar)),
+            ("home",    GameState(size: 7, name: "hc", stamp: .homeClearing)),
+        ]
+        let dirs: [(DirectionMask, Int, Int, DirectionMask)] = [
+            (.north, -1, 0, .south), (.south, 1, 0, .north), (.west, 0, -1, .east), (.east, 0, 1, .west)
+        ]
+        for (label, gs) in worlds {
+            let m = gs.cubeModel
+            var bad = 0
+            for face in CubeFace.allCases {
+                for r in 0..<m.size {
+                    for c in 0..<m.size {
+                        guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                        let op = m.cubies[ci].facelets[fi].mazeTile.openings
+                        for (dir, dr, dc, opp) in dirs {
+                            let nr = r + dr, nc = c + dc
+                            guard nr >= 0, nr < m.size, nc >= 0, nc < m.size,
+                                  let (nci, nfi) = m.faceletAt(face: face, row: nr, col: nc) else { continue }
+                            if op.contains(dir) != m.cubies[nci].facelets[nfi].mazeTile.openings.contains(opp) {
+                                bad += 1
+                            }
+                        }
+                    }
+                }
+            }
+            check(bad == 0, "\(label) has \(bad) edge-halves that disagree with their neighbour")
+        }
+    }
+
     static func testVesselCanBeApproached() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -821,6 +865,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
+        testEveryStampHasConsistentEdges()
         testClosingDoorwayLeavesTheRealPortalAlone()
         testSceneFourTurnOpensTheSealedPortal()
         testAudioEmittersRideTwistsAndAreOccludedByWalls()
