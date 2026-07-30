@@ -1098,6 +1098,26 @@ class CubeModel {
     /// M20 (Eddie) — tiles that must stay CLEAR of dressing so nothing hides a puzzle element: every
     /// tile holding a switch / plinth / temple pillar / sealed door / cylinder, plus its 4 neighbours.
     /// Scanned from the actual placed props (so it tracks whatever the lock stamped). +Z face only.
+    /// Continuous placement jitter for a SCATTERED decorative prop, from a seed.
+    ///
+    /// Sub-cells are an authoring grid: three by three per ~19 m tile. Anything placed straight onto
+    /// them lands on one of nine points, and the eye reads that lattice immediately however well the
+    /// *choice* of plant is randomised (Eddie, twice — the second time after only the front face was
+    /// fixed). This returns a nudge within the cell plus a yaw filling in between the 8-way facing's
+    /// 45° steps, so position and orientation both stop landing on round numbers.
+    ///
+    /// Kept to ±0.43 of a sub-cell so a prop stays inside its own cell — it must not wander into a
+    /// wall, and for solid props the footprint follows the offset (`Prop.blocks`) rather than the
+    /// two drifting apart.
+    func scatterJitter(_ seed: UInt32) -> (ox: Float, oy: Float, yaw: Float) {
+        var g = seed &* 2654435761
+        g ^= g >> 16; g = g &* 2246822519; g ^= g >> 13
+        let cell = worldScale.subCellStep
+        return ((Float(g & 0x3FF) / 1023.0 - 0.5) * 0.86 * cell,
+                (Float((g >> 10) & 0x3FF) / 1023.0 - 0.5) * 0.86 * cell,
+                Float((g >> 20) & 0x3F) * (45.0 / 64.0))
+    }
+
     private func gardenClearTiles() -> Set<[Int]> {
         var s = Set<[Int]>()
         let puzzle: Set<PropKind> = [.switchBase, .switchCap, .plinth, .obelisk, .alignmentCylinder]
@@ -1148,12 +1168,7 @@ class CubeModel {
             // "unnaturally regular"). Nudge within the cell and add a continuous yaw on top of the
             // 8-way facing, so both position and orientation stop landing on round numbers. These
             // are non-solid props, so nothing here moves a collision footprint.
-            var g = h &* 2654435761
-            g ^= g >> 16; g = g &* 2246822519; g ^= g >> 13
-            let cell = worldScale.subCellStep
-            let ox = (Float(g & 0x3FF) / 1023.0 - 0.5) * 0.86 * cell     // ±0.43 of a sub-cell:
-            let oy = (Float((g >> 10) & 0x3FF) / 1023.0 - 0.5) * 0.86 * cell  // spread, but still
-            let yaw = Float((g >> 20) & 0x3F) * (45.0 / 64.0)             // inside its own cell
+            let (ox, oy, yaw) = scatterJitter(h)
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .importedFoliage, subRow: sr, subCol: sc,
                      facing: Heading8(rawValue: Int(h % 8)) ?? .n,
@@ -1530,11 +1545,18 @@ class CubeModel {
                     let rockProb = min(0.98, 0.30 + 0.28 * patchField(dir) + 0.90 * boost)
                     guard Float(h % 1000) / 1000.0 < rockProb else { continue }
                     let ar = Int((h >> 4) % 3), ac = Int((h >> 6) % 3)
-                    cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: ar, subCol: ac, state: Int((h >> 8) % 3)))
+                    // A rubble field is the last place a 3×3 lattice should be readable.
+                    let (jx, jy, jyaw) = scatterJitter(h)
+                    cubies[ci].facelets[fi].props.append(
+                        Prop(kind: .boulder, subRow: ar, subCol: ac, state: Int((h >> 8) % 3),
+                             viewAngle: jyaw, offsetX: jx, offsetY: jy))
                     // Near a corner, drop a second rock at another cell — a denser rubble thicket.
                     if boost > 0.4 {
                         let h2 = hash(faceIdx &* 733 + row, col &* 11, row &+ col &+ 5)
-                        cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: Int(h2 % 3), subCol: Int((h2 / 3) % 3), state: Int((h2 >> 8) % 3)))
+                        let (j2x, j2y, j2yaw) = scatterJitter(h2)
+                        cubies[ci].facelets[fi].props.append(
+                            Prop(kind: .boulder, subRow: Int(h2 % 3), subCol: Int((h2 / 3) % 3),
+                                 state: Int((h2 >> 8) % 3), viewAngle: j2yaw, offsetX: j2x, offsetY: j2y))
                     }
                 }
             }
@@ -1640,17 +1662,31 @@ class CubeModel {
                             let th = hash(faceIdx &* 991 + row &* 17, col &* 13 &+ i, i &* 7 &+ row &- col)
                             let ar = Int(th % 3), ac = Int((th / 3) % 3)
                             let st = Int((th >> 8) % 3)
-                            cubies[ci].facelets[fi].props.append(Prop(kind: .tree, subRow: ar, subCol: ac, state: st))
+                            // Off the 3×3 lattice (see `scatterJitter`). Trunk takes the SAME nudge
+                            // as its crown, or the tree stands beside its own trunk.
+                            let (jx, jy, jyaw) = scatterJitter(th)
+                            cubies[ci].facelets[fi].props.append(
+                                Prop(kind: .tree, subRow: ar, subCol: ac, state: st, viewAngle: jyaw,
+                                     offsetX: jx, offsetY: jy))
                             if i == 0 {   // one solid trunk (keeps collision light while trees spread)
-                                cubies[ci].facelets[fi].props.append(Prop(kind: .treeTrunk, subRow: ar, subCol: ac, state: st))
+                                cubies[ci].facelets[fi].props.append(
+                                    Prop(kind: .treeTrunk, subRow: ar, subCol: ac, state: st, viewAngle: jyaw,
+                                         offsetX: jx, offsetY: jy))
                             }
                         }
                     } else {
                         let r2 = (h >> 12) % 100
+                        // These sit on the tile CENTRE (1,1), so without a nudge every bush and rock
+                        // on the world lands dead centre of its tile — the strongest lattice of all.
+                        let (jx, jy, jyaw) = scatterJitter(h &* 31 &+ 7)
                         if r2 < 20 {   // leafy bush — M20 alpha-cutout foliage card; state = LeafSet slice
-                            cubies[ci].facelets[fi].props.append(Prop(kind: .foliageCard, subRow: 1, subCol: 1, state: Int((h >> 10) % 8)))
+                            cubies[ci].facelets[fi].props.append(
+                                Prop(kind: .foliageCard, subRow: 1, subCol: 1, state: Int((h >> 10) % 8),
+                                     viewAngle: jyaw, offsetX: jx, offsetY: jy))
                         } else if r2 < 28 {
-                            cubies[ci].facelets[fi].props.append(Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3)))
+                            cubies[ci].facelets[fi].props.append(
+                                Prop(kind: .boulder, subRow: 1, subCol: 1, state: Int((h >> 8) % 3),
+                                     viewAngle: jyaw, offsetX: jx, offsetY: jy))
                         }
                     }
                 }

@@ -444,12 +444,18 @@ struct Prop {
     /// (M16.6: a 0.75 m plinth is narrower than one 1.3 m stand cell) blocks fewer cells, so you can
     /// walk right up to it instead of being held a full ~6 m author-cell away. Walk-through props
     /// (portals) block nothing; the connectivity guard proves no footprint severs a tile.
-    func blocks(_ subRow: Int, _ subCol: Int, grid: Int) -> Bool {
+    /// `standStep` (world units per stand cell) lets the footprint follow `offsetX`/`offsetY`, so a
+    /// prop nudged off its authoring sub-cell blocks the ground it is actually DRAWN on. Pass 0 (the
+    /// default) to ignore the offsets. This matters as soon as scattered props are jittered: a
+    /// boulder nudged half a sub-cell is ~2 stand cells from where it looks, and collision that
+    /// disagrees with the picture is precisely the invisible-wall bug in another costume.
+    func blocks(_ subRow: Int, _ subCol: Int, grid: Int, standStep: Float = 0) -> Bool {
         guard kind.isSolid else { return false }
         let k = grid / 3
-        let rc = self.subRow * k + k / 2, cc = self.subCol * k + k / 2   // the sub-cell's centre cell
-        let rad = kind.footprintRadius(grid: grid)
-        return abs(subRow - rc) <= rad && abs(subCol - cc) <= rad
+        var rc = Float(self.subRow * k + k / 2), cc = Float(self.subCol * k + k / 2)  // sub-cell centre
+        if standStep > 0 { cc += offsetX / standStep; rc += offsetY / standStep }
+        let rad = Float(kind.footprintRadius(grid: grid))
+        return abs(Float(subRow) - rc) <= rad && abs(Float(subCol) - cc) <= rad
     }
 
     /// Rotate the prop's placement to match a slice rotation, in the same sense as

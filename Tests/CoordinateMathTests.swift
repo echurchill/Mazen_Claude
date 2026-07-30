@@ -310,6 +310,41 @@ struct CoordinateMathTests {
               "hedge worlds keep the jamb rule their geometry earns")
     }
 
+    /// Scattered props are nudged off the 3×3 authoring lattice so a world does not read as a grid.
+    /// For SOLID props that is only safe if the footprint moves with the picture — a boulder nudged
+    /// half a sub-cell is about two stand cells from where it is drawn, and collision that disagrees
+    /// with what you can see is the invisible-wall bug wearing a different hat.
+    static func testJitteredSolidPropsBlockWhereTheyAreDrawn() {
+        let gs = GameState(size: 7, name: "natural", stamp: .natural)
+        let ws = gs.cubeModel.worldScale
+        let grid = ws.standGrid, step = ws.standStep
+        let k = grid / 3
+        // A boulder on the centre sub-cell, nudged a good way east.
+        var rock = Prop(kind: .boulder, subRow: 1, subCol: 1)
+        check(rock.kind.isSolid, "a boulder is solid, or this test proves nothing")
+        let centre = 1 * k + k / 2
+        let shift = 0.43 * ws.subCellStep                  // the largest nudge scatterJitter produces
+        rock.offsetX = shift
+        let cells = Int((shift / step).rounded())
+        check(cells >= 1, "the nudge must be at least a stand cell wide to be worth testing")
+        // It blocks where it is DRAWN...
+        check(rock.blocks(centre, centre + cells, grid: grid, standStep: step),
+              "a nudged boulder blocks the ground under it")
+        // ...and has let go of ground it has moved off.
+        let rad = rock.kind.footprintRadius(grid: grid)
+        check(!rock.blocks(centre, centre - rad - 1, grid: grid, standStep: step),
+              "and no longer blocks where it used to stand")
+        // Passing no standStep keeps the old lattice-centred behaviour for callers that want it.
+        check(rock.blocks(centre, centre, grid: grid), "without standStep the footprint stays on the cell")
+        // Jitter stays inside the prop's own sub-cell, so nothing wanders into a wall.
+        for seed in 0..<400 {
+            let (ox, oy, yaw) = gs.cubeModel.scatterJitter(UInt32(truncatingIfNeeded: seed &* 2654435761 &+ 17))
+            check(abs(ox) <= 0.5 * ws.subCellStep && abs(oy) <= 0.5 * ws.subCellStep,
+                  "seed \(seed) nudged a prop out of its own sub-cell")
+            check(yaw >= 0 && yaw < 45, "seed \(seed) yaw \(yaw) should fill in between the 45° steps")
+        }
+    }
+
     static func testSceneFourVesselReadsTheLock() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -528,6 +563,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testDressedWorldsDoNotFenceOffOpenEdges()
+        testJitteredSolidPropsBlockWhereTheyAreDrawn()
 
         print("")
         if failed == 0 {

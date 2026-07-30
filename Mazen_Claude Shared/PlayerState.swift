@@ -132,7 +132,7 @@ struct PlayerState {
             // Within-tile hop — target must be standable (grass minus walls) and clear of
             // any solid prop's footprint (M18 Phase 2 — stand-point removal).
             guard tile.isStandable(tr, tc, grid: d, fullWidthGateways: cubeModel.fullWidthGateways) else { return }
-            guard !props.contains(where: { $0.blocks(tr, tc, grid: d) }) else { return }
+            guard !props.contains(where: { $0.blocks(tr, tc, grid: d, standStep: cubeModel.worldScale.standStep) }) else { return }
             beginMove(toFace: face, toRow: row, toCol: col, toSub: (tr, tc), newFacing: facing)
             return
         }
@@ -186,7 +186,7 @@ struct PlayerState {
         case .east:  toSub = (arrLat, d - 1)
         }
         guard arrTile.isStandable(toSub.0, toSub.1, grid: d, fullWidthGateways: cubeModel.fullWidthGateways) else { return }
-        guard !arrProps.contains(where: { $0.blocks(toSub.0, toSub.1, grid: d) }) else { return }
+        guard !arrProps.contains(where: { $0.blocks(toSub.0, toSub.1, grid: d, standStep: cubeModel.worldScale.standStep) }) else { return }
 
         // Rotate the travel heading by however much the crossing rotated the surface frame
         // (same-face: not at all — a diagonal walk stays diagonal), then let arrivalFacing
