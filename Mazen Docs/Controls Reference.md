@@ -23,6 +23,7 @@
 | G | Cycle slice-twist pacing: **normal → slow (0.15×) → single-step** |
 | ] | Scrub a held twist **forward** (single-step pacing) |
 | [ | Scrub a held twist **backward** (single-step pacing) |
+| B | Fire the synthesised **audio test tone** — proves the PHASE path is alive (engine started, asset registered, mixer reachable) without needing a puzzle to trigger a cue. Silence here means the engine failed to start; silence *only* on a cue means that cue's binding is wrong. |
 | N | Cycle cube size (3 → 5 → 7 → 9) |
 
 ### World & props

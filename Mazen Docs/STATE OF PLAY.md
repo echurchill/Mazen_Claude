@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-19. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-29. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
 
 ## The 60-second catch-up
 
@@ -63,6 +63,47 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 - **Tests: 218,050** — the harness now compiles GameState (portal gating + cache invariants covered).
 - **Shipping landmine flagged:** imported models load from an absolute dev path — fine now, blocks
   sharing builds ([Known Issues](Known%20Issues.md)).
+
+## Where things stand — the PROLOGUE sprint (2026-07-20 → 29)
+
+The prototype was tagged **`prototype-v1`** and the six scene scripts (Eddie, vibe-scripted with
+ChatGPT, in `Mazen Docs/Scenes/` — **do not edit those**) became the build target. Plan:
+[Prologue Build Plan](Prologue%20Build%20Plan%20—%20Scenes%201-4.md). Engine orientation for a fresh
+session: [Engine Primer](Engine%20Primer%20—%20Worlds%2C%20Twists%2C%20Travel.md).
+
+- **Phase 0 — travel is now authored, not inferred.** `WorldTransition` (`auto`/`push`/`pop`/`goto`)
+  lives on the portal, replacing name-matching special cases. Worlds record `lastArrivalOrigin`
+  ("how you got here") for Scene 6. `twistEnabled` lets the prologue **withhold the verb** — Scenes
+  1–3 disable Q/E, Scene 4 grants it, which is the moment the game hands over its defining action.
+- **Scene 2 "The Four Corners" — BUILT & played.** Four corner switches → a control plinth raises an
+  alignment cylinder → the world turns and brings a hidden face into view. Eddie: *"Fun."* The
+  turned slab now shows **cut faces** (material 25, metal plating) so a rotating slice is solid
+  rather than a transparent shell.
+- **Scene 4 "The First Turn" — BUILT, in progress.** 5³, three anchors on three faces (bonds
+  straddling the player's slab), a sealed portal, and the player's own first twist. Strain now
+  **grows as each anchor releases** (~3.2° → 4° → 6.3°), so partial progress is felt before the turn
+  is legal. Scene 2 hangs **overhead** as the fixed reference (`WorldStamp.skyCounterpart`).
+- **AUDIO IS IN — PHASE**, synthesised at boot, no asset files. Twist strain / lock / turning,
+  switches, portals, the cylinder raise. Spatialised and verified on AirPods Pro. Plan:
+  [Audio Plan — PHASE](Audio%20Plan%20—%20PHASE.md).
+- **Prologue scenes are single-instance** — one Scene 2 however you reach it, so the world overhead
+  is the world behind the door. Every other world keeps the registry's per-edge variant default.
+- **Skyboxes:** one full-sphere equirect per system; five fictional starfields generated from HYG
+  data as compositing bases; `L` cycles them in place. Sky banding fixed by a `skyDay`-scaled TPDF
+  dither (gated on the gradient, so clean night skies stay clean).
+- **Tests: 245,376** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
+- **New doc:** [Routing — How Paths Live in the Cube](Routing%20—%20How%20Paths%20Live%20in%20the%20Cube.md)
+  — where a route actually lives (4 bits/tile), why a route floor is decoration, and what a twist
+  can and cannot change. Read it before authoring Scene 4's route.
+
+### Open on Scene 4
+- **Route alignment (#2)** — the break must sit on the **slab boundary**, not inside `+Z`: the
+  player's whole face rotates rigidly, so it cannot change its own internal connectivity. Measured:
+  the slab is all 25 `+Z` tiles plus a 5-tile edge strip on each side face; `-Z` stays put. Verify
+  strip↔static crossings with a reachability probe before building.
+- **The vessel's three rings** aligning as anchors release (today a plinth wearing the swirl glyph).
+- Scene 2 polish: portal closing behind you; dust at the joints.
+- Audio Phases C–F: prop emitters that ride twists, occlusion from maze topology, ambience beds.
 
 ## Immediate next actions on resume
 
