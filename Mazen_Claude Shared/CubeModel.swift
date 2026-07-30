@@ -1228,6 +1228,35 @@ class CubeModel {
                 }
             }
         }
+        // Eddie — the OTHER FIVE FACES had no ground scatter at all: this stamp was +Z-only, so they
+        // were carried entirely by wall dressing and read sparse and regular beside the start face.
+        // (That asymmetry is what made every "the scatter still looks regular" report ambiguous.)
+        // Same continuous, clumped scatter over the whole face — no puzzle lives out here, so there
+        // is nothing to keep clear, and these are non-solid props so none of it can block a route.
+        for face in CubeFace.allCases where face != .positiveZ {
+            let faceIdx = face.rawValue
+            for r in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
+                    let density = clumpField(r, col, salt: faceIdx &* 23 &+ 5)
+                    // Tuned against a measured +Z (3.3 ground props per tile): the first pass at
+                    // 0.4 + 7·d² landed the other faces at 1.0–2.9, thinner than the start face and
+                    // visibly so. Eddie asked for roughly double.
+                    let count = Int((1.0 + density * density * 12.0).rounded())
+                    for k in 0..<count {
+                        let h = hash(faceIdx &* 131 &+ r &* 53 &+ col &* 3, k &* 29 &+ 11, r &* col &+ k &* 7)
+                        let roll = h % 100
+                        // One tree per tile at most — they are by far the largest of these, and a
+                        // clump of eight would read as a wall rather than as planting.
+                        if k == 0 && roll < 12 { place(ci, fi, flora.trees, treeScale, h, corner: true) }
+                        else if roll < 46      { place(ci, fi, flora.bushes,  bushScale,   h, corner: true)  }
+                        else if roll < 66      { place(ci, fi, flora.grasses, grassScale,  h, corner: false) }
+                        else if roll < 86      { place(ci, fi, flora.flowers, flowerScale, h, corner: false) }
+                        else                   { place(ci, fi, flora.rocks,   rockScale,   h, corner: false) }
+                    }
+                }
+            }
+        }
         // Eddie — considerably MORE greenery ("can't add too much"; non-solid, so it never impedes
         // movement): a dense EVEN second pass over the whole region (no center-heavy cluster — the
         // distribution should read uniform), skipping the puzzle tiles so nothing hides a switch/plinth.
