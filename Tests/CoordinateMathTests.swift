@@ -529,6 +529,27 @@ struct CoordinateMathTests {
               "no walls between a tile and itself")
     }
 
+    /// Scene 4's payoff, end to end: release the three anchors, take your own twist, and the sealed
+    /// portal comes alive. This never worked — unsealing was reachable only from the garden's
+    /// SCRIPTED turn, so a player's own twist opened nothing and the scene had no exit (Eddie found
+    /// it by playing to the end: "the vessel was aligned but the portal didn't open").
+    static func testSceneFourTurnOpensTheSealedPortal() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        check(m.sealedPortalCubies.count == 1, "Scene 4 starts with its portal sealed")
+        // The anchors alone must NOT open it — the turn is the point of the scene.
+        while !m.bondedGroups.isEmpty { m.removeBond(containing: m.bondedGroups[0].first!) }
+        gs.update(deltaTime: 1.0 / 60.0)
+        check(m.sealedPortalCubies.count == 1, "releasing the anchors alone does not open the door")
+        // Now the player's own twist. (The vessel grants the verb; this is about the seal.)
+        gs.twistEnabled = true
+        gs.startSliceRotation(clockwise: true)
+        check(gs.sliceRotation.isActive && !gs.sliceRotation.isRefusal,
+              "with no bonds left the turn must be permitted")
+        for _ in 0..<600 where gs.sliceRotation.isActive { gs.update(deltaTime: 1.0 / 60.0) }
+        check(m.sealedPortalCubies.isEmpty, "the turn that moved the door opens it")
+    }
+
     static func testVesselCanBeApproached() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -773,6 +794,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
+        testSceneFourTurnOpensTheSealedPortal()
         testAudioEmittersRideTwistsAndAreOccludedByWalls()
         testVesselInspectionGrantsTheTwist()
         testDressedWorldsDoNotFenceOffOpenEdges()

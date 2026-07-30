@@ -801,14 +801,24 @@ class GameState {
         }
     }
 
-    private func openSealedDoors() {
+    /// Unseal every portal whose lock is gone. `limitedTo` restricts it to the cubies a particular
+    /// turn actually MOVED — "the turn that moved this door opened it" — which is how a player's own
+    /// twist earns its payoff without a distant, unrelated door quietly lighting up at the same time.
+    /// Passing nil opens any unlocked door anywhere, which is what the scripted switch-trip turn
+    /// wants: it rotates the back slab for spectacle and the door it opens is somewhere else.
+    private func openSealedDoors(limitedTo cubies: Set<Int>? = nil) {
         var opened = false
         for ci in Array(cubeModel.sealedPortalCubies)
-        where !cubeModel.bondedGroups.contains(where: { $0.contains(ci) }) {
+        where !cubeModel.bondedGroups.contains(where: { $0.contains(ci) })
+            && (cubies?.contains(ci) ?? true) {
             cubeModel.sealedPortalCubies.remove(ci)
             opened = true
         }
-        if opened { updateDoorPlinths(); beginObeliskAwakening() }
+        if opened {
+            updateDoorPlinths()
+            beginObeliskAwakening()
+            pendingAudioCues.append(.portalOpened(at: nil))
+        }
     }
 
     /// Debug (Shift+Q / Shift+E) — replay the scene's scripted turn on demand, so the one-off puzzle
@@ -864,7 +874,13 @@ class GameState {
 
         // M20 (Eddie): the switch-trip turn rotates a distant back slab that need not contain the
         // door — open it here so the payoff still lands (see startBackSliceRotation).
+        // A door in the slab that just turned opens, if its lock is gone. Scene 4 rests on this: the
+        // player releases three anchors, twists their own face, and the sealed portal in it comes
+        // alive. It never could before — `openSealedDoors` was reachable ONLY from the garden's
+        // scripted switch-trip turn, so the player's own twist unsealed nothing and Scene 4's portal
+        // was unopenable (Eddie: "the vessel was aligned but the portal didn't open").
         if sliceRotation.opensSealedDoors { openSealedDoors() }
+        else { openSealedDoors(limitedTo: sliceRotation.affectedCubies) }
         shakeDustFromJoints()
 
         if playerCI >= 0 {
