@@ -14,6 +14,7 @@ enum WorldStamp {
     case gallery         // M20 dev tool: a flat grid of every prop/foliage variant, one per cell, for isolated evaluation
     case portalHub       // M20 (Eddie): a flat plaza of labeled portals — one TARDIS + signpost per world, to navigate by reading not memorised keys
     case sceneTwo        // Prologue Scene 2 "The Four Corners": four corner switches, a control plinth, and the way onward hidden on a face that must be TURNED into view
+    case sceneOne        // Prologue Scene 1 "The First Clearing": a walled clearing, a break in its north wall, and a maze of vessels beyond — the opening, and the first sight of the Builders' objects
     case sceneFour       // Prologue Scene 4 "The First Turn": the player is handed the twist, and must first read and release a bond before the world will move
 
     /// The world this stamp wants hanging overhead, by name (see `GameState.skyCounterpart`).
@@ -37,6 +38,10 @@ enum PrologueSize {
     /// Scene 4. Small on purpose: the script wants a world the player can circumnavigate quickly,
     /// because its job is to make the effect of a twist easy to READ, not to occupy them.
     static let sceneFour = 5
+    /// Scene 1. The clearing is 3×3 tiles and the script wants a maze of "approximately three times
+    /// the playable area" — 9 tiles of clearing against ~35 of maze at this size, which is that,
+    /// walked rather than counted.
+    static let sceneOne = 9
 }
 
 /// M20 — how a world's maze WALLS are rendered.
@@ -116,6 +121,14 @@ class CubeModel {
             // for "low to moderate, visibly softened" — worth revisiting once the cut plane can be
             // inflated to match a curved shell (see Open Questions).
             roundness = 0.0
+        case .sceneOne:
+            stampSceneOne()
+            naturalDressing = true      // grass floors, no dark cube frame
+            // "Roundness: high enough that the world reads as a planet, though curvature should not
+            // yet be obvious from the playable area." Nothing twists here, so the flat-cut-face
+            // constraint that pins Scenes 2 and 4 to zero does not apply.
+            roundness = 1.0
+            reliefAmplitude = 0.02      // barely there: "small irregularities suggest natural earth"
         case .sceneTwo:
             stampSceneTwo()
             naturalDressing = true
@@ -170,6 +183,169 @@ class CubeModel {
                         cubies[nci].facelets[nfi].mazeTile.openings.insert(backMask)
                     }
                 }
+            }
+        }
+    }
+
+
+    // MARK: - Prologue Scene 1 — "The First Clearing"
+
+    /// The opening. A walled clearing with a break in its north wall, a corridor through stone that
+    /// is thicker than it looks, and beyond it a maze whose every dead end holds a vessel.
+    ///
+    /// Nothing here is a puzzle. The scene's whole job is to establish that the world is ENCLOSED,
+    /// that the way on is horizontal rather than upward, and that these objects keep appearing —
+    /// "by the fourth, the vessels no longer feel like decoration. They feel placed." So it is
+    /// authored as architecture, not as a lock: no bond, no switch, no twist (the verb is withheld
+    /// until Scene 4), and the portal at the end is open from the moment it is found.
+    private func stampSceneOne() {
+        let n = size
+        wallStyle = .dressed
+        cleanWalls = true                    // fitted stone, no moss: this world is not ruined yet
+
+        // Start from solid stone and CARVE. Sealing every edge also seals the face's border, so the
+        // clearing and maze are genuinely enclosed rather than opening onto the rest of the cube —
+        // "they rise well above the player's reach and offer no obvious handholds".
+        for r in 0..<n {
+            for c in 0..<n {
+                for dir in [SurfaceDirection.north, .east, .south, .west] {
+                    setSharedEdge(face: .positiveZ, row: r, col: c, dir, open: false)
+                }
+            }
+        }
+
+        // Deterministic RNG — the opening should be the same place every launch.
+        var rng: UInt32 = 0x5CE1_0001
+        func next() -> UInt32 { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng }
+
+        // ── THE CLEARING: a 3×3 room at the south, walled but for one break ────────────────────
+        let clearTop = n - 3, clearLeft = n / 2 - 1, mid = n / 2
+        for r in clearTop..<(clearTop + 3) {
+            for c in clearLeft..<(clearLeft + 3) {
+                if r > clearTop { setSharedEdge(face: .positiveZ, row: r, col: c, .north, open: true) }
+                if c > clearLeft { setSharedEdge(face: .positiveZ, row: r, col: c, .west, open: true) }
+            }
+        }
+        // "A narrow break interrupts the northern wall. It is not framed as a doorway. It is simply
+        // a place where the wall stops."
+        setSharedEdge(face: .positiveZ, row: clearTop, col: mid, .north, open: true)
+        // The corridor through the wall — one tile is ~19 m, so it really is "several steps", and
+        // the clearing stays visible behind you the whole way, framed like the stage you just left.
+        let corridor = clearTop - 1
+        setSharedEdge(face: .positiveZ, row: corridor, col: mid, .north, open: true)
+
+        // ── THE MAZE: recursive backtracker over everything north of the corridor ───────────────
+        let mazeBottom = corridor - 1
+        var visited = Array(repeating: Array(repeating: false, count: n), count: mazeBottom + 1)
+        var stack = [[mazeBottom, mid]]
+        visited[mazeBottom][mid] = true
+        while let cur = stack.last {
+            let r = cur[0], c = cur[1]
+            var options: [(SurfaceDirection, Int, Int)] = []
+            for (dir, dr, dc) in [(SurfaceDirection.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)] {
+                let nr = r + dr, nc = c + dc
+                guard nr >= 0, nr <= mazeBottom, nc >= 0, nc < n, !visited[nr][nc] else { continue }
+                options.append((dir, nr, nc))
+            }
+            guard !options.isEmpty else { stack.removeLast(); continue }
+            let pick = options[Int(next() % UInt32(options.count))]
+            setSharedEdge(face: .positiveZ, row: r, col: c, pick.0, open: true)
+            visited[pick.1][pick.2] = true
+            stack.append([pick.1, pick.2])
+        }
+        // "one or two loops" — a perfect maze is all dead ends and no choices that come back.
+        for _ in 0..<2 {
+            let r = Int(next() % UInt32(mazeBottom + 1)), c = Int(next() % UInt32(n))
+            let dirs: [SurfaceDirection] = [.north, .south, .west, .east]
+            let dir = dirs[Int(next() % 4)]
+            let (dr, dc) = dir == .north ? (-1, 0) : dir == .south ? (1, 0) : dir == .west ? (0, -1) : (0, 1)
+            guard r + dr >= 0, r + dr <= mazeBottom, c + dc >= 0, c + dc < n else { continue }
+            setSharedEdge(face: .positiveZ, row: r, col: c, dir, open: true)
+        }
+
+        // ── DEAD ENDS: one open edge apiece, and the whole point of the scene ──────────────────
+        var deadEnds: [[Int]] = []
+        for r in 0...mazeBottom {
+            for c in 0..<n {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                let op = cubies[ci].facelets[fi].mazeTile.openings
+                var open = 0
+                for d in [DirectionMask.north, .east, .south, .west] where op.contains(d) { open += 1 }
+                if open == 1 { deadEnds.append([r, c]) }
+            }
+        }
+        // The portal goes to the dead end FURTHEST from the corridor by walking distance, so the
+        // player finds it last and has met several vessels on the way.
+        var dist: [[Int]: Int] = [[mazeBottom, mid]: 0]
+        var queue = [[mazeBottom, mid]], head = 0
+        while head < queue.count {
+            let t = queue[head]; head += 1
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: t[0], col: t[1]) else { continue }
+            let op = cubies[ci].facelets[fi].mazeTile.openings
+            for (mask, dr, dc) in [(DirectionMask.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)]
+            where op.contains(mask) {
+                let nt = [t[0] + dr, t[1] + dc]
+                guard nt[0] >= 0, nt[0] <= mazeBottom, nt[1] >= 0, nt[1] < n, dist[nt] == nil else { continue }
+                dist[nt] = dist[t]! + 1; queue.append(nt)
+            }
+        }
+        let portalTile = deadEnds.max { (dist[$0] ?? 0) < (dist[$1] ?? 0) } ?? [0, mid]
+
+        // ── VESSELS ────────────────────────────────────────────────────────────────────────────
+        // "At every dead end stands another vessel. Some are solitary. Others appear in pairs or
+        // small groups. No two need be completely identical, but they share the same stacked axial
+        // grammar." `state` carries a per-vessel variation seed; `anim` is how many of its rings sit
+        // aligned, so a maze of them shows the same object saying slightly different things — "the
+        // first syllables of a language the player does not know they are hearing".
+        func placeVessel(_ r: Int, _ c: Int, _ h: UInt32, group: Bool) {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) else { return }
+            let count = group ? 2 + Int(h % 2) : 1
+            for k in 0..<count {
+                let hk = h &+ UInt32(k &* 7919)
+                let p = scatterPlacement(hk, avoidCentre: count > 1,
+                                         clearCells: PropKind.layeredVessel.footprintRadius(grid: worldScale.standGrid))
+                var v = Prop(kind: .layeredVessel, subRow: p.subRow, subCol: p.subCol,
+                             state: Int(hk % 5), viewAngle: p.yaw,
+                             extraScale: 0.82 + Float(hk % 40) / 100.0,
+                             offsetX: p.ox, offsetY: p.oy)
+                v.anim = Float(hk % 4)          // 0…3 rings home — none of it means anything yet
+                cubies[ci].facelets[fi].props.append(v)
+            }
+        }
+        for (i, t) in deadEnds.enumerated() where t != portalTile {
+            placeVessel(t[0], t[1], next(), group: i % 3 == 0)
+        }
+        // "In one corner of the clearing stands a small group of unusual vessels." The first ones
+        // the player ever sees, before there is any maze to give them meaning.
+        placeVessel(clearTop, clearLeft, next(), group: true)
+
+        // ── THE ARCHWAY ────────────────────────────────────────────────────────────────────────
+        // Active, unsealed, no pull: "the player must choose to cross."
+        if let (ci, fi) = faceletAt(face: .positiveZ, row: portalTile[0], col: portalTile[1]) {
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .portal, subRow: 1, subCol: 1, facing: .s, state: 10, transition: .push))
+            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .s, fieldStyle: 2))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))
+            // "This vessel is the largest encountered so far. Its uppermost layer turns slowly
+            // toward the player. Not like a head. Not quite."
+            var watcher = Prop(kind: .layeredVessel, subRow: 2, subCol: 1, facing: .n,
+                               state: 5, extraScale: 1.45)
+            watcher.anim = 3                    // fully aligned — the only one in the world that is
+            cubies[ci].facelets[fi].props.append(watcher)
+        }
+
+        // ── ARRIVAL, AND FOG ───────────────────────────────────────────────────────────────────
+        spawnLocation = (face: .positiveZ, row: n - 1, col: mid, facing: .n)
+        // "Fog of discovery: active beyond the immediately visible clearing." Reveal the clearing
+        // and nothing else — the maze has to be walked to exist, which is what makes its scale
+        // arrive "gradually through movement, not through an overhead view".
+        for r in clearTop..<(clearTop + 3) {
+            for c in clearLeft..<(clearLeft + 3) {
+                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                cubies[ci].facelets[fi].tileState = .discovered
+                cubies[ci].facelets[fi].discoveryAmount = 1.0
             }
         }
     }
@@ -736,7 +912,7 @@ class CubeModel {
         // (spawn = face centre, kept clear). Index 9 is the hub itself, so it is skipped. Dev
         // navigation: the prologue's scenes chain forward through their own portals, and this hub
         // exists so any of them can be reached directly while building.
-        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11]
+        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12]
         let gridRows = [c - 5, c - 3, c - 1], gridCols = [c - 5, c - 2, c + 1, c + 4]
         for (slot, idx) in hubDestinations.enumerated() {
             let gr = gridRows[slot / 4], gc = gridCols[slot % 4]
@@ -2472,6 +2648,12 @@ class CubeModel {
     /// hedge gateway really is a gap in a wall, and is still crossed through its middle third.
     var fullWidthGateways: Bool { wallStyle == .dressed }
 
+    /// Scene 1 — dressed walls with NO overgrowth. Its stone is "old but not ruined… too large, too
+    /// evenly fitted, and too free of vegetation to belong comfortably to any recognizable human
+    /// period". The garden's walls want the opposite (graded moss and rubble), so this is per-world
+    /// rather than a change to the dressing itself.
+    var cleanWalls = false
+
     /// M20 — suppress ALL fog for this world (both the unknown-tile fog cubes and the distance
     /// fog): a dev/showroom world (the gallery) shouldn't have atmosphere. Fog is opt-out — only
     /// worlds that use it for the story/discovery keep it (Eddie: fog off unless it serves a world).
@@ -2827,7 +3009,7 @@ class CubeModel {
                         let props = dressedWallProps(facelet, face: face, row: row, col: col,
                                                      walls: walls, rocks: rocks, bushes: bushes,
                                                      wallScale: wallScale, rockScale: rockScale, bushScale: bushScale,
-                                                     skipOvergrowth: clear.contains(facelet.id.rawValue))
+                                                     skipOvergrowth: cleanWalls || clear.contains(facelet.id.rawValue))
                         if !props.isEmpty {
                             entries.append((PropTileEntry(face: face, row: row, col: col, ci: ci, fi: fi), props))
                         }

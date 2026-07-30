@@ -59,9 +59,11 @@ struct CoordinateMathTests {
                 check(p.transition == .push, "hub portal at (\(r),\(c)) must be .push, got \(p.transition)")
             }
         } }
-        // One per entry in CubeModel's hubDestinations (the 9 legacy worlds + Scene 2; the hub itself
-        // is skipped). Grows as prologue scenes are added — update alongside that list.
-        check(hubPortals == 11, "expected 11 hub portals, found \(hubPortals)")
+        // One per entry in CubeModel's hubDestinations (the 9 legacy worlds + Scenes 1, 2 and 4; the
+        // hub itself is skipped). Grows as prologue scenes are added — update alongside that list.
+        // The grid is 3 rows × 4 columns, so 12 is also the point at which it is FULL: a thirteenth
+        // destination needs another row before it will have anywhere to stand.
+        check(hubPortals == 12, "expected 12 hub portals, found \(hubPortals)")
 
         // The garden's temple door: a descent from an already-pushed world, so it must PUSH too.
         let garden = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
@@ -808,6 +810,67 @@ struct CoordinateMathTests {
         }
     }
 
+    /// Scene 1 is architecture, not a lock — so what it has to guarantee is that it can be WALKED:
+    /// out of the clearing, through the break in the north wall, and round a maze whose dead ends
+    /// each hold a vessel, ending at the arch. If any of that is stranded the opening simply stops.
+    static func testSceneOneCanBeWalkedFromClearingToArch() {
+        let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
+        let m = gs.cubeModel
+        let n = m.size
+        guard let sp = m.spawnLocation else { check(false, "Scene 1 needs a spawn"); return }
+        check(sp.face == .positiveZ && sp.facing == .n, "the player starts in the clearing, facing the break")
+
+        // Walk the face from the spawn.
+        var seen = Set([[sp.row, sp.col]]), q = [[sp.row, sp.col]], head = 0
+        while head < q.count {
+            let t = q[head]; head += 1
+            guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: t[0], col: t[1]) else { continue }
+            let op = m.cubies[ci].facelets[fi].mazeTile.openings
+            for (mask, dr, dc) in [(DirectionMask.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)]
+            where op.contains(mask) {
+                let nt = [t[0] + dr, t[1] + dc]
+                guard nt[0] >= 0, nt[0] < n, nt[1] >= 0, nt[1] < n, !seen.contains(nt) else { continue }
+                seen.insert(nt); q.append(nt)
+            }
+        }
+        // The maze is "approximately three times the playable area of the original clearing" (9 tiles).
+        check(seen.count >= 30, "the clearing and maze should be one walkable space, got \(seen.count) tiles")
+
+        var portalAt: [Int]? = nil, vesselTiles = 0, vessels = 0
+        for r in 0..<n {
+            for c in 0..<n {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                let props = m.cubies[ci].facelets[fi].props
+                if props.contains(where: { $0.kind == .portal }) { portalAt = [r, c] }
+                let v = props.filter { $0.kind == .layeredVessel }.count
+                if v > 0 { vesselTiles += 1; vessels += v }
+            }
+        }
+        guard let pa = portalAt else { check(false, "Scene 1 needs its archway"); return }
+        check(seen.contains(pa), "the arch must be reachable — it is the only way out of the scene")
+        // "By the fourth, the vessels no longer feel like decoration." There have to BE four.
+        check(vesselTiles >= 4, "the maze needs several vessel sites, got \(vesselTiles)")
+        check(vessels > vesselTiles, "some sites hold groups, not just solitary vessels")
+        for r in 0..<n {
+            for c in 0..<n {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c),
+                      m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel }) else { continue }
+                check(seen.contains([r, c]) || [r, c] == pa, "a vessel at (\(r),\(c)) is walled off")
+            }
+        }
+        // Fog: the clearing is known and the maze is not — its scale has to arrive by walking.
+        var discovered = 0
+        for r in 0..<n {
+            for c in 0..<n {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                if m.cubies[ci].facelets[fi].tileState == .discovered { discovered += 1 }
+            }
+        }
+        check(discovered == 9, "only the 3×3 clearing starts revealed, got \(discovered)")
+        // The verb does not exist yet, and nothing here is bonded — Scene 1 has no lock at all.
+        check(m.bondedGroups.isEmpty, "Scene 1 has no lock; it is an opening, not a puzzle")
+    }
+
     static func testVesselCanBeApproached() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -1041,6 +1104,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
+        testSceneOneCanBeWalkedFromClearingToArch()
         testCrossingAnOpenEdgeAlwaysFindsSomewhereToLand()
         testFlatPropsDoNotWallOffTheirOwnTile()
         testEveryStampHasConsistentEdges()
