@@ -434,6 +434,35 @@ struct CoordinateMathTests {
         check(checkedTiles > 0, "the twist should have left tiles on this face to re-check")
     }
 
+    /// The vessel is meant to be READ up close — three seams and a glyph on its cap. It inherited the
+    /// default prop footprint, a 5×5 block of stand cells, which held the player about 4 m back from
+    /// a vase roughly 1 m across (Eddie: "I can't get very close to the vessel").
+    static func testVesselCanBeApproached() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        let grid = m.worldScale.standGrid, step = m.worldScale.standStep
+        check(PropKind.layeredVessel.footprintRadius(grid: grid) == 0,
+              "a vase narrower than one stand cell should block only the cell it stands on")
+        var found = false
+        for cu in m.cubies {
+            for f in cu.facelets {
+                guard let vessel = f.props.first(where: { $0.kind == .layeredVessel }) else { continue }
+                found = true
+                let k = grid / 3
+                let rc = vessel.subRow * k + k / 2, cc = vessel.subCol * k + k / 2
+                check(vessel.blocks(rc, cc, grid: grid, standStep: step), "it still stands somewhere")
+                // Every neighbouring stand cell is free, so you can walk right up to it and look.
+                for (dr, dc) in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1)] {
+                    check(!vessel.blocks(rc + dr, cc + dc, grid: grid, standStep: step),
+                          "the cell at (\(dr),\(dc)) beside the vessel should be walkable")
+                    check(f.mazeTile.isStandable(rc + dr, cc + dc, grid: grid, fullWidthGateways: m.fullWidthGateways),
+                          "the tile itself should allow standing at (\(dr),\(dc))")
+                }
+            }
+        }
+        check(found, "Scene 4 should have a vessel to approach")
+    }
+
     static func testSceneFourVesselReadsTheLock() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -651,6 +680,7 @@ struct CoordinateMathTests {
         testSceneFourHangsSceneTwoOverhead()
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
+        testVesselCanBeApproached()
         testDressedWorldsDoNotFenceOffOpenEdges()
         testJitteredSolidPropsBlockWhereTheyAreDrawn()
         testDressedWallDressingIsNotAFence()

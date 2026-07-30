@@ -838,6 +838,12 @@ fragment float4 fragmentShader(
             // that have drifted, which is the point.
             const float3 restOffset = float3(0.31, -0.23, 0.14);
             float aligned = clamp(in.discoveryAmount, 0.0, 1.0) * 3.0;   // rings released, 0…3
+            // Scene 4D beat 2 — while a twist is refused, the LEADING ring (the next one not yet
+            // home) attempts to turn and springs back. Signed radians packed by SceneBuilder; the
+            // seam angle is in turns, hence /2π. The ring nearly arrives and does not: the lock is
+            // demonstrated by the object, with no message anywhere.
+            float strainTurns = (float(in.styleSeed) / 2000.0 - 0.25) / 6.2831853;
+            float leadRing = floor(aligned);
             float3 body = ceramic * amb;
             // Green-blue in the grooves: the band edges, where a real vase would hold its glaze.
             float groove = smoothstep(0.5, 0.0, abs(local - 0.5)) ;
@@ -846,6 +852,9 @@ fragment float4 fragmentShader(
                 int i = int(ring);
                 float home = clamp(aligned - float(i), 0.0, 1.0);        // 0 adrift … 1 home
                 float seamAt = restOffset[i] * (1.0 - home);             // turns home as it releases
+                // The leading ring strains harder than the body it sits in (which is already turning
+                // with the whole vessel), so the attempt reads as THIS ring trying, not the vase.
+                if (float(i) == leadRing) seamAt += strainTurns * 2.5;
                 float d = abs(fract(ang - seamAt + 0.5) - 0.5);          // angular distance, wrapped
                 float coreW = 0.008, haloW = 0.030;
                 float core = smoothstep(coreW, 0.0, d);

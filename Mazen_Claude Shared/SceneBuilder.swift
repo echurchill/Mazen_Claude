@@ -283,9 +283,21 @@ final class SceneBuilder {
                                 }
                                 treeScale = sizeBase * jitter
                             }
+                            // Scene 4D beat 3 — "the entire vessel strains several degrees". The vessel
+                            // stands ON the twistable slab, so it already rides a refused twist along
+                            // with the player and the ground; riding together is relative stillness and
+                            // reads as nothing at all. The strain has to be ON TOP of the slab's, about
+                            // the vessel's own axis, so the vase visibly turns against the ground it
+                            // stands on and springs back with it. Same curve the ground is straining to
+                            // (`SliceRotation.currentAngle` on a refusal already damps back to zero), so
+                            // the object and the world cannot disagree about how hard the lock is held.
+                            var extraYaw: Float = 0
+                            if prop.kind == .layeredVessel, sr.isActive, sr.isRefusal {
+                                extraYaw = sr.currentAngle * 1.6
+                            }
                             let pm = restM
                                 * float4x4.translation(Float(prop.subCol - 1) * step + prop.offsetX, Float(prop.subRow - 1) * step + prop.offsetY, 0)
-                                * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180), axis: SIMD3(0, 0, 1))
+                                * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180) + extraYaw, axis: SIMD3(0, 0, 1))
                                 * float4x4.scale(treeScale)
                             // M16.6/M20 — the alignment cylinder (GROW) and switch cap (flush↔out) animate
                             // their HEIGHT. Pass it as heightScale about the plinth top (applied to the
@@ -428,6 +440,12 @@ final class SceneBuilder {
                                 // discoveryAmount slot the shader reads.
                                 materialID = 28
                                 color = SIMD4(1, 1, 1, 1)
+                                // Beat 2 — "one ring attempts to rotate": the LEADING ring (the next
+                                // one not yet home) swings further than the body and springs back.
+                                // Signed strain in radians, packed into the otherwise-unused styleSeed
+                                // as (strain + 0.25) × 2000 so the shader can recover the sign.
+                                let strain = (sr.isActive && sr.isRefusal) ? sr.currentAngle : 0
+                                propStyleSeed = UInt32(max(0, min(1000, Int((strain + 0.25) * 2000))))
                             }
                             if prop.kind == .signpost {
                                 materialID = 24                                 // wood + rendered label
