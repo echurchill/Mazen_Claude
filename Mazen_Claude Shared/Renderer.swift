@@ -591,9 +591,12 @@ class Renderer: NSObject, MTKViewDelegate {
             // M20 (Eddie) — the labeled hub of TARDIS portals + signposts. Size 15 fits the 3×3.
             w = GameState(size: 15, name: dest, stamp: .portalHub)
         case "scene-4":
-            // Prologue Scene 4 — the player is GRANTED the twist here; this is the moment the
-            // game hands over its defining verb, so twistEnabled stays true.
+            // Prologue Scene 4 — the player is GRANTED the twist here. Not on arrival, though: the
+            // script hands it over only once the VESSEL has demonstrated it ("after the vessel is
+            // inspected, player-controlled twist input becomes available"), so the verb is learned
+            // from an object rather than found in a control list. GameState grants it.
             w = GameState(size: PrologueSize.sceneFour, name: dest, stamp: .sceneFour)
+            w.twistEnabled = false
             w.cubeModel.stampGardenVegetation(gardenFlora())
             wallDressingPalette = wallFlora()
             w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),

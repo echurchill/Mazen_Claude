@@ -826,8 +826,11 @@ fragment float4 fragmentShader(
         float3 ceramic = float3(0.60, 0.60, 0.57);        // smooth, pale, faintly warm
         if (in.texCoord.x < 2.0) {
             // Top cap — the swirl, the MOTION glyph Scene 2 taught.
+            // The swirl runs bright while the vessel demonstrates (4D beat 1) and keeps a low ember
+            // once it has been read; baseColor.a carries that level.
             float g = causticTex.sample(texSampler, in.texCoord, SWIRL).r;
-            color = ceramic * amb + float3(0.30, 0.72, 0.66) * g * 1.9;
+            float lit = clamp(in.color.a, 0.0, 1.0);
+            color = ceramic * amb + float3(0.30, 0.72, 0.66) * g * (0.9 + 3.4 * lit);
             lighting = float3(1.0);
         } else {
             float ang   = fract(in.texCoord.x - 2.0);     // 0…1 once around, from the front seam

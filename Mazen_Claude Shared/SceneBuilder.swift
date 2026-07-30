@@ -292,8 +292,19 @@ final class SceneBuilder {
                             // (`SliceRotation.currentAngle` on a refusal already damps back to zero), so
                             // the object and the world cannot disagree about how hard the lock is held.
                             var extraYaw: Float = 0
-                            if prop.kind == .layeredVessel, sr.isActive, sr.isRefusal {
-                                extraYaw = sr.currentAngle * 1.6
+                            if prop.kind == .layeredVessel {
+                                if sr.isActive, sr.isRefusal {
+                                    extraYaw = sr.currentAngle * 1.6
+                                } else if prop.alignAnim > 0 {
+                                    // 4D beat 3, self-driven: the vessel demonstrates the strain with
+                                    // no twist happening at all. Same curve, same amplitude the ground
+                                    // would give against the bonds that remain, so the demonstration
+                                    // is an honest preview rather than a canned animation.
+                                    let blocking = model.bondsBlocking(axis: 2, index: model.size - 1)
+                                    let amp: Float = blocking > 0 ? 0.03 + 0.08 / Float(blocking) : 0.06
+                                    extraYaw = GameState.SliceRotation.strainCurve(
+                                        progress: prop.alignAnim, amplitude: amp * 1.6, direction: 1)
+                                }
                             }
                             let pm = restM
                                 * float4x4.translation(Float(prop.subCol - 1) * step + prop.offsetX, Float(prop.subRow - 1) * step + prop.offsetY, 0)
@@ -389,6 +400,13 @@ final class SceneBuilder {
                                 if refusalGlow > 0 && prop.anim > 0.5 {
                                     color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow)
                                 }
+                                // 4D beat 6 — "three distant points around the world answer with brief
+                                // flashes". The anchors name themselves, so the player learns where the
+                                // lock is held without being told there is one. `alignAnim` decays.
+                                if prop.alignAnim > 0 {
+                                    color = mix(color, SIMD4(1.0, 0.96, 0.72, 1.0), t: prop.alignAnim)
+                                    materialID = 12                     // emissive: visible from afar
+                                }
                             }
                             if prop.kind == .plinth {
                                 // M16.6: the Builder plinth — material 21 reads stone/resin vs glyph
@@ -444,8 +462,11 @@ final class SceneBuilder {
                                 // one not yet home) swings further than the body and springs back.
                                 // Signed strain in radians, packed into the otherwise-unused styleSeed
                                 // as (strain + 0.25) × 2000 so the shader can recover the sign.
-                                let strain = (sr.isActive && sr.isRefusal) ? sr.currentAngle : 0
+                                let strain = (sr.isActive && sr.isRefusal) ? sr.currentAngle : extraYaw / 1.6
                                 propStyleSeed = UInt32(max(0, min(1000, Int((strain + 0.25) * 2000))))
+                                // Beat 1 — the swirl on the cap illuminates while it demonstrates,
+                                // and keeps a low ember afterwards: this object has been read.
+                                color = SIMD4(1, 1, 1, gameState.vesselGlow)
                             }
                             if prop.kind == .signpost {
                                 materialID = 24                                 // wood + rendered label

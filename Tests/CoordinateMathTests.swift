@@ -437,6 +437,32 @@ struct CoordinateMathTests {
     /// The vessel is meant to be READ up close — three seams and a glyph on its cap. It inherited the
     /// default prop footprint, a 5×5 block of stand cells, which held the player about 4 m back from
     /// a vase roughly 1 m across (Eddie: "I can't get very close to the vessel").
+    /// Scene 4D's real payload: the twist is not in a control list, it is LEARNED from an object.
+    /// "After the vessel is inspected, player-controlled twist input becomes available… the vessel
+    /// does not perform the twist for the player. It introduces the possibility."
+    static func testVesselInspectionGrantsTheTwist() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        // Note: the WORLD is what withholds the verb (Renderer sets twistEnabled=false when it builds
+        // scene-4), so set up the same starting condition the scene ships with.
+        gs.twistEnabled = false
+        check(!gs.vesselInspected, "the vessel starts unread")
+        // Q does nothing at all before the vessel has spoken — not refused, not even attempted.
+        gs.startSliceRotation(clockwise: true)
+        check(!gs.sliceRotation.isActive, "the player's twist must be withheld until the vessel is read")
+        gs.beginVesselDemo(at: nil)
+        check(gs.vesselDemo > 0, "activating the vessel starts its demonstration")
+        check(!gs.twistEnabled, "and does NOT hand over the verb before it has finished")
+        // Run it to completion.
+        for _ in 0..<400 where gs.vesselDemo > 0 { gs.update(deltaTime: 1.0 / 60.0) }
+        check(gs.vesselInspected, "the demonstration completes")
+        check(gs.twistEnabled, "and grants the twist")
+        // Now the twist is available — and immediately REFUSED, which is Scene 4E. Both halves of
+        // the lesson: the slice can move, and something crossing its boundary prevents it.
+        gs.startSliceRotation(clockwise: true)
+        check(gs.sliceRotation.isActive, "the twist is now the player's to attempt")
+        check(gs.sliceRotation.isRefusal, "and the anchors still refuse it")
+    }
+
     static func testVesselCanBeApproached() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -681,6 +707,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
+        testVesselInspectionGrantsTheTwist()
         testDressedWorldsDoNotFenceOffOpenEdges()
         testJitteredSolidPropsBlockWhereTheyAreDrawn()
         testDressedWallDressingIsNotAFence()

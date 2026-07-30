@@ -84,13 +84,20 @@ class GameState {
         var axisVector: SIMD3<Float> {
             axis == 0 ? SIMD3(1, 0, 0) : axis == 1 ? SIMD3(0, 1, 0) : SIMD3(0, 0, 1)
         }
+        /// The refusal wobble: strain out and spring back, ending exactly at rest. Shared so the
+        /// VESSEL (Scene 4D) demonstrates the same motion the ground makes — if the two were written
+        /// separately they would drift, and the whole point of the object is that it is telling the
+        /// truth about the lock.
+        static func strainCurve(progress: Float, amplitude: Float, direction: Float) -> Float {
+            direction * amplitude * sinf(progress * .pi * 3) * (1 - progress)
+        }
+
         /// Smoothstep-eased current angle of the in-flight twist — or, for a refusal (M16.2),
         /// a damped wobble in the attempted direction that returns exactly to rest.
         var currentAngle: Float {
             if isRefusal {
-                let amplitude = strainAmplitude
-                let direction: Float = angle < 0 ? -1 : 1
-                return direction * amplitude * sinf(progress * .pi * 3) * (1 - progress)
+                return Self.strainCurve(progress: progress, amplitude: strainAmplitude,
+                                        direction: angle < 0 ? -1 : 1)
             }
             let t = progress * progress * (3 - 2 * progress)
             return angle * t
@@ -219,6 +226,8 @@ class GameState {
         tickAlignmentCylinder(deltaTime)
         tickObeliskAwakening(deltaTime)
         tickLayeredVessel(deltaTime)
+        tickVesselDemo(deltaTime)
+        tickAnchorFlash(deltaTime)
 
         if sliceRotation.isActive {
             // .step holds the twist for manual scrubbing (see stepSlice); .slow crawls; .normal auto.
@@ -579,6 +588,87 @@ class GameState {
         return n
     }()
 
+    /// Scene 4D — the vessel's demonstration, running 0→1 once when the player activates it.
+    /// The script's six beats: the swirl lights, one ring attempts to turn, the whole vessel strains,
+    /// the ground answers, the ring springs back, and three distant points flash. It ends by GRANTING
+    /// the twist ("after the vessel is inspected, player-controlled twist input becomes available") —
+    /// the vessel does not perform the turn, it introduces the possibility.
+    private(set) var vesselDemo: Float = 0
+    private(set) var vesselInspected = false
+    private var vesselAnswered = false           // the anchors answer once, partway through
+    private let vesselDemoDuration: Float = 1.9
+
+    /// True while the vessel is mid-demonstration — the swirl runs bright.
+    var vesselGlow: Float {
+        guard vesselDemo > 0 else { return vesselInspected ? 0.25 : 0 }
+        return 0.25 + 0.75 * sinf(min(1, vesselDemo) * .pi)
+    }
+
+    private func tickVesselDemo(_ dt: Float) {
+        guard vesselDemo > 0 else { return }
+        vesselDemo = min(1, vesselDemo + dt / vesselDemoDuration)
+        // Beat 6 — "three distant points around the world answer with brief flashes": the anchors
+        // name themselves, so the player learns WHERE the lock is without being told there is one.
+        // Fired after the ring has sprung back, so it reads as an answer and not an accompaniment.
+        if !vesselAnswered && vesselDemo > 0.62 {
+            vesselAnswered = true
+            for cu in cubeModel.cubies.indices {
+                for fi in cubeModel.cubies[cu].facelets.indices {
+                    for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                    where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .anchor
+                        && cubeModel.cubies[cu].facelets[fi].props[pi].anim > 0.5 {
+                        cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim = 1
+                    }
+                }
+            }
+            pendingAudioCues.append(.twistLocked(at: nil))
+        }
+        // The vessel carries its own progress, like every other animating prop.
+        setVesselDemoProgress(vesselDemo < 1 ? vesselDemo : 0)
+        if vesselDemo >= 1 {
+            vesselDemo = 0
+            vesselInspected = true
+            // The handover. Scenes 1-3 withhold Q/E; this is the moment the game gives it up.
+            twistEnabled = true
+        }
+    }
+
+    private func setVesselDemoProgress(_ v: Float) {
+        for cu in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[cu].facelets.indices {
+                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .layeredVessel {
+                    cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim = v
+                }
+            }
+        }
+    }
+
+    /// The anchors' answering flash decays on its own.
+    private func tickAnchorFlash(_ dt: Float) {
+        for cu in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[cu].facelets.indices {
+                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .anchor
+                    && cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim > 0 {
+                    cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim =
+                        max(0, cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim - dt / 0.9)
+                }
+            }
+        }
+    }
+
+    /// Begin the vessel's demonstration (F at the vessel). No-op while one is running.
+    func beginVesselDemo(at where_: SIMD3<Float>?) {
+        guard vesselDemo <= 0 else { return }
+        vesselDemo = 0.001
+        vesselAnswered = false
+        // Beat 4 — "a matching vibration travels through the ground". The same cue a refused twist
+        // makes, because it is the same thing happening: something is being held.
+        pendingAudioCues.append(.twistStrain)
+        pendingAudioCues.append(.controlRaised(at: where_))
+    }
+
     private func openSealedDoors() {
         var opened = false
         for ci in Array(cubeModel.sealedPortalCubies)
@@ -830,6 +920,13 @@ class GameState {
             portalRequested = true
             portalDestinationID = portal.state
             portalTransition = portal.transition
+            return
+        }
+        // Scene 4D — the VESSEL. Activating it makes it demonstrate the turn, and fail: the ring
+        // attempts, the vessel strains, the anchors answer, and the twist becomes the player's.
+        if cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel }) {
+            let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
+            beginVesselDemo(at: sliceCentre(axis: axis, index: index))
             return
         }
         // Scene 4 — an ANCHOR. Unlike a switch this does not toggle: activating it RELEASES the bond
