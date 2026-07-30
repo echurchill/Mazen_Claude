@@ -228,6 +228,9 @@ class GameState {
         tickLayeredVessel(deltaTime)
         tickVesselDemo(deltaTime)
         tickAnchorFlash(deltaTime)
+        tickDust(deltaTime)
+        tickArrivalDoorway(deltaTime)
+        updateAudioEmitters()
 
         if sliceRotation.isActive {
             // .step holds the twist for manual scrubbing (see stepSlice); .slow crawls; .normal auto.
@@ -669,6 +672,135 @@ class GameState {
         pendingAudioCues.append(.controlRaised(at: where_))
     }
 
+    /// Audio Phase C — everything currently making a sustained sound, republished every frame.
+    /// Rebuilt from live props rather than remembered, which is what makes it twist-safe: the
+    /// position comes from wherever the facelet is NOW, so a slab turning carries its sounds round
+    /// with it and nothing has to be told that a twist happened.
+    private(set) var activeEmitters: [AudioEmitter] = []
+
+    private func updateAudioEmitters() {
+        activeEmitters.removeAll(keepingCapacity: true)
+        let listenerFace = player.face, lr = player.row, lc = player.col
+        for face in CubeFace.allCases {
+            for r in 0..<cubeModel.size {
+                for c in 0..<cubeModel.size {
+                    guard let (ci, fi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
+                    let facelet = cubeModel.cubies[ci].facelets[fi]
+                    var kind: AudioEmitter.Kind? = nil
+                    // An AWAKENED obelisk hums; a dormant one is silent. Scene 2 lights them one at
+                    // a time, so the world gains a voice per solved step.
+                    if facelet.props.contains(where: { $0.kind == .obelisk && $0.anim > 0.01 }) { kind = .obelisk }
+                    // An OPEN portal holds the "low, stable tone" the scripts describe. A sealed one
+                    // is inert and says nothing — which is the difference the player is listening for.
+                    else if facelet.props.contains(where: { $0.kind == .portal })
+                        && !cubeModel.sealedPortalCubies.contains(ci) { kind = .portal }
+                    guard let k = kind else { continue }
+                    // Phase D — occlusion from the maze. Same face: walk the walls between. A source
+                    // round the curve of the world is muffled by the world itself.
+                    let walls = face == listenerFace
+                        ? cubeModel.wallsBetween(face: face, fromRow: lr, fromCol: lc, toRow: r, toCol: c)
+                        : 3
+                    let m = cubeModel.restMatrix(face: face, row: r, col: c)
+                    activeEmitters.append(AudioEmitter(
+                        id: facelet.id.rawValue, kind: k,
+                        position: SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z),
+                        occlusion: min(1, Float(walls) * 0.34)))
+                }
+            }
+        }
+    }
+
+    /// Scene 2 — "dust falls from nearby wall joints" / "dust shakes loose from moving walls".
+    /// Seeded at CLOSED edges near the player, because that is where a joint is and where the player
+    /// is looking; a world-wide shower would cost more and read as weather rather than as this world
+    /// having just moved. Deterministic per tile, so a replayed twist shakes the same dust.
+    private func shakeDustFromJoints() {
+        let n = cubeModel.size, face = player.face
+        for dr in -2...2 {
+            for dc in -2...2 {
+                let r = player.row + dr, c = player.col + dc
+                guard r >= 0, r < n, c >= 0, c < n,
+                      let (ci, fi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
+                let closed = DirectionMask.all.subtracting(cubeModel.cubies[ci].facelets[fi].mazeTile.openings)
+                guard !closed.isEmpty else { continue }
+                var h = UInt32(truncatingIfNeeded: r &* 73856093 ^ c &* 19349663)
+                h ^= h >> 15; h = h &* 2246822519; h ^= h >> 13
+                let motes = 1 + Int(h % 3)
+                for k in 0..<motes {
+                    let p = cubeModel.scatterPlacement(h &+ UInt32(k &* 977))
+                    var mote = Prop(kind: .dustMote, subRow: p.subRow, subCol: p.subCol,
+                                    viewAngle: p.yaw, offsetX: p.ox, offsetY: p.oy)
+                    mote.anim = 1                        // full life; ticks down and it falls
+                    cubeModel.cubies[ci].facelets[fi].props.append(mote)
+                }
+            }
+        }
+        cubeModel.markTopologyChanged()
+    }
+
+    private func tickDust(_ dt: Float) {
+        var removedAny = false
+        for cu in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[cu].facelets.indices {
+                guard cubeModel.cubies[cu].facelets[fi].props.contains(where: { $0.kind == .dustMote }) else { continue }
+                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .dustMote {
+                    cubeModel.cubies[cu].facelets[fi].props[pi].anim -= dt / 1.6
+                }
+                let before = cubeModel.cubies[cu].facelets[fi].props.count
+                cubeModel.cubies[cu].facelets[fi].props.removeAll { $0.kind == .dustMote && $0.anim <= 0 }
+                if cubeModel.cubies[cu].facelets[fi].props.count != before { removedAny = true }
+            }
+        }
+        if removedAny { cubeModel.markTopologyChanged() }
+    }
+
+    /// Scene 2A — the route behind you closes. "If the player turns immediately, they witness the
+    /// disappearance. If they continue forward, they hear a brief inward rush and later discover that
+    /// the route behind them is gone."
+    ///
+    /// Deliberately a VEIL and a ring, never a working `.portal` prop: there must be no moment where
+    /// stepping back is possible. The prologue's one-way rule is enforced by the door not existing,
+    /// not by the door refusing.
+    func closeArrivalDoorway() {
+        guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
+        var veil = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: player.facing.opposite, state: 2)
+        veil.alignAnim = 1                       // opacity; ticked to 0, then removed
+        cubeModel.cubies[ci].facelets[fi].props.append(veil)
+        cubeModel.cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+        arrivalDoorwayClosing = 1
+        cubeModel.markTopologyChanged()
+        pendingAudioCues.append(.portalClosed(at: nil))
+    }
+
+    /// 1 → 0 while the arrival veil shuts; 0 = nothing closing.
+    private var arrivalDoorwayClosing: Float = 0
+
+    private func tickArrivalDoorway(_ dt: Float) {
+        guard arrivalDoorwayClosing > 0 else { return }
+        arrivalDoorwayClosing = max(0, arrivalDoorwayClosing - dt / 2.2)
+        for cu in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[cu].facelets.indices {
+                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .portalField
+                    && cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim > 0 {
+                    cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim = arrivalDoorwayClosing
+                }
+            }
+        }
+        if arrivalDoorwayClosing <= 0 {
+            // Gone, not merely invisible — nothing left to walk into.
+            for cu in cubeModel.cubies.indices {
+                for fi in cubeModel.cubies[cu].facelets.indices {
+                    cubeModel.cubies[cu].facelets[fi].props.removeAll {
+                        ($0.kind == .portalField && $0.alignAnim <= 0) || $0.kind == .portalRing
+                    }
+                }
+            }
+            cubeModel.markTopologyChanged()
+        }
+    }
+
     private func openSealedDoors() {
         var opened = false
         for ci in Array(cubeModel.sealedPortalCubies)
@@ -733,6 +865,7 @@ class GameState {
         // M20 (Eddie): the switch-trip turn rotates a distant back slab that need not contain the
         // door — open it here so the payoff still lands (see startBackSliceRotation).
         if sliceRotation.opensSealedDoors { openSealedDoors() }
+        shakeDustFromJoints()
 
         if playerCI >= 0 {
             let cubie = cubeModel.cubies[playerCI]

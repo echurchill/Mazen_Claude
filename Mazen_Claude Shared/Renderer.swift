@@ -249,6 +249,8 @@ class Renderer: NSObject, MTKViewDelegate {
     // M11.2b world-transition fade: swap the active world at the midpoint of a quick fade-to-black.
     private enum TransitionPhase { case none, fadingOut, fadingIn }
     private var transitionPhase: TransitionPhase = .none
+    /// Phase E — seconds of silence still owed after an arrival, before the new world's bed starts.
+    private var ambienceSilenceRemaining: Float = 0
     private var transitionT: Float = 0          // 0 clear … 1 fully black
     private var pendingPortalDestination: Int?  // destination id queued for the fade midpoint (M15.2)
     private var pendingPortalTransition: WorldTransition = .auto   // Phase 0: how that swap moves the stack
@@ -631,6 +633,10 @@ class Renderer: NSObject, MTKViewDelegate {
     /// from the root, enter the destination — resolved by route through the registry (M15.2),
     /// created on first visit, persistent forever after.
     private func performPortalSwap(destinationID: Int, transition: WorldTransition = .auto) {
+        // Phase E — the world you are leaving goes quiet AT the swap, and the new one's bed is held
+        // back for a beat. "Silence on arrival, then the wind returns" is the whole effect.
+        audio?.setAmbience(world: nil)
+        ambienceSilenceRemaining = 1.4
         // Stop the departing world walking, so neither world auto-continues across the switch —
         // with walk-through portals, an un-cleared "forward held" would ping-pong through gates.
         gameState.forwardHeld = false; gameState.backwardHeld = false
@@ -680,6 +686,12 @@ class Renderer: NSObject, MTKViewDelegate {
         // you emerge looking the portal's exit direction — the door at your back.
         let arriving = gameState
         arriving.lastArrivalOrigin = departingName   // Phase 0: "how you got here", for route-keyed behaviour
+        // Scene 2A — the way back CLOSES behind you. Only in the prologue's scenes, which are
+        // explicitly one-way ("no going back to the prologue's world"); the dev hub and the sandbox
+        // worlds keep their doors, or building would become a chore.
+        if Self.prologueWorldNames.contains(arriving.name) && pushed {
+            arriving.closeArrivalDoorway()
+        }
         arriving.camera.mode = departingMode
         arriving.camera.lookYaw = 0
         arriving.camera.lookPitch = 0
@@ -867,6 +879,19 @@ class Renderer: NSObject, MTKViewDelegate {
         if !gameState.pendingAudioCues.isEmpty {
             audio?.play(cues: gameState.pendingAudioCues, worldSpin: gameState.worldSpinMatrix())
             gameState.pendingAudioCues.removeAll(keepingCapacity: true)
+        }
+        // Phase C/D — sustained emitters, republished by the world every frame from live topology
+        // and reconciled here. Spun into the same frame the listener lives in, exactly like the
+        // one-shot cues: the world's idle rotation has already caused two bugs by being folded in
+        // at different points in different systems, so it is folded in HERE for everything audible.
+        audio?.updateEmitters(gameState.activeEmitters, worldSpin: gameState.worldSpinMatrix())
+        // Phase E — the world's bed. Arrival is SILENT and the bed returns a moment later (Scene 2's
+        // script is precise about this), so the delay is the point rather than a loading artefact.
+        if ambienceSilenceRemaining > 0 {
+            ambienceSilenceRemaining -= gameState.frameTimeMs / 1000
+            if ambienceSilenceRemaining <= 0 { audio?.setAmbience(world: gameState.name) }
+        } else if transitionPhase == .none {
+            audio?.setAmbience(world: gameState.name)
         }
 
         let camDist = simd_length(framePose.position)

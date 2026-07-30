@@ -809,6 +809,20 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 29) {
+        // DUST (Scene 2). A pale mote lit by the sky, thinning to nothing as it settles. Cutout, not
+        // alpha-blended: this is the opaque pass, so the fade is a screen-door dither on a hashed
+        // position — the same trick the portal veils use. Cheap, order-independent, and at this size
+        // the pattern is invisible; you read it as dust thinning, which is what it is.
+        float2 sp = floor(in.position.xy);
+        float noise = fract(sin(dot(sp, float2(12.9898, 78.233))) * 43758.5453);
+        float life = clamp(in.discoveryAmount, 0.0, 1.0);
+        if (noise > life) discard_fragment();
+        // Round the square card off, so a mote is a speck and not a chip.
+        if (length(in.texCoord - 0.5) > 0.5) discard_fragment();
+        float3 amb = skyAmbient * 0.65 + sunColor * 0.35 * shadowFactor;
+        color = float3(0.78, 0.75, 0.70) * amb;
+        lighting = float3(1.0);
     } else if (in.materialID == 28) {
         // THE LAYERED VESSEL (Scene 4D). Smooth stone/ceramic with faint green-blue traces in the
         // grooves, three major rings each crossed by a narrow luminous seam, and the swirl on its cap.

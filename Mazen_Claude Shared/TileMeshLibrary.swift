@@ -233,6 +233,10 @@ class TileMeshLibrary {
         Self.addAlignmentCylinder(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.alignmentCylinder.rawValue] = TileMesh(vertexOffset: 0, indexOffset: alignStart, indexCount: allIndices.count - alignStart)
 
+        let dustStart = allIndices.count
+        Self.addDustMote(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.dustMote.rawValue] = TileMesh(vertexOffset: 0, indexOffset: dustStart, indexCount: allIndices.count - dustStart)
+
         let vesselStart = allIndices.count
         Self.addLayeredVessel(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.layeredVessel.rawValue] = TileMesh(vertexOffset: 0, indexOffset: vesselStart, indexCount: allIndices.count - vesselStart)
@@ -1479,5 +1483,29 @@ class TileMeshLibrary {
         for j in 0..<seg {
             indices.append(contentsOf: [cap, cap + UInt32(j) + 1, cap + UInt32(j) + 2])
         }
+    }
+
+    /// Scene 2 — a dust mote shaken from a wall joint. Two crossed quads a few cm across, built
+    /// ABOVE the floor at joint height: the prop's `heightScale` (about the floor pivot) then scales
+    /// that height down as its life runs out, so it FALLS and lands rather than fading in mid-air.
+    /// Reusing the height machinery is what keeps the engine's first particle a dozen lines instead
+    /// of a subsystem.
+    private static func addDustMote(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let mUnit: Float = ws.eyeHeight / 1.7
+        let hw = 0.045 * mUnit                      // ~4.5 cm across
+        let z0 = ws.floorY + 1.35 * mUnit           // shaken loose at about joint height
+        func quad(_ ax: Float, _ ay: Float) {
+            let n = SIMD3<Float>(-ay, ax, 0)
+            let base = UInt32(verts.count)
+            for (dx, dz) in [(-hw, -hw), (hw, -hw), (hw, hw), (-hw, hw)] {
+                verts.append(MazeVertexSwift(position: SIMD3(ax * dx, ay * dx, z0 + dz), normal: n,
+                                             texCoord: SIMD2(dx / hw * 0.5 + 0.5, dz / hw * 0.5 + 0.5),
+                                             aoFactor: 1.0))
+            }
+            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            indices.append(contentsOf: [base+0, base+2, base+1, base+0, base+3, base+2])  // two-sided
+        }
+        quad(1, 0)
+        quad(0, 1)
     }
 }

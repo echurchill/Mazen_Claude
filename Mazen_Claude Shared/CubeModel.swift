@@ -2383,6 +2383,30 @@ class CubeModel {
     /// The **flat** (un-inflated, un-spun) placement of a tile — tangent/bitangent/normal basis at
     /// the tile center on the axis-aligned cube face. This is the rest frame the M14b vertex shader
     /// inflates from (per-vertex); rigid objects seat on the curve via `inflatedPlacement` instead.
+    /// Audio Phase D — how many WALLS stand between two tiles on the same face.
+    ///
+    /// The plan's key insight: PHASE can do geometry-aware occlusion, but feeding it the world mesh
+    /// would be expensive and pointless when we already hold the maze. Walking `openings` is cheap,
+    /// exact, and twist-correct for free — the topology IS the occluder, and it rotates with the
+    /// slab, so a twist that opens a corridor also opens the sound down it with no extra work.
+    ///
+    /// A greedy march toward the target, stepping along whichever axis has the most ground left and
+    /// counting the closed edges it crosses. Not a true line-of-sight raycast; on a grid of ~19 m
+    /// tiles it is indistinguishable, and it can never claim a clear path where the maze has none.
+    func wallsBetween(face: CubeFace, fromRow: Int, fromCol: Int, toRow: Int, toCol: Int) -> Int {
+        var r = fromRow, c = fromCol, walls = 0, guardCount = 0
+        while (r, c) != (toRow, toCol) && guardCount < 4 * size {
+            guardCount += 1
+            let dr = toRow - r, dc = toCol - c
+            let stepRow = abs(dr) >= abs(dc)
+            let dir: SurfaceDirection = stepRow ? (dr < 0 ? .north : .south) : (dc < 0 ? .west : .east)
+            guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { return walls + 1 }
+            if !cubies[ci].facelets[fi].mazeTile.openings.contains(direction: dir) { walls += 1 }
+            if stepRow { r += dr < 0 ? -1 : 1 } else { c += dc < 0 ? -1 : 1 }
+        }
+        return walls
+    }
+
     func restMatrix(face: CubeFace, row: Int, col: Int) -> float4x4 {
         let halfN = Float(size) / 2.0
         let spacing = worldScale.cellSpacing

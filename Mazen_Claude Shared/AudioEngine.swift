@@ -38,9 +38,15 @@ final class AudioEngine {
         static let switchUp = "switch.up"
         static let switchDown = "switch.down"
         static let portalOpen = "portal.open"
+        static let portalClose = "portal.close"
         static let controlRaised = "control.raised"
         static let turnSlow = "turn.slow"
         static let turnFast = "turn.fast"
+        // Phase C — SUSTAINED emitters. Looping, so they are a presence rather than an event.
+        static let obeliskHum = "emitter.obelisk"
+        static let portalHum  = "emitter.portal"
+        // Phase E — the world's own bed.
+        static let ambienceBed = "ambience.bed"
     }
 
     /// A world unit is ~18.9 m (WorldScale: eyeHeight 0.09u == 1.7 m). PHASE reasons in metres, so
@@ -60,6 +66,14 @@ final class AudioEngine {
     private var spatialAssets: Set<String> = []
     /// Last listener position, so a positionless spatial sound can be played AT the player.
     private var listenerPosition = SIMD3<Float>(0, 0, 0)
+
+    /// Phase C — one live looping event per emitter id. Keyed by the model's stable facelet id, so a
+    /// source that MOVES under a twist is repositioned rather than stopped and restarted; restarting
+    /// a loop every frame is a stutter, not a sound.
+    private var emitterEvents: [Int: (event: PHASESoundEvent, source: PHASESource)] = [:]
+    /// Phase E — the current ambience bed, and which world it belongs to.
+    private var ambienceEvent: PHASESoundEvent?
+    private var ambienceWorld: String?
     /// Which sounds have already reported a failure. A broken sound fires on every keypress, so
     /// without this one mistake buries the console — the spatial-mixer bug produced dozens of
     /// identical lines and made the genuinely interesting logs hard to find (Eddie).
@@ -122,6 +136,21 @@ final class AudioEngine {
                              harmonics: [1.0, 0.35, 0.12], spatial: true)
             try registerTone(identifier: EventID.portalOpen, frequency: 147, duration: 2.4,
                              harmonics: [1.0, 0.6, 0.4, 0.25], spatial: true)
+            // The way back closing (Scene 2A): the portal-open tone INVERTED — descending, and
+            // landing lower than it began, so it folds inward and resolves shut. The relationship is
+            // the point: the same voice saying the opposite thing.
+            try registerTone(identifier: EventID.portalClose, frequency: 147, duration: 2.2,
+                             harmonics: [1.0, 0.6, 0.4, 0.25], spatial: true, sweepTo: 58)
+
+            // Phase C — sustained emitter voices. An awakened obelisk hums; an open portal holds the
+            // "low, stable tone" the scripts describe. Both loop, both are spatial, and both are
+            // deliberately quiet: they are landmarks you notice when you stop, not an alarm.
+            try registerTone(identifier: EventID.obeliskHum, frequency: 174, duration: 2.0,
+                             harmonics: [1.0, 0.3, 0.14], spatial: true, sustain: true, looping: true)
+            try registerTone(identifier: EventID.portalHum, frequency: 98, duration: 2.4,
+                             harmonics: [1.0, 0.5, 0.22, 0.1], spatial: true, sustain: true, looping: true)
+            // Phase E — the world's bed: broadband, slow-moving, non-spatial. Not a tune, a room.
+            try registerBed(identifier: EventID.ambienceBed, seconds: 6)
 
             try engine.start()
             ready = true
@@ -194,6 +223,7 @@ final class AudioEngine {
             case .switchEngaged(let p):        fire(EventID.switchUp, at: spun(p))
             case .switchDisengaged(let p):     fire(EventID.switchDown, at: spun(p))
             case .portalOpened(let p):         fire(EventID.portalOpen, at: spun(p))
+            case .portalClosed(let p):         fire(EventID.portalClose, at: spun(p))
             }
         }
     }
@@ -242,6 +272,85 @@ final class AudioEngine {
         }
     }
 
+    // MARK: - Sustained emitters (Phase C) and occlusion (Phase D)
+
+    /// Reconcile the live loops against what the world says is sounding right now.
+    ///
+    /// The model republishes every emitter every frame from live topology, so this is a diff: start
+    /// what is new, MOVE what persists, stop what has gone. Moving rather than restarting is the
+    /// whole point — an emitter riding a twist must keep sounding while its position changes.
+    ///
+    /// Occlusion (Phase D) is applied by pushing the source further away along the listener→source
+    /// direction. PHASE offers no per-event gain here, and distance is what the spatial mixer already
+    /// understands; more walls really does mean less energy arriving. It is an ATTENUATION model, not
+    /// a filter — a muffled sound gets quieter but not duller. Honest about what it is.
+    func updateEmitters(_ emitters: [AudioEmitter], worldSpin: float4x4) {
+        guard ready, let sm = spatialMixer else { return }
+        var seen = Set<Int>()
+        for e in emitters {
+            seen.insert(e.id)
+            let v = worldSpin * SIMD4(e.position.x, e.position.y, e.position.z, 1)
+            var world = SIMD3(v.x, v.y, v.z) * Self.metresPerUnit
+            if e.occlusion > 0 {
+                // Push away from the listener: up to ~3× the distance when fully walled off.
+                let away = world - listenerPosition
+                world = listenerPosition + away * (1 + 2.0 * e.occlusion)
+            }
+            if let live = emitterEvents[e.id] {
+                live.source.transform = Self.transform(at: world)
+                continue
+            }
+            do {
+                let src = PHASESource(engine: engine)
+                src.transform = Self.transform(at: world)
+                try engine.rootObject.addChild(src)
+                let id = e.kind == .obelisk ? EventID.obeliskHum : EventID.portalHum
+                let mixerParams = PHASEMixerParameters()
+                mixerParams.addSpatialMixerParameters(identifier: sm.identifier, source: src, listener: listener)
+                let event = try PHASESoundEvent(engine: engine, assetIdentifier: id, mixerParameters: mixerParams)
+                event.start()
+                emitterEvents[e.id] = (event, src)
+            } catch {
+                reportOnce("emitter", error)
+            }
+        }
+        for (id, live) in emitterEvents where !seen.contains(id) {
+            live.event.stopAndInvalidate()
+            live.source.parent?.removeChild(live.source)
+            emitterEvents.removeValue(forKey: id)
+        }
+    }
+
+    private static func transform(at p: SIMD3<Float>) -> simd_float4x4 {
+        var t = matrix_identity_float4x4
+        t.columns.3 = SIMD4(p.x, p.y, p.z, 1)
+        return t
+    }
+
+    // MARK: - Ambience (Phase E)
+
+    /// Give each world its own bed, and let a portal land in SILENCE before it returns.
+    ///
+    /// Scene 2's script is precise about this: you step through and the world is quiet, then the wind
+    /// comes back. Arrival silence is the cheapest possible way to make a world feel like a different
+    /// place, and it costs nothing but restraint. Passing nil stops the bed; passing a new world name
+    /// restarts it, which the Renderer delays so the silence is real.
+    func setAmbience(world: String?) {
+        guard ready else { return }
+        if world == ambienceWorld { return }
+        ambienceWorld = world
+        ambienceEvent?.stopAndInvalidate()
+        ambienceEvent = nil
+        guard world != nil else { return }
+        do {
+            let event = try PHASESoundEvent(engine: engine, assetIdentifier: EventID.ambienceBed)
+            event.start()
+            ambienceEvent = event
+        } catch {
+            reportOnce(EventID.ambienceBed, error)
+        }
+    }
+
     // MARK: - Synthesis
 
     /// Build one tone as raw PCM and register it as a PHASE sound asset.
@@ -252,7 +361,8 @@ final class AudioEngine {
     /// resonator rather than a beep.
     private func registerTone(identifier: String, frequency: Float, duration: Float,
                               harmonics: [Float], spatial: Bool = false, rough: Float = 0,
-                              sweepTo: Float? = nil, transient: Float = 0, sustain: Bool = false) throws {
+                              sweepTo: Float? = nil, transient: Float = 0, sustain: Bool = false,
+                              looping: Bool = false) throws {
         let sampleRate = 48_000.0
         let frames = Int(Double(duration) * sampleRate)
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
@@ -309,8 +419,50 @@ final class AudioEngine {
         let sampler = PHASESamplerNodeDefinition(
             soundAssetIdentifier: identifier + ".asset",
             mixerDefinition: mixer)
-        sampler.playbackMode = .oneShot
+        sampler.playbackMode = looping ? .looping : .oneShot
         sampler.setCalibrationMode(calibrationMode: .relativeSpl, level: 0)
+        try engine.assetRegistry.registerSoundEventAsset(rootNode: sampler, identifier: identifier)
+    }
+
+    /// Phase E — a seamless ambience bed: broadband noise, slowly filtered and swelling, with the
+    /// tail crossfaded into the head so a loop point cannot be heard. Not a tune and not a drone
+    /// with a pitch — a world with weather in it. Non-spatial, because it is everywhere.
+    private func registerBed(identifier: String, seconds: Float) throws {
+        let sampleRate = 48_000.0
+        let frames = Int(Double(seconds) * sampleRate)
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+            throw NSError(domain: "audio", code: 1)
+        }
+        var samples = [Float](repeating: 0, count: frames)
+        // Deterministic noise — the bed should be identical every launch, so a change in the mix is
+        // always a change someone MADE.
+        var rng: UInt32 = 0x9E3779B9
+        var lp: Float = 0, lp2: Float = 0
+        for i in 0..<frames {
+            rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5
+            let white = Float(rng & 0xFFFF) / 32767.5 - 1.0
+            lp += (white - lp) * 0.04          // two poles of lowpass: wind, not hiss
+            lp2 += (lp - lp2) * 0.09
+            let t = Float(i) / Float(sampleRate)
+            // Two slow swells at unrelated rates, so the bed never settles into a pulse.
+            let swell = 0.55 + 0.30 * sinf(t * 0.21) + 0.15 * sinf(t * 0.073 + 1.3)
+            samples[i] = lp2 * swell * 0.30
+        }
+        // Crossfade the last quarter-second into the first, so the loop seam is inaudible.
+        let fade = min(frames / 4, Int(0.25 * sampleRate))
+        for i in 0..<fade {
+            let a = Float(i) / Float(fade)
+            samples[i] = samples[i] * a + samples[frames - fade + i] * (1 - a)
+        }
+        let data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
+        try engine.assetRegistry.registerSoundAsset(
+            data: data, identifier: identifier + ".asset", format: format, normalizationMode: .none)
+        let mixer = PHASEChannelMixerDefinition(
+            channelLayout: AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_Mono)!)
+        let sampler = PHASESamplerNodeDefinition(soundAssetIdentifier: identifier + ".asset",
+                                                 mixerDefinition: mixer)
+        sampler.playbackMode = .looping
+        sampler.setCalibrationMode(calibrationMode: .relativeSpl, level: -12)   // a bed, not a voice
         try engine.assetRegistry.registerSoundEventAsset(rootNode: sampler, identifier: identifier)
     }
 }

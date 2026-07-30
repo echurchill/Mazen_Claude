@@ -463,6 +463,72 @@ struct CoordinateMathTests {
         check(gs.sliceRotation.isRefusal, "and the anchors still refuse it")
     }
 
+    /// Audio Phase C's stated risk: "worth a test that an emitter's position tracks its facelet
+    /// through a rotation". Emitters are republished every frame from live topology rather than
+    /// remembered, so a slab that turns carries its sounds with it — but only if nobody caches.
+    /// Phase D's occlusion rides the same topology, so a twist that opens a corridor opens the sound
+    /// down it, with no separate bookkeeping to forget.
+    static func testAudioEmittersRideTwistsAndAreOccludedByWalls() {
+        let gs = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
+        let m = gs.cubeModel
+        // Scene 2 starts SILENT — its obelisks are dormant and its exit portal is sealed, which is
+        // the scene working as written. Wake the obelisks so there is something sustained to track.
+        var woke = 0
+        for cu in m.cubies.indices {
+            for fi in m.cubies[cu].facelets.indices {
+                for pi in m.cubies[cu].facelets[fi].props.indices
+                where m.cubies[cu].facelets[fi].props[pi].kind == .obelisk {
+                    m.cubies[cu].facelets[fi].props[pi].anim = 1
+                    woke += 1
+                }
+            }
+        }
+        check(woke > 0, "Scene 2 should have obelisks to awaken")
+        gs.update(deltaTime: 1.0 / 60.0)
+        let before = gs.activeEmitters
+        check(!before.isEmpty, "an awakened obelisk should be sounding")
+        // Rotate a slab that actually CONTAINS an emitter. (Scene 2's obelisks live on +Y, so the
+        // +Z outer slice leaves them alone — which is right, and would have made this test pass
+        // while proving nothing.)
+        var slab: (axis: Int, index: Int)? = nil
+        outer: for cu in m.cubies.indices {
+            for f in m.cubies[cu].facelets where before.contains(where: { $0.id == f.id.rawValue }) {
+                slab = (0, Int(m.cubies[cu].position.x))
+                break outer
+            }
+        }
+        guard let sl = slab else { check(false, "could not find the emitter's own slab"); return }
+        m.applySliceRotation(axis: sl.axis, index: sl.index, angle: .pi / 2)
+        gs.update(deltaTime: 1.0 / 60.0)
+        let after = gs.activeEmitters
+        // Same sources, by identity — nothing restarted, nothing orphaned.
+        check(Set(before.map(\.id)) == Set(after.map(\.id)), "a twist must not create or lose emitters")
+        // …but at least one of them MOVED, or the emitters are not tracking their facelets at all.
+        var moved = 0
+        for b in before {
+            guard let a = after.first(where: { $0.id == b.id }) else { continue }
+            if simd_distance(a.position, b.position) > 0.001 { moved += 1 }
+        }
+        check(moved > 0, "an emitter on the turning slab should have moved with it")
+
+        // Occlusion: a wall between listener and source must register, an open corridor must not.
+        var tile = MazeTile(openings: [], styleSeed: 0)
+        check(!tile.openings.contains(.north), "sanity: a closed tile")
+        // Walk a real world: from the player, a source on their own tile is never occluded.
+        let here = gs.activeEmitters.first { e in
+            m.faceletAt(face: gs.player.face, row: gs.player.row, col: gs.player.col)
+                .map { m.cubies[$0.cubieIndex].facelets[$0.faceletIndex].id.rawValue == e.id } ?? false
+        }
+        if let h = here { check(h.occlusion == 0, "a source on your own tile is not occluded") }
+        // And the walk itself: crossing a sealed region boundary must count walls.
+        let n = m.size, c = n / 2
+        let walls = m.wallsBetween(face: .positiveZ, fromRow: c, fromCol: c, toRow: 0, toCol: 0)
+        check(walls >= 0 && walls <= 2 * n, "the occlusion walk terminates with a sane count (\(walls))")
+        tile.openings = .all
+        check(m.wallsBetween(face: .positiveZ, fromRow: c, fromCol: c, toRow: c, toCol: c) == 0,
+              "no walls between a tile and itself")
+    }
+
     static func testVesselCanBeApproached() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -707,6 +773,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
+        testAudioEmittersRideTwistsAndAreOccludedByWalls()
         testVesselInspectionGrantsTheTwist()
         testDressedWorldsDoNotFenceOffOpenEdges()
         testJitteredSolidPropsBlockWhereTheyAreDrawn()

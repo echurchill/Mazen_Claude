@@ -90,6 +90,28 @@ enum AudioCue {
     case switchDisengaged(at: SIMD3<Float>?)
     /// A sealed portal came alive.
     case portalOpened(at: SIMD3<Float>?)
+    /// Scene 2A — the way you came CLOSES behind you: "a descending tone folds inward", and the new
+    /// world stays silent for several seconds afterwards. The disappearance should read as quiet and
+    /// final rather than threatening, so this is a fold, not an alarm.
+    case portalClosed(at: SIMD3<Float>?)
+}
+
+/// Audio Phase C/D — a SUSTAINED sound the world is making from somewhere, republished every frame
+/// from live topology so it rides a twist without anyone having to remember to move it.
+///
+/// Deliberately plain data, like `AudioCue`: the model describes what is sounding and where, and
+/// never reaches for an audio framework, so the headless harness still links and occlusion stays
+/// testable without a speaker.
+struct AudioEmitter: Equatable {
+    enum Kind: Int { case obelisk, portal }
+    /// Stable across frames — it is the FACELET's id, so an emitter keeps its identity while its
+    /// position changes under a twist. Restarting the loop every frame would make a stutter, not a
+    /// sound; this is what lets the engine tell "same source, moved" from "a new source".
+    let id: Int
+    let kind: Kind
+    let position: SIMD3<Float>
+    /// 0 = clear line down a corridor, 1 = fully muffled. Walls between listener and source.
+    let occlusion: Float
 }
 
 enum TileState: Int {
@@ -333,6 +355,9 @@ enum PropKind: UInt8 {
                          // 12) — the light pooling under an energy veil / the lit floor of the elevator.
     case signpost        // M20 (Eddie): a wooden post + board naming the portal it stands beside
                          // (material 24). `state` = the label-array slice (a hub destination index).
+    case dustMote        // Scene 2: a mote shaken loose from a wall joint by a twist. `anim` = life left,
+                         // 1 → 0, which both LOWERS it (heightScale about the floor) and fades it out.
+                         // Non-solid and short-lived; the world's only particle so far.
     case layeredVessel   // Scene 4: the vessel from Scene 1, now READING the lock — three major rings, each
                          // crossed by a luminous seam, that turn into alignment as the anchors release.
                          // `anim` = rings aligned, 0…3 (continuous, so it tweens). Material 28.
@@ -344,7 +369,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .portalRing, .signpost: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .portalRing, .signpost, .dustMote: return false
         default: return true
         }
     }

@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-29. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-30. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
 
 ## The 60-second catch-up
 
@@ -91,19 +91,50 @@ session: [Engine Primer](Engine%20Primer%20—%20Worlds%2C%20Twists%2C%20Travel.
 - **Skyboxes:** one full-sphere equirect per system; five fictional starfields generated from HYG
   data as compositing bases; `L` cycles them in place. Sky banding fixed by a `skyDay`-scaled TPDF
   dither (gated on the gradient, so clean night skies stay clean).
-- **Tests: 245,376** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
+- **Tests: 249,353** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
 - **New doc:** [Routing — How Paths Live in the Cube](Routing%20—%20How%20Paths%20Live%20in%20the%20Cube.md)
   — where a route actually lives (4 bits/tile), why a route floor is decoration, and what a twist
   can and cannot change. Read it before authoring Scene 4's route.
 
+- **Scene 4D is complete.** The layered vessel is built (lathe of Scene 1's silhouette, three ring
+  seams that come home one per anchor), it STRAINS in sympathy with any refused twist using the same
+  curve the ground uses, and `F` runs the script's six beats — swirl, ring attempt, strain, ground
+  answer, spring back, three anchors flashing. Finishing it **grants the twist**: Scene 4 now arrives
+  with `twistEnabled = false`, so the verb is learned from an object rather than found in a control
+  list, and 4E (the first refused turn) follows immediately.
+- **Audio C, D and E are in.** Sustained emitters republished every frame from live topology, so they
+  ride twists; occlusion by walking `openings` between listener and source (attenuation, not
+  filtering — see the caveat below); per-world ambience beds with the script's silence-on-arrival.
+- **Scene 2A closes behind you** — an inward-folding descending tone, the way back gone rather than
+  refused (a veil, never a working portal), and dust shaken from wall joints by a twist. Dust is the
+  engine's first particle: `heightScale` about the floor pivot drops it, a screen-door dither fades it.
+- **The garden's other five faces** now carry ground scatter (they had none), and prop placement is
+  continuous with clumped density rather than sitting on the 3×3 authoring lattice.
+- **Walkability fix:** dressed worlds were narrowing OPEN edges to a gateway's centred gap despite
+  drawing no jambs — invisible walls either side of a lane. See `CubeModel.fullWidthGateways`.
+- **Metal fix:** attachment residency was cached by `ObjectIdentifier`, which is a recyclable address;
+  a new attachment landing on a dead one's address was never made resident. That was the intermittent
+  magenta at startup/resize.
+
 ### Open on Scene 4
-- **Route alignment (#2)** — the break must sit on the **slab boundary**, not inside `+Z`: the
-  player's whole face rotates rigidly, so it cannot change its own internal connectivity. Measured:
-  the slab is all 25 `+Z` tiles plus a 5-tile edge strip on each side face; `-Z` stays put. Verify
-  strip↔static crossings with a reachability probe before building.
-- **The vessel's three rings** aligning as anchors release (today a plinth wearing the swirl glyph).
-- Scene 2 polish: portal closing behind you; dust at the joints.
-- Audio Phases C–F: prop emitters that ride twists, occlusion from maze topology, ambience beds.
+- **Route alignment (#2) — the one real gap left.** Measured: every tile on `+Z` is already reachable
+  from spawn, so the script's premise ("the maze does not connect to the portal; the route exists in
+  pieces") is not built. What exists instead is a SEAL: the portal is dark and the turn lights it.
+  The break must sit on the **slab boundary** — the player's whole face rotates rigidly and cannot
+  change its own internal connectivity; the slab is all 25 `+Z` tiles plus a 5-tile edge strip on
+  each side face, `-Z` untouched, so only the 20 strip↔static crossings are editable by a turn.
+  Verify those crossings with a reachability probe **before** authoring. Also decide whether to drop
+  the seal once the route exists, so the turn's payoff is one idea rather than two locks at once.
+
+### Open elsewhere
+- **Audio F** is scene-gated: Scene 3's six kin tones and Scene 5's travelling pulse need those
+  scenes to exist. **Occlusion is attenuation, not filtering** — PHASE offers no per-event gain on
+  this path, so a walled-off source is pushed further away instead. It gets quieter, not duller.
+- fps: 60–70 full screen, ~100 at launch size (Eddie, 2026-07-30). It tracks window AREA, so the
+  renderer is fill-bound; adding props is cheap, adding full-screen shader work is not. Worth
+  remembering for Scene 3's beams.
+- Uncommitted and awaiting a call: `Prototype Worlds.ods` (modified), `Mazen_Models/metal_plate_02_1k/`,
+  `To_be_evaluated/`.
 
 ## Immediate next actions on resume
 

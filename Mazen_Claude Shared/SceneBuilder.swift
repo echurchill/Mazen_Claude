@@ -452,6 +452,15 @@ final class SceneBuilder {
                             if prop.kind == .portalRing {
                                 materialID = 12                                 // emissive glow ring
                             }
+                            if prop.kind == .dustMote {
+                                // Falls as it dies: heightScale about the FLOOR pivot lowers the mote
+                                // from joint height to the ground over its life, and discoveryAmount
+                                // dithers it away. One prop field doing both jobs.
+                                materialID = 29
+                                heightPivot = model.worldScale.floorY
+                                heightScale = max(0.001, prop.anim)
+                                color = SIMD4(1, 1, 1, 1)
+                            }
                             if prop.kind == .layeredVessel {
                                 // Scene 4D — material 28 draws the three ring seams from a single
                                 // float: `anim` counts rings aligned (0…3), normalised here into the
@@ -489,6 +498,7 @@ final class SceneBuilder {
                             // dither) for the translucent elevator layers; alignAnim==0 ⇒ fully opaque.
                             let discovery: Float
                             if prop.kind == .alignmentCylinder { discovery = prop.alignAnim }
+                            else if prop.kind == .dustMote { discovery = max(0, min(1, prop.anim)) }
                             else if prop.kind == .layeredVessel { discovery = max(0, min(1, prop.anim / 3)) }
                             else if prop.kind == .obelisk && prop.anim > 0 { discovery = prop.anim }
                             else if prop.kind == .portalField && prop.alignAnim > 0 { discovery = prop.alignAnim }
