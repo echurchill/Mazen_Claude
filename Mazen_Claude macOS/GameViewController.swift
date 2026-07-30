@@ -51,7 +51,7 @@ class GameViewController: NSViewController {
         label.drawsBackground = true
         label.isBezeled = false
         label.isEditable = false
-        label.maximumNumberOfLines = 5
+        label.maximumNumberOfLines = 8
         label.translatesAutoresizingMaskIntoConstraints = false
         label.isHidden = true
         view.addSubview(label)
@@ -123,8 +123,25 @@ class GameViewController: NSViewController {
                 }.joined(separator: ", ")
             }
         }
+        // What the ENGINE thinks the walls are on this tile, and where the player is standing within
+        // it. An invisible wall is only diagnosable if you can compare "I cannot walk here" against
+        // "the engine believes there is a wall here" — without that the two are indistinguishable and
+        // it is all guesswork from screenshots.
+        var walls = "—"
+        if let (ci, fi) = gs.cubeModel.faceletAt(face: gs.player.face, row: gs.player.row, col: gs.player.col) {
+            let t = gs.cubeModel.cubies[ci].facelets[fi].mazeTile
+            let solids = gs.cubeModel.cubies[ci].facelets[fi].props.filter { $0.kind.isSolid }
+            walls = [(DirectionMask.north, "N"), (.east, "E"), (.south, "S"), (.west, "W")]
+                .map { t.openings.contains($0.0) ? "·" : $0.1 }.joined()
+            walls += "  sub(\(gs.player.subRow),\(gs.player.subCol))/\(gs.worldScale.standGrid)"
+            if !solids.isEmpty {
+                walls += "  solid: " + solids.map { "\($0.kind)" }.joined(separator: ",")
+            }
+            if gs.cubeModel.fullWidthGateways { walls += "  fullWidthGaps" }
+        }
         let text = String(format: """
             Face: %@  Pos: (%d,%d)  Dir: %@
+            Walls: %@
             Here: %@
             Camera: %@  Cube: %dx%dx%d
             Frame: %.1f ms  (%.0f fps)
@@ -132,6 +149,7 @@ class GameViewController: NSViewController {
             Roundness(-/=): %.1f   Matte(M): %@   Noon(⇧T): %@
             """,
             "\(gs.player.face)", gs.player.row, gs.player.col, "\(gs.player.facing)",
+            walls,
             here,
             gs.camera.mode == .orbit ? "orbit" : "FP", gs.cubeModel.size, gs.cubeModel.size, gs.cubeModel.size,
             gs.avgFrameTimeMs, fps, pacing, world, gs.cubeModel.roundness,
