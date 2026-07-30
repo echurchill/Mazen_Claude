@@ -75,6 +75,17 @@ class Renderer: NSObject, MTKViewDelegate {
     /// validation — technically UB). They're registered lazily on first appearance; the pool is
     /// tiny (~3 drawables + MSAA + depth) and only grows on resize.
     private var residentAttachments = Set<ObjectIdentifier>()
+    /// The same textures, RETAINED. An `ObjectIdentifier` is just the object's address, so once a
+    /// texture is released that address can be handed to the next allocation — and a NEW attachment
+    /// landing on a dead one's address reads as "already resident", never gets added, and is then
+    /// written by the GPU while non-resident. That is undefined behaviour, and what it looked like
+    /// was blocks of magenta at startup and on resize (Eddie) — exactly when MTKView is churning its
+    /// MSAA/depth textures and the drawable pool is filling. Holding a reference makes the address
+    /// un-recyclable, so identity means what the cache assumes it means.
+    private var residentAttachmentTextures: [MTLTexture] = []
+    /// Set when MTKView is about to reallocate its attachments; the old ones are dropped at the top
+    /// of the next frame, once the in-flight frames that may still be reading them have completed.
+    private var attachmentResidencyStale = false
 
     private func ensureAttachmentsResident(_ desc: MTL4RenderPassDescriptor) {
         var added = false
@@ -84,6 +95,7 @@ class Renderer: NSObject, MTKViewDelegate {
             guard !residentAttachments.contains(id) else { return }
             residencySet.addAllocation(tex)
             residentAttachments.insert(id)
+            residentAttachmentTextures.append(tex)
             added = true
         }
         ensure(desc.colorAttachments[0].texture)
@@ -91,6 +103,19 @@ class Renderer: NSObject, MTKViewDelegate {
         ensure(desc.depthAttachment.texture)
         ensure(desc.stencilAttachment.texture)
         if added { residencySet.commit() }
+    }
+
+    /// Drop the attachment registrations so the next frame re-registers whatever MTKView has just
+    /// built. Removes them individually rather than clearing the set — the residency set also holds
+    /// every mesh, texture and uniform buffer in the game, none of which is going anywhere.
+    ///
+    /// Call ONLY after the in-flight frames have retired: these textures may still be being read.
+    private func releaseAttachmentResidency() {
+        guard !residentAttachmentTextures.isEmpty else { return }
+        for tex in residentAttachmentTextures { residencySet.removeAllocation(tex) }
+        residencySet.commit()
+        residentAttachmentTextures.removeAll(keepingCapacity: true)
+        residentAttachments.removeAll(keepingCapacity: true)
     }
 #endif
 
@@ -1131,10 +1156,17 @@ class Renderer: NSObject, MTKViewDelegate {
 
         guard let drawable = view.currentDrawable,
               let renderPassDesc = view.currentMTL4RenderPassDescriptor else { return }
-        ensureAttachmentsResident(renderPassDesc)
 
         let waitValue = UInt64(frameIndex - maxBuffersInFlight)
         endFrameEvent.wait(untilSignaledValue: waitValue, timeoutMS: 10)
+
+        // After the wait: the frames that could still be reading the OLD attachments have retired,
+        // so it is now safe to drop them and register whatever this frame is actually drawing into.
+        if attachmentResidencyStale {
+            attachmentResidencyStale = false
+            releaseAttachmentResidency()
+        }
+        ensureAttachmentsResident(renderPassDesc)
 
         currentBufferIndex = frameIndex % maxBuffersInFlight
         let allocator = commandAllocators[currentBufferIndex]
@@ -1378,6 +1410,12 @@ class Renderer: NSObject, MTKViewDelegate {
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         aspect = Float(size.width) / Float(size.height)
+#if !targetEnvironment(simulator)
+        // MTKView is about to rebuild its MSAA/depth textures and the drawable pool at the new size.
+        // Flag the cached residency registrations as stale so the next frame re-registers the new
+        // ones; the actual removal waits for the in-flight frames (see `releaseAttachmentResidency`).
+        attachmentResidencyStale = true
+#endif
     }
 }
 
