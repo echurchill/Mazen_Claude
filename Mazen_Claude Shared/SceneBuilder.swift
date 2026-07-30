@@ -89,6 +89,31 @@ final class SceneBuilder {
     private var mazePropTiles: [UInt8: [TileEntry]] = [:]
     private var fieldTiles: [TileEntry] = []   // M19: natural-register ground (grass/water), one shared mesh
 
+
+    /// Which edge of tile `a` the band leaves through on its way to `b`, as an N/E/S/W bit mask
+    /// (N=1, E=2, S=4, W=8) matching material 27's spine directions.
+    ///
+    /// Same face: the row/col delta says it outright. Across a face edge: the band leaves through
+    /// whichever border `a` sits on — a tile on row 0 exits north, on the last column exits east,
+    /// and so on. A corner tile sits on two borders and is genuinely ambiguous from position alone;
+    /// it takes the first match, which puts the seam on one of the two correct edges rather than
+    /// none. (Local axes, from `wallCenterline`: north is −y, south +y, west −x, east +x, so in
+    /// normalised tile UV north is v=0 and east is u=1.)
+    private static func bandLink(from a: CubeModel.PropTileEntry, to b: CubeModel.PropTileEntry, size: Int) -> UInt32 {
+        if a.face == b.face {
+            if b.row < a.row { return 1 }
+            if b.row > a.row { return 4 }
+            if b.col < a.col { return 8 }
+            if b.col > a.col { return 2 }
+            return 0
+        }
+        if a.row == 0 { return 1 }
+        if a.row == size - 1 { return 4 }
+        if a.col == 0 { return 8 }
+        if a.col == size - 1 { return 2 }
+        return 0
+    }
+
     /// `worldOffset` pushes the entire built world by an extra transform — used (M11) to hang a
     /// *counterpart* world (the overworld) out in the sky of the world you're standing in, at an
     /// orbital position/scale. `includeCelestials` is false for that counterpart so it doesn't drag
@@ -496,7 +521,14 @@ final class SceneBuilder {
 
         // BOND BANDS — draw what the world is holding on to.
         for band in model.bondBands() {
-            for t in band {
+            for (bi, t) in band.enumerated() {
+                // Which way the run continues out of THIS tile (N/E/S/W bits). The seam is drawn from
+                // the tile centre toward each of them, so a run reads as one continuous line and a
+                // corner actually turns — previously the stripe always lay along the tile's local x,
+                // whatever direction the band was going.
+                var linkMask: UInt32 = 0
+                if bi > 0 { linkMask |= Self.bandLink(from: t, to: band[bi - 1], size: model.size) }
+                if bi < band.count - 1 { linkMask |= Self.bandLink(from: t, to: band[bi + 1], size: model.size) }
                 var restM = model.restMatrix(face: t.face, row: t.row, col: t.col)
                 if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(t.ci) { restM = animMat * restM }
                 // Lift a hair off the ground so the seam is not z-fighting the floor it sits in.
@@ -506,11 +538,11 @@ final class SceneBuilder {
                     modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
                     materialID: 27, tileID: 0,
                     discoveryAmount: refusalGlow,          // the band runs hot while a turn strains
-                    styleSeed: 0,
+                    styleSeed: linkMask,
                     spinMatrix: spin, roundness: model.roundness,
                     invHalfExtent: 1.0 / model.worldScale.faceDistance,
                     reliefAmplitude: model.reliefAmplitude)
-                bondBandTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.fieldFloor))
+                bondBandTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.bandFloor))
             }
         }
 

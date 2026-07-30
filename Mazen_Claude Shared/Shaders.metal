@@ -4,6 +4,15 @@
 
 using namespace metal;
 
+/// Shortest distance from `p` to the line segment a→b. Used to draw the bond-band spine (material
+/// 27) as a set of centre-to-edge segments, so one tile can carry a straight run, a corner, or a
+/// junction from the same code.
+inline float segmentDistance(float2 p, float2 a, float2 b) {
+    float2 ab = b - a;
+    float t = saturate(dot(p - a, ab) / max(1e-6, dot(ab, ab)));
+    return length(p - (a + ab * t));
+}
+
 float hash2D(float2 p) {
     float3 p3 = fract(float3(p.xyx) * 0.1031);
     p3 += dot(p3, p3.yzx + 33.33);
@@ -865,14 +874,30 @@ fragment float4 fragmentShader(
         // BOND BAND — a luminous seam set into the ground, tracing what holds the world rigid.
         // `discoveryAmount` carries the refusal flare: while a twist strains against this bond the
         // band runs hot, which is what turns a refusal from a dead end into information.
+        // The seam is drawn as a SPINE from the tile centre out to each edge the band continues
+        // through (`styleSeed`, N=1 E=2 S=4 W=8 — see SceneBuilder.bandLink), so a run reads as one
+        // line, a corner turns, and a junction joins. Everything off the spine is DISCARDED, leaving
+        // the ground it is set into visible: this quad is an overlay on the world, not a floor of its
+        // own. (It used to paint the whole tile, so every pixel away from the stripe came out black —
+        // a run of bonds read as black tiles with a white line through them. It also assumed uv ran
+        // 0…1 while the shared grass mesh bakes in `uvScale`, which put the line off-centre; the band
+        // now uses `bandFloor`, whose UVs really are normalised.)
         float2 uv = in.texCoord;
-        // A stripe down the middle of the tile, so a run of tiles reads as one continuous line
-        // rather than a row of squares.
-        float across = abs(uv.y - 0.5);
-        float core = smoothstep(0.16, 0.02, across);
-        float halo = smoothstep(0.34, 0.06, across);
-        // Travelling pulse along the band: slow, so it reads as something held under tension.
-        float travel = fract(uv.x * 0.5 - frame.time * 0.22);
+        const float2 mid = float2(0.5, 0.5);
+        uint links = in.styleSeed;
+        float d = 1e9;
+        if (links & 1u) d = min(d, segmentDistance(uv, mid, float2(0.5, 0.0)));   // north (v=0)
+        if (links & 2u) d = min(d, segmentDistance(uv, mid, float2(1.0, 0.5)));   // east  (u=1)
+        if (links & 4u) d = min(d, segmentDistance(uv, mid, float2(0.5, 1.0)));   // south (v=1)
+        if (links & 8u) d = min(d, segmentDistance(uv, mid, float2(0.0, 0.5)));   // west  (u=0)
+        if (links == 0u) d = length(uv - mid);          // a lone bonded tile: a full stop, not a line
+        const float haloW = 0.11;
+        if (d > haloW) discard_fragment();              // the ground shows through everywhere else
+        float core = smoothstep(0.045, 0.012, d);
+        float halo = smoothstep(haloW, 0.03, d);
+        // Travelling pulse: keyed to WORLD position, not tile UV, so the bead flows along a run
+        // instead of restarting inside every tile. Slow — it should read as something under tension.
+        float travel = fract(dot(in.worldPosition, float3(0.7, 0.7, 0.7)) - frame.time * 0.22);
         float bead = smoothstep(0.72, 1.0, 1.0 - abs(travel - 0.5) * 2.0);
 
         float flare = clamp(in.discoveryAmount, 0.0, 1.0);

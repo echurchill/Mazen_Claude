@@ -16,6 +16,9 @@ class TileMeshLibrary {
     let frameMesh: TileMesh
     let celestialCube: TileMesh   // unit cube for the M9 sun/moon bodies
     let fieldFloor: TileMesh      // M19: a full-tile tessellated ground quad (grass/water — no path split)
+    let bandFloor: TileMesh       // Same quad with NORMALISED [0,1]² UVs — for overlays that reason in tile
+                                  // fractions (bond bands). fieldFloor bakes `uvScale` into its UVs for
+                                  // texture tiling, which is wrong for anything measuring "half a tile".
     private var floorMeshes: [UInt8: TileMesh] = [:]      // propSpace sub-cells (base ground)
     private var pathFloorMeshes: [UInt8: TileMesh] = [:]  // path-cross sub-cells (paved)
     private var wallMeshes: [UInt8: TileMesh] = [:]
@@ -275,6 +278,10 @@ class TileMeshLibrary {
         let fieldStart = allIndices.count
         Self.addFieldFloor(to: &allVerts, indices: &allIndices, ws: ws)
         fieldFloor = TileMesh(vertexOffset: 0, indexOffset: fieldStart, indexCount: allIndices.count - fieldStart)
+
+        let bandStart = allIndices.count
+        Self.addFieldFloor(to: &allVerts, indices: &allIndices, ws: ws, normalisedUV: true)
+        bandFloor = TileMesh(vertexOffset: 0, indexOffset: bandStart, indexCount: allIndices.count - bandStart)
 
         // Celestial bodies (M9): a unit cube, drawn at the sun/moon positions.
         let cubeStart = allIndices.count
@@ -787,7 +794,12 @@ class TileMeshLibrary {
 
     /// M19 — a full-tile ground quad, tessellated like the maze floor (3·floorTess per axis) so
     /// per-vertex inflation curves it smoothly. UVs continuous. Used for grass and water tiles.
-    private static func addFieldFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+    /// `normalisedUV` emits (u,v) running 0…1 across the tile instead of the texture-tiling UVs
+    /// (`uvScale`-scaled) the grass wants. An overlay that draws "a stripe down the middle" has to
+    /// measure in tile fractions; with the tiling UVs, uv 0.5 is a quarter of the way across at
+    /// uvScale 2, which is exactly how the bond bands ended up as a thin off-centre line.
+    private static func addFieldFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt32],
+                                      ws: WorldScale, normalisedUV: Bool = false) {
         let hs = ws.floorHalfSize
         let z = ws.floorY
         let n = max(1, ws.floorTess) * 3     // match the maze floor's per-tile vertex density
@@ -796,7 +808,10 @@ class TileMeshLibrary {
             for jc in 0..<n {
                 let x0 = -hs + Float(jc) * step, x1 = x0 + step
                 let y0 = -hs + Float(jr) * step, y1 = y0 + step
-                func uv(_ x: Float, _ y: Float) -> SIMD2<Float> { SIMD2((x + hs) * ws.uvScale, (y + hs) * ws.uvScale) }
+                func uv(_ x: Float, _ y: Float) -> SIMD2<Float> {
+                    normalisedUV ? SIMD2((x + hs) / (2 * hs), (y + hs) / (2 * hs))
+                                 : SIMD2((x + hs) * ws.uvScale, (y + hs) * ws.uvScale)
+                }
                 let base = UInt32(verts.count)
                 verts.append(contentsOf: [
                     MazeVertexSwift(position: SIMD3(x0, y0, z), normal: SIMD3(0, 0, 1), texCoord: uv(x0, y0), aoFactor: 1.0),
