@@ -240,6 +240,37 @@ struct CoordinateMathTests {
     /// Releasing an anchor must make the world visibly GIVE more, even while the turn is still
     /// refused — "partial progress may weaken a lock without yet making a turn legal". With a fixed
     /// strain, three anchors felt exactly like one and the middle of the puzzle read as no progress.
+    /// Scene 4's script hangs the larger Scene 2 world overhead, and that is the ONLY thing in
+    /// sight that stays put when the player's whole face rotates. Authored on the stamp, so the
+    /// fact travels with the scene rather than living at the Renderer's build site.
+    static func testSceneFourHangsSceneTwoOverhead() {
+        check(WorldStamp.sceneFour.skyCounterpart == "scene-2", "Scene 4 authors Scene 2 as its sky")
+        check(GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+                .skyCounterpart == "scene-2", "the built world carries the authored sky")
+        // Every other world keeps the default rule (world beneath you, else the moon edge).
+        for st in [WorldStamp.sceneTwo, .gardenMaze, .portalHub, .lunar, .homeClearing, .bare] {
+            check(st.skyCounterpart == nil, "\(st) leaves its sky to the default rule")
+        }
+    }
+
+    /// The world overhead must be the SAME INSTANCE as the one behind the door. Scene 4 builds
+    /// Scene 2 for its sky before the player has necessarily been there, so a second Scene 2
+    /// created later by the hub door would diverge on the first twist — you'd walk into a world
+    /// that wasn't the one you'd been looking at.
+    static func testSkyCounterpartIsTheSameWorldYouCanVisit() {
+        let reg = WorldRegistry()
+        let sceneTwo = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
+        reg.bind(WorldKey(destination: "scene-2", origin: "scene-4"), to: sceneTwo)   // the sky edge
+        check(reg.anyNamed("scene-2") === sceneTwo, "the sky-bound world is findable by name")
+        check(reg.anyNamed("scene-9") == nil, "a world never built is not conjured")
+        // The hub door then resolves to that same instance (the Renderer's prologue single-instance
+        // rule), so a twist made in the sky copy is present in the one you walk into.
+        let hubEdge = WorldKey(destination: "scene-2", origin: "portal-hub")
+        let walked = reg.world(for: hubEdge) { reg.anyNamed("scene-2") ?? sceneTwo }
+        check(walked === sceneTwo, "walking in from the hub reaches the world that was overhead")
+        check(reg.allWorlds.count == 1, "two edges, one Scene 2 — not a divergent copy")
+    }
+
     static func testSceneFourStrainGrowsAsAnchorsRelease() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -431,6 +462,8 @@ struct CoordinateMathTests {
         testEveryPrologueSceneHasADarsitDoor()
         testSceneFourBondBandsTraceTheLock()
         testSceneFourStrainGrowsAsAnchorsRelease()
+        testSceneFourHangsSceneTwoOverhead()
+        testSkyCounterpartIsTheSameWorldYouCanVisit()
 
         print("")
         if failed == 0 {

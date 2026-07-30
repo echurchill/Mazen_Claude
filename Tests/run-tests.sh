@@ -17,6 +17,7 @@ swiftc -O \
     "$SHARED/CameraState.swift" \
     "$SHARED/CelestialSystem.swift" \
     "$SHARED/GameState.swift" \
+    "$SHARED/WorldGraph.swift" \
     "Tests/CoordinateMathTests.swift" \
     -o "$OUT"
 

@@ -242,6 +242,12 @@ class Renderer: NSObject, MTKViewDelegate {
     /// SceneBuilder, so appending destinations cannot silently repaint the wrong door — and ADD to
     /// this whenever a scene is added, or its door will come up blue.
     static let prologueDestinationIDs: Set<Int> = [10, 11]   // scene-2, scene-4
+    /// The same scenes by name. Derived, so adding a prologue scene to `prologueDestinationIDs`
+    /// (which already gives it a DARSIT door) also makes it single-instance — one place the list
+    /// is maintained, not two that can silently disagree.
+    static let prologueWorldNames: Set<String> = Set(prologueDestinationIDs.compactMap {
+        portalDestinations.indices.contains($0) ? portalDestinations[$0] : nil
+    })
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -491,6 +497,108 @@ class Renderer: NSObject, MTKViewDelegate {
         if worldStack.count > 1 { worldStack.removeLast() }
     }
 
+    /// Build a world from its name — the single place a destination's size, stamp and dressing
+    /// are decided. Used by the portal swap on first arrival, and by the sky binding below, so
+    /// a world hanging overhead is stamped identically to the one you can walk into.
+    private func buildWorld(named dest: String) -> GameState {
+        // First visit — build the destination. (The moon is pre-bound at init, so its
+        // create only runs as a fallback for an unexpected origin.)
+        let w: GameState
+        switch dest {
+        case "temple-interior":
+            w = GameState(size: 5, name: dest, interior: true, stamp: .templeInterior)
+            // M20 — the return portal is an UP elevator; add its flanking columns (imported).
+            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"), archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
+        case "natural":
+            // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
+            w = GameState(size: 7, name: dest, stamp: .natural)
+        case "garden":
+            // M20 — the entry world. Size 11 = exactly the sealed maze play region (R=5),
+            // so the world IS the garden with no fog border on the play face (Eddie shrank it
+            // from 25). Trade-off: a smaller cube shows more surface curvature. The stamp
+            // reveals ONLY its region, so DON'T reveal-all here.
+            w = GameState(size: 11, name: dest, stamp: .gardenMaze)
+            // M20 (Eddie) — the garden's own sky: the Eagle Nebula composite. Measured as the
+            // most banding-prone of the five (widest, faintest soft haze), so it's also the
+            // best showcase for the gradient-aware sky dither.
+            w.skyboxName = "SynthStarfield_5_EagleNebulaComposite"
+            // Reskin the garden with Quaternius plants — the Renderer owns the registry
+            // indices, so it groups them by kind and stamps the vegetation after the build.
+            w.cubeModel.stampGardenVegetation(gardenFlora())
+            // M20 — the garden's walls are DRESSED with stone models (Ruins pieces + rocks/bushes)
+            // instead of hedges: capture the palette; `updateAssetInstances` emits it per closed
+            // edge every frame from live topology, so the stone walls survive slice-twists. (The
+            // static "stone-in-hedges" look — `stampGardenWalls` — is kept available for reuse.)
+            wallDressingPalette = wallFlora()
+            // M20 — a stone path marking the correct route between the puzzle elements (tapers off).
+            w.cubeModel.stampGardenPath(pathStones())
+            // M20 — the temple door is a DOWN elevator; add its flanking columns (imported).
+            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"), archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
+        case "gallery":
+            // M20 dev tool — procedural prop/glyph catalog (Y key) + the natural-wall
+            // prototype east of it. Size 25 to fit the catalog. Stamp partial-reveals.
+            w = GameState(size: 25, name: dest, stamp: .gallery)
+            // M20 prototype — sample "natural walls" (Ruins wall pieces + Nature rocks/bushes).
+            w.cubeModel.stampGalleryWalls(wallFlora())
+            // M20 prototype — rock-path options west of the catalog (MegaKit RockPath models).
+            w.cubeModel.stampGalleryPaths(pathStones())
+            // M20 (Eddie) — three new PORTAL styles in a showroom north of the catalog
+            // (retiring the TARDIS): elevator, spot-to-spot energy veils, level-to-level arch.
+            w.cubeModel.stampGalleryPortals(column: namedProp("Dungeons Column"),
+                                            archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
+        case "gallery-dungeons":
+            w = GameState(size: 25, name: dest, stamp: .bare)
+            w.cubeModel.stampPackGallery(packIndices("Dungeons "))
+            w.cubeModel.noFog = true              // showroom, not a story world — no fog
+        case "gallery-nature":
+            w = GameState(size: 25, name: dest, stamp: .bare)
+            w.cubeModel.stampPackGallery(packIndices("Nature "))
+            w.cubeModel.noFog = true
+        case "gallery-ruins":
+            w = GameState(size: 25, name: dest, stamp: .bare)
+            w.cubeModel.stampPackGallery(packIndices("Ruins "))
+            w.cubeModel.noFog = true
+        case "gallery-megakit":
+            w = GameState(size: 25, name: dest, stamp: .bare)
+            w.cubeModel.stampPackGallery(packIndices("MegaKit "))
+            w.cubeModel.noFog = true
+        case "portal-hub":
+            // M20 (Eddie) — the labeled hub of TARDIS portals + signposts. Size 15 fits the 3×3.
+            w = GameState(size: 15, name: dest, stamp: .portalHub)
+        case "scene-4":
+            // Prologue Scene 4 — the player is GRANTED the twist here; this is the moment the
+            // game hands over its defining verb, so twistEnabled stays true.
+            w = GameState(size: PrologueSize.sceneFour, name: dest, stamp: .sceneFour)
+            w.cubeModel.stampGardenVegetation(gardenFlora())
+            wallDressingPalette = wallFlora()
+            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
+                                          archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
+        case "scene-2":
+            // Prologue Scene 2 — "The Four Corners". The twist is the puzzle's reward, not a
+            // tool the player owns yet, so the player's own Q/E stays withheld here.
+            w = GameState(size: PrologueSize.sceneTwo, name: dest, stamp: .sceneTwo)
+            w.twistEnabled = false
+            w.cubeModel.stampGardenVegetation(gardenFlora())
+            wallDressingPalette = wallFlora()
+            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
+                                          archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
+        default:
+            w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
+        }
+        // Gardens, gallery worlds, and the hub reveal only their own stamped region (no reveal-all).
+        if !dest.hasPrefix("gallery") && dest != "garden" && dest != "portal-hub" { Self.setupInitialDiscovery(gameState: w) }
+        // An authored sky (`skyCounterpart`) is bound as a real edge now, while we can still build
+        // the other world if the player has never been there — the sky lookup itself must never
+        // conjure a world mid-frame. Reuses the existing instance when there is one, so the world
+        // overhead is the same place, with the same scars, as the one behind its door.
+        if let sky = w.skyCounterpart, worldRegistry.existing(WorldKey(destination: sky, origin: dest)) == nil {
+            // One level only: a sky world's own sky stays the default rule, so this cannot recurse.
+            worldRegistry.bind(WorldKey(destination: sky, origin: dest),
+                               to: worldRegistry.anyNamed(sky) ?? buildWorld(named: sky))
+        }
+        return w
+    }
+
     /// Perform the world swap (at the fade midpoint): inside any sub-world, pop back out;
     /// from the root, enter the destination — resolved by route through the registry (M15.2),
     /// created on first visit, persistent forever after.
@@ -519,94 +627,14 @@ class Renderer: NSObject, MTKViewDelegate {
             pushed = false
         } else {
             let key = WorldKey(destination: dest, origin: gameState.name)
+            // The prologue's scenes are single-instance: one Scene 2, however you reach it. Every
+            // other world keeps the registry's per-edge default, where arriving by a new door may
+            // legitimately yield a variant. Without this, Scene 4 building Scene 2 for its sky
+            // would leave a *second* Scene 2 behind the hub door — you would walk into a world that
+            // was not the one overhead, and the two would diverge on the first twist.
             let world = worldRegistry.world(for: key) {
-                // First visit — build the destination. (The moon is pre-bound at init, so its
-                // create only runs as a fallback for an unexpected origin.)
-                let w: GameState
-                switch dest {
-                case "temple-interior":
-                    w = GameState(size: 5, name: dest, interior: true, stamp: .templeInterior)
-                    // M20 — the return portal is an UP elevator; add its flanking columns (imported).
-                    w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"), archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
-                case "natural":
-                    // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
-                    w = GameState(size: 7, name: dest, stamp: .natural)
-                case "garden":
-                    // M20 — the entry world. Size 11 = exactly the sealed maze play region (R=5),
-                    // so the world IS the garden with no fog border on the play face (Eddie shrank it
-                    // from 25). Trade-off: a smaller cube shows more surface curvature. The stamp
-                    // reveals ONLY its region, so DON'T reveal-all here.
-                    w = GameState(size: 11, name: dest, stamp: .gardenMaze)
-                    // M20 (Eddie) — the garden's own sky: the Eagle Nebula composite. Measured as the
-                    // most banding-prone of the five (widest, faintest soft haze), so it's also the
-                    // best showcase for the gradient-aware sky dither.
-                    w.skyboxName = "SynthStarfield_5_EagleNebulaComposite"
-                    // Reskin the garden with Quaternius plants — the Renderer owns the registry
-                    // indices, so it groups them by kind and stamps the vegetation after the build.
-                    w.cubeModel.stampGardenVegetation(gardenFlora())
-                    // M20 — the garden's walls are DRESSED with stone models (Ruins pieces + rocks/bushes)
-                    // instead of hedges: capture the palette; `updateAssetInstances` emits it per closed
-                    // edge every frame from live topology, so the stone walls survive slice-twists. (The
-                    // static "stone-in-hedges" look — `stampGardenWalls` — is kept available for reuse.)
-                    wallDressingPalette = wallFlora()
-                    // M20 — a stone path marking the correct route between the puzzle elements (tapers off).
-                    w.cubeModel.stampGardenPath(pathStones())
-                    // M20 — the temple door is a DOWN elevator; add its flanking columns (imported).
-                    w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"), archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
-                case "gallery":
-                    // M20 dev tool — procedural prop/glyph catalog (Y key) + the natural-wall
-                    // prototype east of it. Size 25 to fit the catalog. Stamp partial-reveals.
-                    w = GameState(size: 25, name: dest, stamp: .gallery)
-                    // M20 prototype — sample "natural walls" (Ruins wall pieces + Nature rocks/bushes).
-                    w.cubeModel.stampGalleryWalls(wallFlora())
-                    // M20 prototype — rock-path options west of the catalog (MegaKit RockPath models).
-                    w.cubeModel.stampGalleryPaths(pathStones())
-                    // M20 (Eddie) — three new PORTAL styles in a showroom north of the catalog
-                    // (retiring the TARDIS): elevator, spot-to-spot energy veils, level-to-level arch.
-                    w.cubeModel.stampGalleryPortals(column: namedProp("Dungeons Column"),
-                                                    archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
-                case "gallery-dungeons":
-                    w = GameState(size: 25, name: dest, stamp: .bare)
-                    w.cubeModel.stampPackGallery(packIndices("Dungeons "))
-                    w.cubeModel.noFog = true              // showroom, not a story world — no fog
-                case "gallery-nature":
-                    w = GameState(size: 25, name: dest, stamp: .bare)
-                    w.cubeModel.stampPackGallery(packIndices("Nature "))
-                    w.cubeModel.noFog = true
-                case "gallery-ruins":
-                    w = GameState(size: 25, name: dest, stamp: .bare)
-                    w.cubeModel.stampPackGallery(packIndices("Ruins "))
-                    w.cubeModel.noFog = true
-                case "gallery-megakit":
-                    w = GameState(size: 25, name: dest, stamp: .bare)
-                    w.cubeModel.stampPackGallery(packIndices("MegaKit "))
-                    w.cubeModel.noFog = true
-                case "portal-hub":
-                    // M20 (Eddie) — the labeled hub of TARDIS portals + signposts. Size 15 fits the 3×3.
-                    w = GameState(size: 15, name: dest, stamp: .portalHub)
-                case "scene-4":
-                    // Prologue Scene 4 — the player is GRANTED the twist here; this is the moment the
-                    // game hands over its defining verb, so twistEnabled stays true.
-                    w = GameState(size: PrologueSize.sceneFour, name: dest, stamp: .sceneFour)
-                    w.cubeModel.stampGardenVegetation(gardenFlora())
-                    wallDressingPalette = wallFlora()
-                    w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
-                                                  archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
-                case "scene-2":
-                    // Prologue Scene 2 — "The Four Corners". The twist is the puzzle's reward, not a
-                    // tool the player owns yet, so the player's own Q/E stays withheld here.
-                    w = GameState(size: PrologueSize.sceneTwo, name: dest, stamp: .sceneTwo)
-                    w.twistEnabled = false
-                    w.cubeModel.stampGardenVegetation(gardenFlora())
-                    wallDressingPalette = wallFlora()
-                    w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
-                                                  archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
-                default:
-                    w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
-                }
-                // Gardens, gallery worlds, and the hub reveal only their own stamped region (no reveal-all).
-                if !dest.hasPrefix("gallery") && dest != "garden" && dest != "portal-hub" { Self.setupInitialDiscovery(gameState: w) }
-                return w
+                (Self.prologueWorldNames.contains(dest) ? self.worldRegistry.anyNamed(dest) : nil)
+                    ?? self.buildWorld(named: dest)
             }
             if replacing {
                 // `goto` — the destination becomes the current world in place. The world we leave
@@ -722,9 +750,16 @@ class Renderer: NSObject, MTKViewDelegate {
         // fact: today that's moon-<here>; a lying/variant sky is a registry binding away).
         // Interior worlds (M15.1) are enclosed: no sky, no celestials, no counterpart overhead.
         let interior = gameState.worldScale.interior
+        // An authored sky (`GameState.skyCounterpart`) outranks both: a world that says what hangs
+        // above it means it however the player arrived — Scene 4 reached by the dev hub must still
+        // show Scene 2 overhead, not the hub it was pushed from.
+        let authoredSky = gameState.skyCounterpart.flatMap {
+            worldRegistry.existing(WorldKey(destination: $0, origin: gameState.name))
+        }
         let counterpart: GameState? = (debugSingleTile || interior) ? nil
-            : (worldStack.count > 1 ? worldStack[worldStack.count - 2]
-                                    : worldRegistry.existing(WorldKey(destination: "moon", origin: gameState.name)))
+            : (authoredSky
+               ?? (worldStack.count > 1 ? worldStack[worldStack.count - 2]
+                                        : worldRegistry.existing(WorldKey(destination: "moon", origin: gameState.name))))
         let result = debugSingleTile
             ? sceneBuilder.buildSingleTile(tileMeshLib: tileMeshLib, instanceBuffer: buffer)
             : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer,

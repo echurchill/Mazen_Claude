@@ -38,6 +38,14 @@ final class WorldRegistry {
     /// (default per the design: bound; diverge only when the narrative wants it).
     func bind(_ key: WorldKey, to world: GameState) { worlds[key] = world }
 
+    /// The instance carrying a given world *name*, whichever edge first created it. Sky bindings
+    /// use this so the world overhead is the very one the player can walk into — bind a fresh
+    /// build instead and you get two divergent copies of the same place, one of which silently
+    /// stops matching the other the first time either is twisted.
+    func anyNamed(_ name: String) -> GameState? {
+        worlds.first { $0.key.destination == name }?.value
+    }
+
     /// All *distinct* instances (multiple keys may share one), for whole-universe operations
     /// like the roundness debug dial.
     var allWorlds: [GameState] {

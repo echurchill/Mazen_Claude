@@ -18,6 +18,15 @@ class GameState {
     /// with it. First user: the garden (Eagle Nebula).
     var skyboxName: String? = nil
 
+    /// The world this one wants hanging **overhead**, by name; nil ⇒ the default rule (the world
+    /// beneath you on the stack, or the moon edge from the root). The counterpart is the player's
+    /// only fixed external reference while their own world turns under them, so which world it is
+    /// is authored, not inherited from however they happened to arrive. First user: Scene 4, whose
+    /// script hangs the larger Scene 2 world above the small one — you watch the sky hold still and
+    /// realise it is *you* that moved. Resolved through the registry as an edge (see `WorldGraph`),
+    /// so the world you see is the same instance you could walk into, twists and all.
+    var skyCounterpart: String? = nil
+
     /// Phase 0 — whether the player may twist a slice here (Q/E). The prologue withholds the verb:
     /// Scenes 1-3 disable it and Scene 4 grants it, which is the moment the game hands the player its
     /// defining action. Default true, so every existing world keeps today's always-on behaviour.
@@ -144,6 +153,7 @@ class GameState {
         let ws = WorldScale(cubeSize: size, interior: interior)
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws, stamp: stamp)
+        skyCounterpart = stamp.skyCounterpart
         player = PlayerState(size: size, standGrid: ws.standGrid)
         if verboseDebugLog { printMazeDebug(face: player.face) }
         // Seed the door plinth's initial glyph from the freshly-stamped lock state (three-of-four

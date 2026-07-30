@@ -15,6 +15,17 @@ enum WorldStamp {
     case portalHub       // M20 (Eddie): a flat plaza of labeled portals — one TARDIS + signpost per world, to navigate by reading not memorised keys
     case sceneTwo        // Prologue Scene 2 "The Four Corners": four corner switches, a control plinth, and the way onward hidden on a face that must be TURNED into view
     case sceneFour       // Prologue Scene 4 "The First Turn": the player is handed the twist, and must first read and release a bond before the world will move
+
+    /// The world this stamp wants hanging overhead, by name (see `GameState.skyCounterpart`).
+    /// Authored here, beside the stamp, rather than at the Renderer's build site: it is a fact
+    /// about the scene, so it holds in the tests too, and a new scene declares its sky in the
+    /// same place it declares everything else about itself.
+    var skyCounterpart: String? {
+        switch self {
+        case .sceneFour: return "scene-2"   // the larger world overhead — Scene 4's fixed reference
+        default:         return nil         // default rule: the world beneath you, or the moon
+        }
+    }
 }
 
 /// Authored sizes for the prologue's worlds, so the Renderer and the tests cannot drift apart.
