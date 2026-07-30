@@ -230,6 +230,10 @@ class TileMeshLibrary {
         Self.addAlignmentCylinder(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.alignmentCylinder.rawValue] = TileMesh(vertexOffset: 0, indexOffset: alignStart, indexCount: allIndices.count - alignStart)
 
+        let vesselStart = allIndices.count
+        Self.addLayeredVessel(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.layeredVessel.rawValue] = TileMesh(vertexOffset: 0, indexOffset: vesselStart, indexCount: allIndices.count - vesselStart)
+
         let switchBaseStart = allIndices.count
         Self.addSwitchBase(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.switchBase.rawValue] = TileMesh(vertexOffset: 0, indexOffset: switchBaseStart, indexCount: allIndices.count - switchBaseStart)
@@ -1375,5 +1379,90 @@ class TileMeshLibrary {
         quad(SIMD3(x1, y1, z0), SIMD3(x0, y1, z0), SIMD3(x0, y1, zTop), SIMD3(x1, y1, zTop), SIMD3( 0, 1, 0)) // +Y
         quad(SIMD3(x0, y0, z0), SIMD3(x1, y0, z0), SIMD3(x1, y0, zTop), SIMD3(x0, y0, zTop), SIMD3( 0,-1, 0)) // -Y
         quad(SIMD3(x0, y0, zTop), SIMD3(x1, y0, zTop), SIMD3(x1, y1, zTop), SIMD3(x0, y1, zTop), SIMD3(0, 0, 1)) // top
+    }
+
+    /// Scene 4 (and Scene 1's silhouette) — the LAYERED VESSEL. A lathe of the profile the script
+    /// describes: "broad circular bowls, compressed spherical chambers, narrow connecting stems,
+    /// flared collars, stacked rotationally symmetrical sections … several different objects
+    /// threaded onto the same invisible vertical axis."
+    ///
+    /// Three of those sections are the **major rings**, each crossed by a narrow luminous seam that
+    /// does not line up with the others until its bond is released. Because the body is a surface of
+    /// revolution, a ring turning and a ring's SEAM turning are indistinguishable — so the seam is a
+    /// shader feature at an angle (material 28), not rotated geometry. That is what lets one static
+    /// mesh show three independently-turning rings with no per-ring instance data.
+    ///
+    /// UV convention read by material 28 (following the alignment cylinder's u≥2 trick):
+    ///   0 ≤ u < 2 → the top cap, (u,v) = the swirl glyph UV
+    ///   u ≥ 2     → the body; u−2 runs 0…1 once around from the front seam
+    ///               v = ringIndex + t  (0,1,2 = the three major rings, t local within the band)
+    ///               v = 3 + t          (plain stem/bowl — no seam)
+    private static func addLayeredVessel(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let mUnit: Float = ws.eyeHeight / 1.7
+        let z0 = ws.floorY
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: uv, aoFactor: ao)
+        }
+        // Profile: (radius in metres, height in metres, ring index or -1 for plain body). Read bottom
+        // to top. ~1.55 m overall — just under eye height, so you look slightly DOWN at the swirl on
+        // its cap and can read all three seams at once without circling it.
+        let profile: [(Float, Float, Int)] = [
+            (0.34, 0.00, -1), (0.40, 0.06, -1),                 // foot
+            (0.22, 0.16, -1),                                   // narrow connecting stem
+            (0.46, 0.30,  0), (0.50, 0.42,  0), (0.44, 0.52, 0), // RING 0 — broad bowl
+            (0.20, 0.62, -1),                                   // stem
+            (0.40, 0.74,  1), (0.43, 0.86,  1), (0.38, 0.96, 1), // RING 1 — compressed chamber
+            (0.18, 1.05, -1),                                   // stem
+            (0.33, 1.16,  2), (0.36, 1.28,  2), (0.30, 1.38, 2), // RING 2 — upper chamber
+            (0.20, 1.46, -1), (0.30, 1.55, -1),                 // flared collar
+        ]
+        let seg = 28
+        // Lathe the profile. Each ring band carries v = ringIndex + t so the shader knows which of
+        // the three seams it is drawing; plain sections get v = 3 + t and never show one.
+        for i in 0..<(profile.count - 1) {
+            let (r0, h0, k0) = profile[i], (r1, h1, k1) = profile[i + 1]
+            let band = (k0 >= 0 && k1 >= 0) ? k0 : 3
+            // Local v within the band: for a ring, run 0→1 across its own sections so the seam has a
+            // full-height gradient to fade at; plain sections park mid-band.
+            let v0 = Float(band) + (band < 3 ? Float(i % 3) / 3.0 : 0.5)
+            let v1 = Float(band) + (band < 3 ? Float(i % 3 + 1) / 3.0 : 0.5)
+            let zA = z0 + h0 * mUnit, zB = z0 + h1 * mUnit
+            let rA = r0 * mUnit, rB = r1 * mUnit
+            // Slope-correct normal for the lathe segment (a cone frustum, not a cylinder).
+            let dr = rB - rA, dz = zB - zA
+            let nLen = max(1e-6, sqrt(dr * dr + dz * dz))
+            let nR = dz / nLen, nZ = -dr / nLen
+            for j in 0..<seg {
+                let a0 = -Float.pi + Float(j) / Float(seg) * 2 * .pi
+                let a1 = -Float.pi + Float(j + 1) / Float(seg) * 2 * .pi
+                let u0 = 2.0 + (a0 + .pi) / (2 * .pi)
+                let u1 = 2.0 + (a1 + .pi) / (2 * .pi)
+                let c0 = cos(a0), s0 = sin(a0), c1 = cos(a1), s1 = sin(a1)
+                // AO: darker low down so it sits into the ground, brighter toward the cap.
+                let ao0 = 0.72 + 0.28 * (h0 / 1.55), ao1 = 0.72 + 0.28 * (h1 / 1.55)
+                let base = UInt32(verts.count)
+                verts.append(contentsOf: [
+                    vtx(SIMD3(c0 * rA, s0 * rA, zA), normalize(SIMD3(c0 * nR, s0 * nR, nZ)), SIMD2(u0, v0), ao0),
+                    vtx(SIMD3(c1 * rA, s1 * rA, zA), normalize(SIMD3(c1 * nR, s1 * nR, nZ)), SIMD2(u1, v0), ao0),
+                    vtx(SIMD3(c1 * rB, s1 * rB, zB), normalize(SIMD3(c1 * nR, s1 * nR, nZ)), SIMD2(u1, v1), ao1),
+                    vtx(SIMD3(c0 * rB, s0 * rB, zB), normalize(SIMD3(c0 * nR, s0 * nR, nZ)), SIMD2(u0, v1), ao1)])
+                indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+            }
+        }
+        // Top cap — UV [0,1]² over its bounding square, carrying the swirl (the MOTION glyph Scene 2
+        // introduced). Same convention as the plinth disc and the alignment cylinder's cap.
+        let rTop = profile[profile.count - 1].0 * mUnit
+        let zTop = z0 + profile[profile.count - 1].1 * mUnit
+        let up = SIMD3<Float>(0, 0, 1)
+        let cap = UInt32(verts.count)
+        verts.append(vtx(SIMD3(0, 0, zTop), up, SIMD2(0.5, 0.5), 1.0))
+        for j in 0...seg {
+            let a = -Float.pi + Float(j) / Float(seg) * 2 * .pi
+            let c = cos(a), s = sin(a)
+            verts.append(vtx(SIMD3(c * rTop, s * rTop, zTop), up, SIMD2(0.5 + 0.5 * c, 0.5 + 0.5 * s), 1.0))
+        }
+        for j in 0..<seg {
+            indices.append(contentsOf: [cap, cap + UInt32(j) + 1, cap + UInt32(j) + 2])
+        }
     }
 }

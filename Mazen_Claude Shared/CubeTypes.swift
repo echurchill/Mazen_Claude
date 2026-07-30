@@ -325,6 +325,9 @@ enum PropKind: UInt8 {
                          // 12) — the light pooling under an energy veil / the lit floor of the elevator.
     case signpost        // M20 (Eddie): a wooden post + board naming the portal it stands beside
                          // (material 24). `state` = the label-array slice (a hub destination index).
+    case layeredVessel   // Scene 4: the vessel from Scene 1, now READING the lock — three major rings, each
+                         // crossed by a luminous seam, that turn into alignment as the anchors release.
+                         // `anim` = rings aligned, 0…3 (continuous, so it tweens). Material 28.
 
     /// M18 Phase 2 — does the player collide with this? Portals and their lamp are
     /// walk-through (stepping onto a portal IS the interaction); a tree's trunk is the

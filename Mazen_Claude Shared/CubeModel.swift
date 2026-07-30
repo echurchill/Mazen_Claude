@@ -200,13 +200,14 @@ class CubeModel {
             portalCubie = ci
         }
 
-        // The layered vessel: it demonstrates the turn, and reflects the state of the lock. Stands
-        // beside the arrival so it is met before anything else. (Stone plinth wearing the swirl —
-        // the symbol Scene 2 introduced for MOTION — until it has a mesh of its own.)
+        // The layered vessel (Scene 4D): the object from Scene 1, arranged differently — three major
+        // rings whose luminous seams do not align, and which come home one at a time as the anchors
+        // release. It reflects the state of the lock, so it can be READ from across the world before
+        // the player has any idea what a bond is. Stands beside the arrival, met before anything else.
         if let (ci, fi) = faceletAt(face: .positiveZ, row: c, col: c) {
-            cubies[ci].facelets[fi].props.append(
-                Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .s,
-                     state: TextureLoader.CausticSymbol.swirl.rawValue))
+            var vessel = Prop(kind: .layeredVessel, subRow: 1, subCol: 1, facing: .s)
+            vessel.anim = 0                              // rings aligned so far, 0…3
+            cubies[ci].facelets[fi].props.append(vessel)
         }
 
         // THREE ANCHORS, on three different faces, so releasing them circumnavigates the world.

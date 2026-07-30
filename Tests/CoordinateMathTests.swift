@@ -271,6 +271,33 @@ struct CoordinateMathTests {
         check(reg.allWorlds.count == 1, "two edges, one Scene 2 — not a divergent copy")
     }
 
+    /// The vessel READS the lock: three rings, one per anchor, coming home as each is released. Its
+    /// count is derived from live bond state rather than tallied separately, so it cannot drift out
+    /// of step with the thing it is reporting on — the failure mode that would matter most, because
+    /// a vessel that lies is worse than no vessel at all.
+    static func testSceneFourVesselReadsTheLock() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        var vessels: [Prop] = [], anchors = 0
+        for cu in m.cubies {
+            for f in cu.facelets {
+                vessels += f.props.filter { $0.kind == .layeredVessel }
+                anchors += f.props.filter { $0.kind == .anchor }.count
+            }
+        }
+        check(vessels.count == 1, "Scene 4 stands exactly one layered vessel")
+        check(vessels.first?.anim == 0, "it starts with no ring home — the lock is whole")
+        check(anchors == 3, "one ring per anchor: three")
+        check(anchors == m.bondedGroups.count, "each anchor holds exactly one bond")
+        // Releasing anchors raises the count the vessel reports (target = total − remaining bonds).
+        for expected in 1...3 {
+            m.removeBond(containing: m.bondedGroups[0].first!)
+            check(anchors - m.bondedGroups.count == expected,
+                  "\(expected) ring(s) should be home after \(expected) release(s)")
+        }
+        check(m.bondedGroups.isEmpty, "the last release frees the slab")
+    }
+
     static func testSceneFourStrainGrowsAsAnchorsRelease() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -464,6 +491,7 @@ struct CoordinateMathTests {
         testSceneFourStrainGrowsAsAnchorsRelease()
         testSceneFourHangsSceneTwoOverhead()
         testSkyCounterpartIsTheSameWorldYouCanVisit()
+        testSceneFourVesselReadsTheLock()
 
         print("")
         if failed == 0 {

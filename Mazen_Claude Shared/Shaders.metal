@@ -800,6 +800,67 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 28) {
+        // THE LAYERED VESSEL (Scene 4D). Smooth stone/ceramic with faint green-blue traces in the
+        // grooves, three major rings each crossed by a narrow luminous seam, and the swirl on its cap.
+        //
+        // "The seams do not align vertically." Each ring holds one anchor's bond, and its seam turns
+        // home as that anchor is released — so the vessel READS the lock, and reads it from across
+        // the world, before the player knows what a bond is. `discoveryAmount` carries rings-aligned
+        // 0…3 normalised to 0…1 (see Prop.anim); ring i is home once that count passes i.
+        //
+        // The body is a surface of revolution, so turning a ring and turning its SEAM look identical.
+        // Drawing the seam here — rather than rotating geometry — is what lets three rings turn
+        // independently off one static mesh and one float.
+        float3 amb = skyAmbient * 0.35 + sunColor * 0.65 * halfLambert * shadowFactor;
+        const uint SWIRL = 5;                             // TextureLoader.CausticSymbol.swirl
+        float3 ceramic = float3(0.60, 0.60, 0.57);        // smooth, pale, faintly warm
+        if (in.texCoord.x < 2.0) {
+            // Top cap — the swirl, the MOTION glyph Scene 2 taught.
+            float g = causticTex.sample(texSampler, in.texCoord, SWIRL).r;
+            color = ceramic * amb + float3(0.30, 0.72, 0.66) * g * 1.9;
+            lighting = float3(1.0);
+        } else {
+            float ang   = fract(in.texCoord.x - 2.0);     // 0…1 once around, from the front seam
+            float ring  = floor(in.texCoord.y);           // 0,1,2 = a major ring; 3 = plain body
+            float local = fract(in.texCoord.y);           // height within the band
+            // Authored misalignment per ring, in turns. Deliberately unequal and in opposite senses
+            // so three seams never read as one pattern rotating — they read as three separate things
+            // that have drifted, which is the point.
+            const float3 restOffset = float3(0.31, -0.23, 0.14);
+            float aligned = clamp(in.discoveryAmount, 0.0, 1.0) * 3.0;   // rings released, 0…3
+            float3 body = ceramic * amb;
+            // Green-blue in the grooves: the band edges, where a real vase would hold its glaze.
+            float groove = smoothstep(0.5, 0.0, abs(local - 0.5)) ;
+            body = mix(body * 0.82 + float3(0.06, 0.15, 0.14), body, groove);
+            if (ring < 2.5) {
+                int i = int(ring);
+                float home = clamp(aligned - float(i), 0.0, 1.0);        // 0 adrift … 1 home
+                float seamAt = restOffset[i] * (1.0 - home);             // turns home as it releases
+                float d = abs(fract(ang - seamAt + 0.5) - 0.5);          // angular distance, wrapped
+                float coreW = 0.008, haloW = 0.030;
+                float core = smoothstep(coreW, 0.0, d);
+                float halo = smoothstep(haloW, 0.0, d);
+                // A seam is a slot in the body, so it dims the ceramic before it lights.
+                body *= 1.0 - 0.45 * halo;
+                // Cool blue-green while adrift, warming to gold as it comes home — the same
+                // vocabulary the bond bands use, so the two objects are visibly talking about the
+                // same thing.
+                float3 adriftC = float3(0.34, 0.78, 0.74);
+                float3 homeC   = float3(1.00, 0.82, 0.34);
+                float3 seamC   = mix(adriftC, homeC, home);
+                // Faint breathing while adrift; steady once home (motion means "unresolved").
+                float breathe = 1.0 - 0.18 * (1.0 - home) * (0.5 + 0.5 * sin(frame.time * 1.7 + float(i) * 2.1));
+                color = body + seamC * (core * 1.7 + halo * 0.5) * breathe;
+                // The seam is emissive, the ceramic around it is not: blend toward unlit by how much
+                // of this pixel is actually seam, so a lit slot doesn't wash out the whole band.
+                float lit = max(core, halo * 0.5);
+                lighting = float3(1.0) * (0.35 + 0.65 * lit) + amb * (1.0 - lit);
+            } else {
+                color = body;
+                lighting = float3(1.0);
+            }
+        }
     } else if (in.materialID == 27) {
         // BOND BAND — a luminous seam set into the ground, tracing what holds the world rigid.
         // `discoveryAmount` carries the refusal flare: while a twist strains against this bond the

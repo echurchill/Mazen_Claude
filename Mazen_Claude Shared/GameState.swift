@@ -218,6 +218,7 @@ class GameState {
 
         tickAlignmentCylinder(deltaTime)
         tickObeliskAwakening(deltaTime)
+        tickLayeredVessel(deltaTime)
 
         if sliceRotation.isActive {
             // .step holds the twist for manual scrubbing (see stepSlice); .slow crawls; .normal auto.
@@ -541,6 +542,42 @@ class GameState {
         }
         obeliskAwakening = stillRunning
     }
+
+    /// Scene 4D — the vessel reads the lock. Its `anim` counts rings brought home (0…3), and it
+    /// EASES toward the true count rather than snapping, because the script wants the vessel to
+    /// answer the player's action a beat later: you release an anchor across the world, walk back,
+    /// and find the vessel has turned. A snap would read as a UI element updating; a turn reads as
+    /// the object having done something.
+    ///
+    /// The target is derived from live bond state, never counted separately — the vessel cannot
+    /// disagree with the lock it is reporting on, however a bond comes or goes.
+    private func tickLayeredVessel(_ dt: Float) {
+        guard sceneFourAnchorTotal > 0 else { return }
+        let remaining = cubeModel.bondedGroups.count
+        let target = Float(max(0, sceneFourAnchorTotal - remaining))
+        let rate: Float = 1.0 / 2.2                       // ~2.2 s for a ring to come home
+        for cu in cubeModel.cubies.indices {
+            for fi in cubeModel.cubies[cu].facelets.indices {
+                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
+                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .layeredVessel {
+                    let a = cubeModel.cubies[cu].facelets[fi].props[pi].anim
+                    guard abs(a - target) > 0.001 else { continue }
+                    cubeModel.cubies[cu].facelets[fi].props[pi].anim =
+                        a < target ? min(target, a + dt * rate) : max(target, a - dt * rate)
+                }
+            }
+        }
+    }
+
+    /// How many anchors the scene started with — the denominator the vessel reports against. Zero in
+    /// every world that has no anchors, which is what makes `tickLayeredVessel` free elsewhere.
+    private lazy var sceneFourAnchorTotal: Int = {
+        var n = 0
+        for cu in cubeModel.cubies {
+            for f in cu.facelets { n += f.props.filter { $0.kind == .anchor }.count }
+        }
+        return n
+    }()
 
     private func openSealedDoors() {
         var opened = false
