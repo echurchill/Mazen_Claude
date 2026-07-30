@@ -33,7 +33,7 @@
 | T | Cycle time scale (1× → 8× → 60×) |
 | Shift + T | Freeze time at high noon (stable, predictable light) |
 | P | Toggle orbit auto-rotation |
-| H | Toggle debug HUD (face, position, camera, cube size, fps, twist pacing) |
+| H | Toggle debug HUD (face, position, camera, cube size, fps, twist pacing). The **Walls** line reads `NESW` — a letter where the engine believes there is a wall, a dot where it believes there is a way through — plus your stand sub-cell and any SOLID prop on the tile. Use it on an invisible wall: a letter in the direction you are pushing means a wall failed to *draw*; a dot means *collision* is wrong. Those need opposite fixes and look identical otherwise. |
 
 ### Debug — worlds & views (macOS)
 | Input | Action |

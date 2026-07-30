@@ -91,7 +91,7 @@ session: [Engine Primer](Engine%20Primer%20—%20Worlds%2C%20Twists%2C%20Travel.
 - **Skyboxes:** one full-sphere equirect per system; five fictional starfields generated from HYG
   data as compositing bases; `L` cycles them in place. Sky banding fixed by a `skyDay`-scaled TPDF
   dither (gated on the gradient, so clean night skies stay clean).
-- **Tests: 249,449** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
+- **Tests: 249,478** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
 - **New doc:** [Routing — How Paths Live in the Cube](Routing%20—%20How%20Paths%20Live%20in%20the%20Cube.md)
   — where a route actually lives (4 bits/tile), why a route floor is decoration, and what a twist
   can and cannot change. Read it before authoring Scene 4's route.
@@ -131,6 +131,29 @@ session: [Engine Primer](Engine%20Primer%20—%20Worlds%2C%20Twists%2C%20Travel.
   ring** (5 tiles on each side face). Everything in it rotates together, so a turn cannot change
   reachability *within* `+Z`. The 20 places that ring meets the static shell are the entire editable
   surface of any Scene 4-style puzzle.
+
+### "Invisible wall" was three different bugs (2026-07-30)
+
+Worth knowing, because the phrase describes a SYMPTOM and the three causes need opposite
+investigations. All three are fixed and each has a test that makes its class impossible.
+
+1. **Asymmetric edges.** An edge is one thing stored in BOTH tiles, and several stamps carved a
+   passage by opening one side only. Movement is tested on the departing tile, so it was passable
+   one way; and the dressed wall is drawn by whichever tile owns it, so if the owner thought the
+   edge was open, nothing was drawn while the other side still blocked. 18 halves in Scene 2, 38 in
+   the hub. `reconcileSharedEdges` (open wins) runs after every stamp.
+2. **Oversized footprints.** Flat things set into the ground — anchor, dial, glyph, and earlier the
+   vessel — inherited the default footprint of `grid/3/2` = a 6.3 m square, filling the middle of
+   their own tile. A footprint draws nothing, so it is invisible by construction.
+3. **Corner refusals at a seam.** Crossing an edge open on both sides carried the lateral over
+   verbatim, landing on the arrival tile's corner where a PERPENDICULAR wall had claimed the cell.
+   156 spots in Scene 4. Only bites when you walk ALONG a wall. Movement now slides the lateral
+   toward the middle until it finds a free cell.
+
+**The HUD tells them apart** — `Walls: NESW` shows a letter where the engine believes there is a
+wall and a dot where it believes there is a way through, plus the stand sub-cell and any solid prop.
+A letter in the direction you are pushing means a wall failed to DRAW; a dot means collision is
+wrong. From a screenshot those look identical, which is why the first two took so long.
 
 ### Open elsewhere
 - **Audio F** is scene-gated: Scene 3's six kin tones and Scene 5's travelling pulse need those
