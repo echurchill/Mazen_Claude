@@ -201,6 +201,32 @@ class CubeModel {
     /// already removes one. So three bonds, each with one cubie inside the twistable slab and one
     /// outside, reproduce the scripted behaviour exactly — including the turn staying refused until
     /// the third is gone — using only machinery the garden's temple lock already proved.
+    /// Set BOTH halves of a shared edge at once. An edge lives in two tiles, and `reconcileSharedEdges`
+    /// resolves any disagreement in favour of OPEN — so closing one half alone does nothing at all.
+    /// Every deliberate wall has to be written on both sides, which is exactly the mistake that put
+    /// invisible walls in Scene 2 and the hub.
+    func setSharedEdge(face: CubeFace, row: Int, col: Int, _ dir: SurfaceDirection, open: Bool) {
+        let mask: DirectionMask = dir == .north ? .north : dir == .south ? .south : dir == .west ? .west : .east
+        guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { return }
+        if open { cubies[ci].facelets[fi].mazeTile.openings.insert(mask) }
+        else { cubies[ci].facelets[fi].mazeTile.openings.remove(mask) }
+
+        let (dr, dc) = dir == .north ? (-1, 0) : dir == .south ? (1, 0) : dir == .west ? (0, -1) : (0, 1)
+        let nr = row + dr, nc = col + dc
+        let far: (face: CubeFace, row: Int, col: Int, back: SurfaceDirection)
+        if nr >= 0, nr < size, nc >= 0, nc < size {
+            far = (face, nr, nc, dir.opposite)
+        } else {
+            let cr = edgeCrossing(face: face, direction: dir, row: row, col: col)
+            far = (cr.face, cr.row, cr.col, cr.facing.opposite)
+        }
+        guard let (nci, nfi) = faceletAt(face: far.face, row: far.row, col: far.col) else { return }
+        let backMask: DirectionMask = far.back == .north ? .north : far.back == .south ? .south
+                                    : far.back == .west ? .west : .east
+        if open { cubies[nci].facelets[nfi].mazeTile.openings.insert(backMask) }
+        else { cubies[nci].facelets[nfi].mazeTile.openings.remove(backMask) }
+    }
+
     private func stampSceneFour() {
         let n = size, c = n / 2
         wallStyle = .dressed
@@ -233,7 +259,54 @@ class CubeModel {
         let (tAxis, tIndex) = sliceAxisAndIndex(for: .positiveZ)
         scriptedTwistSlice = (axis: tAxis, index: tIndex, clockwise: false)   // used by the debug replay key
 
-        // Arrival, and the sealed gate it cannot yet reach.
+        // ── THE MISALIGNED ROUTE (Scene 4's actual puzzle) ─────────────────────────────────────
+        // "A portal is present, but the maze does not connect to it. The necessary route already
+        // exists in pieces… the maze route leading toward it terminates against a closed wall at the
+        // boundary between the current outer slice and the rest of the world."
+        //
+        // That boundary is the only thing a turn can change. Measured: the slab is the WHOLE +Z face
+        // plus a one-tile ring around it (five tiles on each side face); everything in it rotates
+        // together, so within-+Z reachability is untouched by a turn. The 20 places where that ring
+        // meets the static shell are the entire editable surface, and a 90° turn slides each ring
+        // tile a quarter of the way round — so a doorway that opened onto a dead end now opens onto
+        // somewhere else entirely.
+        //
+        // So: the portal's corner of +Z is walled off from the rest of the face, and its ONE way out
+        // is a single ring tile whose along-ring edges are shut. Before the turn that tile's outer
+        // door faces a sealed pocket — the route reaching the boundary and stopping, which is what
+        // the player is meant to walk up to and read. After the turn the same door faces the live
+        // shell, and the world is joined up. Nothing is created; a piece is brought into line.
+        let portalCorner = [(0, 0), (0, 1), (1, 0), (1, 1)]
+        for (r, cc) in portalCorner {
+            // Seal the corner from the REST of +Z (its own four tiles stay open to each other).
+            for (dir, dr, dc) in [(SurfaceDirection.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)] {
+                let nr = r + dr, nc = cc + dc
+                let insideCorner = portalCorner.contains { $0 == (nr, nc) }
+                let leavesFace = nr < 0 || nr >= n || nc < 0 || nc >= n
+                if insideCorner { setSharedEdge(face: .positiveZ, row: r, col: cc, dir, open: true) }
+                else if !leavesFace { setSharedEdge(face: .positiveZ, row: r, col: cc, dir, open: false) }
+                else { setSharedEdge(face: .positiveZ, row: r, col: cc, dir, open: false) }
+            }
+        }
+        // The one way out: west from +Z(1,0) onto the ring tile -X(1,4).
+        setSharedEdge(face: .positiveZ, row: 1, col: 0, .west, open: true)
+        // That ring tile is a doorway, not a corridor: shut along the ring so it cannot be walked
+        // around to, and open OUTWARD so the route continues — into a pocket, for now.
+        setSharedEdge(face: .negativeX, row: 1, col: 4, .north, open: false)
+        setSharedEdge(face: .negativeX, row: 1, col: 4, .south, open: false)
+        setSharedEdge(face: .negativeX, row: 1, col: 4, .west, open: true)
+        // The pocket it currently opens onto — one tile, sealed on every other side. This is the
+        // "closed wall at the boundary" the script asks the player to find.
+        for dir in [SurfaceDirection.north, .south, .west] {
+            setSharedEdge(face: .negativeX, row: 1, col: 3, dir, open: false)
+        }
+        // Where that same doorway lands after a 90° turn (measured, not derived): -Y(4,3), opening
+        // onto -Y(3,3). Make sure THAT tile is joined to the shell, so the turn completes the route.
+        for dir in [SurfaceDirection.north, .south, .west, .east] {
+            setSharedEdge(face: .negativeY, row: 3, col: 3, dir, open: true)
+        }
+
+        // Arrival, and the gate it cannot yet reach.
         spawnLocation = (face: .positiveZ, row: min(n - 1, c + 1), col: c, facing: .n)
         var portalCubie: Int? = nil
         if let (ci, fi) = faceletAt(face: .positiveZ, row: max(0, c - 1), col: max(0, c - 1)) {
@@ -242,7 +315,10 @@ class CubeModel {
             styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .s, fieldStyle: 2))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))
-            sealedPortalCubies.insert(ci)          // dark until the bond is gone AND the turn is made
+            // NOT sealed. "A portal is present, but the maze does not connect to it" — the obstacle
+            // is the route, not a dark door, and two locks at once would blur the one idea the turn
+            // is meant to land. It is lit and alive from the moment the player arrives, and simply
+            // cannot be walked to.
             portalCubie = ci
         }
 

@@ -529,52 +529,22 @@ struct CoordinateMathTests {
               "no walls between a tile and itself")
     }
 
-    /// Scene 4's payoff, end to end: release the three anchors, take your own twist, and the sealed
-    /// portal comes alive. This never worked — unsealing was reachable only from the garden's
-    /// SCRIPTED turn, so a player's own twist opened nothing and the scene had no exit (Eddie found
-    /// it by playing to the end: "the vessel was aligned but the portal didn't open").
-    static func testSceneFourTurnOpensTheSealedPortal() {
-        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
-        let m = gs.cubeModel
-        check(m.sealedPortalCubies.count == 1, "Scene 4 starts with its portal sealed")
-        // The anchors alone must NOT open it — the turn is the point of the scene.
-        while !m.bondedGroups.isEmpty { m.removeBond(containing: m.bondedGroups[0].first!) }
-        gs.update(deltaTime: 1.0 / 60.0)
-        check(m.sealedPortalCubies.count == 1, "releasing the anchors alone does not open the door")
-        // Now the player's own twist. (The vessel grants the verb; this is about the seal.)
-        gs.twistEnabled = true
-        gs.startSliceRotation(clockwise: true)
-        check(gs.sliceRotation.isActive && !gs.sliceRotation.isRefusal,
-              "with no bonds left the turn must be permitted")
-        for _ in 0..<600 where gs.sliceRotation.isActive { gs.update(deltaTime: 1.0 / 60.0) }
-        check(m.sealedPortalCubies.isEmpty, "the turn that moved the door opens it")
-    }
-
-    /// The arrival doorway closes behind you (Scene 2A) — and must take ONLY itself with it. Its veil
-    /// and ring are the same two prop kinds the scene's real exit portal uses, so a cleanup that
-    /// matched by kind swept the whole world and stripped the exit of its visuals.
-    static func testClosingDoorwayLeavesTheRealPortalAlone() {
-        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
-        let m = gs.cubeModel
-        func portalDressing() -> Int {
-            var n = 0
-            for cu in m.cubies { for f in cu.facelets {
-                n += f.props.filter { ($0.kind == .portalField || $0.kind == .portalRing) && $0.anim <= 0.5 }.count
-            } }
-            return n
-        }
-        let before = portalDressing()
-        check(before > 0, "Scene 4's exit portal should have a veil and a ring to protect")
-        gs.closeArrivalDoorway()
-        check(portalDressing() == before, "closing must not disturb the real portal's dressing")
-        // Run the close all the way out.
-        for _ in 0..<300 { gs.update(deltaTime: 1.0 / 60.0) }
-        check(portalDressing() == before, "and the real portal still has them once it is gone")
-        var arrivals = 0
-        for cu in m.cubies { for f in cu.facelets {
-            arrivals += f.props.filter { ($0.kind == .portalField || $0.kind == .portalRing) && $0.anim > 0.5 }.count
+    /// Every prologue door in the hub must be a DARSIT, not a TARDIS (Eddie). The livery is keyed to
+    /// a set of destination ids, and it is easy to add a scene and forget to add its id — at which
+    /// point its door silently comes up blue and looks like a dev world.
+    static func testEveryPrologueSceneHasADarsitDoor() {
+        // The prologue worlds that exist so far, by destination index.
+        let prologue = [10, 11]
+        let hub = GameState(size: 15, name: "portal-hub", stamp: .portalHub).cubeModel
+        var found = Set<Int>()
+        for r in 0..<15 { for c in 0..<15 {
+            guard let (ci, fi) = hub.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+            for p in hub.cubies[ci].facelets[fi].props where p.kind == .portal {
+                if prologue.contains(p.state) { found.insert(p.state) }
+            }
         } }
-        check(arrivals == 0, "the arrival doorway itself is gone, not merely invisible")
+        check(found == Set(prologue),
+              "every prologue scene needs a hub door: expected \(prologue), found \(found.sorted())")
     }
 
     /// An edge is ONE thing stored TWICE, once in each tile that meets at it, and nothing enforced
@@ -621,73 +591,37 @@ struct CoordinateMathTests {
         }
     }
 
-    static func testVesselCanBeApproached() {
-        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
-        let m = gs.cubeModel
-        let grid = m.worldScale.standGrid, step = m.worldScale.standStep
-        check(PropKind.layeredVessel.footprintRadius(grid: grid) == 0,
-              "a vase narrower than one stand cell should block only the cell it stands on")
-        var found = false
-        for cu in m.cubies {
-            for f in cu.facelets {
-                guard let vessel = f.props.first(where: { $0.kind == .layeredVessel }) else { continue }
-                found = true
-                let k = grid / 3
-                let rc = vessel.subRow * k + k / 2, cc = vessel.subCol * k + k / 2
-                check(vessel.blocks(rc, cc, grid: grid, standStep: step), "it still stands somewhere")
-                // Every neighbouring stand cell is free, so you can walk right up to it and look.
-                for (dr, dc) in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1)] {
-                    check(!vessel.blocks(rc + dr, cc + dc, grid: grid, standStep: step),
-                          "the cell at (\(dr),\(dc)) beside the vessel should be walkable")
-                    check(f.mazeTile.isStandable(rc + dr, cc + dc, grid: grid, fullWidthGateways: m.fullWidthGateways),
-                          "the tile itself should allow standing at (\(dr),\(dc))")
-                }
-            }
-        }
-        check(found, "Scene 4 should have a vessel to approach")
-    }
-
-    static func testSceneFourVesselReadsTheLock() {
-        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
-        let m = gs.cubeModel
-        var vessels: [Prop] = [], anchors = 0
-        for cu in m.cubies {
-            for f in cu.facelets {
-                vessels += f.props.filter { $0.kind == .layeredVessel }
-                anchors += f.props.filter { $0.kind == .anchor }.count
-            }
-        }
-        check(vessels.count == 1, "Scene 4 stands exactly one layered vessel")
-        check(vessels.first?.anim == 0, "it starts with no ring home — the lock is whole")
-        check(anchors == 3, "one ring per anchor: three")
-        check(anchors == m.bondedGroups.count, "each anchor holds exactly one bond")
-        // Releasing anchors raises the count the vessel reports (target = total − remaining bonds).
-        for expected in 1...3 {
-            m.removeBond(containing: m.bondedGroups[0].first!)
-            check(anchors - m.bondedGroups.count == expected,
-                  "\(expected) ring(s) should be home after \(expected) release(s)")
-        }
-        check(m.bondedGroups.isEmpty, "the last release frees the slab")
-    }
-
-    static func testSceneFourStrainGrowsAsAnchorsRelease() {
+    /// Scene 4's three anchors must gate the player's own twist, and must do it with NO new lock
+    /// machinery: each anchor is one bond straddling the slab the player stands on, so
+    /// `canRotateSlice` refuses while any remain. Releasing them one at a time must keep the turn
+    /// refused until the third is gone — "partial progress may weaken a lock without yet making a
+    /// turn legal" — and only then become legal.
+    static func testSceneFourAnchorsGateThePlayersTwist() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
         let (axis, index) = m.sliceAxisAndIndex(for: .positiveZ)
 
-        check(m.bondsBlocking(axis: axis, index: index) == 3, "three anchors should block the turn")
-        var amplitudes: [Float] = []
-        for expected in [3, 2, 1] {
-            check(m.bondsBlocking(axis: axis, index: index) == expected,
-                  "expected \(expected) blocking bonds")
-            gs.startSliceRotation(clockwise: true)
-            check(gs.sliceRotation.isRefusal, "the turn must still be refused with \(expected) anchors")
-            amplitudes.append(gs.sliceRotation.strainAmplitude)
-            gs.sliceRotation = GameState.SliceRotation()      // clear for the next attempt
-            m.removeBond(containing: m.bondedGroups[0].first!)
+        check(m.bondedGroups.count == 3, "expected three anchor bonds, got \(m.bondedGroups.count)")
+        let slab = Set(m.cubieIndicesInSlice(axis: axis, index: index))
+        for g in m.bondedGroups {
+            check(!g.isDisjoint(with: slab) && !g.isSubset(of: slab),
+                  "each anchor bond must STRADDLE the player's slab, or it would not refuse the turn")
         }
-        check(amplitudes[0] < amplitudes[1] && amplitudes[1] < amplitudes[2],
-              "strain must grow as anchors are released, got \(amplitudes)")
+        check(!m.canRotateSlice(axis: axis, index: index), "the turn must be refused while anchored")
+
+        // Release them one at a time: still refused until the last.
+        for remaining in [2, 1, 0] {
+            m.bondedGroups.removeLast()
+            check(m.bondedGroups.count == remaining, "bond bookkeeping")
+            let legal = m.canRotateSlice(axis: axis, index: index)
+            check(legal == (remaining == 0),
+                  "with \(remaining) anchors left the turn should be \(remaining == 0 ? "legal" : "refused")")
+        }
+
+        // The gate is NOT sealed — the obstacle is the ROUTE now (see the reachability test), one
+        // idea rather than two locks. The player must own the verb here, though.
+        check(m.sealedPortalCubies.isEmpty, "Scene 4's portal is present and lit, not dark")
+        check(gs.twistEnabled, "Scene 4 is where the player is GRANTED the twist")
     }
 
     /// Scene 4's bond bands must actually trace the lock. A bond is otherwise invisible — the turn
@@ -732,54 +666,181 @@ struct CoordinateMathTests {
         check(m.bondBands().count == before - 1, "releasing a bond must remove exactly its band")
     }
 
-    /// Every prologue door in the hub must be a DARSIT, not a TARDIS (Eddie). The livery is keyed to
-    /// a set of destination ids, and it is easy to add a scene and forget to add its id — at which
-    /// point its door silently comes up blue and looks like a dev world.
-    static func testEveryPrologueSceneHasADarsitDoor() {
-        // The prologue worlds that exist so far, by destination index.
-        let prologue = [10, 11]
-        let hub = GameState(size: 15, name: "portal-hub", stamp: .portalHub).cubeModel
-        var found = Set<Int>()
-        for r in 0..<15 { for c in 0..<15 {
-            guard let (ci, fi) = hub.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
-            for p in hub.cubies[ci].facelets[fi].props where p.kind == .portal {
-                if prologue.contains(p.state) { found.insert(p.state) }
-            }
-        } }
-        check(found == Set(prologue),
-              "every prologue scene needs a hub door: expected \(prologue), found \(found.sorted())")
-    }
-
-    /// Scene 4's three anchors must gate the player's own twist, and must do it with NO new lock
-    /// machinery: each anchor is one bond straddling the slab the player stands on, so
-    /// `canRotateSlice` refuses while any remain. Releasing them one at a time must keep the turn
-    /// refused until the third is gone — "partial progress may weaken a lock without yet making a
-    /// turn legal" — and only then become legal.
-    static func testSceneFourAnchorsGateThePlayersTwist() {
+    static func testSceneFourStrainGrowsAsAnchorsRelease() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
         let (axis, index) = m.sliceAxisAndIndex(for: .positiveZ)
 
-        check(m.bondedGroups.count == 3, "expected three anchor bonds, got \(m.bondedGroups.count)")
-        let slab = Set(m.cubieIndicesInSlice(axis: axis, index: index))
-        for g in m.bondedGroups {
-            check(!g.isDisjoint(with: slab) && !g.isSubset(of: slab),
-                  "each anchor bond must STRADDLE the player's slab, or it would not refuse the turn")
+        check(m.bondsBlocking(axis: axis, index: index) == 3, "three anchors should block the turn")
+        var amplitudes: [Float] = []
+        for expected in [3, 2, 1] {
+            check(m.bondsBlocking(axis: axis, index: index) == expected,
+                  "expected \(expected) blocking bonds")
+            gs.startSliceRotation(clockwise: true)
+            check(gs.sliceRotation.isRefusal, "the turn must still be refused with \(expected) anchors")
+            amplitudes.append(gs.sliceRotation.strainAmplitude)
+            gs.sliceRotation = GameState.SliceRotation()      // clear for the next attempt
+            m.removeBond(containing: m.bondedGroups[0].first!)
         }
-        check(!m.canRotateSlice(axis: axis, index: index), "the turn must be refused while anchored")
+        check(amplitudes[0] < amplitudes[1] && amplitudes[1] < amplitudes[2],
+              "strain must grow as anchors are released, got \(amplitudes)")
+    }
 
-        // Release them one at a time: still refused until the last.
-        for remaining in [2, 1, 0] {
-            m.bondedGroups.removeLast()
-            check(m.bondedGroups.count == remaining, "bond bookkeeping")
-            let legal = m.canRotateSlice(axis: axis, index: index)
-            check(legal == (remaining == 0),
-                  "with \(remaining) anchors left the turn should be \(remaining == 0 ? "legal" : "refused")")
+    static func testSceneFourVesselReadsTheLock() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        var vessels: [Prop] = [], anchors = 0
+        for cu in m.cubies {
+            for f in cu.facelets {
+                vessels += f.props.filter { $0.kind == .layeredVessel }
+                anchors += f.props.filter { $0.kind == .anchor }.count
+            }
         }
+        check(vessels.count == 1, "Scene 4 stands exactly one layered vessel")
+        check(vessels.first?.anim == 0, "it starts with no ring home — the lock is whole")
+        check(anchors == 3, "one ring per anchor: three")
+        check(anchors == m.bondedGroups.count, "each anchor holds exactly one bond")
+        // Releasing anchors raises the count the vessel reports (target = total − remaining bonds).
+        for expected in 1...3 {
+            m.removeBond(containing: m.bondedGroups[0].first!)
+            check(anchors - m.bondedGroups.count == expected,
+                  "\(expected) ring(s) should be home after \(expected) release(s)")
+        }
+        check(m.bondedGroups.isEmpty, "the last release frees the slab")
+    }
 
-        // The gate itself must start sealed, and the player must own the verb here.
-        check(!m.sealedPortalCubies.isEmpty, "Scene 4's portal starts sealed")
-        check(gs.twistEnabled, "Scene 4 is where the player is GRANTED the twist")
+    static func testVesselCanBeApproached() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        let grid = m.worldScale.standGrid, step = m.worldScale.standStep
+        check(PropKind.layeredVessel.footprintRadius(grid: grid) == 0,
+              "a vase narrower than one stand cell should block only the cell it stands on")
+        var found = false
+        for cu in m.cubies {
+            for f in cu.facelets {
+                guard let vessel = f.props.first(where: { $0.kind == .layeredVessel }) else { continue }
+                found = true
+                let k = grid / 3
+                let rc = vessel.subRow * k + k / 2, cc = vessel.subCol * k + k / 2
+                check(vessel.blocks(rc, cc, grid: grid, standStep: step), "it still stands somewhere")
+                // Every neighbouring stand cell is free, so you can walk right up to it and look.
+                for (dr, dc) in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1)] {
+                    check(!vessel.blocks(rc + dr, cc + dc, grid: grid, standStep: step),
+                          "the cell at (\(dr),\(dc)) beside the vessel should be walkable")
+                    check(f.mazeTile.isStandable(rc + dr, cc + dc, grid: grid, fullWidthGateways: m.fullWidthGateways),
+                          "the tile itself should allow standing at (\(dr),\(dc))")
+                }
+            }
+        }
+        check(found, "Scene 4 should have a vessel to approach")
+    }
+
+    /// The arrival doorway closes behind you (Scene 2A) — and must take ONLY itself with it. Its veil
+    /// and ring are the same two prop kinds the scene's real exit portal uses, so a cleanup that
+    /// matched by kind swept the whole world and stripped the exit of its visuals.
+    static func testClosingDoorwayLeavesTheRealPortalAlone() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        func portalDressing() -> Int {
+            var n = 0
+            for cu in m.cubies { for f in cu.facelets {
+                n += f.props.filter { ($0.kind == .portalField || $0.kind == .portalRing) && $0.anim <= 0.5 }.count
+            } }
+            return n
+        }
+        let before = portalDressing()
+        check(before > 0, "Scene 4's exit portal should have a veil and a ring to protect")
+        gs.closeArrivalDoorway()
+        check(portalDressing() == before, "closing must not disturb the real portal's dressing")
+        for _ in 0..<300 { gs.update(deltaTime: 1.0 / 60.0) }
+        check(portalDressing() == before, "and the real portal still has them once it is gone")
+        var arrivals = 0
+        for cu in m.cubies { for f in cu.facelets {
+            arrivals += f.props.filter { ($0.kind == .portalField || $0.kind == .portalRing) && $0.anim > 0.5 }.count
+        } }
+        check(arrivals == 0, "the arrival doorway itself is gone, not merely invisible")
+    }
+
+    /// Scene 4's payoff, end to end, and the assertion the whole scene rests on: the portal is
+    /// UNREACHABLE until the turn, and reachable after it.
+    ///
+    /// "A portal is present, but the maze does not connect to it… the maze route leading toward it
+    /// terminates against a closed wall at the boundary between the current outer slice and the rest
+    /// of the world."
+    ///
+    /// The boundary is the only thing a turn can edit: the slab is the whole +Z face plus a one-tile
+    /// ring, all of which rotates together, so a turn cannot change reachability WITHIN +Z. This
+    /// walks the real thing — every face, crossing cube edges properly — because that conjugation is
+    /// exactly what intuition gets wrong.
+    static func testSceneFourRouteCompletesOnlyAfterTheTurn() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        let n = m.size
+
+        struct T: Hashable { let f: Int; let r: Int; let c: Int }
+        func reachable(from s: T) -> Set<T> {
+            var seen: Set<T> = [s]; var q = [s]; var h = 0
+            while h < q.count {
+                let t = q[h]; h += 1
+                guard let face = CubeFace(rawValue: t.f),
+                      let (ci, fi) = m.faceletAt(face: face, row: t.r, col: t.c) else { continue }
+                let op = m.cubies[ci].facelets[fi].mazeTile.openings
+                for (dir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                            (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)] {
+                    guard op.contains(mask) else { continue }
+                    let nr = t.r + dr, nc = t.c + dc
+                    let nt: T
+                    if nr >= 0, nr < n, nc >= 0, nc < n { nt = T(f: t.f, r: nr, c: nc) }
+                    else {
+                        let cr = m.edgeCrossing(face: face, direction: dir, row: t.r, col: t.c)
+                        nt = T(f: cr.face.rawValue, r: cr.row, c: cr.col)
+                    }
+                    if !seen.contains(nt) { seen.insert(nt); q.append(nt) }
+                }
+            }
+            return seen
+        }
+        func locate(_ kind: PropKind) -> [T] {
+            var out: [T] = []
+            for f in CubeFace.allCases {
+                for r in 0..<n {
+                    for c in 0..<n {
+                        guard let (ci, fi) = m.faceletAt(face: f, row: r, col: c) else { continue }
+                        if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == kind }) {
+                            out.append(T(f: f.rawValue, r: r, c: c))
+                        }
+                    }
+                }
+            }
+            return out
+        }
+        guard let sp = m.spawnLocation else { check(false, "Scene 4 needs a spawn"); return }
+
+        var seen = reachable(from: T(f: sp.face.rawValue, r: sp.row, c: sp.col))
+        let portal = locate(.portal)
+        check(portal.count == 1, "Scene 4 has one portal")
+        check(!seen.contains(portal[0]), "the portal must NOT be reachable before the turn")
+        // …but the puzzle must be solvable: every anchor has to be walkable to, or the scene is a
+        // dead end rather than a lock. This is the half that a route puzzle most easily breaks.
+        let anchors = locate(.anchor)
+        check(anchors.count == 3, "three anchors")
+        for a in anchors { check(seen.contains(a), "anchor at (\(a.f),\(a.r),\(a.c)) must be reachable") }
+
+        // Release the anchors and take the turn.
+        while !m.bondedGroups.isEmpty { m.removeBond(containing: m.bondedGroups[0].first!) }
+        gs.twistEnabled = true
+        gs.startSliceRotation(clockwise: true)
+        check(gs.sliceRotation.isActive && !gs.sliceRotation.isRefusal,
+              "with no bonds left the turn must be permitted")
+        for _ in 0..<600 where gs.sliceRotation.isActive { gs.update(deltaTime: 1.0 / 60.0) }
+
+        guard let sp2 = m.spawnLocation else { return }
+        seen = reachable(from: T(f: sp2.face.rawValue, r: sp2.row, c: sp2.col))
+        let after = locate(.portal)
+        check(after.count == 1 && seen.contains(after[0]),
+              "after the turn a route to the portal exists")
+        // And the door is not ALSO sealed: the obstacle is the route, one idea, not two locks.
+        check(m.sealedPortalCubies.isEmpty, "Scene 4's portal is present and lit, just unreachable")
     }
 
     /// Scene 2's lock must actually gate the turn. Before the fourth switch the bond straddles the
@@ -867,7 +928,7 @@ struct CoordinateMathTests {
         testVesselCanBeApproached()
         testEveryStampHasConsistentEdges()
         testClosingDoorwayLeavesTheRealPortalAlone()
-        testSceneFourTurnOpensTheSealedPortal()
+        testSceneFourRouteCompletesOnlyAfterTheTurn()
         testAudioEmittersRideTwistsAndAreOccludedByWalls()
         testVesselInspectionGrantsTheTwist()
         testDressedWorldsDoNotFenceOffOpenEdges()

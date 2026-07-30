@@ -91,7 +91,7 @@ session: [Engine Primer](Engine%20Primer%20—%20Worlds%2C%20Twists%2C%20Travel.
 - **Skyboxes:** one full-sphere equirect per system; five fictional starfields generated from HYG
   data as compositing bases; `L` cycles them in place. Sky banding fixed by a `skyDay`-scaled TPDF
   dither (gated on the gradient, so clean night skies stay clean).
-- **Tests: 249,353** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
+- **Tests: 249,449** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
 - **New doc:** [Routing — How Paths Live in the Cube](Routing%20—%20How%20Paths%20Live%20in%20the%20Cube.md)
   — where a route actually lives (4 bits/tile), why a route floor is decoration, and what a twist
   can and cannot change. Read it before authoring Scene 4's route.
@@ -116,15 +116,21 @@ session: [Engine Primer](Engine%20Primer%20—%20Worlds%2C%20Twists%2C%20Travel.
   a new attachment landing on a dead one's address was never made resident. That was the intermittent
   magenta at startup/resize.
 
-### Open on Scene 4
-- **Route alignment (#2) — the one real gap left.** Measured: every tile on `+Z` is already reachable
-  from spawn, so the script's premise ("the maze does not connect to the portal; the route exists in
-  pieces") is not built. What exists instead is a SEAL: the portal is dark and the turn lights it.
-  The break must sit on the **slab boundary** — the player's whole face rotates rigidly and cannot
-  change its own internal connectivity; the slab is all 25 `+Z` tiles plus a 5-tile edge strip on
-  each side face, `-Z` untouched, so only the 20 strip↔static crossings are editable by a turn.
-  Verify those crossings with a reachability probe **before** authoring. Also decide whether to drop
-  the seal once the route exists, so the turn's payoff is one idea rather than two locks at once.
+### Scene 4 is complete
+- **The route puzzle is built.** The portal is present and lit from arrival and simply cannot be
+  walked to: its corner of `+Z` is sealed from the rest of the face, and its one way out is a single
+  ring tile whose along-ring edges are shut and whose outer door opens onto a sealed pocket — the
+  route reaching the slab boundary and stopping, which is what the player walks up to and reads.
+  A 90° turn slides that ring tile a quarter of the way round, its door now faces the live shell,
+  and the world is joined up. Nothing is created; a piece is brought into line.
+- **The seal is gone.** The obstacle is the route, not a dark door — two locks at once blurred the
+  one idea the turn is meant to land. ("A portal is present, but the maze does not connect to it.")
+- Measured and asserted: portal unreachable before, reachable after, and **all three anchors
+  reachable throughout** — the half a route puzzle most easily breaks.
+- Useful geometry, measured rather than derived: the slab is the whole `+Z` face **plus a one-tile
+  ring** (5 tiles on each side face). Everything in it rotates together, so a turn cannot change
+  reachability *within* `+Z`. The 20 places that ring meets the static shell are the entire editable
+  surface of any Scene 4-style puzzle.
 
 ### Open elsewhere
 - **Audio F** is scene-gated: Scene 3's six kin tones and Scene 5's travelling pulse need those
