@@ -382,6 +382,11 @@ enum PropKind: UInt8 {
         switch self {
         case .plinth, .switchBase: return 0   // small base — blocks only the single cell it stands on
         case .obelisk:             return 1   // M20: a thin pillar — a 3×3 footprint, not the default 5×5 (Eddie: don't eat more stepping spots than needed)
+        // Flat, small things set INTO the ground. Each is well under one 1.26 m stand cell, and each
+        // inherited the 6.3 m default — an invisible slab across the middle of its own tile, blocking
+        // passage from every direction with nothing visible to explain it. That is exactly what Eddie
+        // walked into on Scene 4's anchor: the edges either side were open, so no wall was drawn.
+        case .anchor, .dial, .glyph: return 0
         case .layeredVessel:       return 0   // Scene 4: a vase ~1 m across, narrower than ONE 1.26 m stand
                                               // cell. The default 5×5 held the player 4 m back from an
                                               // object whose whole job is to be read closely (Eddie).

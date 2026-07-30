@@ -709,6 +709,42 @@ struct CoordinateMathTests {
         check(m.bondedGroups.isEmpty, "the last release frees the slab")
     }
 
+    /// Eddie drew a line across the middle of an anchor's tile: blocked from above AND below, with
+    /// the edges either side wide open so nothing was drawn to explain it. The anchor is a plate set
+    /// into the ground, roughly a metre across, and it had inherited the default footprint — a 6.3 m
+    /// square, an invisible slab filling the middle of its own tile.
+    ///
+    /// The rule this pins: a prop may not block ground it does not visibly occupy, and a tile
+    /// carrying one must still be walkable THROUGH.
+    static func testFlatPropsDoNotWallOffTheirOwnTile() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        let grid = m.worldScale.standGrid, step = m.worldScale.standStep
+        for kind in [PropKind.anchor, .dial, .glyph, .layeredVessel, .plinth, .switchBase] {
+            check(kind.footprintRadius(grid: grid) == 0,
+                  "\(kind) is a small flat thing and must not claim a whole author cell")
+        }
+        // Walk the anchor's own tile end to end, straight through the middle, in both axes.
+        var checkedTiles = 0
+        for cu in m.cubies {
+            for f in cu.facelets {
+                let solids = f.props.filter { $0.kind.isSolid }
+                guard solids.contains(where: { $0.kind == .anchor }) else { continue }
+                checkedTiles += 1
+                let mid = grid / 2
+                var blockedDown = 0, blockedAcross = 0
+                for i in 0..<grid {
+                    if solids.contains(where: { $0.blocks(i, mid, grid: grid, standStep: step) }) { blockedDown += 1 }
+                    if solids.contains(where: { $0.blocks(mid, i, grid: grid, standStep: step) }) { blockedAcross += 1 }
+                }
+                // The plate itself stands on ONE cell; everything else in both lines stays walkable.
+                check(blockedDown <= 1, "north-south through an anchor tile blocked at \(blockedDown) cells")
+                check(blockedAcross <= 1, "east-west through an anchor tile blocked at \(blockedAcross) cells")
+            }
+        }
+        check(checkedTiles == 3, "Scene 4 has three anchors to check, found \(checkedTiles)")
+    }
+
     static func testVesselCanBeApproached() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -942,6 +978,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
+        testFlatPropsDoNotWallOffTheirOwnTile()
         testEveryStampHasConsistentEdges()
         testClosingDoorwayLeavesTheRealPortalAlone()
         testSceneFourRouteCompletesOnlyAfterTheTurn()
@@ -1061,7 +1098,10 @@ struct CoordinateMathTests {
             // author row 0 (stand row 0 sits inside author row 0's block).
             var covered = Array(repeating: 0, count: d)
             for ac in 0..<3 {
-                let p = Prop(kind: .dial, subRow: 0, subCol: ac)
+                // Use a DEFAULT-footprint prop. This used to be a dial, which now blocks only its own
+                // cell — small flat things set into the ground had inherited a 6.3 m footprint and
+                // were fencing off the middle of their own tiles invisibly.
+                let p = Prop(kind: .topiary, subRow: 0, subCol: ac)
                 for sc in 0..<d where p.blocks(0, sc, grid: d) { covered[sc] += 1 }
             }
             check(covered.allSatisfy { $0 == 1 }, "footprint d=\(d): author thirds tile the stand grid exactly")
