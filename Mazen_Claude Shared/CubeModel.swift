@@ -306,6 +306,42 @@ class CubeModel {
             setSharedEdge(face: .negativeY, row: 3, col: 3, dir, open: true)
         }
 
+        // The vessel stands BESIDE the arrival — "met before anything else" — so guarantee that one
+        // step rather than hoping the generated maze provides it.
+        setSharedEdge(face: .positiveZ, row: min(n - 1, c + 1), col: c, .north, open: true)
+
+        // Sealing the portal's corner can ORPHAN tiles that only reached the rest of the face
+        // THROUGH it — which is exactly what happened: the vessel at the centre of +Z, and the two
+        // tiles beside the corner, were cut off along with the portal, so the scene had a puzzle
+        // piece the player could not walk to (Eddie: "I don't see how to get to the vessel").
+        //
+        // Repair afterwards rather than trying to author around it: flood from the spawn and open
+        // one edge from any stranded tile back toward reached ground. The portal corner is exempt —
+        // being unreachable is its entire job.
+        var reached = Set<[Int]>([[min(n - 1, c + 1), c]])
+        var frontier = Array(reached)
+        while let t = frontier.popLast() {
+            guard let (ci, fi) = faceletAt(face: .positiveZ, row: t[0], col: t[1]) else { continue }
+            let op = cubies[ci].facelets[fi].mazeTile.openings
+            for (mask, dr, dc) in [(DirectionMask.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)]
+            where op.contains(mask) {
+                let nt = [t[0] + dr, t[1] + dc]
+                guard nt[0] >= 0, nt[0] < n, nt[1] >= 0, nt[1] < n, !reached.contains(nt) else { continue }
+                reached.insert(nt); frontier.append(nt)
+            }
+        }
+        for r in 0..<n {
+            for cc in 0..<n where !reached.contains([r, cc]) && !portalCorner.contains(where: { $0 == (r, cc) }) {
+                for (dir, dr, dc) in [(SurfaceDirection.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)] {
+                    let nt = [r + dr, cc + dc]
+                    guard reached.contains(nt), !portalCorner.contains(where: { $0 == (nt[0], nt[1]) }) else { continue }
+                    setSharedEdge(face: .positiveZ, row: r, col: cc, dir, open: true)
+                    reached.insert([r, cc])
+                    break
+                }
+            }
+        }
+
         // Arrival, and the gate it cannot yet reach.
         spawnLocation = (face: .positiveZ, row: min(n - 1, c + 1), col: c, facing: .n)
         var portalCubie: Int? = nil

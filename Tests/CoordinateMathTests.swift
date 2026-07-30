@@ -825,6 +825,22 @@ struct CoordinateMathTests {
         let anchors = locate(.anchor)
         check(anchors.count == 3, "three anchors")
         for a in anchors { check(seen.contains(a), "anchor at (\(a.f),\(a.r),\(a.c)) must be reachable") }
+        // The VESSEL above all: it grants the twist, so if it is stranded the scene deadlocks —
+        // no verb, no turn, no route, nothing the player can do. Sealing the portal's corner
+        // orphaned it once already, because its only path ran through that corner.
+        let vessel = locate(.layeredVessel)
+        check(vessel.count == 1, "one vessel")
+        check(seen.contains(vessel[0]), "the vessel MUST be reachable or the scene cannot be started")
+        // Nothing else on the start face should be walled off by accident. Only the portal's own
+        // corner is meant to be unreachable, and that is the puzzle.
+        var strandedOnStartFace = 0
+        for r in 0..<n {
+            for c in 0..<n where !seen.contains(T(f: CubeFace.positiveZ.rawValue, r: r, c: c)) {
+                strandedOnStartFace += 1
+            }
+        }
+        check(strandedOnStartFace == 4,
+              "only the portal's 4-tile corner should be cut off, found \(strandedOnStartFace)")
 
         // Release the anchors and take the turn.
         while !m.bondedGroups.isEmpty { m.removeBond(containing: m.bondedGroups[0].first!) }
