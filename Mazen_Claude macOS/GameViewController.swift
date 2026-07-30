@@ -75,8 +75,14 @@ class GameViewController: NSViewController {
         case .slow:   pacing = "SLOW"
         case .step:   pacing = "STEP  [ ] to scrub"
         }
+        // Name the world you are actually in. This used to read "interior (depth N)" for ANY pushed
+        // world, which is simply wrong — depth counts the world STACK, and Scene 4 is an exterior
+        // reached by two pushes (earth → hub → scene-4), so it reported itself as an interior at
+        // depth 3. `WorldScale.interior` is the real flag, and the name is what you actually want
+        // when several worlds look alike.
         let depth = renderer?.worldStack.count ?? 1
-        let world = depth > 1 ? "interior (depth \(depth))" : "overworld"
+        let kind = gs.worldScale.interior ? " · interior" : ""
+        let world = depth > 1 ? "\(gs.name)\(kind) (depth \(depth))" : "\(gs.name)\(kind)"
         // "Here:" — name the prop(s) on the player's tile (the gallery / asset-eval readout).
         var here = "—"
         if let (ci, fi) = gs.cubeModel.faceletAt(face: gs.player.face, row: gs.player.row, col: gs.player.col) {
