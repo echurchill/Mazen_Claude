@@ -550,6 +550,33 @@ struct CoordinateMathTests {
         check(m.sealedPortalCubies.isEmpty, "the turn that moved the door opens it")
     }
 
+    /// The arrival doorway closes behind you (Scene 2A) — and must take ONLY itself with it. Its veil
+    /// and ring are the same two prop kinds the scene's real exit portal uses, so a cleanup that
+    /// matched by kind swept the whole world and stripped the exit of its visuals.
+    static func testClosingDoorwayLeavesTheRealPortalAlone() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        func portalDressing() -> Int {
+            var n = 0
+            for cu in m.cubies { for f in cu.facelets {
+                n += f.props.filter { ($0.kind == .portalField || $0.kind == .portalRing) && $0.anim <= 0.5 }.count
+            } }
+            return n
+        }
+        let before = portalDressing()
+        check(before > 0, "Scene 4's exit portal should have a veil and a ring to protect")
+        gs.closeArrivalDoorway()
+        check(portalDressing() == before, "closing must not disturb the real portal's dressing")
+        // Run the close all the way out.
+        for _ in 0..<300 { gs.update(deltaTime: 1.0 / 60.0) }
+        check(portalDressing() == before, "and the real portal still has them once it is gone")
+        var arrivals = 0
+        for cu in m.cubies { for f in cu.facelets {
+            arrivals += f.props.filter { ($0.kind == .portalField || $0.kind == .portalRing) && $0.anim > 0.5 }.count
+        } }
+        check(arrivals == 0, "the arrival doorway itself is gone, not merely invisible")
+    }
+
     static func testVesselCanBeApproached() {
         let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
         let m = gs.cubeModel
@@ -794,6 +821,7 @@ struct CoordinateMathTests {
         testSkyCounterpartIsTheSameWorldYouCanVisit()
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
+        testClosingDoorwayLeavesTheRealPortalAlone()
         testSceneFourTurnOpensTheSealedPortal()
         testAudioEmittersRideTwistsAndAreOccludedByWalls()
         testVesselInspectionGrantsTheTwist()

@@ -764,10 +764,17 @@ class GameState {
     /// not by the door refusing.
     func closeArrivalDoorway() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
+        // `anim = 1` MARKS these two as the arrival doorway's own. Without a marker the cleanup below
+        // matched by kind and swept the whole world — including the scene's real exit portal, whose
+        // veil and ring are the same two prop kinds. Caught in review before it reached a playthrough.
         var veil = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: player.facing.opposite, state: 2)
         veil.alignAnim = 1                       // opacity; ticked to 0, then removed
+        veil.anim = 1
+        var ring = Prop(kind: .portalRing, subRow: 1, subCol: 1)
+        ring.anim = 1
         cubeModel.cubies[ci].facelets[fi].props.append(veil)
-        cubeModel.cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+        cubeModel.cubies[ci].facelets[fi].props.append(ring)
+        arrivalDoorwayTile = (ci, fi)
         arrivalDoorwayClosing = 1
         cubeModel.markTopologyChanged()
         pendingAudioCues.append(.portalClosed(at: nil))
@@ -775,37 +782,28 @@ class GameState {
 
     /// 1 → 0 while the arrival veil shuts; 0 = nothing closing.
     private var arrivalDoorwayClosing: Float = 0
+    /// Where it was placed. Props ride their facelet through a twist, so this stays valid even if the
+    /// slab the player arrived on turns while the doorway is still closing.
+    private var arrivalDoorwayTile: (ci: Int, fi: Int)?
 
     private func tickArrivalDoorway(_ dt: Float) {
-        guard arrivalDoorwayClosing > 0 else { return }
+        guard arrivalDoorwayClosing > 0, let t = arrivalDoorwayTile else { return }
         arrivalDoorwayClosing = max(0, arrivalDoorwayClosing - dt / 2.2)
-        for cu in cubeModel.cubies.indices {
-            for fi in cubeModel.cubies[cu].facelets.indices {
-                for pi in cubeModel.cubies[cu].facelets[fi].props.indices
-                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .portalField
-                    && cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim > 0 {
-                    cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim = arrivalDoorwayClosing
-                }
-            }
+        for pi in cubeModel.cubies[t.ci].facelets[t.fi].props.indices
+        where cubeModel.cubies[t.ci].facelets[t.fi].props[pi].kind == .portalField
+            && cubeModel.cubies[t.ci].facelets[t.fi].props[pi].anim > 0.5 {
+            cubeModel.cubies[t.ci].facelets[t.fi].props[pi].alignAnim = arrivalDoorwayClosing
         }
         if arrivalDoorwayClosing <= 0 {
-            // Gone, not merely invisible — nothing left to walk into.
-            for cu in cubeModel.cubies.indices {
-                for fi in cubeModel.cubies[cu].facelets.indices {
-                    cubeModel.cubies[cu].facelets[fi].props.removeAll {
-                        ($0.kind == .portalField && $0.alignAnim <= 0) || $0.kind == .portalRing
-                    }
-                }
+            // Gone, not merely invisible — nothing left to walk into. Only OUR two props, only here.
+            cubeModel.cubies[t.ci].facelets[t.fi].props.removeAll {
+                ($0.kind == .portalField || $0.kind == .portalRing) && $0.anim > 0.5
             }
+            arrivalDoorwayTile = nil
             cubeModel.markTopologyChanged()
         }
     }
 
-    /// Unseal every portal whose lock is gone. `limitedTo` restricts it to the cubies a particular
-    /// turn actually MOVED — "the turn that moved this door opened it" — which is how a player's own
-    /// twist earns its payoff without a distant, unrelated door quietly lighting up at the same time.
-    /// Passing nil opens any unlocked door anywhere, which is what the scripted switch-trip turn
-    /// wants: it rotates the back slab for spectacle and the door it opens is somewhere else.
     private func openSealedDoors(limitedTo cubies: Set<Int>? = nil) {
         var opened = false
         for ci in Array(cubeModel.sealedPortalCubies)
