@@ -133,8 +133,9 @@ session: [Engine Primer](Engine%20Primer%20—%20Worlds%2C%20Twists%2C%20Travel.
 - fps: 60–70 full screen, ~100 at launch size (Eddie, 2026-07-30). It tracks window AREA, so the
   renderer is fill-bound; adding props is cheap, adding full-screen shader work is not. Worth
   remembering for Scene 3's beams.
-- Uncommitted and awaiting a call: `Prototype Worlds.ods` (modified), `Mazen_Models/metal_plate_02_1k/`,
-  `To_be_evaluated/`.
+- The world list has moved on from the spreadsheet: the six scene scripts in `Scenes/` are the build
+  target now, so `Prototype Worlds.ods` is in `Archive/` rather than tracking a plan nothing follows.
+  (`metal_plate_02_1k/` and `To_be_evaluated/` were removed by Eddie, 2026-07-30.)
 
 ## Immediate next actions on resume
 
