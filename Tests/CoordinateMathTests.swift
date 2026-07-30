@@ -236,6 +236,30 @@ struct CoordinateMathTests {
 
 
 
+
+    /// Releasing an anchor must make the world visibly GIVE more, even while the turn is still
+    /// refused — "partial progress may weaken a lock without yet making a turn legal". With a fixed
+    /// strain, three anchors felt exactly like one and the middle of the puzzle read as no progress.
+    static func testSceneFourStrainGrowsAsAnchorsRelease() {
+        let gs = GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
+        let m = gs.cubeModel
+        let (axis, index) = m.sliceAxisAndIndex(for: .positiveZ)
+
+        check(m.bondsBlocking(axis: axis, index: index) == 3, "three anchors should block the turn")
+        var amplitudes: [Float] = []
+        for expected in [3, 2, 1] {
+            check(m.bondsBlocking(axis: axis, index: index) == expected,
+                  "expected \(expected) blocking bonds")
+            gs.startSliceRotation(clockwise: true)
+            check(gs.sliceRotation.isRefusal, "the turn must still be refused with \(expected) anchors")
+            amplitudes.append(gs.sliceRotation.strainAmplitude)
+            gs.sliceRotation = GameState.SliceRotation()      // clear for the next attempt
+            m.removeBond(containing: m.bondedGroups[0].first!)
+        }
+        check(amplitudes[0] < amplitudes[1] && amplitudes[1] < amplitudes[2],
+              "strain must grow as anchors are released, got \(amplitudes)")
+    }
+
     /// Scene 4's bond bands must actually trace the lock. A bond is otherwise invisible — the turn
     /// refuses and the reason is nowhere — so this is what turns a refusal into information.
     /// Checks the three properties the script demands: one band per bond, each band genuinely
@@ -406,6 +430,7 @@ struct CoordinateMathTests {
         testSceneFourAnchorsGateThePlayersTwist()
         testEveryPrologueSceneHasADarsitDoor()
         testSceneFourBondBandsTraceTheLock()
+        testSceneFourStrainGrowsAsAnchorsRelease()
 
         print("")
         if failed == 0 {

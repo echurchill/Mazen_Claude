@@ -2552,6 +2552,15 @@ class CubeModel {
     /// Whether a slice twist is legal under the current bonds (the bandaged-cube rule): every bonded
     /// group must be **entirely inside** the rotating slice or **entirely outside** it. A group that
     /// straddles the slice would be torn, so the twist is refused. No bonds ⇒ always legal.
+    /// How many bonded groups straddle this slice — i.e. how many separate things are refusing the
+    /// turn. Scene 4 uses it to make a weakening lock legible: each anchor released lets the world
+    /// give further before it springs back.
+    func bondsBlocking(axis: Int, index: Int) -> Int {
+        guard !bondedGroups.isEmpty else { return 0 }
+        let slice = Set(cubieIndicesInSlice(axis: axis, index: index))
+        return bondedGroups.filter { !$0.isDisjoint(with: slice) && !$0.isSubset(of: slice) }.count
+    }
+
     func canRotateSlice(axis: Int, index: Int) -> Bool {
         guard !bondedGroups.isEmpty else { return true }
         let slice = Set(cubieIndicesInSlice(axis: axis, index: index))

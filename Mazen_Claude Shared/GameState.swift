@@ -56,6 +56,12 @@ class GameState {
         /// M16.2: a REFUSED twist — the slice strains a few degrees and springs back (a damped
         /// wobble); nothing is finalized. The cue that teaches "locked" without a word of UI.
         var isRefusal = false
+        /// How far a refused twist gives before springing back, in radians. Set when the refusal is
+        /// raised, from how many bonds still straddle the slice: Scene 4 releases its anchors one at a
+        /// time, and "partial progress may weaken a lock without yet making a turn legal" only reads
+        /// if the world visibly gives MORE as each one goes. A fixed amplitude made three anchors feel
+        /// identical to one.
+        var strainAmplitude: Float = 0.06
 
         /// M20 (Eddie): the switch-trip "turn the world" spectacle rotates the BACK slab (a distant
         /// wall for impact), which needn't contain the sealed door — so this flags the finalize to
@@ -73,7 +79,7 @@ class GameState {
         /// a damped wobble in the attempted direction that returns exactly to rest.
         var currentAngle: Float {
             if isRefusal {
-                let amplitude: Float = 0.06   // ~3.4° of strain
+                let amplitude = strainAmplitude
                 let direction: Float = angle < 0 ? -1 : 1
                 return direction * amplitude * sinf(progress * .pi * 3) * (1 - progress)
             }
@@ -387,11 +393,14 @@ class GameState {
         guard cubeModel.canRotateSlice(axis: axis, index: index) else {
             twistRefused = true
             pendingAudioCues.append(.twistStrain)
+            // The fewer bonds still holding, the further the world gives before it springs back.
+            let blocking = cubeModel.bondsBlocking(axis: axis, index: index)
+            let strain: Float = blocking > 0 ? 0.03 + 0.08 / Float(blocking) : 0.06
             sliceRotation = SliceRotation(
                 isActive: true, axis: axis, index: index, angle: angle,
                 progress: 0, speed: 4.0,
                 affectedCubies: Set(cubieIndices), playerCubieIndex: playerCI,
-                isRefusal: true
+                isRefusal: true, strainAmplitude: strain
             )
             return
         }
