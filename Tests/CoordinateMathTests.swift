@@ -897,69 +897,49 @@ struct CoordinateMathTests {
         check(unwatched > 0, "a vessel out of view should drift, got \(unwatched)")
     }
 
-    /// Scene 1 keeps its fog, so what you can SEE from where you stand has to be right — Eddie's
-    /// screenshot showed a world assembling itself around him: props floating in mist on tiles whose
-    /// walls did not exist yet, and the maze arriving one tile at a time.
+    /// A sealed world has to STAY sealed. The stamps closed their region border one-sidedly, which
+    /// was enough while movement was tested on the departing tile — you could not step out. Then
+    /// `reconcileSharedEdges` arrived to fix the invisible walls, resolving disagreements in favour
+    /// of OPEN, and silently undid every one of those seals: Eddie walked off Scene 2's face and
+    /// across to a portal that was not meant to be reachable.
     ///
-    /// Two rules, both asserted here: standing somewhere reveals what you could see from it (down
-    /// every open corridor, stopped by walls), and a dressed world's walls exist on ADJACENT tiles
-    /// and not only on ones you have stood on.
-    static func testFogRevealsWhatYouCouldSeeFromWhereYouStand() {
-        let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
-        let m = gs.cubeModel
-        guard let sp = m.spawnLocation else { check(false, "needs a spawn"); return }
-        gs.player.face = sp.face; gs.player.row = sp.row; gs.player.col = sp.col
-        gs.revealLineOfSight()
-        // From the spawn everything in sight is the clearing, which is revealed already — so step to
-        // the first maze tile, where there IS something to discover, and look from there too.
-        gs.player.row = m.size - 5; gs.player.col = m.size / 2      // (4,4), just north of the corridor
-        gs.revealLineOfSight()
-
-        // Everything in an unbroken line from where the player stands must be out of the fog — in
-        // whichever directions are actually open, which is not something to hard-code about a maze.
-        var revealed = 0
-        for (mask, dr, dc) in [(DirectionMask.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)] {
-            var r = gs.player.row, c = gs.player.col
-            while true {
-                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c),
-                      m.cubies[ci].facelets[fi].mazeTile.openings.contains(mask) else { break }
-                r += dr; c += dc
-                guard r >= 0, r < m.size, c >= 0, c < m.size,
-                      let (nci, nfi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { break }
-                check(m.cubies[nci].facelets[nfi].tileState != .unknown,
-                      "(\(r),\(c)) is in plain sight and must not be fogged")
-                revealed += 1
+    /// This walks the whole cube from the spawn and asserts the player cannot leave the play face —
+    /// the property that actually matters, rather than the state of any particular edge.
+    static func testSealedWorldsCannotBeWalkedOutOf() {
+        for (label, gs) in [("scene-1", GameState(size: PrologueSize.sceneOne, name: "s1", stamp: .sceneOne)),
+                            ("scene-2", GameState(size: PrologueSize.sceneTwo, name: "s2", stamp: .sceneTwo)),
+                            ("garden",  GameState(size: 11, name: "g", stamp: .gardenMaze)),
+                            ("hub",     GameState(size: 15, name: "h", stamp: .portalHub))] {
+            let m = gs.cubeModel
+            let n = m.size
+            struct T: Hashable { let f: Int; let r: Int; let c: Int }
+            let start = T(f: gs.player.face.rawValue, r: gs.player.row, c: gs.player.col)
+            var seen: Set<T> = [start], q = [start], head = 0
+            while head < q.count {
+                let t = q[head]; head += 1
+                guard let face = CubeFace(rawValue: t.f),
+                      let (ci, fi) = m.faceletAt(face: face, row: t.r, col: t.c) else { continue }
+                let op = m.cubies[ci].facelets[fi].mazeTile.openings
+                for (dir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                            (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)] {
+                    guard op.contains(mask) else { continue }
+                    let nr = t.r + dr, nc = t.c + dc
+                    let nt: T
+                    if nr >= 0, nr < n, nc >= 0, nc < n { nt = T(f: t.f, r: nr, c: nc) }
+                    else {
+                        let cr = m.edgeCrossing(face: face, direction: dir, row: t.r, col: t.c)
+                        nt = T(f: cr.face.rawValue, r: cr.row, c: cr.col)
+                    }
+                    if !seen.contains(nt) { seen.insert(nt); q.append(nt) }
+                }
             }
+            // Guard against a vacuous pass: if the walk explored almost nothing, "did not escape"
+            // means nothing either.
+            check(seen.count > 20, "\(label): the walk only reached \(seen.count) tiles")
+            let escaped = seen.filter { $0.f != start.f }
+            check(escaped.isEmpty,
+                  "\(label): the player can walk off the play face onto \(Set(escaped.map { $0.f }).sorted())")
         }
-        check(revealed > 0, "standing in the maze must reveal something in line of sight")
-
-        // But sight does NOT pass through walls: a tile behind the clearing's west wall stays unknown.
-        var hidden = 0
-        for rr in 0..<m.size {
-            for cc in 0..<m.size {
-                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: rr, col: cc) else { continue }
-                if m.cubies[ci].facelets[fi].tileState == .unknown { hidden += 1 }
-            }
-        }
-        check(hidden > 30, "most of the maze must still be hidden, only \(hidden) tiles are")
-
-        // Walls exist on an adjacent tile — the dressing must not wait for you to stand on it.
-        let pool = [0, 1, 2, 3]
-        var adjacentWithWalls = 0
-        for rr in 0..<m.size {
-            for cc in 0..<m.size {
-                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: rr, col: cc) else { continue }
-                let f = m.cubies[ci].facelets[fi]
-                guard f.tileState == .adjacent else { continue }
-                let closed = DirectionMask.all.subtracting(f.mazeTile.openings)
-                guard !closed.isEmpty else { continue }
-                let props = m.dressedWallProps(f, face: .positiveZ, row: rr, col: cc,
-                                               walls: pool, rocks: pool, bushes: pool,
-                                               wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: true)
-                if !props.isEmpty { adjacentWithWalls += 1 }
-            }
-        }
-        check(adjacentWithWalls > 0, "an adjacent walled tile must already have its wall models")
     }
 
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
@@ -985,6 +965,35 @@ struct CoordinateMathTests {
             check(gs.cubeModel.cubies[ci].facelets[fi].tileState != .unknown,
                   "\(label) must not start the player on an unrevealed tile")
         }
+    }
+
+    /// Line of sight, for the worlds that still fog. Discovery marked only the four touching tiles,
+    /// so a maze arrived one tile at a time however far you could actually see along it. Walking each
+    /// open direction until a wall stops it is cheaper than a real visibility test.
+    ///
+    /// (Scene 1 was the reason this was written and is no longer fogged — its walk-in reveal read
+    /// badly — but the rule is general and the moon and the natural worlds still use it.)
+    static func testSightGoesDownCorridorsNotJustOntoTheNextTile() {
+        let gs = GameState(size: 7, name: "natural", stamp: .natural)
+        let m = gs.cubeModel
+        // A world with no walls at all: sight should run the full range in every direction.
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                m.cubies[ci].facelets[fi].tileState = .unknown
+            }
+        }
+        gs.player.face = .positiveZ; gs.player.row = m.size / 2; gs.player.col = m.size / 2
+        gs.revealLineOfSight(range: 3)
+        var revealed = 0
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                if m.cubies[ci].facelets[fi].tileState != .unknown { revealed += 1 }
+            }
+        }
+        // Three tiles down each of four open directions, and never the diagonals.
+        check(revealed == 12, "sight should run 3 tiles in 4 directions, revealed \(revealed)")
     }
 
     static func testSceneOneAmbienceTriggers() {
@@ -1073,7 +1082,9 @@ struct CoordinateMathTests {
                 check(seen.contains([r, c]) || [r, c] == pa, "a vessel at (\(r),\(c)) is walled off")
             }
         }
-        // Fog: the clearing is known and the maze is not — its scale has to arrive by walking.
+        // Scene 1 is revealed in full: the walk-in reveal read as blocks lifting off rather than as
+        // distance resolving, because the fog is a volume and not a horizon (Eddie). The gradual
+        // scale the script wants needs a different mechanism, not this one.
         var discovered = 0
         for r in 0..<n {
             for c in 0..<n {
@@ -1081,7 +1092,7 @@ struct CoordinateMathTests {
                 if m.cubies[ci].facelets[fi].tileState == .discovered { discovered += 1 }
             }
         }
-        check(discovered == 9, "only the 3×3 clearing starts revealed, got \(discovered)")
+        check(discovered == n * n, "Scene 1 starts fully revealed, got \(discovered) of \(n * n)")
         // The verb does not exist yet, and nothing here is bonded — Scene 1 has no lock at all.
         check(m.bondedGroups.isEmpty, "Scene 1 has no lock; it is an opening, not a puzzle")
     }
@@ -1322,7 +1333,8 @@ struct CoordinateMathTests {
         testSceneOneCanBeWalkedFromClearingToArch()
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
-        testFogRevealsWhatYouCouldSeeFromWhereYouStand()
+        testSealedWorldsCannotBeWalkedOutOf()
+        testSightGoesDownCorridorsNotJustOntoTheNextTile()
         testVesselsMoveOnlyWhenNotWatched()
         testInteractPicksTheNearestThingNotThePortal()
         testCrossingAnOpenEdgeAlwaysFindsSomewhereToLand()

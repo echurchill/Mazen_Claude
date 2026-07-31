@@ -361,14 +361,18 @@ class CubeModel {
         // view rather than in the middle of it, which is what the script is after — "discoverable
         // through looking rather than presented as an objective marker".
         spawnLocation = (face: .positiveZ, row: clearTop + 2, col: clearLeft + 2, facing: .n)
-        // "Fog of discovery: active beyond the immediately visible clearing." Reveal the clearing
-        // and nothing else — the maze has to be walked to exist, which is what makes its scale
-        // arrive "gradually through movement, not through an overhead view".
-        for r in clearTop..<(clearTop + 3) {
-            for c in clearLeft..<(clearLeft + 3) {
-                guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) else { continue }
-                cubies[ci].facelets[fi].tileState = .discovered
-                cubies[ci].facelets[fi].discoveryAmount = 1.0
+        // The script asks for "fog of discovery: active beyond the immediately visible clearing", and
+        // it was built that way — but revealed by walking it looked wrong (Eddie: "really damn
+        // odd"), because the fog is a solid volume rather than a horizon, so the maze arrived as
+        // blocks lifting off rather than as distance resolving. Revealed in full for now. The
+        // gradual-scale idea is worth another go with a different mechanism, not this one.
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for c in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { continue }
+                    cubies[ci].facelets[fi].tileState = .discovered
+                    cubies[ci].facelets[fi].discoveryAmount = 1.0
+                }
             }
         }
     }
@@ -404,6 +408,28 @@ class CubeModel {
     /// resolves any disagreement in favour of OPEN — so closing one half alone does nothing at all.
     /// Every deliberate wall has to be written on both sides, which is exactly the mistake that put
     /// invisible walls in Scene 2 and the hub.
+    /// Seal a rectangular play region's border on BOTH halves of every edge.
+    ///
+    /// The stamps used to do this with a one-sided `op.remove(.north)` on the inside tile, which was
+    /// enough while movement was tested on the departing tile — you simply could not step out. Then
+    /// `reconcileSharedEdges` arrived to fix the invisible walls, resolving disagreements in favour
+    /// of OPEN, and quietly undid every one of those seals: the neighbour still said the edge was
+    /// open, so the border re-opened and the player could walk off the world (Eddie, Scene 2).
+    ///
+    /// The reasoning that justified "open wins" was that every one-sided edit in this file is an
+    /// insert. That was wrong, and wrong in a way a grep for `openings.remove` could not see: these
+    /// six sites mutate a local `op` and assign it back. Hence this, and hence `setSharedEdge`.
+    func sealRegionBorder(face: CubeFace, rLo: Int, rHi: Int, cLo: Int, cHi: Int) {
+        for r in rLo...rHi {
+            setSharedEdge(face: face, row: r, col: cLo, .west, open: false)
+            setSharedEdge(face: face, row: r, col: cHi, .east, open: false)
+        }
+        for c in cLo...cHi {
+            setSharedEdge(face: face, row: rLo, col: c, .north, open: false)
+            setSharedEdge(face: face, row: rHi, col: c, .south, open: false)
+        }
+    }
+
     func setSharedEdge(face: CubeFace, row: Int, col: Int, _ dir: SurfaceDirection, open: Bool) {
         let mask: DirectionMask = dir == .north ? .north : dir == .south ? .south : dir == .west ? .west : .east
         guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { return }
@@ -763,6 +789,10 @@ class CubeModel {
             addBond(bond)
             templeDoorBond = bond
         }
+
+        // Two-sided, and LAST, so nothing carved above can leave a way out and
+        // `reconcileSharedEdges` has nothing to disagree with.
+        sealRegionBorder(face: .positiveZ, rLo: rLo, rHi: rHi, cLo: cLo, cHi: cHi)
     }
 
     /// The outer X-slab that carries the hidden face into view, and the `+Y` tiles riding it.
@@ -904,6 +934,10 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
         }
+
+        // Two-sided, and LAST, so nothing carved above can leave a way out and
+        // `reconcileSharedEdges` has nothing to disagree with.
+        sealRegionBorder(face: .positiveZ, rLo: rLo, rHi: rHi, cLo: cLo, cHi: cHi)
     }
 
     /// M20 (Eddie) — the PORTAL HUB: a flat grass plaza with a 3×3 grid of simple TARDIS portals, each
@@ -948,6 +982,10 @@ class CubeModel {
             // Signpost on the south sub-cell of the same tile, facing the approaching player.
             cubies[ci].facelets[fi].props.append(Prop(kind: .signpost, subRow: 2, subCol: 1, facing: .n, state: idx))
         }
+
+        // Two-sided, and LAST, so nothing carved above can leave a way out and
+        // `reconcileSharedEdges` has nothing to disagree with.
+        sealRegionBorder(face: .positiveZ, rLo: rLo, rHi: rHi, cLo: cLo, cHi: cHi)
     }
 
     /// M20 (Eddie) — three PORTAL-STYLE prototypes in a showroom revealed just NORTH of the catalog
@@ -1438,6 +1476,10 @@ class CubeModel {
         if let (ci, fi) = faceletAt(face: .positiveZ, row: c, col: min(cHi, c + 2)) {
             cubies[ci].facelets[fi].props.append(Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .n, state: 8))
         }
+
+        // Two-sided, and LAST, so nothing carved above can leave a way out and
+        // `reconcileSharedEdges` has nothing to disagree with.
+        sealRegionBorder(face: .positiveZ, rLo: rLo, rHi: rHi, cLo: cLo, cHi: cHi)
     }
 
     /// M20 — Quaternius plant registry indices, grouped by kind, for the garden reskin. The Renderer
@@ -1808,10 +1850,14 @@ class CubeModel {
             let f = frame(dir)
             for k in 0..<6 {
                 let h = hash(seed, canon(dir) &* 31 &+ 1, k &* 7 &+ type)
-                // Small jitter only — these are the WALL. Enough that a ruin stops looking milled,
-                // not enough to open a gap you could see through (the pieces overlap at six a side).
+                // NO along-edge jitter. I claimed the pieces overlapped enough to absorb it; they do
+                // not. Six pieces about 4 m wide across a ~19 m tile overlap by under a metre, and
+                // ±0.055 of the span is ±1 m — so it opened real holes, and since the overgrowth is
+                // placed separately you saw walls "with visible breaks that only have the moss bits
+                // shown" (Eddie). Position along the wall is now exact.
                 let t = -0.5 + (Float(k) + 0.5) / 6.0
-                    + (Float((h >> 13) & 0xFF) / 255.0 - 0.5) * 0.055
+                // In and out is free — it cannot open a gap, and it is enough to stop a ruin looking
+                // milled. Same for the small yaw below.
                 let radial = 0.46 + (Float((h >> 21) & 0x3F) / 63.0 - 0.5) * 0.03
                 put(walls, wallScale, 0.03 + Float((h >> 9) & 0xF) / 15.0 * 0.02, f.facing, h,
                     f.nx * radial + f.tx * t, f.ny * radial + f.ty * t,
