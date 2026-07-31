@@ -819,20 +819,27 @@ fragment float4 fragmentShader(
         // — a straight grid reads as tiling, and the script wants "repaired, replaced, or accumulated
         // across enormous spans of time".
         float3 lp = in.localPosition;
+        // Give every face its OWN 2D basis, taken from the local-space normal.
+        //
+        // Two goes at this failed for the same underlying reason: the pattern needs to know which
+        // plane it is on, and both earlier attempts got that from something unstable. First the
+        // WORLD normal — which the idle spin rotates, so walls flipped layout between frames while
+        // the camera stood still. Then `lp.x + lp.y`, which is stable but DEGENERATE on a wall's end
+        // cap: `along` barely varies across that little face, so the whole cap fell in one block
+        // cell sitting on a floor() boundary and flipped colour with sub-pixel shifts as the player
+        // turned (Eddie, three frames from one spot at slightly different angles).
+        //
+        // The local normal from screen-space derivatives of localPosition is exact for a flat face,
+        // costs two instructions, and cannot rotate with the world — so the basis is per-face, never
+        // degenerate, and frame-stable.
+        float3 ln = normalize(cross(dfdx(lp), dfdy(lp)));
+        float3 an = abs(ln);
+        float2 uv = (an.x > an.y && an.x > an.z) ? lp.yz
+                  : ((an.y > an.z) ? lp.xz : lp.xy);
         // Blocks are laid in courses, and each course is offset — masonry, not graph paper.
-        float course = floor(lp.z * 9.0);
-        float row = fract(lp.z * 9.0);
-        // The coordinate ALONG the wall, branch-free and derived from local space only.
-        //
-        // This picked its axis with a threshold on the WORLD normal, which flickers: the world has a
-        // slow idle spin, so that normal rotates continuously and a wall sitting near the threshold
-        // flips between axes from one frame to the next — snapping its whole block pattern to a
-        // different layout while the camera has not moved at all (Eddie).
-        //
-        // A wall is an axis-aligned plane, so one of lp.x / lp.y is CONSTANT across it; their sum
-        // therefore varies exactly along the wall whichever way it faces, needs no branch, and knows
-        // nothing about world orientation.
-        float along = lp.x + lp.y;
+        float course = floor(uv.y * 9.0);
+        float row = fract(uv.y * 9.0);
+        float along = uv.x;
         float shift = fract(sin(course * 12.9898) * 43758.5453) * 0.5;
         float unit = floor(along * 6.0 + shift);
         float col = fract(along * 6.0 + shift);
