@@ -65,6 +65,14 @@ typedef struct
     // The approach is meant to be readable BEFORE you round the corner, which nothing emissive can
     // do on its own — an emissive surface lights only itself. So the nearest active portal is
     // published as a point light and the lit materials add it.
+    // Scene 3 — the chamber lights itself. The orb is a point; each beam is a SEGMENT, lit by its
+    // closest point to the surface being shaded, which is what a line of light actually does and is
+    // barely more expensive than a point. Count is 0 in every world that has no orb, so the loop
+    // costs nothing where it is not wanted — which matters, the renderer being fill-bound.
+    vector_float4 chamberLightA[8];      // xyz = point / segment start, w = radius
+    vector_float4 chamberLightB[8];      // xyz = segment end (== A for the orb), w = intensity
+    vector_float4 chamberLightColor[8];  // rgb; w unused
+    int chamberLightCount;
     vector_float3 portalLightPosition;   // world space; unused when the radius is 0
     float portalLightRadius;             // 0 = no portal light this frame
     vector_float3 portalLightColor;

@@ -1005,11 +1005,45 @@ class Renderer: NSObject, MTKViewDelegate {
             leafLoaded: leafArray != nil ? 1 : 0,
             greeneryLoaded: greeneryArray != nil ? 1 : 0,
             treeSpriteLoaded: treeSpriteArray != nil ? 1 : 0,
+            chamberLightA: chamberLights.a,
+            chamberLightB: chamberLights.b,
+            chamberLightColor: chamberLights.color,
+            chamberLightCount: chamberLights.count,
             portalLightPosition: portalLight.position,
             portalLightRadius: portalLight.radius,
             portalLightColor: portalLight.color,
             portalLightIntensity: portalLight.intensity
         )
+    }
+
+    /// Scene 3 — the orb and its beams, as lights. Read from `GameState.chamberEmitters`, the same
+    /// definition SceneBuilder draws from, so what lights the room can never end up somewhere other
+    /// than what you can see.
+    private var chamberLights: (a: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>),
+                                b: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>),
+                                color: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>),
+                                count: Int32) {
+        var a = [SIMD4<Float>](repeating: .zero, count: 8)
+        var b = [SIMD4<Float>](repeating: .zero, count: 8)
+        var col = [SIMD4<Float>](repeating: .zero, count: 8)
+        let spin = gameState.worldSpinMatrix()
+        var n = 0
+        for e in gameState.chamberEmitters where n < 8 {
+            let pa = spin * SIMD4(e.a.x, e.a.y, e.a.z, 1)
+            let pb = spin * SIMD4(e.b.x, e.b.y, e.b.z, 1)
+            let reach = gameState.worldScale.faceDistance
+            // The orb throws far and softly; a beam lights the wall it passes, not the whole room.
+            let radius = e.isOrb ? reach * 1.25 : reach * 0.42
+            let intensity = (e.isOrb ? 0.42 : 0.30) * e.glow
+            a[n] = SIMD4(pa.x, pa.y, pa.z, radius)
+            b[n] = SIMD4(pb.x, pb.y, pb.z, intensity)
+            col[n] = e.isOrb ? SIMD4(0.52, 0.72, 1.00, 0) : SIMD4(0.42, 0.66, 0.98, 0)
+            n += 1
+        }
+        return ((a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
+                (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]),
+                (col[0], col[1], col[2], col[3], col[4], col[5], col[6], col[7]),
+                Int32(n))
     }
 
     /// Scene 1G — the nearest ACTIVE portal, published as a point light so it can spill onto the

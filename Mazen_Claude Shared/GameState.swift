@@ -949,6 +949,55 @@ class GameState {
         }
     }
 
+    /// Scene 3 — where the chamber's light comes from: the orb, and each lit beam as a SEGMENT.
+    ///
+    /// Defined once and read by both the SceneBuilder (which draws them) and the Renderer (which
+    /// lights the room with them). Computing the beam endpoints twice is exactly how the drawn beam
+    /// and the light it casts would end up in different places — a class of bug this codebase has
+    /// already produced more than once.
+    ///
+    /// Positions are UNSPUN: each consumer applies the world spin itself, because the renderer folds
+    /// that in at a different point than the builder does.
+    struct ChamberEmitter {
+        let a: SIMD3<Float>       // orb centre, or the beam's obelisk end
+        let b: SIMD3<Float>       // the same point for an orb; the far end for a beam
+        let radius: Float         // orb radius, or beam half-thickness
+        let glow: Float           // 0…1
+        let isOrb: Bool
+    }
+
+    var chamberEmitters: [ChamberEmitter] {
+        guard worldScale.interior, cubeModel.symbolPairedPlinths else { return [] }
+        let cc = cubeModel.size / 2
+        let reach = worldScale.faceDistance
+        let orbR = reach * 0.20
+        let centre = SIMD3<Float>(0, 0, 0)
+        var lit: Float = 0, total: Float = 0
+        var out: [ChamberEmitter] = []
+        for face in CubeFace.allCases {
+            guard let (ci, fi) = cubeModel.faceletAt(face: face, row: cc, col: cc) else { continue }
+            for p in cubeModel.cubies[ci].facelets[fi].props where p.kind == .obelisk {
+                total += 1
+                guard p.anim > 0 else { continue }
+                lit += 1
+                let m = cubeModel.restMatrix(face: face, row: cc, col: cc)
+                let from = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                let toC = centre - from
+                let dist = simd_length(toC)
+                guard dist > 1e-4 else { continue }
+                let dir = toC / dist
+                out.append(ChamberEmitter(a: from + dir * (reach * 0.16),
+                                          b: centre - dir * (orbR * 1.55),
+                                          radius: reach * 0.012,
+                                          glow: min(1, p.anim), isOrb: false))
+            }
+        }
+        guard total > 0 else { return [] }
+        out.insert(ChamberEmitter(a: centre, b: centre, radius: orbR,
+                                  glow: lit / total, isOrb: true), at: 0)
+        return out
+    }
+
     /// Scene 3 — every obelisk lit. The exit "is created only after all six obelisks are active".
     var sceneThreeAllObelisksAwake: Bool {
         for cu in cubeModel.cubies {

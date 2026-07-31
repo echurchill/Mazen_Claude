@@ -576,63 +576,37 @@ final class SceneBuilder {
         // hollow shell and the middle of it was simply empty space. "Every surface of the chamber has
         // its local up directed toward this shared center… it is not on the ceiling. It is always
         // inward." So the orb sits at the origin, which is exactly what makes that true for free.
-        if model.worldScale.interior && model.symbolPairedPlinths {
-            var lit: Float = 0, total: Float = 0
-            var beams: [(from: SIMD3<Float>, glow: Float)] = []
-            for face in CubeFace.allCases {
-                let cc = model.size / 2
-                guard let (ci, fi) = model.faceletAt(face: face, row: cc, col: cc) else { continue }
-                for p in model.cubies[ci].facelets[fi].props where p.kind == .obelisk {
-                    total += 1
-                    guard p.anim > 0 else { continue }
-                    lit += 1
-                    let m = spin * model.restMatrix(face: face, row: cc, col: cc)
-                    beams.append((SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z), min(1, p.anim)))
-                }
-            }
-            if total > 0 {
-                let centre = SIMD3<Float>(spin.columns.3.x, spin.columns.3.y, spin.columns.3.z)
-                let reach = model.worldScale.faceDistance
-                // "Large enough to remain visible from every face, but small enough that the
-                // distances around it remain imposing."
-                let orbR = reach * 0.20
-                let orbM = float4x4.translation(centre.x, centre.y, centre.z) * float4x4.scale(orbR)
+        for e in gameState.chamberEmitters {
+            if e.isOrb {
+                let c = spin * SIMD4(e.a.x, e.a.y, e.a.z, 1)
+                let orbM = float4x4.translation(c.x, c.y, c.z) * float4x4.scale(e.radius)
                 orbTiles.append(TileEntry(
                     instance: InstanceDataSwift(modelMatrix: orbM, baseColor: SIMD4(1, 1, 1, 1),
-                        materialID: 30, tileID: 0, discoveryAmount: lit / total, styleSeed: 0,
+                        materialID: 30, tileID: 0, discoveryAmount: e.glow, styleSeed: 0,
                         spinMatrix: matrix_identity_float4x4, roundness: 0, invHalfExtent: 1, reliefAmplitude: 0),
                     mesh: tileMeshLib.orbMesh))
-
-                for b in beams {
-                    // From the obelisk's TIP toward the orb, and stopping short of it. "None touches
-                    // it. The equal gaps between their tips and the orb create an invisible six-axis
-                    // structure through the chamber." The gap is the idea — the connection is
-                    // implied and never made — so it is real geometry, not a fade.
-                    let toCentre = centre - b.from
-                    let dist = simd_length(toCentre)
-                    guard dist > 1e-4 else { continue }
-                    let dir = toCentre / dist
-                    let start = b.from + dir * (reach * 0.16)      // clear of the obelisk's own body
-                    let end = centre - dir * (orbR * 1.55)         // and stopping short of the orb
-                    let len = simd_length(end - start)
-                    guard len > 1e-4 else { continue }
-                    // Build a frame whose +Z runs along the beam.
-                    let up = abs(dir.y) > 0.95 ? SIMD3<Float>(1, 0, 0) : SIMD3<Float>(0, 1, 0)
-                    let x = simd_normalize(simd_cross(up, dir))
-                    let y = simd_cross(dir, x)
-                    let thick = reach * 0.012
-                    var bm = matrix_identity_float4x4
-                    bm.columns.0 = SIMD4(x * thick, 0)
-                    bm.columns.1 = SIMD4(y * thick, 0)
-                    bm.columns.2 = SIMD4(dir * len, 0)
-                    bm.columns.3 = SIMD4(start, 1)
-                    beamTiles.append(TileEntry(
-                        instance: InstanceDataSwift(modelMatrix: bm, baseColor: SIMD4(1, 1, 1, 1),
-                            materialID: 31, tileID: 0, discoveryAmount: b.glow, styleSeed: 0,
-                            spinMatrix: matrix_identity_float4x4, roundness: 0, invHalfExtent: 1, reliefAmplitude: 0),
-                        mesh: tileMeshLib.beamMesh))
-                }
+                continue
             }
+            let a4 = spin * SIMD4(e.a.x, e.a.y, e.a.z, 1), b4 = spin * SIMD4(e.b.x, e.b.y, e.b.z, 1)
+            let start = SIMD3(a4.x, a4.y, a4.z), finish = SIMD3(b4.x, b4.y, b4.z)
+            let along = finish - start
+            let len = simd_length(along)
+            guard len > 1e-4 else { continue }
+            let dir = along / len
+            // A frame whose +Z runs along the beam.
+            let up = abs(dir.y) > 0.95 ? SIMD3<Float>(1, 0, 0) : SIMD3<Float>(0, 1, 0)
+            let x = simd_normalize(simd_cross(up, dir))
+            let y = simd_cross(dir, x)
+            var bm = matrix_identity_float4x4
+            bm.columns.0 = SIMD4(x * e.radius, 0)
+            bm.columns.1 = SIMD4(y * e.radius, 0)
+            bm.columns.2 = SIMD4(dir * len, 0)
+            bm.columns.3 = SIMD4(start, 1)
+            beamTiles.append(TileEntry(
+                instance: InstanceDataSwift(modelMatrix: bm, baseColor: SIMD4(1, 1, 1, 1),
+                    materialID: 31, tileID: 0, discoveryAmount: e.glow, styleSeed: 0,
+                    spinMatrix: matrix_identity_float4x4, roundness: 0, invHalfExtent: 1, reliefAmplitude: 0),
+                mesh: tileMeshLib.beamMesh))
         }
 
         // Celestial bodies (M9): the sun cube (emissive) and moon cube (sun-lit) at their

@@ -1115,6 +1115,35 @@ fragment float4 fragmentShader(
 
     color *= lighting * in.aoFactor;
 
+    // SCENE 3 — THE CHAMBER LIGHTS ITSELF. There is no sun in here: "light comes from narrow seams
+    // between selected wall blocks, dim recessed fixtures, weak reflections from the central
+    // crystal, dormant obelisk markings." The orb and its beams are the only real sources, and
+    // until now they lit only themselves — six bright objects in a room they left dark.
+    //
+    // The orb is a point. Each beam is a SEGMENT, shaded from its closest point to this surface,
+    // which is what a line of light actually does and costs one clamp more than a point light. The
+    // count is zero in every world without an orb, so this loop is free everywhere else — which
+    // matters, since this renderer is fill-bound.
+    for (int i = 0; i < frame.chamberLightCount; ++i) {
+        float3 la = frame.chamberLightA[i].xyz;
+        float3 lb = frame.chamberLightB[i].xyz;
+        float radius = frame.chamberLightA[i].w;
+        // Closest point on the segment. For the orb A == B, so this collapses to a point light.
+        float3 ab = lb - la;
+        float denom = max(1e-6, dot(ab, ab));
+        float tOn = saturate(dot(in.worldPosition - la, ab) / denom);
+        float3 lp = la + ab * tOn;
+        float3 toLight = lp - in.worldPosition;
+        float dist = length(toLight);
+        if (dist >= radius) continue;
+        float fall = 1.0 - dist / radius;
+        fall *= fall;
+        // Never fully dark on the far side: this is a lantern in an enclosed metal room, and light
+        // in here has nowhere to go but bounce.
+        float facing = 0.40 + 0.60 * saturate(dot(normal, toLight / max(dist, 1e-4)));
+        color += frame.chamberLightColor[i].rgb * (frame.chamberLightB[i].w * fall * facing);
+    }
+
     // Scene 1G — THE PORTAL'S SPILL. "Colored illumination trembles faintly across the stone ahead,
     // too saturated to be sunlight… light from the portal spills across the floor and up the nearby
     // walls. It also reflects from the vessel placed beside the arch."
