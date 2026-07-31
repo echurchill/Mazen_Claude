@@ -860,6 +860,43 @@ struct CoordinateMathTests {
     /// though the sound itself is not testable here: the undertone latches on the player's FIRST
     /// movement and never lets go ("the world noticing you"), and the birds fall silent by distance
     /// to the arch, which is the only warning the scene gives that a corridor is different.
+    /// Scene 1C's best trick: "one layered section may complete a tiny quarter-turn while outside the
+    /// center of the camera's view. When the player looks directly at it, it is still." Driven by
+    /// where the camera POINTS rather than by a timer — "the motion should be subtle enough that the
+    /// player may doubt having seen it", which only works if doubting is literally correct.
+    static func testVesselsMoveOnlyWhenNotWatched() {
+        let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
+        let m = gs.cubeModel
+        // Find a vessel and point the camera straight at it from a little way off.
+        var at: (r: Int, c: Int, id: Int)? = nil
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c),
+                      m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel && $0.state != 5 })
+                else { continue }
+                if at == nil { at = (r, c, m.cubies[ci].facelets[fi].id.rawValue) }
+            }
+        }
+        guard let v = at else { check(false, "Scene 1 should have vessels"); return }
+        let mm = m.restMatrix(face: .positiveZ, row: v.r, col: v.c)
+        let p = SIMD3(mm.columns.3.x, mm.columns.3.y, mm.columns.3.z)
+        let eye = p + SIMD3(0, 0, 3)
+        gs.spinEnabled = false                       // isolate the camera from the world's idle spin
+
+        // Looking straight at it: it must not move, however long you stare.
+        gs.viewOrigin = eye
+        gs.viewForward = simd_normalize(p - eye)
+        for _ in 0..<240 { gs.update(deltaTime: 1.0 / 60.0) }
+        let watched = gs.vesselDrift[v.id] ?? 0
+        check(watched == 0, "a vessel under direct view must be still, got drift \(watched)")
+
+        // Looking away: it drifts.
+        gs.viewForward = simd_normalize(SIMD3(0, 1, 0.2))
+        for _ in 0..<240 { gs.update(deltaTime: 1.0 / 60.0) }
+        let unwatched = gs.vesselDrift[v.id] ?? 0
+        check(unwatched > 0, "a vessel out of view should drift, got \(unwatched)")
+    }
+
     static func testSceneOneAmbienceTriggers() {
         let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
         let m = gs.cubeModel
@@ -1185,6 +1222,7 @@ struct CoordinateMathTests {
         testVesselCanBeApproached()
         testSceneOneCanBeWalkedFromClearingToArch()
         testSceneOneAmbienceTriggers()
+        testVesselsMoveOnlyWhenNotWatched()
         testInteractPicksTheNearestThingNotThePortal()
         testCrossingAnOpenEdgeAlwaysFindsSomewhereToLand()
         testFlatPropsDoNotWallOffTheirOwnTile()

@@ -293,6 +293,19 @@ final class SceneBuilder {
                             // the object and the world cannot disagree about how hard the lock is held.
                             var extraYaw: Float = 0
                             if prop.kind == .layeredVessel {
+                                // Scene 1C — the peripheral drift. Whole turns, so what you glimpse
+                                // is the vessel having MOVED rather than moving: it is never caught
+                                // mid-rotation, only found in a new position.
+                                let id = facelet.id.rawValue
+                                if let drift = gameState.vesselDrift[id] {
+                                    extraYaw += (.pi / 2) * drift.rounded(.down)
+                                }
+                                // Scene 1G — the watcher turns to face you, continuously, rather
+                                // than in the quarter-turns the others drift by. That difference is
+                                // the point: everything else in this world moves only when unobserved.
+                                if prop.state == 5, let watch = gameState.vesselWatch[id] {
+                                    extraYaw = watch
+                                }
                                 if sr.isActive, sr.isRefusal {
                                     extraYaw = sr.currentAngle * 1.6
                                 } else if prop.alignAnim > 0 {

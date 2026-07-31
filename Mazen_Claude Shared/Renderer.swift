@@ -906,6 +906,11 @@ class Renderer: NSObject, MTKViewDelegate {
         // Audio Phase A: the listener rides the SAME pose as the camera, so a face crossing or a
         // twist can never desync what you see from where a sound seems to come from.
         audio?.updateListener(position: framePose.position, forward: framePose.forward, up: framePose.up)
+        // Scene 1C — the vessels only move when they are not being looked at, so the model needs to
+        // know where the camera points. Published rather than reached for: GameState must stay
+        // compilable without a renderer.
+        gameState.viewForward = framePose.forward
+        gameState.viewOrigin = framePose.position
         // Drain whatever the world asked to be heard this frame (same hand-off shape as
         // `portalRequested`): the model describes sounds, the renderer plays them.
         if !gameState.pendingAudioCues.isEmpty {

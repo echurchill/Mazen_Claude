@@ -232,6 +232,7 @@ class GameState {
         tickArrivalDoorway(deltaTime)
         updateAudioEmitters()
         updateAmbienceTriggers()
+        tickVesselDrift(deltaTime)
 
         if sliceRotation.isActive {
             // .step holds the twist for manual scrubbing (see stepSlice); .slow crawls; .normal auto.
@@ -686,6 +687,67 @@ class GameState {
     /// Scene 1G — "the ambient birds fall silent" as the arch is approached. Distance to the nearest
     /// ACTIVE portal, in tiles, or nil when there is none to be near.
     private(set) var tilesToNearestPortal: Int? = nil
+
+    /// Scene 1C — "one layered section may complete a tiny quarter-turn while outside the center of
+    /// the camera's view. When the player looks directly at it, it is still."
+    ///
+    /// The effect is entirely about ATTENTION, so it is driven by where the camera points rather than
+    /// by a timer: a vessel drifts only while it is off to the side, and freezes the moment it is
+    /// looked at. You cannot catch it. "The motion should be subtle enough that the player may doubt
+    /// having seen it" — which is only achievable if doubting is literally correct.
+    ///
+    /// Stored per facelet id and advanced here rather than in the renderer, so the drift survives a
+    /// world being left and returned to: the vessels "remain where they were. Or appear to."
+    private(set) var vesselDrift: [Int: Float] = [:]
+    /// Scene 1G — the largest vessel, the one beside the arch: "its uppermost layer turns slowly
+    /// toward the player. Not like a head. Not quite." Eased, never snapped, and slow enough that
+    /// it is only ever noticed in retrospect. Keyed by facelet id like the drift.
+    private(set) var vesselWatch: [Int: Float] = [:]
+    /// Set by the renderer each frame — the camera's forward in world space, and its position.
+    var viewForward = SIMD3<Float>(0, 0, 1)
+    var viewOrigin = SIMD3<Float>(0, 0, 0)
+
+    private func tickVesselDrift(_ dt: Float) {
+        guard !cubeModel.styledPortals.isEmpty || !vesselDrift.isEmpty || true else { return }
+        let spin = worldSpinMatrix()
+        for face in CubeFace.allCases {
+            for r in 0..<cubeModel.size {
+                for c in 0..<cubeModel.size {
+                    guard let (ci, fi) = cubeModel.faceletAt(face: face, row: r, col: c),
+                          cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel })
+                    else { continue }
+                    let m = spin * cubeModel.restMatrix(face: face, row: r, col: c)
+                    let p = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                    let toIt = p - viewOrigin
+                    let len = simd_length(toIt)
+                    guard len > 1e-4 else { continue }
+                    // How far off the centre of view it is. Dead ahead ⇒ 1, hard to the side ⇒ 0.
+                    let centred = simd_dot(simd_normalize(toIt), viewForward)
+                    let id = cubeModel.cubies[ci].facelets[fi].id.rawValue
+                    // Only drift when it is genuinely peripheral, and stop dead when looked at. The
+                    // threshold is generous on purpose: catching it should be impossible, not hard.
+                    if centred < 0.72 {
+                        vesselDrift[id, default: 0] += dt * 0.06
+                    }
+                    // The WATCHER (state 5 — the largest, placed beside the arch) tracks the player
+                    // instead of drifting. Eased at ~9°/s: too slow to catch in the act, fast enough
+                    // that it is facing you by the time you have walked up to it.
+                    guard cubeModel.cubies[ci].facelets[fi].props.contains(where: {
+                        $0.kind == .layeredVessel && $0.state == 5
+                    }) else { continue }
+                    let lx = SIMD3(m.columns.0.x, m.columns.0.y, m.columns.0.z)
+                    let ly = SIMD3(m.columns.1.x, m.columns.1.y, m.columns.1.z)
+                    let target = atan2f(simd_dot(-toIt, ly), simd_dot(-toIt, lx))
+                    let cur = vesselWatch[id] ?? target
+                    // Shortest way round, so it never unwinds the long way when you circle it.
+                    var delta = target - cur
+                    while delta > .pi { delta -= 2 * .pi }
+                    while delta < -.pi { delta += 2 * .pi }
+                    vesselWatch[id] = cur + max(-dt * 0.16, min(dt * 0.16, delta))
+                }
+            }
+        }
+    }
 
     private func updateAmbienceTriggers() {
         if player.isMoving { hasMoved = true }
