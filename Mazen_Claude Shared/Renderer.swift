@@ -967,8 +967,44 @@ class Renderer: NSObject, MTKViewDelegate {
             skyDistance: skyDistance,
             leafLoaded: leafArray != nil ? 1 : 0,
             greeneryLoaded: greeneryArray != nil ? 1 : 0,
-            treeSpriteLoaded: treeSpriteArray != nil ? 1 : 0
+            treeSpriteLoaded: treeSpriteArray != nil ? 1 : 0,
+            portalLightPosition: portalLight.position,
+            portalLightRadius: portalLight.radius,
+            portalLightColor: portalLight.color,
+            portalLightIntensity: portalLight.intensity
         )
+    }
+
+    /// Scene 1G — the nearest ACTIVE portal, published as a point light so it can spill onto the
+    /// floor, the walls and the vessel beside it.
+    ///
+    /// One light, not one per portal: the scenes stand a single arch at a time, and the whole effect
+    /// is a corridor that starts glowing before you reach the turn. Picking the nearest keeps that
+    /// true without a light budget. Sealed portals are inert and contribute nothing, which is what
+    /// makes a dark door read as dark rather than merely unlit.
+    private var portalLight: (position: SIMD3<Float>, radius: Float, color: SIMD3<Float>, intensity: Float) {
+        let model = gameState.cubeModel
+        guard !model.styledPortals.isEmpty else { return (.zero, 0, .zero, 0) }
+        let spin = gameState.worldSpinMatrix()
+        let eye = gameState.framePose(aspect: aspect).position
+        var best: (pos: SIMD3<Float>, d: Float)? = nil
+        for sp in model.styledPortals where !model.sealedPortalCubies.contains(sp.ci) {
+            guard let loc = model.locate(cubie: sp.ci, facelet: sp.fi) else { continue }
+            let m = spin * model.restMatrix(face: loc.face, row: loc.row, col: loc.col)
+            // Lift it to about the middle of the arch rather than the floor, so the spill falls
+            // DOWN onto the ground and outward onto the walls the way a doorway's light does.
+            let up = SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)
+            let p = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z) + up * (0.06 * gameState.worldScale.eyeHeight / 1.7)
+            let d = simd_length(p - eye)
+            if best == nil || d < best!.d { best = (p, d) }
+        }
+        guard let b = best else { return (.zero, 0, .zero, 0) }
+        // Violet-cyan, and deliberately "too saturated to be sunlight" (script). It breathes, so the
+        // illumination "trembles" rather than sitting there like a lamp.
+        let t = gameState.time
+        let flicker = 0.86 + 0.14 * sinf(t * 2.3) * cosf(t * 1.17)
+        return (b.pos, 3.2 * gameState.worldScale.cellSpacing,
+                SIMD3(0.42, 0.62, 1.0), 1.35 * flicker)
     }
 
     /// M20 — registry indices of every imported model whose gallery `name` starts with `prefix`

@@ -1059,6 +1059,29 @@ fragment float4 fragmentShader(
 
     color *= lighting * in.aoFactor;
 
+    // Scene 1G — THE PORTAL'S SPILL. "Colored illumination trembles faintly across the stone ahead,
+    // too saturated to be sunlight… light from the portal spills across the floor and up the nearby
+    // walls. It also reflects from the vessel placed beside the arch."
+    //
+    // An emissive surface lights only itself, so the arch could never do this on its own; the CPU
+    // publishes the nearest active portal as a point light and it is added here, after the material
+    // has decided its own colour. ADDITIVE on purpose: this is light arriving, so it brightens what
+    // it falls on rather than tinting it, and it survives on surfaces that are already lit.
+    if (frame.portalLightRadius > 0.0) {
+        float3 toLight = frame.portalLightPosition - in.worldPosition;
+        float dist = length(toLight);
+        if (dist < frame.portalLightRadius) {
+            // Smooth to zero at the radius so the pool of light has no visible boundary — a hard
+            // edge would read as a decal on the floor rather than as illumination.
+            float fall = 1.0 - dist / frame.portalLightRadius;
+            fall *= fall;
+            // Surfaces facing the portal catch more, but never nothing: a doorway's light bounces,
+            // and a wall edge-on going fully black is the giveaway of a fake point light.
+            float facing = 0.35 + 0.65 * saturate(dot(normal, toLight / max(dist, 1e-4)));
+            color += frame.portalLightColor * (frame.portalLightIntensity * fall * facing);
+        }
+    }
+
     // Distance fog — greyscale textured. Range comes size-derived from the CPU (R2.11): FP keeps
     // the historical 1→3.5 depth-cue; in orbit it starts beyond the cube's far corner, so the
     // planet reads clean while truly distant things (the counterpart sky-world) stay hazed.

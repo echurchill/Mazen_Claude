@@ -59,6 +59,16 @@ typedef struct
     float leafLoaded;            // M20: 1 = a real leaf atlas is bound (sample it), 0 = fall back to the procedural mask
     float greeneryLoaded;        // M20: 1 = misc-greenery card array bound
     float treeSpriteLoaded;      // M20: 1 = WenrexaTrees sprite array bound
+    // Scene 1G — the portal LIGHTS ITS SURROUNDINGS. "Colored illumination trembles faintly across
+    // the stone ahead, too saturated to be sunlight… light from the portal spills across the floor
+    // and up the nearby walls. It also reflects from the vessel placed beside the arch."
+    // The approach is meant to be readable BEFORE you round the corner, which nothing emissive can
+    // do on its own — an emissive surface lights only itself. So the nearest active portal is
+    // published as a point light and the lit materials add it.
+    vector_float3 portalLightPosition;   // world space; unused when the radius is 0
+    float portalLightRadius;             // 0 = no portal light this frame
+    vector_float3 portalLightColor;
+    float portalLightIntensity;
 } FrameUniforms;
 
 typedef struct

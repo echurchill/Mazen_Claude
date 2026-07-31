@@ -2753,6 +2753,22 @@ class CubeModel {
         return walls
     }
 
+    /// Where a (cubie, facelet) pair currently sits on the surface. The reverse of `faceletAt`, and
+    /// live rather than remembered: a twist moves facelets between grid slots, so anything holding a
+    /// (ci, fi) — a styled portal, an emitter — has to ask again rather than cache.
+    func locate(cubie ci: Int, facelet fi: Int) -> (face: CubeFace, row: Int, col: Int)? {
+        let want = cubies[ci].facelets[fi].id.rawValue
+        for face in CubeFace.allCases {
+            for r in 0..<size {
+                for c in 0..<size {
+                    guard let (aci, afi) = faceletAt(face: face, row: r, col: c) else { continue }
+                    if cubies[aci].facelets[afi].id.rawValue == want { return (face, r, c) }
+                }
+            }
+        }
+        return nil
+    }
+
     func restMatrix(face: CubeFace, row: Int, col: Int) -> float4x4 {
         let halfN = Float(size) / 2.0
         let spacing = worldScale.cellSpacing
