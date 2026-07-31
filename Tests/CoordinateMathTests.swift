@@ -1019,7 +1019,7 @@ struct CoordinateMathTests {
 
         // Activation: cumulative, and the exit appears only at the end.
         check(!gs.sceneThreeAllObelisksAwake, "the chamber starts dark")
-        check(m.sealedPortalCubies.count == 1, "the way out starts sealed — it is 'created' at the end")
+        check(m.chosenExit == nil, "there is no way out yet — the orb has not chosen one")
         for (i, p) in plinths.enumerated() {
             gs.player.face = p.face; gs.player.row = p.r; gs.player.col = p.c
             let grid = m.worldScale.standGrid
@@ -1032,11 +1032,21 @@ struct CoordinateMathTests {
             } }
             check(awake == i + 1, "after \(i + 1) plinths, \(awake) obelisks are lit")
             if i < plinths.count - 1 {
-                check(!m.sealedPortalCubies.isEmpty, "the exit must not open early")
+                check(m.chosenExit == nil, "the exit must not appear early")
             }
         }
         check(gs.sceneThreeAllObelisksAwake, "all six lit")
-        check(m.sealedPortalCubies.isEmpty, "and the way out is created")
+        // 3K — "the orb chooses a surface", and its rules are the point.
+        guard let exit = m.chosenExit else { check(false, "the orb should have chosen an exit"); return }
+        guard let spawn = m.spawnLocation else { return }
+        check(exit.face != spawn.face, "not on the player's starting face")
+        check(exit.row > 0 && exit.row < n - 1 && exit.col > 0 && exit.col < n - 1,
+              "not on a face edge or corner triple-point, got (\(exit.row),\(exit.col))")
+        var hasPortal = false
+        if let (ci, fi) = m.faceletAt(face: exit.face, row: exit.row, col: exit.col) {
+            hasPortal = m.cubies[ci].facelets[fi].props.contains { $0.kind == .portal }
+        }
+        check(hasPortal, "and a portal actually stands there")
     }
 
     /// Scene 3's staged responses (3I) and its completion (3J) hang on two numbers the model owns:

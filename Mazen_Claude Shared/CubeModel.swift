@@ -409,12 +409,7 @@ class CubeModel {
         // The six symbols. Distinct but visibly of one language — they are all caustic glyphs, which
         // is the Builders' hand. (The script asks for six purpose-made marks; these stand in until
         // that art exists, and the pairing logic does not care which slices they are.)
-        let symbols = [TextureLoader.CausticSymbol.one.rawValue,
-                       TextureLoader.CausticSymbol.two.rawValue,
-                       TextureLoader.CausticSymbol.three.rawValue,
-                       TextureLoader.CausticSymbol.four.rawValue,
-                       TextureLoader.CausticSymbol.swirl.rawValue,
-                       TextureLoader.CausticSymbol.square.rawValue]
+        let symbols = GameState.sceneThreeVoices
         let faces: [CubeFace] = [.positiveZ, .positiveY, .negativeX, .negativeZ, .positiveX, .negativeY]
 
         // AN OBELISK IN THE MIDDLE OF EVERY FACE, pointing inward at the orb. Inactive: "they are
@@ -447,20 +442,6 @@ class CubeModel {
             var cap = Prop(kind: .switchCap, subRow: 1, subCol: 1, facing: .n, state: symbols[i])
             cap.alignAnim = 0                                // 0 = flush and dark; 1 = raised, lit
             cubies[ci].facelets[fi].props.append(cap)
-        }
-
-        // THE WAY ON, "created only after all six obelisks are active" — so it is stamped sealed and
-        // opens when the last obelisk wakes. On the floor face, away from every plinth.
-        if let (ci, fi) = faceletAt(face: .negativeY, row: n - 1, col: c) {
-            for dir in [SurfaceDirection.north, .east, .south, .west] {
-                setSharedEdge(face: .negativeY, row: n - 1, col: c, dir, open: true)
-            }
-            cubies[ci].facelets[fi].props.append(
-                Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 13, transition: .push))
-            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 2))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2))
-            sealedPortalCubies.insert(ci)
         }
 
         // Arrival: on the floor, looking across the chamber. "The player enters from above" — the
@@ -914,6 +895,68 @@ class CubeModel {
         for face in CubeFace.allCases where face != .positiveZ {
             sealRegionBorder(face: face, rLo: 0, rHi: n - 1, cLo: 0, cHi: n - 1)
         }
+    }
+
+    /// Where the orb put the way out, once it has chosen. nil until the sixth obelisk connects.
+    private(set) var chosenExit: (face: CubeFace, row: Int, col: Int)? = nil
+
+    /// Scene 3K — "the orb chooses a surface". The exit is not authored: it is SELECTED when the
+    /// puzzle completes, from the tiles that qualify.
+    ///
+    /// The rules are the script's — not on the player's starting face, reachable, not on a face edge
+    /// or corner (the awkward triple-points where a portal frame would straddle two surfaces), room
+    /// for the structure — plus "preferably encourage the player to cross at least one more face
+    /// boundary", so of the candidates the FURTHEST by walking distance wins. Deterministic, and
+    /// "fixed for the current world state once made": stamped once, never reconsidered.
+    @discardableResult
+    func createChosenExit(destinationID: Int) -> (face: CubeFace, row: Int, col: Int)? {
+        guard chosenExit == nil, let spawn = spawnLocation else { return nil }
+        struct T: Hashable { let f: Int; let r: Int; let c: Int }
+        var dist: [T: Int] = [:]
+        let start = T(f: spawn.face.rawValue, r: spawn.row, c: spawn.col)
+        dist[start] = 0
+        var q = [start], head = 0
+        while head < q.count {
+            let t = q[head]; head += 1
+            guard let face = CubeFace(rawValue: t.f),
+                  let (ci, fi) = faceletAt(face: face, row: t.r, col: t.c) else { continue }
+            let op = cubies[ci].facelets[fi].mazeTile.openings
+            for (dir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                        (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)]
+            where op.contains(mask) {
+                let nr = t.r + dr, nc = t.c + dc
+                let nt: T
+                if nr >= 0, nr < size, nc >= 0, nc < size { nt = T(f: t.f, r: nr, c: nc) }
+                else {
+                    let cr = edgeCrossing(face: face, direction: dir, row: t.r, col: t.c)
+                    nt = T(f: cr.face.rawValue, r: cr.row, c: cr.col)
+                }
+                if dist[nt] == nil { dist[nt] = dist[t]! + 1; q.append(nt) }
+            }
+        }
+        var best: (t: T, d: Int)? = nil
+        for (t, d) in dist {
+            guard t.f != spawn.face.rawValue else { continue }
+            guard t.r > 0, t.r < size - 1, t.c > 0, t.c < size - 1 else { continue }
+            guard let face = CubeFace(rawValue: t.f),
+                  let (ci, fi) = faceletAt(face: face, row: t.r, col: t.c),
+                  cubies[ci].facelets[fi].props.isEmpty else { continue }
+            // Ties broken by face then position, so the choice is identical every run.
+            if best == nil || d > best!.d
+                || (d == best!.d && (t.f, t.r, t.c) < (best!.t.f, best!.t.r, best!.t.c)) {
+                best = (t, d)
+            }
+        }
+        guard let pick = best?.t, let face = CubeFace(rawValue: pick.f),
+              let (ci, fi) = faceletAt(face: face, row: pick.r, col: pick.c) else { return nil }
+        cubies[ci].facelets[fi].props.append(
+            Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: destinationID, transition: .push))
+        styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 2))
+        cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+        cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2))
+        chosenExit = (face, pick.r, pick.c)
+        markTopologyChanged()
+        return chosenExit
     }
 
     /// The outer X-slab that carries the hidden face into view, and the `+Y` tiles riding it.

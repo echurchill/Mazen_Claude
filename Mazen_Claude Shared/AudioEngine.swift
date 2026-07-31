@@ -46,6 +46,8 @@ final class AudioEngine {
         static let obeliskHum = "emitter.obelisk"
         static let portalHum  = "emitter.portal"
         static let vesselHum  = "emitter.vessel"
+        /// Scene 3 — six obelisk voices, one per symbol. Audio Phase F.
+        static func obeliskVoice(_ i: Int) -> String { "emitter.obelisk.\(i)" }
         // Phase E — the world's own bed.
         static let ambienceBed = "ambience.bed"
         // Scene 1B/1G — the two layers the opening is built on.
@@ -158,6 +160,23 @@ final class AudioEngine {
             // no character to identify it by.
             try registerTone(identifier: EventID.vesselHum, frequency: 73.5, duration: 3.1,
                              harmonics: [1.0, 0.12], spatial: true, sustain: true, looping: true)
+            // Audio F — SCENE 3's SIX KIN TONES. "Six obelisks whose tones are distinguishable but
+            // obviously kin — that's a harmonic series, trivially generated, painful to source"
+            // (the audio plan, and the reason this engine synthesises rather than samples).
+            //
+            // A harmonic series on a low fundamental: every voice is literally a multiple of the
+            // same note, so they are related by construction rather than by taste, and six of them
+            // sounding at once are consonant no matter which order the player wakes them in. The
+            // partial weights thin as the series climbs, so the high ones stay slender rather than
+            // shrill.
+            for i in 0..<6 {
+                let fundamental: Float = 55                 // A1 — under everything
+                let voice = fundamental * Float(i + 2)      // 2f, 3f, 4f, 5f, 6f, 7f
+                try registerTone(identifier: EventID.obeliskVoice(i), frequency: voice, duration: 2.6,
+                                 harmonics: [1.0, 0.34 / Float(i + 1), 0.14 / Float(i + 1)],
+                                 spatial: true, sustain: true, looping: true)
+            }
+
             // Phase E — the world's bed: broadband, slow-moving, non-spatial. Not a tune, a room.
             try registerBed(identifier: EventID.ambienceBed, seconds: 6)
             // "Distant birds, sparse and difficult to locate." Sparse is the point — a dense loop
@@ -323,7 +342,8 @@ final class AudioEngine {
                 try engine.rootObject.addChild(src)
                 let id: String
                 switch e.kind {
-                case .obelisk: id = EventID.obeliskHum
+                // A voiced obelisk (Scene 3) sings its own note; an ordinary one hums.
+                case .obelisk: id = e.voice >= 0 ? EventID.obeliskVoice(min(5, e.voice)) : EventID.obeliskHum
                 case .portal:  id = EventID.portalHum
                 case .vessel:  id = EventID.vesselHum
                 }

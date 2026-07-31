@@ -112,6 +112,10 @@ struct AudioEmitter: Equatable {
     let position: SIMD3<Float>
     /// 0 = clear line down a corridor, 1 = fully muffled. Walls between listener and source.
     let occlusion: Float
+    /// Scene 3 — which of the six kin tones this obelisk sings, 0…5; -1 for anything that just hums.
+    /// Carried here rather than looked up by the engine, so the model stays the only thing that
+    /// knows a symbol maps to a voice.
+    var voice: Int = -1
 }
 
 enum TileState: Int {

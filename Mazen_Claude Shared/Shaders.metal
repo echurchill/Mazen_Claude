@@ -925,6 +925,17 @@ fragment float4 fragmentShader(
         float across = abs(in.texCoord.x - 0.5) * 2.0;      // 0 centre … 1 edge
         float glow = clamp(in.discoveryAmount, 0.0, 1.0);
         float t = frame.time;
+        // 3K's TARGETING beam is styleSeed 6 — the seventh, after the six obelisk beams. "Narrow,
+        // continuous, sharply directional, brighter at its point of contact": no pulse at all, and
+        // it brightens toward the far end instead of tapering, because that end is the message.
+        if (in.styleSeed == 6u) {
+            float core = 1.0 - smoothstep(0.0, 0.62, across);
+            if (core <= 0.001) discard_fragment();
+            float contact = 0.55 + 1.35 * smoothstep(0.55, 1.0, along);
+            color = float3(0.86, 0.95, 1.00) * core * contact;
+            lighting = float3(1.0);
+            return float4(color, 1.0);
+        }
         // The cycle. One slow rhythm, offset along the beam so the whole length is never at once.
         // 3I AFTER TWO: "their rhythms begin to alternate." styleSeed carries the beam's index, so
         // each runs a half-cycle out of phase with its neighbour instead of six beams breathing as

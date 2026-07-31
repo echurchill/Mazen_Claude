@@ -848,10 +848,17 @@ class GameState {
                         ? cubeModel.wallsBetween(face: face, fromRow: lr, fromCol: lc, toRow: r, toCol: c)
                         : 3
                     let m = cubeModel.restMatrix(face: face, row: r, col: c)
+                    // Scene 3's obelisks each sing a distinct partial of one fundamental — the
+                    // voice is chosen by the SYMBOL, so the note and the mark are the same fact.
+                    var voice = -1
+                    if k == .obelisk, cubeModel.symbolPairedPlinths,
+                       let ob = facelet.props.first(where: { $0.kind == .obelisk }) {
+                        voice = Self.sceneThreeVoices.firstIndex(of: ob.state) ?? -1
+                    }
                     activeEmitters.append(AudioEmitter(
                         id: facelet.id.rawValue, kind: k,
                         position: SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z),
-                        occlusion: min(1, Float(walls) * 0.34)))
+                        occlusion: min(1, Float(walls) * 0.34), voice: voice))
                 }
             }
         }
@@ -997,6 +1004,17 @@ class GameState {
         guard total > 0 else { return [] }
         out.insert(ChamberEmitter(a: centre, b: centre, radius: orbR,
                                   glow: lit / total, isOrb: true), at: 0)
+        // 3K — THE TARGETING BEAM. "The orb emits a new beam. Unlike the six broad, pulsing obelisk
+        // beams, this one is narrow, continuous, sharply directional, brighter at its point of
+        // contact." It runs the OTHER way — from the orb out to the chosen tile — and unlike the six
+        // it touches what it points at, because its whole job is to say "there".
+        if let exit = cubeModel.chosenExit {
+            let m = cubeModel.restMatrix(face: exit.face, row: exit.row, col: exit.col)
+            let target = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+            let dir = simd_normalize(target - centre)
+            out.append(ChamberEmitter(a: centre + dir * (orbR * 1.05), b: target,
+                                      radius: reach * 0.004, glow: 1, isOrb: false))
+        }
         return out
     }
 
@@ -1040,6 +1058,15 @@ class GameState {
         obeliskRebuff = max(0, obeliskRebuff - dt / 0.8)
         if obeliskRebuff <= 0 { obeliskRebuffFacelet = -1 }
     }
+
+    /// The six symbols Scene 3 uses, in voice order — index here IS the harmonic. Kept beside the
+    /// audio rather than in the stamp so the two cannot disagree about which mark sings which note.
+    static let sceneThreeVoices = [TextureLoader.CausticSymbol.one.rawValue,
+                                   TextureLoader.CausticSymbol.two.rawValue,
+                                   TextureLoader.CausticSymbol.three.rawValue,
+                                   TextureLoader.CausticSymbol.four.rawValue,
+                                   TextureLoader.CausticSymbol.swirl.rawValue,
+                                   TextureLoader.CausticSymbol.square.rawValue]
 
     /// Scene 3 — every obelisk lit. The exit "is created only after all six obelisks are active".
     var sceneThreeAllObelisksAwake: Bool {
@@ -1434,7 +1461,9 @@ class GameState {
             // Positioned AT the obelisk, across the chamber: the sound is how the player learns the
             // control they just pressed did something somewhere they cannot see.
             pendingAudioCues.append(.twistLocked(at: wokeAt))
-            if sceneThreeAllObelisksAwake { openSealedDoors() }
+            // 3K — the orb chooses where the way out appears, and only now. Destination 10 is
+            // scene-2, which is where Scene 3's exit leads back out to for the moment.
+            if sceneThreeAllObelisksAwake { cubeModel.createChosenExit(destinationID: 10) }
             cubeModel.markTopologyChanged()
             return
         }
