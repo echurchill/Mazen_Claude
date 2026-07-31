@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-30. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-31. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
 
 ## The 60-second catch-up
 
@@ -64,6 +64,68 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 - **Shipping landmine flagged:** imported models load from an absolute dev path — fine now, blocks
   sharing builds ([Known Issues](Known%20Issues.md)).
 
+## Where things stand — SCENE 1, and the app opens into the prologue (2026-07-31)
+
+**The app now boots into Scene 1.** Starting anywhere else made the prologue's opening a place you
+had to go looking for. `earth`/`homeClearing` is still built on demand from the hub, and the moon
+still hangs in its sky, because that binding is by name rather than by being first.
+
+### Scene 1 — "The First Clearing"
+- A 3×3 walled clearing at dawn; a break in its north wall that is "not framed as a doorway"; a
+  corridor that **dog-legs** inside the wall (Eddie) so the maze is not visible through the gap; a
+  carved maze of ~35 tiles beyond it; and the arch at the dead end FURTHEST from the corridor, so it
+  is found last and several vessels have been met on the way.
+- **Vessels at every dead end**, solitary and in groups, plus two alcoves off the corridor itself —
+  which state the scene's rule (a dead end is where a vessel stands) before the maze can be mistaken
+  for getting lost.
+- **They move only when you are not looking.** Camera-driven, in whole quarter-turns, so you find
+  one *having moved* and can never catch it — the only way to earn "subtle enough that the player
+  may doubt having seen it". Drift is stored per facelet on the world, so it survives leaving and
+  returning. The largest, beside the arch, does the opposite and tracks you at ~9°/s.
+- **1E variations:** one inert, one humming a fifth above the undertone, one warmer in sunlight.
+- **Audio:** sparse unplaceable birds that hush near the arch; a 49 Hz undertone that latches on the
+  player's first movement and never stops.
+- **The fog is OFF.** Built as the script asks and it read badly (Eddie: "really damn odd") — the
+  fog is a solid volume, not a horizon, so the maze arrived as blocks lifting off rather than as
+  distance resolving. The line-of-sight reveal it prompted stays for the worlds that still fog. The
+  script's gradual-scale idea deserves another attempt with a different mechanism, probably tight
+  distance fog rather than tile discovery.
+
+### Elsewhere
+- **The portal lights its surroundings** (Scene 1G). An emissive surface lights only itself, so the
+  arch could never do this alone; the nearest ACTIVE portal is published as a point light. First
+  pass was a floodlight that washed the obelisks out of Scene 2 — now a glow on nearby stone.
+- **`F` acts on what you are nearest to**, not on the portal every time. A tile is ~19 m across and
+  Scene 1 stands its largest vessel BESIDE the arch, so the portal branch made that vessel — the one
+  the script most wants looked at — unreachable.
+- **A world places the player where it says.** `spawnLocation` was only applied on arrival through a
+  portal; anything else got PlayerState's default, the centre of the front face. Dormant for as long
+  as it existed, because every world revealed itself at build.
+
+### Things that were right for a world standing still
+Three of the last four bugs had this shape, and it is worth suspecting first:
+- **Seals were one-sided.** Enough while movement is tested on the departing tile — you could not
+  step out — until `reconcileSharedEdges` (open wins) undid all six. Now `sealRegionBorder` closes
+  both halves and runs last in each stamp.
+- **Only the play face was sealed.** Fine until a slab TURNS and swings other faces into reach.
+  Scene 2 now seals every face; edges travel with their tiles, so each stays an island.
+- **`setSharedEdge` closed `openings` but not `openEdges`.** That mask means "fully open, no
+  geometry" and `edgeAllows` checks it FIRST, so sealed borders leaked wherever a room had set it.
+
+### Hazard worth remembering
+`reconcileSharedEdges` has now caused two bugs. It fixed a real class (an edge is stored twice and
+the halves could disagree), but its rule was chosen on a false premise — "every one-sided edit is an
+insert", which a grep for `openings.remove` could not disprove because six sites mutate a local
+`op`. **One-sided closes are what it gets wrong.** Anything that opens up unexpectedly, suspect it.
+
+### Still open on Scene 1
+- The wall-absorbs-sound cue (1C) and the vessel carrying "a faint reflection of a place not visible
+  nearby" (1E) — the only two script beats not built.
+- The 1B fade-in: the script opens with the screen fading in; at app start you simply appear.
+- Maze walls lower than the clearing walls (Eddie deferred).
+- **Unverified:** the moon should be setting as the sun rises. Dawn is set; the moon's position at
+  that moment has not been checked.
+
 ## Where things stand — the PROLOGUE sprint (2026-07-20 → 29)
 
 The prototype was tagged **`prototype-v1`** and the six scene scripts (Eddie, vibe-scripted with
@@ -91,7 +153,7 @@ session: [Engine Primer](Engine%20Primer%20—%20Worlds%2C%20Twists%2C%20Travel.
 - **Skyboxes:** one full-sphere equirect per system; five fictional starfields generated from HYG
   data as compositing bases; `L` cycles them in place. Sky banding fixed by a `skyDay`-scaled TPDF
   dither (gated on the gradient, so clean night skies stay clean).
-- **Tests: 249,478** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
+- **Tests: 249,529** across sizes [3, 5, 7, 9, 11, 25]. The harness now compiles `WorldGraph` too.
 - **New doc:** [Routing — How Paths Live in the Cube](Routing%20—%20How%20Paths%20Live%20in%20the%20Cube.md)
   — where a route actually lives (4 bits/tile), why a route floor is decoration, and what a twist
   can and cannot change. Read it before authoring Scene 4's route.
@@ -159,12 +221,21 @@ wrong. From a screenshot those look identical, which is why the first two took s
 - **Audio F** is scene-gated: Scene 3's six kin tones and Scene 5's travelling pulse need those
   scenes to exist. **Occlusion is attenuation, not filtering** — PHASE offers no per-event gain on
   this path, so a walled-off source is pushed further away instead. It gets quieter, not duller.
-- fps: 60–70 full screen, ~100 at launch size (Eddie, 2026-07-30). It tracks window AREA, so the
-  renderer is fill-bound; adding props is cheap, adding full-screen shader work is not. Worth
-  remembering for Scene 3's beams.
+- fps: 60–70 full screen, ~100 at launch size on Scene 4's 5³ (Eddie, 2026-07-30); **34 fps on
+  Scene 2's 11³** in orbit (2026-07-31), which may be nothing but eight times the tiles — the portal
+  light and the denser scatter both landed in between and it has not been measured properly. It
+  tracks window AREA, so the renderer is fill-bound: adding props is cheap, adding full-screen
+  shader work is not. Worth remembering for Scene 3's beams.
 - The world list has moved on from the spreadsheet: the six scene scripts in `Scenes/` are the build
   target now, so `Prototype Worlds.ods` is in `Archive/` rather than tracking a plan nothing follows.
   (`metal_plate_02_1k/` and `To_be_evaluated/` were removed by Eddie, 2026-07-30.)
+
+## Next
+**Scene 3 — "The Heart of the World"** is the only prologue scene left before the chain is whole,
+and by far the most new tech: six obelisk beams to the cube's centre, a refracting orb at an
+interior centre (nothing renders there today), and 1:1 plinth→obelisk binding. The build plan calls
+it "the only real performance risk", and audio C+D were meant to land before it — they have.
+Scenes 5 and 6 exist as drafts only.
 
 ## Immediate next actions on resume
 
