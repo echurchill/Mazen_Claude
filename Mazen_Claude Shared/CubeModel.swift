@@ -170,7 +170,17 @@ class CubeModel {
     /// is no one-sided `remove` anywhere — so a disagreement always means "someone carved a passage
     /// and did not tell the far side". Opening both halves is what they meant. It also cannot seal a
     /// route, so it can only ever fix reachability, never break it.
-    private func reconcileSharedEdges() {
+    /// `preferOpen` decides who wins a disagreement, and the right answer differs by WHEN.
+    ///
+    /// At stamp time, open: a disagreement there means an author carved a passage and did not tell
+    /// the far side, since every one-sided edit in this file is an insert.
+    ///
+    /// After a TWIST, closed: two real tiles have just been brought together, each carrying its own
+    /// walls, and if either has a wall on that edge then there is a wall. Opening it would invent a
+    /// passage the turn did not make. This is also what the scenes want — "every turn rewrites the
+    /// world around it… one turn may connect the current to a receiver while disconnecting an
+    /// earlier path" — a twist is supposed to be able to seal a route.
+    func reconcileSharedEdges(preferOpen: Bool = true) {
         let dirs: [(SurfaceDirection, DirectionMask, Int, Int)] = [
             (.north, .north, -1, 0), (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)
         ]
@@ -179,7 +189,9 @@ class CubeModel {
                 for c in 0..<size {
                     guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { continue }
                     for (sdir, mask, dr, dc) in dirs {
-                        guard cubies[ci].facelets[fi].mazeTile.openings.contains(mask) else { continue }
+                        // Open-wins propagates from the OPEN side; closed-wins from the CLOSED one.
+                        let hasIt = cubies[ci].facelets[fi].mazeTile.openings.contains(mask)
+                        guard hasIt == preferOpen else { continue }
                         let nr = r + dr, nc = c + dc
                         let far: (face: CubeFace, row: Int, col: Int, back: SurfaceDirection)
                         if nr >= 0, nr < size, nc >= 0, nc < size {
@@ -193,7 +205,12 @@ class CubeModel {
                         guard let (nci, nfi) = faceletAt(face: far.face, row: far.row, col: far.col) else { continue }
                         let backMask: DirectionMask = far.back == .north ? .north : far.back == .south ? .south
                                                     : far.back == .west ? .west : .east
-                        cubies[nci].facelets[nfi].mazeTile.openings.insert(backMask)
+                        if preferOpen {
+                            cubies[nci].facelets[nfi].mazeTile.openings.insert(backMask)
+                        } else {
+                            cubies[nci].facelets[nfi].mazeTile.openings.remove(backMask)
+                            cubies[nci].facelets[nfi].mazeTile.openEdges.remove(backMask)
+                        }
                     }
                 }
             }
@@ -3455,6 +3472,12 @@ class CubeModel {
 
         rebuildProjection()
         markTopologyChanged()   // PERF: a twist relocated tiles/props — derived caches must re-derive
+        // A twist moves the slab's facelets and rotates their openings; the tiles they now meet did
+        // not move. So the two halves of every edge along the slab boundary can disagree — and they
+        // accumulate: a bare 7³ went 0 → 16 → 48 → 72 → 96 → 112 disagreeing halves over six turns.
+        // That is one-way passages and walls that block without being drawn (Eddie: "invisible walls
+        // occur after a few turns"). Closed wins here: two real walls have been brought together.
+        reconcileSharedEdges(preferOpen: false)
     }
 
     func sliceAxisAndIndex(for face: CubeFace) -> (axis: Int, index: Int) {

@@ -1211,6 +1211,50 @@ struct CoordinateMathTests {
         check(exitDestination(of: three) == [11], "Scene 3 leads on to Scene 4, got \(exitDestination(of: three))")
     }
 
+    /// Invisible walls returning, after twists this time. A twist moves the slab's facelets and
+    /// rotates their openings; the tiles they now meet did not move — so the two halves of every
+    /// edge along the slab boundary can disagree, and the disagreements ACCUMULATE. A bare 7³ went
+    /// 0 → 16 → 48 → 72 → 96 → 112 over six turns, which is one-way passages and walls that block
+    /// without being drawn (Eddie: "invisible walls occur after a few turns").
+    ///
+    /// Closed wins after a twist, unlike at stamp time: two real walls have just been brought
+    /// together, and inventing a passage between them would be the twist undoing itself.
+    static func testTwistsLeaveTheTopologyConsistent() {
+        for (label, gs) in [("bare", GameState(size: 7, name: "b", stamp: .bare)),
+                            ("garden", GameState(size: 11, name: "g", stamp: .gardenMaze)),
+                            ("scene-4", GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour))] {
+            let m = gs.cubeModel
+            func disagreeing() -> Int {
+                var bad = 0
+                for face in CubeFace.allCases {
+                    for r in 0..<m.size {
+                        for c in 0..<m.size {
+                            guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                            let op = m.cubies[ci].facelets[fi].mazeTile.openings
+                            for (dir, dr, dc, opp) in [(DirectionMask.north, -1, 0, DirectionMask.south),
+                                                       (.south, 1, 0, .north), (.west, 0, -1, .east),
+                                                       (.east, 0, 1, .west)] {
+                                let nr = r + dr, nc = c + dc
+                                guard nr >= 0, nr < m.size, nc >= 0, nc < m.size,
+                                      let (nci, nfi) = m.faceletAt(face: face, row: nr, col: nc) else { continue }
+                                if op.contains(dir) != m.cubies[nci].facelets[nfi].mazeTile.openings.contains(opp) {
+                                    bad += 1
+                                }
+                            }
+                        }
+                    }
+                }
+                return bad
+            }
+            check(disagreeing() == 0, "\(label): inconsistent before any twist")
+            // Several turns, on different axes and both ends — the accumulating case.
+            for turn in 1...6 {
+                m.applySliceRotation(axis: turn % 3, index: (turn % 2 == 0) ? 0 : m.size - 1, angle: .pi / 2)
+                check(disagreeing() == 0, "\(label): \(disagreeing()) disagreeing halves after \(turn) twist(s)")
+            }
+        }
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1603,6 +1647,7 @@ struct CoordinateMathTests {
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
         testInteriorsDoNotSpin()
+        testTwistsLeaveTheTopologyConsistent()
         testThePrologueScenesLeadToEachOther()
         testSceneTwoQuadrantsDifferButAreNotColourCoded()
         testOnlySceneThreeAsksForAtmosphericDepth()
