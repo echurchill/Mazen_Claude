@@ -50,6 +50,8 @@ final class AudioEngine {
         static func obeliskVoice(_ i: Int) -> String { "emitter.obelisk.\(i)" }
         // Phase E — the world's own bed.
         static let ambienceBed = "ambience.bed"
+        /// An enclosed world's room tone — the outdoor bed is wind, which a sealed chamber has none of.
+        static let chamberBed = "ambience.chamber"
         // Scene 1B/1G — the two layers the opening is built on.
         static let birds = "ambience.birds"
         static let underTone = "ambience.undertone"
@@ -179,6 +181,13 @@ final class AudioEngine {
 
             // Phase E — the world's bed: broadband, slow-moving, non-spatial. Not a tune, a room.
             try registerBed(identifier: EventID.ambienceBed, seconds: 6)
+            // Scene 3 — "music: low harmonic texture, initially almost inaudible". A sealed metal
+            // chamber has no wind, and it was playing the outdoor bed: the loop is broadband noise,
+            // which is weather, and there is no weather in here. This is a room tone instead — three
+            // partials of the same 55 Hz fundamental the obelisks sing, beating slowly against each
+            // other, so the chamber hums in the key its own objects answer in.
+            try registerTone(identifier: EventID.chamberBed, frequency: 55, duration: 9,
+                             harmonics: [1.0, 0.30, 0.16, 0.07], sustain: true, looping: true)
             // "Distant birds, sparse and difficult to locate." Sparse is the point — a dense loop
             // would place them, and the script wants them unplaceable.
             try registerBirds(identifier: EventID.birds, seconds: 11)
@@ -402,7 +411,7 @@ final class AudioEngine {
     /// comes back. Arrival silence is the cheapest possible way to make a world feel like a different
     /// place, and it costs nothing but restraint. Passing nil stops the bed; passing a new world name
     /// restarts it, which the Renderer delays so the silence is real.
-    func setAmbience(world: String?) {
+    func setAmbience(world: String?, enclosed: Bool = false) {
         guard ready else { return }
         if world == ambienceWorld { return }
         ambienceWorld = world
@@ -414,7 +423,8 @@ final class AudioEngine {
             return
         }
         do {
-            let event = try PHASESoundEvent(engine: engine, assetIdentifier: EventID.ambienceBed)
+            let event = try PHASESoundEvent(engine: engine,
+                                            assetIdentifier: enclosed ? EventID.chamberBed : EventID.ambienceBed)
             event.start()
             ambienceEvent = event
         } catch {

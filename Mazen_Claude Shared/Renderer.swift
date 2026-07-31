@@ -958,9 +958,11 @@ class Renderer: NSObject, MTKViewDelegate {
         // script is precise about this), so the delay is the point rather than a loading artefact.
         if ambienceSilenceRemaining > 0 {
             ambienceSilenceRemaining -= gameState.frameTimeMs / 1000
-            if ambienceSilenceRemaining <= 0 { audio?.setAmbience(world: gameState.name) }
+            if ambienceSilenceRemaining <= 0 {
+                audio?.setAmbience(world: gameState.name, enclosed: gameState.worldScale.interior)
+            }
         } else if transitionPhase == .none {
-            audio?.setAmbience(world: gameState.name)
+            audio?.setAmbience(world: gameState.name, enclosed: gameState.worldScale.interior)
         }
 
         let camDist = simd_length(framePose.position)

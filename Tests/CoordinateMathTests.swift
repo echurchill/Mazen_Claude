@@ -1127,6 +1127,44 @@ struct CoordinateMathTests {
               "the far wall should be muted but still THERE, got \(farWall)")
     }
 
+    /// Scene 2's puzzle is FINDING FOUR CORNERS, and until now nothing told one corner from another.
+    /// 2D asks for "a subtle environmental character" per quadrant — "differing degrees of wall
+    /// preservation… distinctions that help orientation without turning the maze into four
+    /// colour-coded zones."
+    ///
+    /// So the assertion is two-sided, and the second half is the one that matters: the quadrants
+    /// must differ, and must NOT differ so much that they read as four zones.
+    static func testSceneTwoQuadrantsDifferButAreNotColourCoded() {
+        let gs = GameState(size: PrologueSize.sceneTwo, name: "s2", stamp: .sceneTwo)
+        let m = gs.cubeModel
+        let n = m.size, c = n / 2
+        var sums = [Int](repeating: 0, count: 4), counts = [Int](repeating: 0, count: 4)
+        for r in 0..<n {
+            for col in 0..<n {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                let q = ((r < c) ? 0 : 2) + ((col < c) ? 0 : 1)
+                sums[q] += Int(m.cubies[ci].facelets[fi].mazeTile.wallType)
+                counts[q] += 1
+            }
+        }
+        var means: [Double] = []
+        for q in 0..<4 {
+            check(counts[q] > 0, "quadrant \(q) has tiles")
+            means.append(Double(sums[q]) / Double(counts[q]))
+        }
+        let lo = means.min()!, hi = means.max()!
+        check(hi - lo > 0.15, "the quadrants should feel different, spread is only \(hi - lo)")
+        // The ceiling is the point: wallType runs 0…3, so a spread approaching that would mean one
+        // quadrant pristine and another rubble — which is a colour code, not a character.
+        check(hi - lo < 1.2, "too different — this reads as four zones, spread \(hi - lo)")
+        // And the gradient the scene is actually built on must survive: the centre stays the most
+        // collapsed, "age has radiated outward from the centre".
+        guard let (cci, cfi) = m.faceletAt(face: .positiveZ, row: c, col: c),
+              let (eci, efi) = m.faceletAt(face: .positiveZ, row: 0, col: c) else { return }
+        check(m.cubies[cci].facelets[cfi].mazeTile.wallType > m.cubies[eci].facelets[efi].mazeTile.wallType,
+              "the centre must still be more ruined than the perimeter")
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1519,6 +1557,7 @@ struct CoordinateMathTests {
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
         testInteriorsDoNotSpin()
+        testSceneTwoQuadrantsDifferButAreNotColourCoded()
         testOnlySceneThreeAsksForAtmosphericDepth()
         testSceneThreePairsPlinthsToDistantObelisks()
         testSceneThreeWakesInStagesAndFiresItsWaveOnce()

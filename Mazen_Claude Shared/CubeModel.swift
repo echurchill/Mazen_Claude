@@ -735,8 +735,32 @@ class CubeModel {
                 // Scene 2's ruin gradient runs the OPPOSITE way to the garden's: the centre is the
                 // most collapsed ("age has radiated outward from the centre") and the perimeter is
                 // nearly intact. wallType 0 = cleanest … 3 = most broken.
+                // `d` is distance from the region EDGE, so it is largest at the centre. The mapping
+                // was inverted — it made the perimeter the most broken and the centre the cleanest,
+                // which is backwards from the script AND from the comment directly above it: "the
+                // walls nearest the center are incomplete… farther away, the maze becomes
+                // increasingly intact… age, pressure, or some unknown force has radiated outward
+                // from the center." Corrected: ruin now decreases with distance from the middle.
                 let d = min(min(r - rLo, rHi - r), min(col - cLo, cHi - col))
-                cubies[ci].facelets[fi].mazeTile.wallType = UInt8(d >= 4 ? 0 : (d == 3 ? 1 : (d >= 1 ? 2 : 3)))
+                var type = d >= 4 ? 3 : (d == 3 ? 2 : (d >= 1 ? 1 : 0))
+                // 2D's NAVIGATIONAL LANGUAGE — "each quadrant may carry a subtle environmental
+                // character… differing degrees of wall preservation… these distinctions help
+                // orientation without turning the maze into four colour-coded zones."
+                //
+                // A scene whose puzzle is FINDING FOUR CORNERS gave the player nothing to tell one
+                // corner from another. So each quadrant leans a step cleaner or a step more broken
+                // than the gradient alone would put it — which also changes how much rubble and
+                // overgrowth its walls carry, since `wallType` drives both. One step, never two:
+                // enough to notice you have been here before, not enough to read as a colour code.
+                // …applied to only about a third of a quadrant's tiles, chosen by hash. Shifting
+                // every tile moved a quadrant's whole character by a full step, which is precisely
+                // the "four colour-coded zones" the script warns against; shifting a scattering of
+                // them reads as one corner having weathered differently from another.
+                let quadrant = ((r < c) ? 0 : 2) + ((col < c) ? 0 : 1)
+                var qh = UInt32(truncatingIfNeeded: r &* 73856093 ^ col &* 19349663 ^ quadrant &* 83492791)
+                qh ^= qh >> 15; qh = qh &* 2246822519; qh ^= qh >> 13
+                if qh % 100 < 34 { type += [0, 1, -1, 0][quadrant] }
+                cubies[ci].facelets[fi].mazeTile.wallType = UInt8(max(0, min(3, type)))
             }
         }
 
