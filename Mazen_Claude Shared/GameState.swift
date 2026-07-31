@@ -802,15 +802,21 @@ class GameState {
 
     private func updateAmbienceTriggers() {
         if player.isMoving { hasMoved = true }
-        var best: Int? = nil
+        // Straight-line distance in the world, converted to tiles — NOT same-face Manhattan, which
+        // was the first attempt and never fired in Scene 2: its portal sits on another face until
+        // the slab turns, so "near the arch" was permanently false and the birds never hushed
+        // however close Eddie stood to the light.
+        var best: Float? = nil
+        let here = cubeModel.restMatrix(face: player.face, row: player.row, col: player.col)
+        let hp = SIMD3(here.columns.3.x, here.columns.3.y, here.columns.3.z)
         for sp in cubeModel.styledPortals where !cubeModel.sealedPortalCubies.contains(sp.ci) {
             guard let loc = cubeModel.locate(cubie: sp.ci, facelet: sp.fi) else { continue }
-            // Same face only: round the curve of a world, "near" stops meaning anything.
-            guard loc.face == player.face else { continue }
-            let d = abs(loc.row - player.row) + abs(loc.col - player.col)
+            let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
+            let d = simd_distance(hp, SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z))
+                / cubeModel.worldScale.cellSpacing
             if best == nil || d < best! { best = d }
         }
-        tilesToNearestPortal = best
+        tilesToNearestPortal = best.map { Int($0.rounded()) }
     }
 
     private func updateAudioEmitters() {

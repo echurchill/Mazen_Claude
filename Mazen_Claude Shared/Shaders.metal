@@ -1074,7 +1074,7 @@ fragment float4 fragmentShader(
             // Smooth to zero at the radius so the pool of light has no visible boundary — a hard
             // edge would read as a decal on the floor rather than as illumination.
             float fall = 1.0 - dist / frame.portalLightRadius;
-            fall *= fall;
+            fall *= fall * fall;        // cubic: bright only right at the arch, gone a tile or two out
             // Surfaces facing the portal catch more, but never nothing: a doorway's light bounces,
             // and a wall edge-on going fully black is the giveaway of a fake point light.
             float facing = 0.35 + 0.65 * saturate(dot(normal, toLight / max(dist, 1e-4)));

@@ -1030,9 +1030,13 @@ class Renderer: NSObject, MTKViewDelegate {
         // Violet-cyan, and deliberately "too saturated to be sunlight" (script). It breathes, so the
         // illumination "trembles" rather than sitting there like a lamp.
         let t = gameState.time
-        let flicker = 0.86 + 0.14 * sinf(t * 2.3) * cosf(t * 1.17)
-        return (b.pos, 3.2 * gameState.worldScale.cellSpacing,
-                SIMD3(0.42, 0.62, 1.0), 1.35 * flicker)
+        let flicker = 0.90 + 0.10 * sinf(t * 2.3) * cosf(t * 1.17)
+        // Far dimmer and far shorter than the first pass, which was a floodlight: at 1.35 over three
+        // tiles it blew out everything near it and washed the obelisks' own light clean away in
+        // Scene 2 (Eddie). This is meant to be a glow you notice on the stone as you approach, not a
+        // light source competing with the sun.
+        return (b.pos, 1.6 * gameState.worldScale.cellSpacing,
+                SIMD3(0.42, 0.62, 1.0), 0.30 * flicker)
     }
 
     /// M20 — registry indices of every imported model whose gallery `name` starts with `prefix`

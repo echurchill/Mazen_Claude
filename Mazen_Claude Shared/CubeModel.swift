@@ -433,8 +433,15 @@ class CubeModel {
     func setSharedEdge(face: CubeFace, row: Int, col: Int, _ dir: SurfaceDirection, open: Bool) {
         let mask: DirectionMask = dir == .north ? .north : dir == .south ? .south : dir == .west ? .west : .east
         guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { return }
+        // Closing an edge must clear it from openEdges too. That mask means "fully open, no geometry
+        // at all" (a merged room's interior) and `edgeAllows` checks it FIRST — so an edge closed
+        // only in `openings` stayed walkable, and a sealed border made of such tiles still let the
+        // player out. Opening does NOT set it: a gateway is not a room.
         if open { cubies[ci].facelets[fi].mazeTile.openings.insert(mask) }
-        else { cubies[ci].facelets[fi].mazeTile.openings.remove(mask) }
+        else {
+            cubies[ci].facelets[fi].mazeTile.openings.remove(mask)
+            cubies[ci].facelets[fi].mazeTile.openEdges.remove(mask)
+        }
 
         let (dr, dc) = dir == .north ? (-1, 0) : dir == .south ? (1, 0) : dir == .west ? (0, -1) : (0, 1)
         let nr = row + dr, nc = col + dc
@@ -449,7 +456,10 @@ class CubeModel {
         let backMask: DirectionMask = far.back == .north ? .north : far.back == .south ? .south
                                     : far.back == .west ? .west : .east
         if open { cubies[nci].facelets[nfi].mazeTile.openings.insert(backMask) }
-        else { cubies[nci].facelets[nfi].mazeTile.openings.remove(backMask) }
+        else {
+            cubies[nci].facelets[nfi].mazeTile.openings.remove(backMask)
+            cubies[nci].facelets[nfi].mazeTile.openEdges.remove(backMask)
+        }
     }
 
     private func stampSceneFour() {
@@ -793,6 +803,14 @@ class CubeModel {
         // Two-sided, and LAST, so nothing carved above can leave a way out and
         // `reconcileSharedEdges` has nothing to disagree with.
         sealRegionBorder(face: .positiveZ, rLo: rLo, rHi: rHi, cLo: cLo, cHi: cHi)
+        // …and EVERY other face too. Sealing the play face was enough while the world stood still,
+        // but the whole point of this scene is that a slab TURNS: tiles from other faces swing into
+        // reach, and those had never been sealed, so the turn handed the player a way to walk
+        // straight off the world (Eddie). Edges travel with their tiles through a twist, so sealing
+        // each face now keeps every face an island however the world is rearranged.
+        for face in CubeFace.allCases where face != .positiveZ {
+            sealRegionBorder(face: face, rLo: 0, rHi: n - 1, cLo: 0, cHi: n - 1)
+        }
     }
 
     /// The outer X-slab that carries the hidden face into view, and the `+Y` tiles riding it.

@@ -942,6 +942,46 @@ struct CoordinateMathTests {
         }
     }
 
+    /// …and it has to stay sealed AFTER a twist, which is the case that actually bit. Sealing the
+    /// play face was enough while the world stood still; turning a slab swings tiles from other
+    /// faces into reach, and those had never been sealed, so the payoff of Scene 2 also handed the
+    /// player a way to walk off the world (Eddie).
+    static func testSealSurvivesTheScriptedTurn() {
+        let gs = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
+        let m = gs.cubeModel
+        let n = m.size
+        guard let slice = m.scriptedTwistSlice else { check(false, "Scene 2 names a slab to turn"); return }
+        // Dissolve the lock so the turn is legal, then take it.
+        while !m.bondedGroups.isEmpty { m.removeBond(containing: m.bondedGroups[0].first!) }
+        m.applySliceRotation(axis: slice.axis, index: slice.index, angle: .pi / 2)
+
+        struct T: Hashable { let f: Int; let r: Int; let c: Int }
+        let start = T(f: gs.player.face.rawValue, r: gs.player.row, c: gs.player.col)
+        var seen: Set<T> = [start], q = [start], head = 0
+        while head < q.count {
+            let t = q[head]; head += 1
+            guard let face = CubeFace(rawValue: t.f),
+                  let (ci, fi) = m.faceletAt(face: face, row: t.r, col: t.c) else { continue }
+            let tile = m.cubies[ci].facelets[fi].mazeTile
+            for (dir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                        (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)] {
+                // Use the real movement rule, so a border left open only in `openEdges` counts.
+                guard tile.openings.contains(mask) || tile.openEdges.contains(mask) else { continue }
+                let nr = t.r + dr, nc = t.c + dc
+                let nt: T
+                if nr >= 0, nr < n, nc >= 0, nc < n { nt = T(f: t.f, r: nr, c: nc) }
+                else {
+                    let cr = m.edgeCrossing(face: face, direction: dir, row: t.r, col: t.c)
+                    nt = T(f: cr.face.rawValue, r: cr.row, c: cr.col)
+                }
+                if !seen.contains(nt) { seen.insert(nt); q.append(nt) }
+            }
+        }
+        check(seen.count > 20, "the walk after the turn only reached \(seen.count) tiles")
+        let escaped = Set(seen.filter { $0.f != start.f }.map { $0.f }).sorted()
+        check(escaped.isEmpty, "after the turn the player reaches faces \(escaped)")
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1334,6 +1374,7 @@ struct CoordinateMathTests {
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
         testSealedWorldsCannotBeWalkedOutOf()
+        testSealSurvivesTheScriptedTurn()
         testSightGoesDownCorridorsNotJustOntoTheNextTile()
         testVesselsMoveOnlyWhenNotWatched()
         testInteractPicksTheNearestThingNotThePortal()
