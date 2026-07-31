@@ -1295,6 +1295,11 @@ fragment float4 fragmentShader(
         float3 nightHorizon = float3(0.04, 0.05, 0.08);
         float3 dayHorizon = float3(0.52, 0.58, 0.66);
         float3 horizon = mix(nightHorizon, dayHorizon, dayFactor);
+        // An enclosed chamber has no horizon to fade into. Fading toward grey there reads as mist
+        // indoors; fading toward near-black reads as distance, which is what "distant and muted"
+        // means when there is no sun. A trace of the chamber's own blue keeps it from looking like
+        // the geometry has simply been clipped away.
+        horizon = mix(horizon, float3(0.020, 0.026, 0.038), frame.darkHaze);
         float fogBrightness = mix(0.7, 1.3, fogTex);
         float3 fogColor = horizon * fogBrightness;
 

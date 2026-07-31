@@ -77,6 +77,9 @@ typedef struct
     // travels out from the orb when the sixth connects (0 = not running, →1 as it passes).
     float chamberWoken;
     float chamberWave;
+    /// 1 in a world whose distance fog should fall toward DARK rather than toward a sky horizon —
+    /// an enclosed chamber has no horizon to fade into, so fading to grey reads as mist indoors.
+    float darkHaze;
     vector_float3 portalLightPosition;   // world space; unused when the radius is 0
     float portalLightRadius;             // 0 = no portal light this frame
     vector_float3 portalLightColor;

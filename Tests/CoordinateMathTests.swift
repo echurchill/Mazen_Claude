@@ -1103,6 +1103,30 @@ struct CoordinateMathTests {
         check(turning != matrix_identity_float4x4, "an exterior world still turns under its sun")
     }
 
+    /// Scene 3 gets DEPTH rather than concealment. Discovery fog was the script's word, but in a
+    /// chamber whose defining property is that you can see the other five faces, hiding what is in
+    /// plain sight reads as broken — and it would make the six obelisks invisible outright, since a
+    /// prop needs a discovered tile. Distance haze gives "the ceiling is visible, but distant and
+    /// muted" without anything vanishing.
+    ///
+    /// Pinned per-world, because the temple interior is signed off and must not change with it.
+    static func testOnlySceneThreeAsksForAtmosphericDepth() {
+        let chamber = GameState(size: PrologueSize.sceneThree, name: "s3", interior: true, stamp: .sceneThree)
+        let temple = GameState(size: 5, name: "t", interior: true, stamp: .templeInterior)
+        check(chamber.cubeModel.atmosphericDepth, "the chamber hazes with distance")
+        check(!temple.cubeModel.atmosphericDepth, "the temple interior is unchanged")
+        // The range has to be measured against the CHAMBER: its far wall is two face-distances away,
+        // so fog starting at the historical 1.0 would bury the orb at 2.5 and the whole room with it.
+        let reach = chamber.worldScale.faceDistance
+        check(reach > 1, "a 5³ chamber should be several units across, got \(reach)")
+        let near = reach * 0.9, far = reach * 2.5
+        let orbDepth = (reach - near) / (far - near)          // the orb sits one face-distance away
+        let farWall = (2 * reach - near) / (far - near)       // the opposite face, two away
+        check(orbDepth < 0.15, "the centre must stay clear, got \(orbDepth)")
+        check(farWall > 0.5 && farWall < 1.0,
+              "the far wall should be muted but still THERE, got \(farWall)")
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1495,6 +1519,7 @@ struct CoordinateMathTests {
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
         testInteriorsDoNotSpin()
+        testOnlySceneThreeAsksForAtmosphericDepth()
         testSceneThreePairsPlinthsToDistantObelisks()
         testSceneThreeWakesInStagesAndFiresItsWaveOnce()
         testSealedWorldsCannotBeWalkedOutOf()

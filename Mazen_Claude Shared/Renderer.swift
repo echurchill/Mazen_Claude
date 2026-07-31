@@ -965,9 +965,18 @@ class Renderer: NSObject, MTKViewDelegate {
 
         let camDist = simd_length(framePose.position)
         // Interior worlds (M15.1) and no-fog worlds (M20 gallery): fog off (pushed past everything).
-        let noFog = interior || gameState.cubeModel.noFog
-        var fogNear: Float = noFog ? 1e6 : (isOrbit ? camDist + halfDiagonal : 1.0)
-        var fogFar: Float = noFog ? 2e6 : (isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5)
+        let haze = gameState.cubeModel.atmosphericDepth
+        let noFog = (interior && !haze) || gameState.cubeModel.noFog
+        // A hazed interior gets a range measured against the CHAMBER rather than the historical
+        // 1→3.5 depth cue: the far wall of a hollow world is two face-distances away, so the fog has
+        // to start around one and saturate a little past two, or the opposite face either reads
+        // crisp or vanishes entirely. Scene 3's brightest point is its centre, and this is what
+        // makes the edges fall away from it.
+        let reach = gameState.worldScale.faceDistance
+        var fogNear: Float = noFog ? 1e6 : (haze ? reach * 0.9
+                                                 : (isOrbit ? camDist + halfDiagonal : 1.0))
+        var fogFar: Float = noFog ? 2e6 : (haze ? reach * 2.5
+                                                : (isOrbit ? camDist + halfDiagonal + 2.0 * Float(gameState.cubeModel.size) : 3.5))
         // While a slab turns, PULL THE FOG BACK. In first person the turn happens across the world —
         // ~90 m away at the far edge — and the depth-cue fog reduced the one moment the scene is built
         // around to a pale ghost, crisp only from orbit (Eddie, playtest). Eased in and out over the
@@ -1011,6 +1020,7 @@ class Renderer: NSObject, MTKViewDelegate {
             chamberLightCount: chamberLights.count,
             chamberWoken: gameState.chamberWoken,
             chamberWave: gameState.chamberWave,
+            darkHaze: gameState.cubeModel.atmosphericDepth ? 1 : 0,
             portalLightPosition: portalLight.position,
             portalLightRadius: portalLight.radius,
             portalLightColor: portalLight.color,

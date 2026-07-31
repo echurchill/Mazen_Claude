@@ -405,6 +405,7 @@ class CubeModel {
         let n = size, c = n / 2
         wallStyle = .metal          // patchwork iron, brass, steel, copper — see `WallStyle`
         symbolPairedPlinths = true
+        atmosphericDepth = true     // distance, not discovery — see the flag
 
         // The six symbols. Distinct but visibly of one language — they are all caustic glyphs, which
         // is the Builders' hand. (The script asks for six purpose-made marks; these stand in until
@@ -2881,6 +2882,14 @@ class CubeModel {
     /// plinth must not be placed on the same face as its matching obelisk… each pairing therefore
     /// requires the player to connect a remote control with a distant response."
     var symbolPairedPlinths = false
+
+    /// Scene 3 — the chamber has DEPTH rather than concealment. The script's image is "the ceiling
+    /// is visible, but distant and muted… the center of the chamber is the brightest point", which
+    /// is distance falling away into dark, not tiles being hidden. Discovery fog would do the
+    /// opposite here: this is a room whose whole point is that you can see the other five faces,
+    /// and hiding what is in plain sight across open space reads as broken (it also makes the six
+    /// obelisks invisible, since props need a discovered tile).
+    var atmosphericDepth = false
 
     /// Whether an open edge may be crossed at its full width. True where the world draws no jamb
     /// posts to justify a narrower gap — i.e. dressed walls, where the stone sits on closed edges
