@@ -16,6 +16,8 @@ class TileMeshLibrary {
     let frameMesh: TileMesh
     let celestialCube: TileMesh   // unit cube for the M9 sun/moon bodies
     let fieldFloor: TileMesh      // M19: a full-tile tessellated ground quad (grass/water — no path split)
+    let orbMesh: TileMesh         // Scene 3: the suspended heart at the chamber's centre
+    let beamMesh: TileMesh        // Scene 3: one obelisk-to-orb beam, a unit length along +Z
     let bandFloor: TileMesh       // Same quad with NORMALISED [0,1]² UVs — for overlays that reason in tile
                                   // fractions (bond bands). fieldFloor bakes `uvScale` into its UVs for
                                   // texture tiling, which is wrong for anything measuring "half a tile".
@@ -282,6 +284,14 @@ class TileMeshLibrary {
         let fieldStart = allIndices.count
         Self.addFieldFloor(to: &allVerts, indices: &allIndices, ws: ws)
         fieldFloor = TileMesh(vertexOffset: 0, indexOffset: fieldStart, indexCount: allIndices.count - fieldStart)
+
+        let orbStart = allIndices.count
+        Self.addOrb(to: &allVerts, indices: &allIndices)
+        orbMesh = TileMesh(vertexOffset: 0, indexOffset: orbStart, indexCount: allIndices.count - orbStart)
+
+        let beamStart = allIndices.count
+        Self.addBeam(to: &allVerts, indices: &allIndices)
+        beamMesh = TileMesh(vertexOffset: 0, indexOffset: beamStart, indexCount: allIndices.count - beamStart)
 
         let bandStart = allIndices.count
         Self.addFieldFloor(to: &allVerts, indices: &allIndices, ws: ws, normalisedUV: true)
@@ -1507,5 +1517,57 @@ class TileMeshLibrary {
         }
         quad(1, 0)
         quad(0, 1)
+    }
+
+    /// Scene 3's ORB — a unit sphere at the origin, scaled and placed by the instance. UV-mapped so
+    /// the material can run facets over it; `localPosition` does the real work in the shader, but
+    /// the texCoord gives it a stable seam-free-enough parameterisation for the surface planes.
+    ///
+    /// "From one angle it appears spherical. From another, its surface reveals shifting crystalline
+    /// planes." The geometry is the easy half of that — the sphere is deliberately plain, and every
+    /// facet the player sees is the material's doing, because faceted GEOMETRY would freeze the
+    /// shape and the script wants it to refuse classification.
+    private static func addOrb(to verts: inout [MazeVertexSwift], indices: inout [UInt32]) {
+        let rings = 16, segs = 24
+        let base = UInt32(verts.count)
+        for i in 0...rings {
+            let v = Float(i) / Float(rings)
+            let phi = v * .pi
+            for j in 0...segs {
+                let u = Float(j) / Float(segs)
+                let theta = u * 2 * .pi
+                let n = SIMD3<Float>(sinf(phi) * cosf(theta), cosf(phi), sinf(phi) * sinf(theta))
+                verts.append(MazeVertexSwift(position: n, normal: n, texCoord: SIMD2(u, v), aoFactor: 1.0))
+            }
+        }
+        for i in 0..<rings {
+            for j in 0..<segs {
+                let a = base + UInt32(i * (segs + 1) + j)
+                let b = a + UInt32(segs + 1)
+                indices.append(contentsOf: [a, b, a + 1, a + 1, b, b + 1])
+            }
+        }
+    }
+
+    /// Scene 3's BEAM — a square tube of unit length running 0…1 along +Z, half-width 1 in x/y, so
+    /// the instance matrix sets both length and thickness. Four sides, no caps: you are meant to see
+    /// along it, and a capped end reads as a rod rather than as light.
+    ///
+    /// texCoord.y carries the position ALONG the beam (0 at the obelisk, 1 at the orb end), which is
+    /// what lets the material run a travelling pulse and taper it toward the tip.
+    private static func addBeam(to verts: inout [MazeVertexSwift], indices: inout [UInt32]) {
+        let corners: [SIMD2<Float>] = [SIMD2(-1, -1), SIMD2(1, -1), SIMD2(1, 1), SIMD2(-1, 1)]
+        for k in 0..<4 {
+            let p0 = corners[k], p1 = corners[(k + 1) % 4]
+            let n = normalize(SIMD3<Float>((p0.x + p1.x) * 0.5, (p0.y + p1.y) * 0.5, 0))
+            let base = UInt32(verts.count)
+            verts.append(contentsOf: [
+                MazeVertexSwift(position: SIMD3(p0.x, p0.y, 0), normal: n, texCoord: SIMD2(0, 0), aoFactor: 1.0),
+                MazeVertexSwift(position: SIMD3(p1.x, p1.y, 0), normal: n, texCoord: SIMD2(1, 0), aoFactor: 1.0),
+                MazeVertexSwift(position: SIMD3(p1.x, p1.y, 1), normal: n, texCoord: SIMD2(1, 1), aoFactor: 1.0),
+                MazeVertexSwift(position: SIMD3(p0.x, p0.y, 1), normal: n, texCoord: SIMD2(0, 1), aoFactor: 1.0)])
+            indices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
+            indices.append(contentsOf: [base, base + 2, base + 1, base, base + 3, base + 2])   // two-sided
+        }
     }
 }

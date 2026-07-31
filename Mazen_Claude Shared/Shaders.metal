@@ -809,6 +809,62 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 30) {
+        // SCENE 3's ORB — "from one angle it appears spherical. From another, its surface reveals
+        // shifting crystalline planes. Fine internal structures rotate or refract independently,
+        // suggesting depth greater than its external volume should contain."
+        //
+        // The geometry is a plain sphere on purpose: faceted GEOMETRY would freeze the shape, and
+        // the script wants it to refuse classification. So the facets live here and MOVE — three
+        // sets of planes rotating at unrelated rates, which is what stops the eye settling on a
+        // solid. `discoveryAmount` is how many obelisks are lit, 0…1.
+        float woken = clamp(in.discoveryAmount, 0.0, 1.0);
+        float3 p = normalize(in.localPosition);
+        float3 viewDir = normalize(frame.cameraPosition - in.worldPosition);
+        float t = frame.time;
+        // Three plane families, each turning about a different axis at its own rate. Their sum is
+        // never periodic in any direction the player can watch for.
+        float f1 = dot(p, normalize(float3(cos(t * 0.13), 0.6, sin(t * 0.13))));
+        float f2 = dot(p, normalize(float3(sin(t * 0.081), cos(t * 0.081), 0.35)));
+        float f3 = dot(p, normalize(float3(0.4, sin(t * 0.056), cos(t * 0.056))));
+        // Quantise into facets — the bands ARE the crystalline planes.
+        float facet = fract(f1 * 3.5) + fract(f2 * 2.75) + fract(f3 * 4.25);
+        float planes = smoothstep(1.1, 1.9, facet) * 0.55 + smoothstep(2.1, 2.6, facet) * 0.45;
+        // A rim that reads as a surface you cannot quite locate.
+        float fres = pow(1.0 - saturate(dot(normal, viewDir)), 2.2);
+        // "Initially the orb emits only a faint internal glow. Its light rises and falls slowly,
+        // almost like breathing." The breath slows and deepens as the chamber wakes.
+        float breath = 0.72 + 0.28 * sin(t * (0.55 + 0.35 * woken));
+        float3 cold = float3(0.30, 0.52, 0.72);
+        float3 hot  = float3(0.72, 0.88, 1.00);
+        float3 body = mix(cold, hot, woken * 0.75);
+        color = body * (0.16 + 0.55 * planes) * breath
+              + float3(0.55, 0.78, 1.00) * fres * (0.35 + 0.65 * woken)
+              + body * woken * 0.30;
+        lighting = float3(1.0);          // it is a light source, not a lit thing
+    } else if (in.materialID == 31) {
+        // SCENE 3's BEAM. "The beam is not perfectly steady. It pulses in slow intervals:
+        // brightening → narrowing → dimming → brightening. Its rhythm should feel alive without
+        // implying biological machinery."
+        //
+        // texCoord.y runs 0 at the obelisk to 1 at the orb end. The pulse travels ALONG it, and the
+        // beam narrows as it brightens — done as an alpha cutout on the cross-section rather than by
+        // scaling geometry, so all six stay one instanced draw.
+        float along = in.texCoord.y;
+        float across = abs(in.texCoord.x - 0.5) * 2.0;      // 0 centre … 1 edge
+        float glow = clamp(in.discoveryAmount, 0.0, 1.0);
+        float t = frame.time;
+        // The cycle. One slow rhythm, offset along the beam so the whole length is never at once.
+        float cycle = sin(t * 0.9 - along * 2.1);
+        float bright = 0.55 + 0.45 * cycle;
+        float width = 1.0 - 0.35 * bright;                   // brighter ⇒ narrower, per the script
+        if (across > width) discard_fragment();
+        // Soft core, and a taper toward the orb end so the beam ARRIVES rather than stopping.
+        float core = 1.0 - smoothstep(0.0, width, across);
+        float taper = 1.0 - 0.35 * smoothstep(0.55, 1.0, along);
+        float3 tint = mix(float3(0.36, 0.62, 0.95), float3(0.78, 0.92, 1.00), bright);
+        color = tint * (0.35 + 1.05 * core) * bright * taper * glow;
+        lighting = float3(1.0);
     } else if (in.materialID == 29) {
         // DUST (Scene 2). A pale mote lit by the sky, thinning to nothing as it settles. Cutout, not
         // alpha-blended: this is the opaque pass, so the fade is a screen-door dither on a hashed
