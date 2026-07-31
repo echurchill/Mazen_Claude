@@ -1209,6 +1209,10 @@ class Renderer: NSObject, MTKViewDelegate {
         // PERF: iterate only the facelets that CARRY props (cached per topologyVersion) instead of
         // scanning all 6×n² tiles per frame. Prop fields are read live; a twist bumps the version.
         for e in model.propTiles() {
+            // Nothing stands on a tile you have never seen. This path never checked, so in a fogged
+            // world the trees and vessels floated in the mist while the walls beside them did not
+            // exist yet — which is what made Scene 1 look like it was being built as Eddie walked.
+            guard model.cubies[e.ci].facelets[e.fi].tileState != .unknown else { continue }
             let base = model.restMatrix(face: e.face, row: e.row, col: e.col)
             let props = model.cubies[e.ci].facelets[e.fi].props
             for prop in props { placeProp(prop, base: base, ci: e.ci) }

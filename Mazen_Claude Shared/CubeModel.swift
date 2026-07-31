@@ -3044,7 +3044,12 @@ class CubeModel {
                     for col in 0..<size {
                         guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { continue }
                         let facelet = cubies[ci].facelets[fi]
-                        guard facelet.tileState == .discovered else { continue }
+                        // ADJACENT counts, not just discovered. SceneBuilder emits hedge geometry for
+                        // an adjacent tile, and a dressed world suppresses that mesh in favour of these
+                        // models — so requiring `.discovered` here meant a fogged dressed world had no
+                        // walls on the tile in front of you at all. You saw the props on it (the asset
+                        // path never checked discovery) and walked into walls that appeared on arrival.
+                        guard facelet.tileState != .unknown else { continue }
                         let props = dressedWallProps(facelet, face: face, row: row, col: col,
                                                      walls: walls, rocks: rocks, bushes: bushes,
                                                      wallScale: wallScale, rockScale: rockScale, bushScale: bushScale,

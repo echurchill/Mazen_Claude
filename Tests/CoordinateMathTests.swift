@@ -897,6 +897,71 @@ struct CoordinateMathTests {
         check(unwatched > 0, "a vessel out of view should drift, got \(unwatched)")
     }
 
+    /// Scene 1 keeps its fog, so what you can SEE from where you stand has to be right — Eddie's
+    /// screenshot showed a world assembling itself around him: props floating in mist on tiles whose
+    /// walls did not exist yet, and the maze arriving one tile at a time.
+    ///
+    /// Two rules, both asserted here: standing somewhere reveals what you could see from it (down
+    /// every open corridor, stopped by walls), and a dressed world's walls exist on ADJACENT tiles
+    /// and not only on ones you have stood on.
+    static func testFogRevealsWhatYouCouldSeeFromWhereYouStand() {
+        let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
+        let m = gs.cubeModel
+        guard let sp = m.spawnLocation else { check(false, "needs a spawn"); return }
+        gs.player.face = sp.face; gs.player.row = sp.row; gs.player.col = sp.col
+        gs.revealLineOfSight()
+        // From the spawn everything in sight is the clearing, which is revealed already — so step to
+        // the first maze tile, where there IS something to discover, and look from there too.
+        gs.player.row = m.size - 5; gs.player.col = m.size / 2      // (4,4), just north of the corridor
+        gs.revealLineOfSight()
+
+        // Everything in an unbroken line from where the player stands must be out of the fog — in
+        // whichever directions are actually open, which is not something to hard-code about a maze.
+        var revealed = 0
+        for (mask, dr, dc) in [(DirectionMask.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)] {
+            var r = gs.player.row, c = gs.player.col
+            while true {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c),
+                      m.cubies[ci].facelets[fi].mazeTile.openings.contains(mask) else { break }
+                r += dr; c += dc
+                guard r >= 0, r < m.size, c >= 0, c < m.size,
+                      let (nci, nfi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { break }
+                check(m.cubies[nci].facelets[nfi].tileState != .unknown,
+                      "(\(r),\(c)) is in plain sight and must not be fogged")
+                revealed += 1
+            }
+        }
+        check(revealed > 0, "standing in the maze must reveal something in line of sight")
+
+        // But sight does NOT pass through walls: a tile behind the clearing's west wall stays unknown.
+        var hidden = 0
+        for rr in 0..<m.size {
+            for cc in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: rr, col: cc) else { continue }
+                if m.cubies[ci].facelets[fi].tileState == .unknown { hidden += 1 }
+            }
+        }
+        check(hidden > 30, "most of the maze must still be hidden, only \(hidden) tiles are")
+
+        // Walls exist on an adjacent tile — the dressing must not wait for you to stand on it.
+        let pool = [0, 1, 2, 3]
+        var adjacentWithWalls = 0
+        for rr in 0..<m.size {
+            for cc in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: rr, col: cc) else { continue }
+                let f = m.cubies[ci].facelets[fi]
+                guard f.tileState == .adjacent else { continue }
+                let closed = DirectionMask.all.subtracting(f.mazeTile.openings)
+                guard !closed.isEmpty else { continue }
+                let props = m.dressedWallProps(f, face: .positiveZ, row: rr, col: cc,
+                                               walls: pool, rocks: pool, bushes: pool,
+                                               wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: true)
+                if !props.isEmpty { adjacentWithWalls += 1 }
+            }
+        }
+        check(adjacentWithWalls > 0, "an adjacent walled tile must already have its wall models")
+    }
+
     static func testSceneOneAmbienceTriggers() {
         let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
         let m = gs.cubeModel
@@ -1231,6 +1296,7 @@ struct CoordinateMathTests {
         testVesselCanBeApproached()
         testSceneOneCanBeWalkedFromClearingToArch()
         testSceneOneAmbienceTriggers()
+        testFogRevealsWhatYouCouldSeeFromWhereYouStand()
         testVesselsMoveOnlyWhenNotWatched()
         testInteractPicksTheNearestThingNotThePortal()
         testCrossingAnOpenEdgeAlwaysFindsSomewhereToLand()

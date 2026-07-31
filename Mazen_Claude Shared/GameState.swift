@@ -354,6 +354,33 @@ class GameState {
                 }
             }
         }
+        revealLineOfSight()
+    }
+
+    /// You can see DOWN a corridor, so reveal along it. Marking only the four touching tiles meant a
+    /// maze arrived one tile at a time however far you could actually see, which reads as the world
+    /// building itself around you as you walk into it. Stepping each open direction until a wall
+    /// stops it is cheaper than a real visibility test and is exactly what the script describes the
+    /// player seeing on entering: "one forward path, one immediate branch, several walls hiding the
+    /// maze's full extent".
+    ///
+    /// Same face only — over a cube edge, "straight ahead" stops being a straight line.
+    func revealLineOfSight(range: Int = 6) {
+        let n = cubeModel.size
+        for (mask, dr, dc) in [(DirectionMask.north, -1, 0), (.south, 1, 0), (.west, 0, -1), (.east, 0, 1)] {
+            var r = player.row, c = player.col
+            for _ in 0..<range {
+                guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: r, col: c),
+                      cubeModel.cubies[ci].facelets[fi].mazeTile.openings.contains(mask) else { break }
+                r += dr; c += dc
+                guard r >= 0, r < n, c >= 0, c < n,
+                      let (nci, nfi) = cubeModel.faceletAt(face: player.face, row: r, col: c) else { break }
+                if cubeModel.cubies[nci].facelets[nfi].tileState == .unknown {
+                    cubeModel.cubies[nci].facelets[nfi].tileState = .adjacent
+                    cubeModel.cubies[nci].facelets[nfi].discoveryAmount = 0.2
+                }
+            }
+        }
     }
 
     // Walk-through portals fire when the player reaches the portal's OWN sub-cell (its 3×3 author cell
