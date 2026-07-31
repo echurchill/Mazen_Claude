@@ -237,6 +237,11 @@ class CubeModel {
         // expected" is discovered by walking it, and the maze arrives only at the turn.
         setSharedEdge(face: .positiveZ, row: corridor, col: clearLeft, .east, open: true)
         setSharedEdge(face: .positiveZ, row: corridor, col: mid, .north, open: true)
+        // Two ALCOVES off the dog-leg, one at each end (Eddie). They are dead ends inside the wall
+        // itself, which is the first time the player meets the scene's rule — a dead end is where a
+        // vessel stands — and they meet it before the maze, on a stretch they cannot get lost in.
+        setSharedEdge(face: .positiveZ, row: corridor, col: clearLeft - 1, .east, open: true)
+        setSharedEdge(face: .positiveZ, row: corridor, col: clearLeft + 2, .west, open: true)
 
         // ── THE MAZE: recursive backtracker over everything north of the corridor ───────────────
         let mazeBottom = corridor - 1
@@ -322,6 +327,11 @@ class CubeModel {
         // "In one corner of the clearing stands a small group of unusual vessels." The first ones
         // the player ever sees, before there is any maze to give them meaning.
         placeVessel(clearTop, clearLeft, next(), group: true)
+        // The corridor alcoves. Placed explicitly rather than by the dead-end sweep, which only
+        // scans the maze proper — and deliberately so, or the arch would be free to end up in one
+        // of these instead of at the far end of the maze.
+        placeVessel(corridor, clearLeft - 1, next(), group: false)
+        placeVessel(corridor, clearLeft + 2, next(), group: true)
 
         // ── THE ARCHWAY ────────────────────────────────────────────────────────────────────────
         // Active, unsealed, no pull: "the player must choose to cross."
