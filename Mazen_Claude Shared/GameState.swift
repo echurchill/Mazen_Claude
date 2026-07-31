@@ -1059,11 +1059,36 @@ class GameState {
         updateDoorPlinths()                  // ⇒ plinth shows all-filled, ready for F
     }
 
+    /// Where a prop stands, in STAND cells, so "which of these am I next to" is answerable. Mirrors
+    /// `Prop.blocks`: the author sub-cell's centre, shifted by the same offset the renderer draws it at.
+    private func standPosition(of p: Prop) -> (row: Float, col: Float) {
+        let grid = worldScale.standGrid
+        let k = Float(grid) / 3, step = worldScale.standStep
+        return (Float(p.subRow) * k + k / 2 + (step > 0 ? p.offsetY / step : 0),
+                Float(p.subCol) * k + k / 2 + (step > 0 ? p.offsetX / step : 0))
+    }
+
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props
+        // A tile is ~19 m across and can hold more than one thing worth pressing F at — Scene 1
+        // stands its largest vessel BESIDE the arch, on the same tile. Taking the portal first
+        // whatever else was there meant walking up to that vessel, pressing F, and being thrown
+        // through the door instead (Eddie). So F acts on whatever you are actually NEAREST to.
+        //
+        // Walking THROUGH a portal is unaffected: that fires from the portal's own centre sub-cell,
+        // continuously, and is the primary way doors are used. This only decides what F means.
+        let interactable: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap, .plinth, .dial, .chest]
+        let here = (row: Float(player.subRow), col: Float(player.subCol))
+        let nearest = props.filter { interactable.contains($0.kind) }.min { a, b in
+            let pa = standPosition(of: a), pb = standPosition(of: b)
+            let da = (pa.row - here.row) * (pa.row - here.row) + (pa.col - here.col) * (pa.col - here.col)
+            let db = (pb.row - here.row) * (pb.row - here.row) + (pb.col - here.col) * (pb.col - here.col)
+            return da < db
+        }
         if let portal = props.first(where: { $0.kind == .portal }),
-           !cubeModel.sealedPortalCubies.contains(ci) {    // M16.4: sealed = inert
+           !cubeModel.sealedPortalCubies.contains(ci),      // M16.4: sealed = inert
+           nearest?.kind == .portal {
             portalRequested = true
             portalDestinationID = portal.state
             portalTransition = portal.transition

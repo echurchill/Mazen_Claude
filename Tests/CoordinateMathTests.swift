@@ -813,6 +813,47 @@ struct CoordinateMathTests {
     /// Scene 1 is architecture, not a lock — so what it has to guarantee is that it can be WALKED:
     /// out of the clearing, through the break in the north wall, and round a maze whose dead ends
     /// each hold a vessel, ending at the arch. If any of that is stranded the opening simply stops.
+    /// A tile is ~19 m across and can hold more than one thing worth pressing F at. Scene 1 stands
+    /// its largest vessel BESIDE the arch — same tile, several metres apart — and F took the portal
+    /// unconditionally, so walking up to that vessel and pressing F threw you through the door
+    /// instead (Eddie: "I pushed F at the last vessel, well away from the portal").
+    ///
+    /// F now acts on whatever you are nearest to. Walking THROUGH a portal is untouched: that fires
+    /// from the portal's own centre sub-cell and stays the primary way doors are used.
+    static func testInteractPicksTheNearestThingNotThePortal() {
+        let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
+        let m = gs.cubeModel
+        let n = m.size, grid = m.worldScale.standGrid
+        // Find the tile holding BOTH the arch and the vessel beside it.
+        var found = false
+        for r in 0..<n {
+            for c in 0..<n {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                let props = m.cubies[ci].facelets[fi].props
+                guard let portal = props.first(where: { $0.kind == .portal }),
+                      let vessel = props.first(where: { $0.kind == .layeredVessel }) else { continue }
+                found = true
+                check(portal.subRow != vessel.subRow || portal.subCol != vessel.subCol,
+                      "the arch and its vessel should stand apart on the tile")
+                let k = grid / 3
+                // Stand ON the vessel's sub-cell and press F: it must NOT travel.
+                gs.player.face = .positiveZ; gs.player.row = r; gs.player.col = c
+                gs.player.subRow = vessel.subRow * k + k / 2
+                gs.player.subCol = vessel.subCol * k + k / 2
+                gs.portalRequested = false
+                gs.interact()
+                check(!gs.portalRequested, "F beside the vessel must not fire the portal")
+                check(gs.vesselDemo > 0, "F beside the vessel inspects the vessel")
+                // Stand on the ARCH's own sub-cell and press F: it must travel.
+                gs.player.subRow = portal.subRow * k + k / 2
+                gs.player.subCol = portal.subCol * k + k / 2
+                gs.interact()
+                check(gs.portalRequested, "F at the arch itself still travels")
+            }
+        }
+        check(found, "Scene 1 should stand a vessel beside its arch")
+    }
+
     static func testSceneOneCanBeWalkedFromClearingToArch() {
         let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
         let m = gs.cubeModel
@@ -1105,6 +1146,7 @@ struct CoordinateMathTests {
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
         testSceneOneCanBeWalkedFromClearingToArch()
+        testInteractPicksTheNearestThingNotThePortal()
         testCrossingAnOpenEdgeAlwaysFindsSomewhereToLand()
         testFlatPropsDoNotWallOffTheirOwnTile()
         testEveryStampHasConsistentEdges()
