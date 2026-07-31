@@ -962,6 +962,31 @@ struct CoordinateMathTests {
         check(adjacentWithWalls > 0, "an adjacent walled tile must already have its wall models")
     }
 
+    /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
+    /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
+    /// above all — left the player at PlayerState's default, the centre of the front face.
+    ///
+    /// Harmless while every world revealed itself at build; fatal once one keeps its fog. It put the
+    /// player in the middle of Scene 1's maze with only the clearing revealed, which reads as three
+    /// separate bugs at once: no walls, fog where the ground should be, and no clearing in sight.
+    static func testWorldsPlaceThePlayerWhereTheySay() {
+        for (label, gs) in [("scene-1", GameState(size: PrologueSize.sceneOne, name: "s1", stamp: .sceneOne)),
+                            ("scene-2", GameState(size: PrologueSize.sceneTwo, name: "s2", stamp: .sceneTwo)),
+                            ("scene-4", GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour))] {
+            guard let spawn = gs.cubeModel.spawnLocation else {
+                check(false, "\(label) should author a spawn"); continue
+            }
+            check(gs.player.face == spawn.face && gs.player.row == spawn.row && gs.player.col == spawn.col,
+                  "\(label) starts the player at (\(gs.player.row),\(gs.player.col)), authored (\(spawn.row),\(spawn.col))")
+            check(gs.player.facing == spawn.facing, "\(label) starts the player facing \(spawn.facing)")
+            // And the tile under them is one they can see — standing in fog is not a start.
+            guard let (ci, fi) = gs.cubeModel.faceletAt(face: gs.player.face, row: gs.player.row, col: gs.player.col)
+            else { check(false, "\(label) spawn is off the grid"); continue }
+            check(gs.cubeModel.cubies[ci].facelets[fi].tileState != .unknown,
+                  "\(label) must not start the player on an unrevealed tile")
+        }
+    }
+
     static func testSceneOneAmbienceTriggers() {
         let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
         let m = gs.cubeModel
@@ -1296,6 +1321,7 @@ struct CoordinateMathTests {
         testVesselCanBeApproached()
         testSceneOneCanBeWalkedFromClearingToArch()
         testSceneOneAmbienceTriggers()
+        testWorldsPlaceThePlayerWhereTheySay()
         testFogRevealsWhatYouCouldSeeFromWhereYouStand()
         testVesselsMoveOnlyWhenNotWatched()
         testInteractPicksTheNearestThingNotThePortal()

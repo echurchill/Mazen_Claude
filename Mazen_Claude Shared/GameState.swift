@@ -162,11 +162,27 @@ class GameState {
         cubeModel = CubeModel(worldScale: ws, stamp: stamp)
         skyCounterpart = stamp.skyCounterpart
         player = PlayerState(size: size, standGrid: ws.standGrid)
+        // Stand where the world SAYS you stand. `spawnLocation` was only ever applied on arrival
+        // through a portal, so a world entered any other way — the boot world above all — put the
+        // player at PlayerState's default, the centre of the front face.
+        //
+        // That was harmless while every world revealed itself at build. Scene 1 keeps its fog, so
+        // the default dropped the player into the middle of the maze with only the clearing
+        // revealed: no walls (they need a seen tile), fog where the ground should be, and a clearing
+        // nowhere near them. One wrong position, three symptoms that look like three bugs (Eddie:
+        // "what the heck is going on?").
+        if let spawn = cubeModel.spawnLocation {
+            player.face = spawn.face
+            player.row = spawn.row
+            player.col = spawn.col
+            player.facing = spawn.facing
+        }
         if verboseDebugLog { printMazeDebug(face: player.face) }
         // Seed the door plinth's initial glyph from the freshly-stamped lock state (three-of-four
         // while three dials are pre-aligned) — otherwise it stays blank until the first dial is
         // touched. No-op in worlds without a temple door.
         updateDoorPlinths()
+        revealLineOfSight()      // the first frame should show what standing there shows
     }
 
     func printMazeDebug(face: CubeFace) {
