@@ -221,7 +221,8 @@ final class SceneBuilder {
                         // Revealed maze geometry + the dissolve fog that is still burning off it.
                         emitMazeTile(facelet, restM: restM, spin: spin,
                                      roundness: roundness, invHalf: invHalf, relief: relief,
-                                     naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed, tileMeshLib: tileMeshLib)
+                                     naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed,
+                                     metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib)
                         let fogInst = InstanceDataSwift(
                             modelMatrix: matrix,
                             baseColor: faceColor * 0.9,
@@ -239,7 +240,8 @@ final class SceneBuilder {
                         case .maze:
                             emitMazeTile(facelet, restM: restM, spin: spin,
                                          roundness: roundness, invHalf: invHalf, relief: relief,
-                                         naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed, tileMeshLib: tileMeshLib)
+                                         naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed,
+                                     metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib)
                         case .grass, .water, .regolith, .plating:
                             // M19: a full-tile ground quad, no walls. Grass (14) / water (15) /
                             // regolith (16) share the fieldFloor mesh, so they batch into one draw.
@@ -530,6 +532,19 @@ final class SceneBuilder {
                             else if prop.kind == .dustMote { discovery = max(0, min(1, prop.anim)) }
                             else if prop.kind == .layeredVessel { discovery = max(0, min(1, prop.anim / 3)) }
                             else if prop.kind == .obelisk && prop.anim > 0 { discovery = prop.anim }
+                            // Scene 3D — the refusal. A faint flash on the symbol of the obelisk the
+                            // player just touched, and only that one: enough to say "you were heard"
+                            // without ever saying "yes".
+                            else if prop.kind == .obelisk && gameState.obeliskRebuffFacelet == facelet.id.rawValue {
+                                discovery = gameState.obeliskRebuff * 0.22
+                            }
+                            // 3I AFTER FIVE: "the remaining inactive obelisk flashes once. Its symbol
+                            // becomes more visible, helping the player identify the final matching
+                            // plinth. This is guidance, not an objective marker." So: a slow pulse on
+                            // the one that is left, never a steady light.
+                            else if prop.kind == .obelisk, gameState.chamberWoken > 0.8, gameState.chamberWoken < 1 {
+                                discovery = 0.10 + 0.10 * (0.5 + 0.5 * sinf(gameState.time * 1.6))
+                            }
                             else if prop.kind == .portalField && prop.alignAnim > 0 { discovery = prop.alignAnim }
                             else { discovery = 1.0 }
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
@@ -576,6 +591,7 @@ final class SceneBuilder {
         // hollow shell and the middle of it was simply empty space. "Every surface of the chamber has
         // its local up directed toward this shared center… it is not on the ceiling. It is always
         // inward." So the orb sits at the origin, which is exactly what makes that true for free.
+        var beamIndex: UInt32 = 0
         for e in gameState.chamberEmitters {
             if e.isOrb {
                 let c = spin * SIMD4(e.a.x, e.a.y, e.a.z, 1)
@@ -604,9 +620,10 @@ final class SceneBuilder {
             bm.columns.3 = SIMD4(start, 1)
             beamTiles.append(TileEntry(
                 instance: InstanceDataSwift(modelMatrix: bm, baseColor: SIMD4(1, 1, 1, 1),
-                    materialID: 31, tileID: 0, discoveryAmount: e.glow, styleSeed: 0,
+                    materialID: 31, tileID: 0, discoveryAmount: e.glow, styleSeed: beamIndex,
                     spinMatrix: matrix_identity_float4x4, roundness: 0, invHalfExtent: 1, reliefAmplitude: 0),
                 mesh: tileMeshLib.beamMesh))
+            beamIndex += 1
         }
 
         // Celestial bodies (M9): the sun cube (emissive) and moon cube (sun-lit) at their
@@ -975,7 +992,7 @@ final class SceneBuilder {
     /// (R2.2: previously two hand-maintained copies that had to be edited in lockstep).
     private func emitMazeTile(_ facelet: MazeFacelet, restM: float4x4, spin: float4x4,
                               roundness: Float, invHalf: Float, relief: Float, naturalDressing: Bool,
-                              suppressHedge: Bool, tileMeshLib: TileMeshLibrary) {
+                              suppressHedge: Bool, metal: Bool = false, tileMeshLib: TileMeshLibrary) {
         let openings = facelet.mazeTile.openings
         let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
         let uvT = facelet.mazeTile.uvTurns
@@ -992,13 +1009,13 @@ final class SceneBuilder {
         } else {
             // Floor: inflated per-vertex (rest matrix + roundness + relief).
             let floorInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-                materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                materialID: metal ? 32 : 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
                 styleSeed: facelet.mazeTile.styleSeed,
                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
             mazeFloorTiles[key, default: []].append(TileEntry(instance: floorInst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
             if let pfm = tileMeshLib.pathFloorMesh(for: openings, uvTurns: uvT) {
                 let pathInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
-                    materialID: 9, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                    materialID: metal ? 32 : 9, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
                     styleSeed: facelet.mazeTile.styleSeed,
                     spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
                 mazePathFloorTiles[key, default: []].append(TileEntry(instance: pathInst, mesh: pfm))
@@ -1013,14 +1030,14 @@ final class SceneBuilder {
             // (walls are the foliage props placed by stampGardenWalls; nothing to emit here)
         } else if let wm = tileMeshLib.wallMesh(configKey: cfg) {
             let wallInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-                materialID: 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                materialID: metal ? 32 : 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
                 styleSeed: facelet.mazeTile.styleSeed,
                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
             mazeWallTiles[cfg, default: []].append(TileEntry(instance: wallInst, mesh: wm))
         }
         if !suppressHedge, let pm = tileMeshLib.postMesh(configKey: cfg) {
             let postInst = InstanceDataSwift(modelMatrix: restM, baseColor: Self.postColor,
-                materialID: 8, tileID: UInt32(facelet.id.rawValue),
+                materialID: metal ? 32 : 8, tileID: UInt32(facelet.id.rawValue),
                 discoveryAmount: 1.0, styleSeed: facelet.mazeTile.styleSeed,
                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
             mazePostTiles[cfg, default: []].append(TileEntry(instance: postInst, mesh: pm))

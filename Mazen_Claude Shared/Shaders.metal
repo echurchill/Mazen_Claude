@@ -809,6 +809,67 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 32) {
+        // SCENE 3's WALLS — "a patchwork of metal cubes and rectangular blocks: dark iron, tarnished
+        // brass, dull steel, oxidized copper, blackened alloy, occasional pale ceramic or crystalline
+        // inserts… The blocks vary slightly in size and age, but all conform to the tile topology."
+        //
+        // Procedural rather than an atlas: there is no art to author, and every wall in the chamber
+        // becomes a different piece of salvage. The block grid is deliberately IRREGULAR in one axis
+        // — a straight grid reads as tiling, and the script wants "repaired, replaced, or accumulated
+        // across enormous spans of time".
+        float3 lp = in.localPosition;
+        // Blocks are laid in courses, and each course is offset — masonry, not graph paper.
+        float course = floor(lp.z * 9.0);
+        float row = fract(lp.z * 9.0);
+        float along = (abs(normal.z) > 0.7) ? lp.x : ((abs(normal.x) > 0.7) ? lp.y : lp.x);
+        float shift = fract(sin(course * 12.9898) * 43758.5453) * 0.5;
+        float unit = floor(along * 6.0 + shift);
+        float col = fract(along * 6.0 + shift);
+        // One hash per block picks its metal and its age.
+        float h = fract(sin(unit * 78.233 + course * 37.719) * 43758.5453);
+        float h2 = fract(sin(unit * 12.111 + course * 91.7) * 24634.6345);
+        float3 metalTint;
+        if (h < 0.26)      metalTint = float3(0.20, 0.20, 0.23);   // dark iron
+        else if (h < 0.44) metalTint = float3(0.42, 0.34, 0.17);   // tarnished brass
+        else if (h < 0.62) metalTint = float3(0.34, 0.36, 0.38);   // dull steel
+        else if (h < 0.78) metalTint = float3(0.24, 0.36, 0.31);   // oxidized copper
+        else if (h < 0.94) metalTint = float3(0.14, 0.14, 0.16);   // blackened alloy
+        else               metalTint = float3(0.68, 0.66, 0.62);   // pale ceramic insert
+        // Age: some blocks are newer than their neighbours, which is the "repaired, replaced" read.
+        metalTint *= 0.72 + 0.5 * h2;
+        // SEAMS between blocks, and the deeper joint between courses.
+        float seamA = smoothstep(0.0, 0.045, col) * smoothstep(1.0, 0.955, col);
+        float seamB = smoothstep(0.0, 0.070, row) * smoothstep(1.0, 0.930, row);
+        float seam = seamA * seamB;
+        // RIVETS near the corners of the larger blocks.
+        float2 rv = float2(fract(col * 2.0) - 0.5, fract(row * 2.0) - 0.5);
+        float rivet = (h2 > 0.55) ? smoothstep(0.16, 0.09, length(rv)) : 0.0;
+        float3 base = metalTint * (0.35 + 0.65 * seam) + metalTint * rivet * 0.45;
+        // DORMANT LIGHT CHANNELS — "occasional", and dormant: they carry a trace, not a glow. The
+        // chamber's real light is the orb, and these only hint that the walls once did more.
+        float channel = (h > 0.90 && h2 < 0.34) ? smoothstep(0.46, 0.5, row) * smoothstep(0.54, 0.5, row) : 0.0;
+        // 3I AFTER FOUR: "dormant light channels awaken across portions of the maze. The chamber
+        // becomes easier to navigate." Not all of them — portions, so the hash decides which.
+        float woken = smoothstep(0.55, 0.70, frame.chamberWoken) * step(0.55, h2);
+        float3 amb = skyAmbient * 0.30 + sunColor * 0.35 * halfLambert * shadowFactor;
+        // A tight specular so metal reads as metal under the orb's moving light rather than as stone.
+        float3 viewDir = normalize(frame.cameraPosition - in.worldPosition);
+        float3 halfV = normalize(viewDir + normalize(frame.lightDirection));
+        float spec = pow(saturate(dot(normal, halfV)), 42.0) * (0.10 + 0.30 * h2) * seam;
+        color = base;
+        color += float3(0.30, 0.62, 0.72) * channel * (0.30 + 1.5 * woken);
+        // 3J THE WAVE: "a wave of light travels outward from the orb… and across all six faces. The
+        // wave reveals the full cube for a moment." A front expanding by distance from the centre,
+        // which is the chamber's origin — so it genuinely sweeps outward through the room rather
+        // than fading everything up together.
+        if (frame.chamberWave > 0.0 && frame.chamberWave < 1.0) {
+            float d = length(in.worldPosition);
+            float front = frame.chamberWave * 9.0 - d;
+            float pass = smoothstep(0.0, 0.5, front) * smoothstep(2.4, 0.6, front);
+            color += float3(0.42, 0.68, 0.95) * pass * 0.85;
+        }
+        lighting = amb + float3(1.0) * spec;
     } else if (in.materialID == 30) {
         // SCENE 3's ORB — "from one angle it appears spherical. From another, its surface reveals
         // shifting crystalline planes. Fine internal structures rotate or refract independently,
@@ -834,13 +895,23 @@ fragment float4 fragmentShader(
         float fres = pow(1.0 - saturate(dot(normal, viewDir)), 2.2);
         // "Initially the orb emits only a faint internal glow. Its light rises and falls slowly,
         // almost like breathing." The breath slows and deepens as the chamber wakes.
-        float breath = 0.72 + 0.28 * sin(t * (0.55 + 0.35 * woken));
+        // 3J: "the orb's internal facets accelerate. Its glow strengthens." The wave doubles the
+        // rate while it passes, then the chamber settles darker for having been bright.
+        float wave = frame.chamberWave > 0.0 ? sin(frame.chamberWave * 3.14159) : 0.0;
+        float breath = 0.72 + 0.28 * sin(t * (0.55 + 0.35 * woken + 1.6 * wave));
         float3 cold = float3(0.30, 0.52, 0.72);
         float3 hot  = float3(0.72, 0.88, 1.00);
         float3 body = mix(cold, hot, woken * 0.75);
+        // 3I AFTER THREE: "faint lines appear inside it, suggesting an incomplete internal
+        // structure." Latitude lines that only resolve once half the chamber is lit — an interior
+        // the orb was not showing you before.
+        float inner = smoothstep(0.45, 0.62, woken)
+                    * smoothstep(0.86, 1.0, abs(sin(p.y * 11.0 + t * 0.21)));
         color = body * (0.16 + 0.55 * planes) * breath
               + float3(0.55, 0.78, 1.00) * fres * (0.35 + 0.65 * woken)
-              + body * woken * 0.30;
+              + body * woken * 0.30
+              + float3(0.60, 0.82, 1.00) * inner * 0.35
+              + float3(0.80, 0.93, 1.00) * wave * 0.55;
         lighting = float3(1.0);          // it is a light source, not a lit thing
     } else if (in.materialID == 31) {
         // SCENE 3's BEAM. "The beam is not perfectly steady. It pulses in slow intervals:
@@ -855,9 +926,17 @@ fragment float4 fragmentShader(
         float glow = clamp(in.discoveryAmount, 0.0, 1.0);
         float t = frame.time;
         // The cycle. One slow rhythm, offset along the beam so the whole length is never at once.
-        float cycle = sin(t * 0.9 - along * 2.1);
+        // 3I AFTER TWO: "their rhythms begin to alternate." styleSeed carries the beam's index, so
+        // each runs a half-cycle out of phase with its neighbour instead of six beams breathing as
+        // one — which would read as a machine rather than as six separate things answering.
+        float phase = float(in.styleSeed) * 1.04;
+        float cycle = sin(t * 0.9 - along * 2.1 + phase);
         float bright = 0.55 + 0.45 * cycle;
         float width = 1.0 - 0.35 * bright;                   // brighter ⇒ narrower, per the script
+        // 3J: "the six beams contract into narrower, brighter lines." Briefly, while the wave runs.
+        float wave = frame.chamberWave > 0.0 ? sin(frame.chamberWave * 3.14159) : 0.0;
+        width *= 1.0 - 0.55 * wave;
+        bright += 1.1 * wave;
         if (across > width) discard_fragment();
         // Soft core, and a taper toward the orb end so the beam ARRIVES rather than stopping.
         float core = 1.0 - smoothstep(0.0, width, across);

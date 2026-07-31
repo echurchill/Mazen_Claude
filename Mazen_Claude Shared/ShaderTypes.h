@@ -73,6 +73,10 @@ typedef struct
     vector_float4 chamberLightB[8];      // xyz = segment end (== A for the orb), w = intensity
     vector_float4 chamberLightColor[8];  // rgb; w unused
     int chamberLightCount;
+    // Scene 3I/3J — how awake the chamber is (0…1, obelisks lit), and the completion WAVE that
+    // travels out from the orb when the sixth connects (0 = not running, →1 as it passes).
+    float chamberWoken;
+    float chamberWave;
     vector_float3 portalLightPosition;   // world space; unused when the radius is 0
     float portalLightRadius;             // 0 = no portal light this frame
     vector_float3 portalLightColor;

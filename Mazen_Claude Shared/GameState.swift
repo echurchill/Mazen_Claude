@@ -241,6 +241,8 @@ class GameState {
 
         tickAlignmentCylinder(deltaTime)
         tickObeliskAwakening(deltaTime)
+        tickObeliskRebuff(deltaTime)
+        tickChamberWave(deltaTime)
         tickLayeredVessel(deltaTime)
         tickVesselDemo(deltaTime)
         tickAnchorFlash(deltaTime)
@@ -998,6 +1000,47 @@ class GameState {
         return out
     }
 
+    /// Scene 3J — the completion wave. "A wave of light travels outward from the orb, down each
+    /// beam, into every obelisk, and across all six faces. The wave reveals the full cube for a
+    /// moment. Then the chamber returns to its darker state." 0 = not running; climbs once to 1 and
+    /// stops, because it happens exactly once and the chamber is quieter afterwards for having.
+    private(set) var chamberWave: Float = 0
+    private var chamberWaveFired = false
+
+    private func tickChamberWave(_ dt: Float) {
+        if !chamberWaveFired, cubeModel.symbolPairedPlinths, sceneThreeAllObelisksAwake {
+            chamberWaveFired = true
+        }
+        guard chamberWaveFired, chamberWave < 1 else { return }
+        chamberWave = min(1, chamberWave + dt / 3.2)
+    }
+
+    /// How much of the chamber is awake, 0…1 — the value 3I's stages are keyed to.
+    var chamberWoken: Float {
+        guard cubeModel.symbolPairedPlinths else { return 0 }
+        var lit: Float = 0, total: Float = 0
+        for cu in cubeModel.cubies {
+            for f in cu.facelets {
+                for p in f.props where p.kind == .obelisk {
+                    total += 1
+                    if p.anim > 0 { lit += 1 }
+                }
+            }
+        }
+        return total > 0 ? lit / total : 0
+    }
+
+    /// Scene 3D — an obelisk that has just been touched and refused: 1 → 0 as its symbol flashes.
+    /// Which one, by facelet id, so only the one the player put their hand on answers.
+    private(set) var obeliskRebuff: Float = 0
+    private(set) var obeliskRebuffFacelet: Int = -1
+
+    private func tickObeliskRebuff(_ dt: Float) {
+        guard obeliskRebuff > 0 else { return }
+        obeliskRebuff = max(0, obeliskRebuff - dt / 0.8)
+        if obeliskRebuff <= 0 { obeliskRebuffFacelet = -1 }
+    }
+
     /// Scene 3 — every obelisk lit. The exit "is created only after all six obelisks are active".
     var sceneThreeAllObelisksAwake: Bool {
         for cu in cubeModel.cubies {
@@ -1331,6 +1374,35 @@ class GameState {
         // M16.6 (Eddie): a SWITCH — F toggles it engaged (poking out) ↔ disengaged (flush). All four
         // engaged dissolves the lock; disengaging any one re-applies it (goof-and-fix). The door
         // plinth's progress display + the lock are refreshed together.
+        // Scene 3D — touching an OBELISK. "Activating an obelisk directly does nothing. The symbol
+        // flashes faintly, a distant answering tone sounds from somewhere else in the maze, the
+        // obelisk remains inactive. This teaches that the control is located elsewhere."
+        //
+        // The answering tone is positioned at the obelisk's own PLINTH, so the sound is not merely
+        // "somewhere else" — it is the answer, and a player who turns toward it is already walking
+        // to the thing they need. The lesson and the direction arrive together.
+        if cubeModel.symbolPairedPlinths,
+           let obIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .obelisk }) {
+            let symbol = cubeModel.cubies[ci].facelets[fi].props[obIdx].state
+            if cubeModel.cubies[ci].facelets[fi].props[obIdx].anim <= 0 {
+                obeliskRebuff = 1                       // the symbol flashes and fades
+                obeliskRebuffFacelet = cubeModel.cubies[ci].facelets[fi].id.rawValue
+                var answerAt: SIMD3<Float>? = nil
+                for cu in cubeModel.cubies.indices {
+                    for f in cubeModel.cubies[cu].facelets.indices
+                    where cubeModel.cubies[cu].facelets[f].props.contains(where: {
+                        $0.kind == .switchCap && $0.state == symbol
+                    }) {
+                        if let loc = cubeModel.locate(cubie: cu, facelet: f) {
+                            let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
+                            answerAt = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                        }
+                    }
+                }
+                pendingAudioCues.append(.switchDisengaged(at: answerAt))
+            }
+            return                                       // it stays inactive either way
+        }
         // Scene 3 — a plinth that controls ONE obelisk, by symbol, somewhere else in the chamber.
         // "Unlike Scene 2, activation is not reversible during normal play. Once raised, a plinth
         // remains active. The puzzle is cumulative."

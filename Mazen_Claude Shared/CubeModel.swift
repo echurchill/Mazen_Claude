@@ -59,6 +59,11 @@ enum PrologueSize {
 enum WallStyle {
     case hedge
     case dressed
+    /// Scene 3 — the Builders' engineered interior. Same wall MESH as the hedge maze (the shape of a
+    /// maze wall is the shape of a maze wall), shaded as "a patchwork of metal cubes and rectangular
+    /// blocks… seams, rivets, inset plates, and occasional dormant light channels". Procedural, so
+    /// there is no atlas to author and every wall in the chamber is a different piece of salvage.
+    case metal
 }
 
 class CubeModel {
@@ -398,7 +403,7 @@ class CubeModel {
     /// make you walk all six.
     private func stampSceneThree() {
         let n = size, c = n / 2
-        wallStyle = .hedge          // the metal-block walls are their own look; hedges stay off
+        wallStyle = .metal          // patchwork iron, brass, steel, copper — see `WallStyle`
         symbolPairedPlinths = true
 
         // The six symbols. Distinct but visibly of one language — they are all caustic glyphs, which

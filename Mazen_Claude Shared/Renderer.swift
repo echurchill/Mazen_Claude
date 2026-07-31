@@ -1009,6 +1009,8 @@ class Renderer: NSObject, MTKViewDelegate {
             chamberLightB: chamberLights.b,
             chamberLightColor: chamberLights.color,
             chamberLightCount: chamberLights.count,
+            chamberWoken: gameState.chamberWoken,
+            chamberWave: gameState.chamberWave,
             portalLightPosition: portalLight.position,
             portalLightRadius: portalLight.radius,
             portalLightColor: portalLight.color,

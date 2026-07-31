@@ -1039,6 +1039,46 @@ struct CoordinateMathTests {
         check(m.sealedPortalCubies.isEmpty, "and the way out is created")
     }
 
+    /// Scene 3's staged responses (3I) and its completion (3J) hang on two numbers the model owns:
+    /// how awake the chamber is, and whether the wave has run. Both are worth pinning because the
+    /// stages are keyed to thresholds — an off-by-one in the count silently skips a beat.
+    static func testSceneThreeWakesInStagesAndFiresItsWaveOnce() {
+        let gs = GameState(size: PrologueSize.sceneThree, name: "s3", interior: true, stamp: .sceneThree)
+        let m = gs.cubeModel
+        check(gs.chamberWoken == 0, "the chamber starts dark")
+        check(gs.chamberWave == 0, "and the wave has not run")
+
+        var plinths: [(CubeFace, Int, Int)] = []
+        for face in CubeFace.allCases {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .switchCap }) {
+                        plinths.append((face, r, c))
+                    }
+                }
+            }
+        }
+        check(plinths.count == 6, "six plinths")
+        let grid = m.worldScale.standGrid
+        for (i, p) in plinths.enumerated() {
+            gs.player.face = p.0; gs.player.row = p.1; gs.player.col = p.2
+            gs.player.subRow = grid / 2; gs.player.subCol = grid / 2
+            gs.interact()
+            gs.update(deltaTime: 1.0 / 60.0)
+            let expected = Float(i + 1) / 6
+            check(abs(gs.chamberWoken - expected) < 0.001,
+                  "after \(i + 1) plinths the chamber should be \(expected) awake, got \(gs.chamberWoken)")
+            // The wave belongs to the SIXTH, not to any earlier one.
+            if i < 5 { check(gs.chamberWave == 0, "the wave must not start at \(i + 1) obelisks") }
+        }
+        // It runs, and it runs once.
+        for _ in 0..<400 { gs.update(deltaTime: 1.0 / 60.0) }
+        check(gs.chamberWave >= 1, "the wave completes")
+        for _ in 0..<400 { gs.update(deltaTime: 1.0 / 60.0) }
+        check(gs.chamberWave == 1, "and does not restart — 'then the chamber returns to its darker state'")
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1431,6 +1471,7 @@ struct CoordinateMathTests {
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
         testSceneThreePairsPlinthsToDistantObelisks()
+        testSceneThreeWakesInStagesAndFiresItsWaveOnce()
         testSealedWorldsCannotBeWalkedOutOf()
         testSealSurvivesTheScriptedTurn()
         testSightGoesDownCorridorsNotJustOntoTheNextTile()
