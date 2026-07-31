@@ -15,6 +15,7 @@ enum WorldStamp {
     case portalHub       // M20 (Eddie): a flat plaza of labeled portals — one TARDIS + signpost per world, to navigate by reading not memorised keys
     case sceneTwo        // Prologue Scene 2 "The Four Corners": four corner switches, a control plinth, and the way onward hidden on a face that must be TURNED into view
     case sceneOne        // Prologue Scene 1 "The First Clearing": a walled clearing, a break in its north wall, and a maze of vessels beyond — the opening, and the first sight of the Builders' objects
+    case sceneThree      // Prologue Scene 3 "The Heart of the World": the INSIDE of Scene 2's world — six interior faces, six obelisks, six remote plinths, and a suspended orb at the centre
     case sceneFour       // Prologue Scene 4 "The First Turn": the player is handed the twist, and must first read and release a bond before the world will move
 
     /// The world this stamp wants hanging overhead, by name (see `GameState.skyCounterpart`).
@@ -42,6 +43,10 @@ enum PrologueSize {
     /// the playable area" — 9 tiles of clearing against ~35 of maze at this size, which is that,
     /// walked rather than counted.
     static let sceneOne = 9
+    /// Scene 3. "World dimensions: 5x5x5 … playable surface: six interior faces, each 5x5 tiles" —
+    /// the script is explicit, and it has to be: the player must be able to see the orb from every
+    /// face, which a larger chamber would put out of reach of the eye.
+    static let sceneThree = 5
 }
 
 /// M20 — how a world's maze WALLS are rendered.
@@ -129,6 +134,9 @@ class CubeModel {
             // constraint that pins Scenes 2 and 4 to zero does not apply.
             roundness = 1.0
             reliefAmplitude = 0.02      // barely there: "small irregularities suggest natural earth"
+        case .sceneThree:
+            stampSceneThree()
+            roundness = 0.0             // "shape: hard-edged cube"
         case .sceneTwo:
             stampSceneTwo()
             naturalDressing = true
@@ -370,6 +378,96 @@ class CubeModel {
             for r in 0..<n {
                 for c in 0..<n {
                     guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { continue }
+                    cubies[ci].facelets[fi].tileState = .discovered
+                    cubies[ci].facelets[fi].discoveryAmount = 1.0
+                }
+            }
+        }
+    }
+
+
+    // MARK: - Prologue Scene 3 — "The Heart of the World"
+
+    /// The inside of Scene 2's world. Six interior faces under one continuous maze, an obelisk
+    /// standing inward from the middle of each, and six plinths that control them REMOTELY — no
+    /// plinth on the same face as the obelisk it wakes, so every pairing is a journey.
+    ///
+    /// The scene's real subject is the chamber's geometry: every surface's "up" points at the same
+    /// centre, so the orb hangs in the same place above you whichever face you are on, and crossing
+    /// a face reorients the world around you rather than moving you through it. The puzzle exists to
+    /// make you walk all six.
+    private func stampSceneThree() {
+        let n = size, c = n / 2
+        wallStyle = .hedge          // the metal-block walls are their own look; hedges stay off
+        symbolPairedPlinths = true
+
+        // The six symbols. Distinct but visibly of one language — they are all caustic glyphs, which
+        // is the Builders' hand. (The script asks for six purpose-made marks; these stand in until
+        // that art exists, and the pairing logic does not care which slices they are.)
+        let symbols = [TextureLoader.CausticSymbol.one.rawValue,
+                       TextureLoader.CausticSymbol.two.rawValue,
+                       TextureLoader.CausticSymbol.three.rawValue,
+                       TextureLoader.CausticSymbol.four.rawValue,
+                       TextureLoader.CausticSymbol.swirl.rawValue,
+                       TextureLoader.CausticSymbol.square.rawValue]
+        let faces: [CubeFace] = [.positiveZ, .positiveY, .negativeX, .negativeZ, .positiveX, .negativeY]
+
+        // AN OBELISK IN THE MIDDLE OF EVERY FACE, pointing inward at the orb. Inactive: "they are
+        // dark and silent", and interacting with one does nothing — the control is somewhere else.
+        for (i, face) in faces.enumerated() {
+            guard let (ci, fi) = faceletAt(face: face, row: c, col: c) else { continue }
+            for dir in [SurfaceDirection.north, .east, .south, .west] {
+                setSharedEdge(face: face, row: c, col: c, dir, open: true)   // reachable from anywhere
+            }
+            var ob = Prop(kind: .obelisk, subRow: 1, subCol: 1, state: symbols[i])
+            ob.anim = 0
+            cubies[ci].facelets[fi].props.append(ob)
+        }
+
+        // THE PLINTHS. Face i's obelisk is controlled from face i+1 — a six-cycle, so no pairing is
+        // the opposite face and none is local. "The exact mapping may be authored for navigational
+        // rhythm, but should not follow an immediately obvious opposite-face rule for all six."
+        // Positions vary per face so the six do not sit on a pattern either.
+        let spots = [(1, 1), (1, c + 1), (c + 1, 1), (c + 1, c + 1), (1, c), (c + 1, c)]
+        for (i, _) in faces.enumerated() {
+            let host = faces[(i + 1) % faces.count]          // the face the CONTROL stands on
+            let spot = spots[i]
+            guard let (ci, fi) = faceletAt(face: host, row: spot.0, col: spot.1) else { continue }
+            for dir in [SurfaceDirection.north, .east, .south, .west] {
+                setSharedEdge(face: host, row: spot.0, col: spot.1, dir, open: true)
+            }
+            cubies[ci].facelets[fi].props.append(Prop(kind: .switchBase, subRow: 1, subCol: 1, facing: .n))
+            // `state` is the SYMBOL, which is the whole binding: the plinth wakes whichever obelisk
+            // carries the same mark, and nothing has to remember a pairing table.
+            var cap = Prop(kind: .switchCap, subRow: 1, subCol: 1, facing: .n, state: symbols[i])
+            cap.alignAnim = 0                                // 0 = flush and dark; 1 = raised, lit
+            cubies[ci].facelets[fi].props.append(cap)
+        }
+
+        // THE WAY ON, "created only after all six obelisks are active" — so it is stamped sealed and
+        // opens when the last obelisk wakes. On the floor face, away from every plinth.
+        if let (ci, fi) = faceletAt(face: .negativeY, row: n - 1, col: c) {
+            for dir in [SurfaceDirection.north, .east, .south, .west] {
+                setSharedEdge(face: .negativeY, row: n - 1, col: c, dir, open: true)
+            }
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 13, transition: .push))
+            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 2))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+            cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2))
+            sealedPortalCubies.insert(ci)
+        }
+
+        // Arrival: on the floor, looking across the chamber. "The player enters from above" — the
+        // descent from Scene 2 lands them on a surface, and every surface here is a floor.
+        spawnLocation = (face: .positiveZ, row: n - 1, col: c, facing: .n)
+
+        // Fog stays ON (the script asks for it), but the six faces are large and the maze is the
+        // point — reveal the arrival tile's surroundings so the first frame is not a wall of grey.
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
                     cubies[ci].facelets[fi].tileState = .discovered
                     cubies[ci].facelets[fi].discoveryAmount = 1.0
                 }
@@ -987,8 +1085,9 @@ class CubeModel {
         // (spawn = face centre, kept clear). Index 9 is the hub itself, so it is skipped. Dev
         // navigation: the prologue's scenes chain forward through their own portals, and this hub
         // exists so any of them can be reached directly while building.
-        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12]
-        let gridRows = [c - 5, c - 3, c - 1], gridCols = [c - 5, c - 2, c + 1, c + 4]
+        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13]
+        // Four rows now — the 3×4 grid filled up at twelve, and Scene 3 is the thirteenth.
+        let gridRows = [c - 5, c - 3, c - 1, c + 1], gridCols = [c - 5, c - 2, c + 1, c + 4]
         for (slot, idx) in hubDestinations.enumerated() {
             let gr = gridRows[slot / 4], gc = gridCols[slot % 4]
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
@@ -2728,6 +2827,12 @@ class CubeModel {
     /// still being narrowed to a centred gap between jamb posts that a dressed world never draws.
     /// See `fullWidthGateways`.
     var wallStyle: WallStyle = .hedge
+
+    /// Scene 3 — plinths and obelisks are paired by SYMBOL rather than collectively. Activating a
+    /// plinth wakes the obelisk carrying the same symbol, wherever in the chamber it stands: "a
+    /// plinth must not be placed on the same face as its matching obelisk… each pairing therefore
+    /// requires the player to connect a remote control with a distant response."
+    var symbolPairedPlinths = false
 
     /// Whether an open edge may be crossed at its full width. True where the world draws no jamb
     /// posts to justify a narrower gap — i.e. dressed walls, where the stone sits on closed edges

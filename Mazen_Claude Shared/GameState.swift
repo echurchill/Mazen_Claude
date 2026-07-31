@@ -949,6 +949,18 @@ class GameState {
         }
     }
 
+    /// Scene 3 — every obelisk lit. The exit "is created only after all six obelisks are active".
+    var sceneThreeAllObelisksAwake: Bool {
+        for cu in cubeModel.cubies {
+            for f in cu.facelets {
+                // Strictly zero means dark. The awakening STARTS at a hair above zero and climbs,
+                // so a threshold of 0.01 counted a freshly-lit obelisk as still out.
+                for p in f.props where p.kind == .obelisk && p.anim <= 0 { return false }
+            }
+        }
+        return true
+    }
+
     private func openSealedDoors(limitedTo cubies: Set<Int>? = nil) {
         var opened = false
         for ci in Array(cubeModel.sealedPortalCubies)
@@ -1270,6 +1282,41 @@ class GameState {
         // M16.6 (Eddie): a SWITCH — F toggles it engaged (poking out) ↔ disengaged (flush). All four
         // engaged dissolves the lock; disengaging any one re-applies it (goof-and-fix). The door
         // plinth's progress display + the lock are refreshed together.
+        // Scene 3 — a plinth that controls ONE obelisk, by symbol, somewhere else in the chamber.
+        // "Unlike Scene 2, activation is not reversible during normal play. Once raised, a plinth
+        // remains active. The puzzle is cumulative."
+        if cubeModel.symbolPairedPlinths,
+           let capIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .switchCap }) {
+            guard cubeModel.cubies[ci].facelets[fi].props[capIdx].alignAnim < 0.5 else { return }  // already raised
+            let symbol = cubeModel.cubies[ci].facelets[fi].props[capIdx].state
+            cubeModel.cubies[ci].facelets[fi].props[capIdx].alignAnim = 1
+            pendingAudioCues.append(.switchEngaged(at: nil))
+            // "A pulse travels away through embedded channels… the matching obelisk activates
+            // elsewhere in the chamber." The obelisk is found by its MARK, not by a pairing table —
+            // so the puzzle's rule is the same thing the player is reading off the stone.
+            var wokeAt: SIMD3<Float>? = nil
+            for cu in cubeModel.cubies.indices {
+                for f in cubeModel.cubies[cu].facelets.indices {
+                    for pi in cubeModel.cubies[cu].facelets[f].props.indices
+                    where cubeModel.cubies[cu].facelets[f].props[pi].kind == .obelisk
+                        && cubeModel.cubies[cu].facelets[f].props[pi].state == symbol
+                        && cubeModel.cubies[cu].facelets[f].props[pi].anim <= 0.01 {
+                        cubeModel.cubies[cu].facelets[f].props[pi].anim = 0.001   // begins to climb
+                        if let loc = cubeModel.locate(cubie: cu, facelet: f) {
+                            let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
+                            wokeAt = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                        }
+                    }
+                }
+            }
+            obeliskAwakening = true
+            // Positioned AT the obelisk, across the chamber: the sound is how the player learns the
+            // control they just pressed did something somewhere they cannot see.
+            pendingAudioCues.append(.twistLocked(at: wokeAt))
+            if sceneThreeAllObelisksAwake { openSealedDoors() }
+            cubeModel.markTopologyChanged()
+            return
+        }
         if let capIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .switchCap }) {
             // Once the door is open (portal activated), the switches are inert for this puzzle (Eddie).
             guard templeDoorStillSealed() else { return }

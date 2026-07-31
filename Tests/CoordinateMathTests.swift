@@ -61,9 +61,8 @@ struct CoordinateMathTests {
         } }
         // One per entry in CubeModel's hubDestinations (the 9 legacy worlds + Scenes 1, 2 and 4; the
         // hub itself is skipped). Grows as prologue scenes are added — update alongside that list.
-        // The grid is 3 rows × 4 columns, so 12 is also the point at which it is FULL: a thirteenth
-        // destination needs another row before it will have anywhere to stand.
-        check(hubPortals == 12, "expected 12 hub portals, found \(hubPortals)")
+        // The grid grew to 4 rows × 4 columns when Scene 3 became the thirteenth destination.
+        check(hubPortals == 13, "expected 13 hub portals, found \(hubPortals)")
 
         // The garden's temple door: a descent from an already-pushed world, so it must PUSH too.
         let garden = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
@@ -982,6 +981,64 @@ struct CoordinateMathTests {
         check(escaped.isEmpty, "after the turn the player reaches faces \(escaped)")
     }
 
+    /// Scene 3's mechanism: six plinths, six obelisks, matched by SYMBOL, and never on the same face
+    /// — "each pairing therefore requires the player to connect a remote control with a distant
+    /// response". Cumulative, irreversible, and the way out exists only once all six are lit.
+    static func testSceneThreePairsPlinthsToDistantObelisks() {
+        let gs = GameState(size: PrologueSize.sceneThree, name: "scene-3", interior: true, stamp: .sceneThree)
+        let m = gs.cubeModel
+        let n = m.size
+
+        var obelisks: [(face: CubeFace, r: Int, c: Int, symbol: Int)] = []
+        var plinths: [(face: CubeFace, r: Int, c: Int, symbol: Int)] = []
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for c in 0..<n {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    for p in m.cubies[ci].facelets[fi].props {
+                        if p.kind == .obelisk { obelisks.append((face, r, c, p.state)) }
+                        if p.kind == .switchCap { plinths.append((face, r, c, p.state)) }
+                    }
+                }
+            }
+        }
+        check(obelisks.count == 6, "one obelisk per face, got \(obelisks.count)")
+        check(plinths.count == 6, "six plinths, got \(plinths.count)")
+        check(Set(obelisks.map(\.symbol)).count == 6, "every obelisk carries a DISTINCT symbol")
+        check(Set(obelisks.map(\.face)).count == 6, "one per face, not two on any")
+        // The rule the scene is built on.
+        for p in plinths {
+            guard let match = obelisks.first(where: { $0.symbol == p.symbol }) else {
+                check(false, "plinth symbol \(p.symbol) matches no obelisk"); continue
+            }
+            check(match.face != p.face,
+                  "a plinth must not share a face with the obelisk it wakes (symbol \(p.symbol))")
+        }
+        // Obelisks stand in the middle of their face, pointing inward at the orb.
+        for o in obelisks { check(o.r == n / 2 && o.c == n / 2, "obelisk on \(o.face) is off-centre") }
+
+        // Activation: cumulative, and the exit appears only at the end.
+        check(!gs.sceneThreeAllObelisksAwake, "the chamber starts dark")
+        check(m.sealedPortalCubies.count == 1, "the way out starts sealed — it is 'created' at the end")
+        for (i, p) in plinths.enumerated() {
+            gs.player.face = p.face; gs.player.row = p.r; gs.player.col = p.c
+            let grid = m.worldScale.standGrid
+            gs.player.subRow = grid / 2; gs.player.subCol = grid / 2
+            gs.interact()
+            // The obelisk that woke is the one carrying this plinth's symbol, and it is elsewhere.
+            var awake = 0
+            for cu in m.cubies { for f in cu.facelets {
+                awake += f.props.filter { $0.kind == .obelisk && $0.anim > 0 }.count
+            } }
+            check(awake == i + 1, "after \(i + 1) plinths, \(awake) obelisks are lit")
+            if i < plinths.count - 1 {
+                check(!m.sealedPortalCubies.isEmpty, "the exit must not open early")
+            }
+        }
+        check(gs.sceneThreeAllObelisksAwake, "all six lit")
+        check(m.sealedPortalCubies.isEmpty, "and the way out is created")
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1373,6 +1430,7 @@ struct CoordinateMathTests {
         testSceneOneCanBeWalkedFromClearingToArch()
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
+        testSceneThreePairsPlinthsToDistantObelisks()
         testSealedWorldsCannotBeWalkedOutOf()
         testSealSurvivesTheScriptedTurn()
         testSightGoesDownCorridorsNotJustOntoTheNextTile()

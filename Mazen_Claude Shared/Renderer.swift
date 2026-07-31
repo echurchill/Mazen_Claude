@@ -155,7 +155,8 @@ class Renderer: NSObject, MTKViewDelegate {
     /// is never its own signpost — hence the blank placeholder keeping the two lists aligned.
     static let destinationLabels = ["Moon", "Temple Interior", "Natural World", "The Garden", "Gallery",
                                     "Dungeons Gallery", "Nature Gallery", "Ruins Gallery", "MegaKit Gallery",
-                                    "", "Scene 2 Four Corners", "Scene 4 First Turn", "Scene 1 First Clearing"]
+                                    "", "Scene 2 Four Corners", "Scene 4 First Turn", "Scene 1 First Clearing",
+                                    "Scene 3 Heart of the World"]
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
         "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
@@ -263,13 +264,14 @@ class Renderer: NSObject, MTKViewDelegate {
                                      "portal-hub",   // index 9 — the labeled hub (reached by the ` key)
                                      "scene-2",      // index 10 — prologue Scene 2 (APPEND only: portal props store this index)
                                      "scene-4",      // index 11 — prologue Scene 4
-                                     "scene-1"]      // index 12 — prologue Scene 1, the opening
+                                     "scene-1",      // index 12 — prologue Scene 1, the opening
+                                     "scene-3"]      // index 13 — prologue Scene 3, the interior
     /// Destination indices belonging to the PROLOGUE, as opposed to the legacy dev worlds. Their
     /// hub doors wear DARSIT red rather than TARDIS blue, so the scenes read apart at a glance
     /// (Eddie: every scene added from the script gets one). Named rather than bare literals in
     /// SceneBuilder, so appending destinations cannot silently repaint the wrong door — and ADD to
     /// this whenever a scene is added, or its door will come up blue.
-    static let prologueDestinationIDs: Set<Int> = [10, 11, 12]   // scene-2, scene-4, scene-1
+    static let prologueDestinationIDs: Set<Int> = [10, 11, 12, 13]   // scenes 2, 4, 1, 3
     /// The same scenes by name. Derived, so adding a prologue scene to `prologueDestinationIDs`
     /// (which already gives it a DARSIT door) also makes it single-instance — one place the list
     /// is maintained, not two that can silently disagree.
@@ -616,6 +618,13 @@ class Renderer: NSObject, MTKViewDelegate {
         case "portal-hub":
             // M20 (Eddie) — the labeled hub of TARDIS portals + signposts. Size 15 fits the 3×3.
             w = GameState(size: 15, name: dest, stamp: .portalHub)
+        case "scene-3":
+            // Prologue Scene 3 — the INTERIOR of Scene 2's world. No sky, no celestials, no
+            // counterpart overhead; the orb at the centre is the only thing to navigate by.
+            w = GameState(size: PrologueSize.sceneThree, name: dest, interior: true, stamp: .sceneThree)
+            w.twistEnabled = false          // "player twist access: disabled"
+            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
+                                          archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
         case "scene-1":
             // Prologue Scene 1 — the opening. No lock, no twist: "initial twist access: disabled or
             // unexplained". The verb is not withheld as a puzzle here, it simply does not exist yet.
