@@ -479,16 +479,26 @@ final class SceneBuilder {
                                 // float: `anim` counts rings aligned (0…3), normalised here into the
                                 // discoveryAmount slot the shader reads.
                                 materialID = 28
-                                color = SIMD4(1, 1, 1, 1)
+                                // Scene 1E — "one appears warmer in sunlight". baseColor tints the
+                                // ceramic; every other vessel takes it plain, so the difference is
+                                // only visible with one of each in view.
+                                color = prop.state == 2 ? SIMD4(1.10, 1.02, 0.88, 1)
+                                                        : SIMD4(1, 1, 1, 1)
                                 // Beat 2 — "one ring attempts to rotate": the LEADING ring (the next
                                 // one not yet home) swings further than the body and springs back.
                                 // Signed strain in radians, packed into the otherwise-unused styleSeed
                                 // as (strain + 0.25) × 2000 so the shader can recover the sign.
-                                let strain = (sr.isActive && sr.isRefusal) ? sr.currentAngle : extraYaw / 1.6
+                                // Scene 1's peripheral drift also lands in extraYaw, and it is NOT
+                                // strain — a vessel quietly rotating is not a vessel straining, so
+                                // only the demo's own animation feeds the ring.
+                                let demoStrain = prop.alignAnim > 0 ? extraYaw / 1.6 : 0
+                                let strain = (sr.isActive && sr.isRefusal) ? sr.currentAngle : demoStrain
                                 propStyleSeed = UInt32(max(0, min(1000, Int((strain + 0.25) * 2000))))
                                 // Beat 1 — the swirl on the cap illuminates while it demonstrates,
-                                // and keeps a low ember afterwards: this object has been read.
-                                color = SIMD4(1, 1, 1, gameState.vesselGlow)
+                                // and keeps a low ember afterwards: this object has been read. The
+                                // ALPHA carries that; keep the RGB the tint chose above, or the warm
+                                // vessel would be quietly reset to plain here.
+                                color.w = gameState.vesselGlow
                             }
                             if prop.kind == .signpost {
                                 materialID = 24                                 // wood + rendered label

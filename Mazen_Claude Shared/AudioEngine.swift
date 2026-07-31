@@ -45,6 +45,7 @@ final class AudioEngine {
         // Phase C — SUSTAINED emitters. Looping, so they are a presence rather than an event.
         static let obeliskHum = "emitter.obelisk"
         static let portalHum  = "emitter.portal"
+        static let vesselHum  = "emitter.vessel"
         // Phase E — the world's own bed.
         static let ambienceBed = "ambience.bed"
         // Scene 1B/1G — the two layers the opening is built on.
@@ -152,6 +153,11 @@ final class AudioEngine {
                              harmonics: [1.0, 0.3, 0.14], spatial: true, sustain: true, looping: true)
             try registerTone(identifier: EventID.portalHum, frequency: 98, duration: 2.4,
                              harmonics: [1.0, 0.5, 0.22, 0.1], spatial: true, sustain: true, looping: true)
+            // Scene 1E — a vessel's "barely audible tone". A perfect fifth above the undertone, so
+            // it is unmistakably the same voice; almost nothing but the fundamental, so it carries
+            // no character to identify it by.
+            try registerTone(identifier: EventID.vesselHum, frequency: 73.5, duration: 3.1,
+                             harmonics: [1.0, 0.12], spatial: true, sustain: true, looping: true)
             // Phase E — the world's bed: broadband, slow-moving, non-spatial. Not a tune, a room.
             try registerBed(identifier: EventID.ambienceBed, seconds: 6)
             // "Distant birds, sparse and difficult to locate." Sparse is the point — a dense loop
@@ -315,7 +321,12 @@ final class AudioEngine {
                 let src = PHASESource(engine: engine)
                 src.transform = Self.transform(at: world)
                 try engine.rootObject.addChild(src)
-                let id = e.kind == .obelisk ? EventID.obeliskHum : EventID.portalHum
+                let id: String
+                switch e.kind {
+                case .obelisk: id = EventID.obeliskHum
+                case .portal:  id = EventID.portalHum
+                case .vessel:  id = EventID.vesselHum
+                }
                 let mixerParams = PHASEMixerParameters()
                 mixerParams.addSpatialMixerParameters(identifier: sm.identifier, source: src, listener: listener)
                 let event = try PHASESoundEvent(engine: engine, assetIdentifier: id, mixerParameters: mixerParams)

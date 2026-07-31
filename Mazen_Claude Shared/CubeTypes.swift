@@ -103,7 +103,7 @@ enum AudioCue {
 /// never reaches for an audio framework, so the headless harness still links and occlusion stays
 /// testable without a speaker.
 struct AudioEmitter: Equatable {
-    enum Kind: Int { case obelisk, portal }
+    enum Kind: Int { case obelisk, portal, vessel }
     /// Stable across frames — it is the FACELET's id, so an emitter keeps its identity while its
     /// position changes under a twist. Restarting the loop every frame would make a stutter, not a
     /// sound; this is what lets the engine tell "same source, moved" from "a new source".

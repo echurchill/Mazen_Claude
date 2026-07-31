@@ -726,7 +726,15 @@ class GameState {
                     let id = cubeModel.cubies[ci].facelets[fi].id.rawValue
                     // Only drift when it is genuinely peripheral, and stop dead when looked at. The
                     // threshold is generous on purpose: catching it should be impossible, not hard.
-                    if centred < 0.72 {
+                    // Scene 1E — "each vessel may react differently to the player's route… one
+                    // rotates a middle ring, one emits a barely audible tone… one remains completely
+                    // inert. These differences should not yet form a solvable puzzle. They are the
+                    // first syllables of a language the player does not know they are hearing."
+                    // `state` carries which syllable: 0 never moves at all, and the others drift.
+                    let inert = cubeModel.cubies[ci].facelets[fi].props.contains {
+                        $0.kind == .layeredVessel && $0.state == 0
+                    }
+                    if centred < 0.72 && !inert {
                         vesselDrift[id, default: 0] += dt * 0.06
                     }
                     // The WATCHER (state 5 — the largest, placed beside the arch) tracks the player
@@ -774,6 +782,10 @@ class GameState {
                     // An AWAKENED obelisk hums; a dormant one is silent. Scene 2 lights them one at
                     // a time, so the world gains a voice per solved step.
                     if facelet.props.contains(where: { $0.kind == .obelisk && $0.anim > 0.01 }) { kind = .obelisk }
+                    // Scene 1E — one of them "emits a barely audible tone". Deliberately quiet and
+                    // occluded like anything else, so it is something you notice you have been
+                    // hearing rather than something you hear.
+                    else if facelet.props.contains(where: { $0.kind == .layeredVessel && $0.state == 1 }) { kind = .vessel }
                     // An OPEN portal holds the "low, stable tone" the scripts describe. A sealed one
                     // is inert and says nothing — which is the difference the player is listening for.
                     else if facelet.props.contains(where: { $0.kind == .portal })
