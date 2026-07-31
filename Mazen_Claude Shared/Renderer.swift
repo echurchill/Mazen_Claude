@@ -356,12 +356,13 @@ class Renderer: NSObject, MTKViewDelegate {
         // anywhere else made it a place you had to go looking for. ("earth"/homeClearing is still
         // built on demand from the hub, and the moon still hangs in ITS sky, since that binding is
         // by name.)
-        let overworld = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
-        overworld.twistEnabled = false
-        overworld.time = 6.0
-        Self.slowTheDay(overworld)
-        Self.setupInitialDiscovery(gameState: overworld)
-        self.worldStack = [overworld]
+        // A PLACEHOLDER only: `worldStack` has to be non-empty before `super.init()`, but the real
+        // Scene 1 is built through `buildWorld` further down — the same path the hub door uses.
+        // Constructing it here instead skipped everything buildWorld does around the stamp: the wall
+        // dressing palette above all, so the maze had its topology and none of its walls, and the
+        // player stood in an open field with vessels on the horizon (Eddie: "the maze is gone!").
+        // Duplicating that setup is exactly what caused it, so the boot path no longer has its own.
+        self.worldStack = [GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .bare)]
         // The moon world exists from the start (persists across visits) so it can hang in earth's
         // sky — and so any tears you make on it stay put (M11 killer visual). Registered on the
         // identity-bound edge moon-earth (M15.0): the moon you see IS the moon you can visit.
@@ -370,7 +371,9 @@ class Renderer: NSObject, MTKViewDelegate {
         worldRegistry.bind(WorldKey(destination: "moon", origin: "earth"), to: moon)
 
         // Tile mesh library (geometry baked from the world scale)
-        self.tileMeshLib = TileMeshLibrary(device: device, worldScale: overworld.worldScale)
+        // The mesh library bakes geometry from a WorldScale, and every prologue world is the same
+        // scale family, so the placeholder's is the right one to build from.
+        self.tileMeshLib = TileMeshLibrary(device: device, worldScale: self.worldStack[0].worldScale)
 
         // Textures
         self.diffuseArray = TextureLoader.loadTextureArray(device: device,
@@ -479,6 +482,9 @@ class Renderer: NSObject, MTKViewDelegate {
         self.residencySet = rs
 
         super.init()
+
+        // The real boot world, built the one way worlds are built.
+        worldStack = [buildWorld(named: "scene-1")]
 #endif
     }
 
@@ -618,8 +624,12 @@ class Renderer: NSObject, MTKViewDelegate {
             // DAWN. The script opens here and lets the light move as the player explores: "the maze
             // exploration should last long enough for the opening celestial arrangement to change…
             // the world itself marks the player's movement through the scene."
-            w.time = 6.0
             Self.slowTheDay(w)
+            // DAWN, and `time` is seconds into a cycle that STARTS at noon — so 6.0 was midday, not
+            // six in the morning. Sunrise is three quarters of the way round; a shade past it puts
+            // the sun just clear of the eastern wall, which is where the script opens: "its light
+            // reaches only the upper stones at first, then spills down into the clearing."
+            w.time = w.celestialSystem.sunPeriod * 0.765
             w.cubeModel.stampGardenVegetation(gardenFlora())
             wallDressingPalette = wallFlora()
             w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
@@ -648,7 +658,12 @@ class Renderer: NSObject, MTKViewDelegate {
             w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
         }
         // Gardens, gallery worlds, and the hub reveal only their own stamped region (no reveal-all).
-        if !dest.hasPrefix("gallery") && dest != "garden" && dest != "portal-hub" { Self.setupInitialDiscovery(gameState: w) }
+        // Scene 1 joins the reveal-only-what-you-stamped list: its fog is the point. "The maze is
+        // not shown all at once… the player should understand its scale gradually through movement,
+        // not through an overhead view."
+        if !dest.hasPrefix("gallery") && dest != "garden" && dest != "portal-hub" && dest != "scene-1" {
+            Self.setupInitialDiscovery(gameState: w)
+        }
         // An authored sky (`skyCounterpart`) is bound as a real edge now, while we can still build
         // the other world if the player has never been there — the sky lookup itself must never
         // conjure a world mid-frame. Reuses the existing instance when there is one, so the world
