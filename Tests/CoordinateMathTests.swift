@@ -843,7 +843,9 @@ struct CoordinateMathTests {
                 gs.portalRequested = false
                 gs.interact()
                 check(!gs.portalRequested, "F beside the vessel must not fire the portal")
-                check(gs.vesselDemo > 0, "F beside the vessel inspects the vessel")
+                // In Scene 1 it does nothing further either — "nothing dramatic happens". The
+                // demonstration belongs to Scene 4, where there is a lock for it to be about.
+                check(gs.vesselDemo == 0, "a Scene 1 vessel stays silent when activated")
                 // Stand on the ARCH's own sub-cell and press F: it must travel.
                 gs.player.subRow = portal.subRow * k + k / 2
                 gs.player.subCol = portal.subCol * k + k / 2
@@ -859,7 +861,10 @@ struct CoordinateMathTests {
         let m = gs.cubeModel
         let n = m.size
         guard let sp = m.spawnLocation else { check(false, "Scene 1 needs a spawn"); return }
-        check(sp.face == .positiveZ && sp.facing == .n, "the player starts in the clearing, facing the break")
+        // "Facing roughly north, but not directly toward the opening. The gap rests near the EDGE of
+        // the initial view." Due north from the break's own column made it the first thing you saw.
+        check(sp.face == .positiveZ, "the player starts on the clearing's face")
+        check([Heading8.ne, .nw].contains(sp.facing), "roughly north, but off-axis: got \(sp.facing)")
 
         // Walk the face from the spawn.
         var seen = Set([[sp.row, sp.col]]), q = [[sp.row, sp.col]], head = 0

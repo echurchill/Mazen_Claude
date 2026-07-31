@@ -1097,8 +1097,15 @@ class GameState {
         // Scene 4D — the VESSEL. Activating it makes it demonstrate the turn, and fail: the ring
         // attempts, the vessel strains, the anchors answer, and the twist becomes the player's.
         if cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel }) {
-            let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
-            beginVesselDemo(at: sliceCentre(axis: axis, index: index))
+            // …but only where there is something for it to demonstrate. Scene 1 is explicit that
+            // "if the player approaches the vessels, nothing dramatic happens" — they are scenery
+            // that will turn out not to have been scenery, and a vessel that performs on demand in
+            // the opening spends that reveal before it has been set up. A world with no lock has
+            // nothing to say, so it says nothing.
+            if !cubeModel.bondedGroups.isEmpty {
+                let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
+                beginVesselDemo(at: sliceCentre(axis: axis, index: index))
+            }
             return
         }
         // Scene 4 — an ANCHOR. Unlike a switch this does not toggle: activating it RELEASES the bond

@@ -352,7 +352,14 @@ class Renderer: NSObject, MTKViewDelegate {
         // `gameState` getter can't be called before super.init().
         // M20 (Eddie) — the FIRST world: a pastoral natural clearing whose one portal is a stone arch
         // to the garden. Kept named "earth" so the moon still hangs in its sky (moon↔earth binding).
-        let overworld = GameState(size: Self.initialCubeSize, name: "earth", stamp: .homeClearing)
+        // The app boots into the PROLOGUE now — Scene 1 is where the story starts, and starting
+        // anywhere else made it a place you had to go looking for. ("earth"/homeClearing is still
+        // built on demand from the hub, and the moon still hangs in ITS sky, since that binding is
+        // by name.)
+        let overworld = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
+        overworld.twistEnabled = false
+        overworld.time = 6.0
+        Self.slowTheDay(overworld)
         Self.setupInitialDiscovery(gameState: overworld)
         self.worldStack = [overworld]
         // The moon world exists from the start (persists across visits) so it can hang in earth's
@@ -525,6 +532,16 @@ class Renderer: NSObject, MTKViewDelegate {
         if worldStack.count > 1 { worldStack.removeLast() }
     }
 
+    /// Scene 1's day runs at a third of the usual speed. The default ~8 minutes is tuned for
+    /// watching a shadow sweep during development; here the light is meant to move over a whole
+    /// exploration without ever being the thing you notice (Eddie: "the day seems to go by a little
+    /// too fast"). At ~24 minutes dawn still becomes morning while you walk the maze, but no faster
+    /// than the walking.
+    static func slowTheDay(_ w: GameState) {
+        w.celestialSystem.sunPeriod *= 3
+        w.celestialSystem.moonPeriod *= 3
+    }
+
     /// Build a world from its name — the single place a destination's size, stamp and dressing
     /// are decided. Used by the portal swap on first arrival, and by the sky binding below, so
     /// a world hanging overhead is stamped identically to the one you can walk into.
@@ -602,6 +619,7 @@ class Renderer: NSObject, MTKViewDelegate {
             // exploration should last long enough for the opening celestial arrangement to change…
             // the world itself marks the player's movement through the scene."
             w.time = 6.0
+            Self.slowTheDay(w)
             w.cubeModel.stampGardenVegetation(gardenFlora())
             wallDressingPalette = wallFlora()
             w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),

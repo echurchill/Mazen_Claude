@@ -337,7 +337,13 @@ class CubeModel {
         }
 
         // ── ARRIVAL, AND FOG ───────────────────────────────────────────────────────────────────
-        spawnLocation = (face: .positiveZ, row: n - 1, col: mid, facing: .n)
+        // "The player is standing near the center of the clearing. The camera begins facing roughly
+        // north, but not directly toward the opening. The gap in the wall rests near the edge of the
+        // initial view, discoverable through looking rather than presented as an objective marker."
+        // Standing on the break's own column and facing due north made the exit the first thing you
+        // saw, which inverts the whole intent — so: centre tile, one column west of the break, and a
+        // north-EAST facing that puts the gap at the edge of view rather than in the middle of it.
+        spawnLocation = (face: .positiveZ, row: clearTop + 1, col: clearLeft, facing: .ne)
         // "Fog of discovery: active beyond the immediately visible clearing." Reveal the clearing
         // and nothing else — the maze has to be walked to exist, which is what makes its scale
         // arrive "gradually through movement, not through an overhead view".
