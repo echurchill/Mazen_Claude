@@ -293,7 +293,11 @@ class GameState {
     /// render instances and the first-person camera (which rides the spin); the sun/moon and
     /// the orbit camera stay world-frame, so the sun sweeps across the faces as the cube turns.
     func worldSpinMatrix() -> float4x4 {
-        guard spinEnabled else { return matrix_identity_float4x4 }
+        // An INTERIOR never spins. The spin exists so the sun sweeps across the faces of a planet —
+        // an interior has no sun and no sky, so it buys nothing there, and it is not free: it turns
+        // the world-space normals under everything, so any shading that reads them drifts while the
+        // player stands still. That is exactly how Scene 3's metal walls came to flicker.
+        guard spinEnabled, !worldScale.interior else { return matrix_identity_float4x4 }
         let angle = time / spinPeriod * 2 * .pi
         return float4x4.rotation(radians: angle, axis: SIMD3(0, 1, 0))
     }

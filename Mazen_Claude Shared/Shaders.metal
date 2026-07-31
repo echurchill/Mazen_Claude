@@ -822,7 +822,17 @@ fragment float4 fragmentShader(
         // Blocks are laid in courses, and each course is offset — masonry, not graph paper.
         float course = floor(lp.z * 9.0);
         float row = fract(lp.z * 9.0);
-        float along = (abs(normal.z) > 0.7) ? lp.x : ((abs(normal.x) > 0.7) ? lp.y : lp.x);
+        // The coordinate ALONG the wall, branch-free and derived from local space only.
+        //
+        // This picked its axis with a threshold on the WORLD normal, which flickers: the world has a
+        // slow idle spin, so that normal rotates continuously and a wall sitting near the threshold
+        // flips between axes from one frame to the next — snapping its whole block pattern to a
+        // different layout while the camera has not moved at all (Eddie).
+        //
+        // A wall is an axis-aligned plane, so one of lp.x / lp.y is CONSTANT across it; their sum
+        // therefore varies exactly along the wall whichever way it faces, needs no branch, and knows
+        // nothing about world orientation.
+        float along = lp.x + lp.y;
         float shift = fract(sin(course * 12.9898) * 43758.5453) * 0.5;
         float unit = floor(along * 6.0 + shift);
         float col = fract(along * 6.0 + shift);

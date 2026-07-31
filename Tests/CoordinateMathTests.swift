@@ -1089,6 +1089,20 @@ struct CoordinateMathTests {
         check(gs.chamberWave == 1, "and does not restart — 'then the chamber returns to its darker state'")
     }
 
+    /// An interior world must not spin. The spin exists so the sun sweeps across a planet's faces;
+    /// an interior has neither sun nor sky, so it buys nothing — and it is not free, because it turns
+    /// the world-space normals under everything. Shading that reads them then drifts while the player
+    /// stands still, which is how Scene 3's metal walls came to flicker between frames from a fixed
+    /// camera.
+    static func testInteriorsDoNotSpin() {
+        let inside = GameState(size: PrologueSize.sceneThree, name: "s3", interior: true, stamp: .sceneThree)
+        let outside = GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour)
+        for gs in [inside, outside] { gs.spinEnabled = true; gs.time = 37 }
+        let still = inside.worldSpinMatrix(), turning = outside.worldSpinMatrix()
+        check(still == matrix_identity_float4x4, "an interior world stands still")
+        check(turning != matrix_identity_float4x4, "an exterior world still turns under its sun")
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1480,6 +1494,7 @@ struct CoordinateMathTests {
         testSceneOneCanBeWalkedFromClearingToArch()
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
+        testInteriorsDoNotSpin()
         testSceneThreePairsPlinthsToDistantObelisks()
         testSceneThreeWakesInStagesAndFiresItsWaveOnce()
         testSealedWorldsCannotBeWalkedOutOf()
