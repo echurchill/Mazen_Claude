@@ -934,7 +934,16 @@ struct CoordinateMathTests {
         // "Facing roughly north, but not directly toward the opening. The gap rests near the EDGE of
         // the initial view." Due north from the break's own column made it the first thing you saw.
         check(sp.face == .positiveZ, "the player starts on the clearing's face")
-        check([Heading8.ne, .nw].contains(sp.facing), "roughly north, but off-axis: got \(sp.facing)")
+        check([Heading8.n, .ne, .nw].contains(sp.facing), "roughly north: got \(sp.facing)")
+        // The real assertion is not the compass bearing but that the break is NOT straight ahead:
+        // the player must not spawn on the gap's own column looking up it.
+        var breakCol: Int? = nil
+        for c in 0..<n {
+            guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: n - 3, col: c) else { continue }
+            if m.cubies[ci].facelets[fi].mazeTile.openings.contains(.north) { breakCol = c }
+        }
+        check(breakCol != nil, "the clearing needs its break")
+        check(breakCol != sp.col, "the break must not be dead ahead of the spawn")
 
         // Walk the face from the spawn.
         var seen = Set([[sp.row, sp.col]]), q = [[sp.row, sp.col]], head = 0

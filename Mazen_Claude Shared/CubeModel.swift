@@ -227,11 +227,15 @@ class CubeModel {
             }
         }
         // "A narrow break interrupts the northern wall. It is not framed as a doorway. It is simply
-        // a place where the wall stops."
-        setSharedEdge(face: .positiveZ, row: clearTop, col: mid, .north, open: true)
-        // The corridor through the wall — one tile is ~19 m, so it really is "several steps", and
-        // the clearing stays visible behind you the whole way, framed like the stage you just left.
+        // a place where the wall stops." At the clearing's north-WEST corner, diagonally opposite
+        // the arrival — so it is found by looking rather than by being stood in front of.
         let corridor = clearTop - 1
+        setSharedEdge(face: .positiveZ, row: clearTop, col: clearLeft, .north, open: true)
+        // The corridor DOG-LEGS inside the wall (Eddie): in at the west, one step east, then north
+        // into the maze. A straight corridor showed the maze through the gap before you entered it;
+        // a bend means "crossing through the break reveals that the outer wall is much thicker than
+        // expected" is discovered by walking it, and the maze arrives only at the turn.
+        setSharedEdge(face: .positiveZ, row: corridor, col: clearLeft, .east, open: true)
         setSharedEdge(face: .positiveZ, row: corridor, col: mid, .north, open: true)
 
         // ── THE MAZE: recursive backtracker over everything north of the corridor ───────────────
@@ -343,7 +347,10 @@ class CubeModel {
         // Standing on the break's own column and facing due north made the exit the first thing you
         // saw, which inverts the whole intent — so: centre tile, one column west of the break, and a
         // north-EAST facing that puts the gap at the edge of view rather than in the middle of it.
-        spawnLocation = (face: .positiveZ, row: clearTop + 1, col: clearLeft, facing: .ne)
+        // The far corner from the break, facing north: the gap sits at the left edge of the opening
+        // view rather than in the middle of it, which is what the script is after — "discoverable
+        // through looking rather than presented as an objective marker".
+        spawnLocation = (face: .positiveZ, row: clearTop + 2, col: clearLeft + 2, facing: .n)
         // "Fog of discovery: active beyond the immediately visible clearing." Reveal the clearing
         // and nothing else — the maze has to be walked to exist, which is what makes its scale
         // arrive "gradually through movement, not through an overhead view".
