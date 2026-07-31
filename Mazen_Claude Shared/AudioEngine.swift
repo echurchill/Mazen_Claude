@@ -47,6 +47,9 @@ final class AudioEngine {
         static let portalHum  = "emitter.portal"
         // Phase E — the world's own bed.
         static let ambienceBed = "ambience.bed"
+        // Scene 1B/1G — the two layers the opening is built on.
+        static let birds = "ambience.birds"
+        static let underTone = "ambience.undertone"
     }
 
     /// A world unit is ~18.9 m (WorldScale: eyeHeight 0.09u == 1.7 m). PHASE reasons in metres, so
@@ -151,6 +154,14 @@ final class AudioEngine {
                              harmonics: [1.0, 0.5, 0.22, 0.1], spatial: true, sustain: true, looping: true)
             // Phase E — the world's bed: broadband, slow-moving, non-spatial. Not a tune, a room.
             try registerBed(identifier: EventID.ambienceBed, seconds: 6)
+            // "Distant birds, sparse and difficult to locate." Sparse is the point — a dense loop
+            // would place them, and the script wants them unplaceable.
+            try registerBirds(identifier: EventID.birds, seconds: 11)
+            // "After the player first moves, a low tonal layer enters almost below conscious notice."
+            // It is the Builders, and it is the same voice the vessels and the portal speak in — so
+            // it is a held chord on the portal tone's fundamental rather than a new instrument.
+            try registerTone(identifier: EventID.underTone, frequency: 49, duration: 8,
+                             harmonics: [1.0, 0.62, 0.30, 0.16, 0.09], sustain: true, looping: true)
 
             try engine.start()
             ready = true
@@ -329,6 +340,31 @@ final class AudioEngine {
 
     // MARK: - Ambience (Phase E)
 
+    private var birdsEvent: PHASESoundEvent?
+    private var underToneEvent: PHASESoundEvent?
+
+    /// Scene 1's two extra layers, each switched independently of the wind bed.
+    ///
+    /// `birds` go quiet as the player nears the arch — "the ambient birds fall silent" — which is
+    /// the scene's only warning that the corridor ahead is not another corridor. `underTone` starts
+    /// once the player has moved and never stops: it is "almost below conscious notice" at first and
+    /// merely becomes audible later, so it is a level change, not an entrance.
+    func setAmbienceLayers(birds: Bool, underTone: Bool) {
+        guard ready else { return }
+        if birds && birdsEvent == nil {
+            birdsEvent = try? PHASESoundEvent(engine: engine, assetIdentifier: EventID.birds)
+            birdsEvent?.start()
+        } else if !birds, let e = birdsEvent {
+            e.stopAndInvalidate(); birdsEvent = nil
+        }
+        if underTone && underToneEvent == nil {
+            underToneEvent = try? PHASESoundEvent(engine: engine, assetIdentifier: EventID.underTone)
+            underToneEvent?.start()
+        } else if !underTone, let e = underToneEvent {
+            e.stopAndInvalidate(); underToneEvent = nil
+        }
+    }
+
     /// Give each world its own bed, and let a portal land in SILENCE before it returns.
     ///
     /// Scene 2's script is precise about this: you step through and the world is quiet, then the wind
@@ -341,7 +377,11 @@ final class AudioEngine {
         ambienceWorld = world
         ambienceEvent?.stopAndInvalidate()
         ambienceEvent = nil
-        guard world != nil else { return }
+        guard world != nil else {
+            // Leaving a world takes its layers with it, or Scene 1's birds follow you to the moon.
+            setAmbienceLayers(birds: false, underTone: false)
+            return
+        }
         do {
             let event = try PHASESoundEvent(engine: engine, assetIdentifier: EventID.ambienceBed)
             event.start()
@@ -463,6 +503,55 @@ final class AudioEngine {
                                                  mixerDefinition: mixer)
         sampler.playbackMode = .looping
         sampler.setCalibrationMode(calibrationMode: .relativeSpl, level: -12)   // a bed, not a voice
+        try engine.assetRegistry.registerSoundEventAsset(rootNode: sampler, identifier: identifier)
+    }
+
+    /// Sparse, hard-to-place birdcalls over a long loop. Each call is a short pair of FM chirps at a
+    /// randomised pitch, scattered thinly enough that you never quite catch where one came from —
+    /// "distant birds, sparse and difficult to locate". Non-spatial, because a bird you could point
+    /// at would be a bird that was somewhere, and these are meant to be everywhere and nowhere.
+    private func registerBirds(identifier: String, seconds: Float) throws {
+        let sampleRate = 48_000.0
+        let frames = Int(Double(seconds) * sampleRate)
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+            throw NSError(domain: "audio", code: 1)
+        }
+        var samples = [Float](repeating: 0, count: frames)
+        var rng: UInt32 = 0xB1D5_0007
+        func next() -> UInt32 { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng }
+        let calls = 14
+        for _ in 0..<calls {
+            let start = Int(next() % UInt32(max(1, frames - Int(sampleRate))))
+            let base = 1800 + Float(next() % 1400)          // 1.8–3.2 kHz: small birds, far off
+            let notes = 2 + Int(next() % 2)
+            var cursor = start
+            for _ in 0..<notes {
+                let len = Int(0.05 * sampleRate) + Int(next() % UInt32(0.05 * sampleRate))
+                let bend = 1.0 + (Float(next() % 100) / 100.0 - 0.5) * 0.35
+                for i in 0..<len where cursor + i < frames {
+                    let u = Float(i) / Float(len)
+                    let f = base * (1 + (bend - 1) * u)
+                    let env = sinf(u * .pi)                 // no click either end
+                    samples[cursor + i] += sinf(2 * .pi * f * Float(i) / Float(sampleRate)) * env * 0.05
+                }
+                cursor += len + Int(0.04 * sampleRate) + Int(next() % UInt32(0.05 * sampleRate))
+            }
+        }
+        // Crossfade the seam, same as the wind bed.
+        let fade = min(frames / 4, Int(0.4 * sampleRate))
+        for i in 0..<fade {
+            let a = Float(i) / Float(fade)
+            samples[i] = samples[i] * a + samples[frames - fade + i] * (1 - a)
+        }
+        let data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
+        try engine.assetRegistry.registerSoundAsset(
+            data: data, identifier: identifier + ".asset", format: format, normalizationMode: .none)
+        let mixer = PHASEChannelMixerDefinition(
+            channelLayout: AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_Mono)!)
+        let sampler = PHASESamplerNodeDefinition(soundAssetIdentifier: identifier + ".asset",
+                                                 mixerDefinition: mixer)
+        sampler.playbackMode = .looping
+        sampler.setCalibrationMode(calibrationMode: .relativeSpl, level: -16)
         try engine.assetRegistry.registerSoundEventAsset(rootNode: sampler, identifier: identifier)
     }
 }

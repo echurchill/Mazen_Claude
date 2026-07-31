@@ -856,6 +856,39 @@ struct CoordinateMathTests {
         check(found, "Scene 1 should stand a vessel beside its arch")
     }
 
+    /// Scene 1's ambience is driven by two facts about the world, so they are worth pinning even
+    /// though the sound itself is not testable here: the undertone latches on the player's FIRST
+    /// movement and never lets go ("the world noticing you"), and the birds fall silent by distance
+    /// to the arch, which is the only warning the scene gives that a corridor is different.
+    static func testSceneOneAmbienceTriggers() {
+        let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
+        let m = gs.cubeModel
+        check(!gs.hasMoved, "the opening has not been disturbed yet")
+        gs.update(deltaTime: 1.0 / 60.0)
+        check(!gs.hasMoved, "standing still is not moving")
+        // Distance to the arch is measured, and from the clearing it is far.
+        guard let far = gs.tilesToNearestPortal else { check(false, "Scene 1 has an arch to be near"); return }
+        check(far > 2, "the clearing is not near the arch (got \(far))")
+        // Stand ON the arch's tile and it is near.
+        var portalAt: (Int, Int)? = nil
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .portal }) { portalAt = (r, c) }
+            }
+        }
+        guard let pa = portalAt else { return }
+        gs.player.row = pa.0; gs.player.col = pa.1
+        gs.update(deltaTime: 1.0 / 60.0)
+        check((gs.tilesToNearestPortal ?? 99) == 0, "standing at the arch reads as zero tiles away")
+        // And the latch: once it has moved, it stays moved.
+        gs.player.isMoving = true
+        gs.update(deltaTime: 1.0 / 60.0)
+        gs.player.isMoving = false
+        gs.update(deltaTime: 1.0 / 60.0)
+        check(gs.hasMoved, "the undertone latches on: it does not come and go with the player")
+    }
+
     static func testSceneOneCanBeWalkedFromClearingToArch() {
         let gs = GameState(size: PrologueSize.sceneOne, name: "scene-1", stamp: .sceneOne)
         let m = gs.cubeModel
@@ -1151,6 +1184,7 @@ struct CoordinateMathTests {
         testSceneFourVesselReadsTheLock()
         testVesselCanBeApproached()
         testSceneOneCanBeWalkedFromClearingToArch()
+        testSceneOneAmbienceTriggers()
         testInteractPicksTheNearestThingNotThePortal()
         testCrossingAnOpenEdgeAlwaysFindsSomewhereToLand()
         testFlatPropsDoNotWallOffTheirOwnTile()

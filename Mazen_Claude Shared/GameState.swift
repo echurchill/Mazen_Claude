@@ -231,6 +231,7 @@ class GameState {
         tickDust(deltaTime)
         tickArrivalDoorway(deltaTime)
         updateAudioEmitters()
+        updateAmbienceTriggers()
 
         if sliceRotation.isActive {
             // .step holds the twist for manual scrubbing (see stepSlice); .slow crawls; .normal auto.
@@ -677,6 +678,27 @@ class GameState {
     /// position comes from wherever the facelet is NOW, so a slab turning carries its sounds round
     /// with it and nothing has to be told that a twist happened.
     private(set) var activeEmitters: [AudioEmitter] = []
+
+    /// Scene 1B — "after the player first moves, a low tonal layer enters almost below conscious
+    /// notice". Latched, never cleared: it is the world noticing you, and a thing that noticed you
+    /// does not stop.
+    private(set) var hasMoved = false
+    /// Scene 1G — "the ambient birds fall silent" as the arch is approached. Distance to the nearest
+    /// ACTIVE portal, in tiles, or nil when there is none to be near.
+    private(set) var tilesToNearestPortal: Int? = nil
+
+    private func updateAmbienceTriggers() {
+        if player.isMoving { hasMoved = true }
+        var best: Int? = nil
+        for sp in cubeModel.styledPortals where !cubeModel.sealedPortalCubies.contains(sp.ci) {
+            guard let loc = cubeModel.locate(cubie: sp.ci, facelet: sp.fi) else { continue }
+            // Same face only: round the curve of a world, "near" stops meaning anything.
+            guard loc.face == player.face else { continue }
+            let d = abs(loc.row - player.row) + abs(loc.col - player.col)
+            if best == nil || d < best! { best = d }
+        }
+        tilesToNearestPortal = best
+    }
 
     private func updateAudioEmitters() {
         activeEmitters.removeAll(keepingCapacity: true)

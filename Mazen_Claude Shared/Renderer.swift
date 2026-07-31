@@ -917,6 +917,14 @@ class Renderer: NSObject, MTKViewDelegate {
         // one-shot cues: the world's idle rotation has already caused two bugs by being folded in
         // at different points in different systems, so it is folded in HERE for everything audible.
         audio?.updateEmitters(gameState.activeEmitters, worldSpin: gameState.worldSpinMatrix())
+        // Scene 1's two layers. Birds only in a world that HAS an outdoors and no lock — the opening
+        // — and they fall silent within two tiles of the arch, which is the only warning the scene
+        // gives that the corridor ahead is different. The undertone starts once the player has moved
+        // and stays, "almost below conscious notice" until the portal's own tone joins it.
+        let outdoors = !gameState.worldScale.interior && ambienceSilenceRemaining <= 0
+        let nearArch = (gameState.tilesToNearestPortal ?? 99) <= 2
+        audio?.setAmbienceLayers(birds: outdoors && !nearArch,
+                                 underTone: outdoors && gameState.hasMoved)
         // Phase E — the world's bed. Arrival is SILENT and the bed returns a moment later (Scene 2's
         // script is precise about this), so the delay is the point rather than a loading artefact.
         if ambienceSilenceRemaining > 0 {
