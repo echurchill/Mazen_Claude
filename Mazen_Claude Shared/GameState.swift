@@ -1465,9 +1465,10 @@ class GameState {
             // Positioned AT the obelisk, across the chamber: the sound is how the player learns the
             // control they just pressed did something somewhere they cannot see.
             pendingAudioCues.append(.twistLocked(at: wokeAt))
-            // 3K — the orb chooses where the way out appears, and only now. Destination 10 is
-            // scene-2, which is where Scene 3's exit leads back out to for the moment.
-            if sceneThreeAllObelisksAwake { cubeModel.createChosenExit(destinationID: 10) }
+            // 3K — the orb chooses where the way out appears, and only now. → SCENE 4: "emergence
+            // beneath the stars", the small world the player is handed the twist on. This was
+            // pointing back at Scene 2 as a placeholder while Scene 3 was being built.
+            if sceneThreeAllObelisksAwake { cubeModel.createChosenExit(destinationID: 11) }
             cubeModel.markTopologyChanged()
             return
         }

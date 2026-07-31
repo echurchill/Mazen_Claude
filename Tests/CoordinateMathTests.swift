@@ -131,7 +131,10 @@ struct CoordinateMathTests {
         var chamberAt: (Int, Int)? = nil
         for r in 0..<m.size { for col in 0..<m.size {
             guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: col) else { continue }
-            if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .portal && $0.state == 1 }) { chamberAt = (r, col) }
+            // Found as "the portal", not by its destination index: which world it leads to is a
+            // routing decision that has already changed once (temple-interior → Scene 3), and this
+            // test is about WHERE the chamber lands, not where it goes.
+            if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .portal }) { chamberAt = (r, col) }
         } }
         check(chamberAt?.0 == c && chamberAt?.1 == 0,
               "the chamber should land at (centre row, col 0); landed at \(String(describing: chamberAt))")
@@ -204,7 +207,7 @@ struct CoordinateMathTests {
             var target: (Int, Int)? = nil
             for r in 0..<n { for c in 0..<n {
                 guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
-                if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .portal && $0.state == 1 }) { target = (r, c) }
+                if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .portal }) { target = (r, c) }
             } }
             guard let goal = target else { return false }
             // Flood fill across open edges, staying on the playable face.
@@ -1165,6 +1168,49 @@ struct CoordinateMathTests {
               "the centre must still be more ruined than the perimeter")
     }
 
+    /// The prologue has to be a CHAIN. Each scene was built against whatever existed at the time, so
+    /// each one's exit pointed at a stand-in — Scene 2 at the temple interior, Scene 3 back at Scene
+    /// 2 — and the sequence quietly dropped the player into dev worlds partway through. Nothing
+    /// catches that except walking it or asserting it.
+    ///
+    /// Indices are into Renderer.portalDestinations, which the headless harness cannot see, so they
+    /// are named here: 10 scene-2, 11 scene-4, 13 scene-3.
+    static func testThePrologueScenesLeadToEachOther() {
+        func exitDestination(of gs: GameState, ignoring skip: Set<Int> = []) -> [Int] {
+            var out: [Int] = []
+            let m = gs.cubeModel
+            for face in CubeFace.allCases {
+                for r in 0..<m.size {
+                    for c in 0..<m.size {
+                        guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                        for p in m.cubies[ci].facelets[fi].props
+                        where p.kind == .portal && !skip.contains(p.state) { out.append(p.state) }
+                    }
+                }
+            }
+            return out
+        }
+        let one = GameState(size: PrologueSize.sceneOne, name: "s1", stamp: .sceneOne)
+        check(exitDestination(of: one) == [10], "Scene 1's arch leads to Scene 2, got \(exitDestination(of: one))")
+
+        let two = GameState(size: PrologueSize.sceneTwo, name: "s2", stamp: .sceneTwo)
+        check(exitDestination(of: two) == [13], "Scene 2's chamber descends into Scene 3, got \(exitDestination(of: two))")
+
+        // Scene 3's exit does not exist until the orb chooses one, so complete the puzzle first.
+        let three = GameState(size: PrologueSize.sceneThree, name: "s3", interior: true, stamp: .sceneThree)
+        let m3 = three.cubeModel
+        for cu in m3.cubies.indices {
+            for f in m3.cubies[cu].facelets.indices {
+                for pi in m3.cubies[cu].facelets[f].props.indices
+                where m3.cubies[cu].facelets[f].props[pi].kind == .obelisk {
+                    m3.cubies[cu].facelets[f].props[pi].anim = 1
+                }
+            }
+        }
+        m3.createChosenExit(destinationID: 11)
+        check(exitDestination(of: three) == [11], "Scene 3 leads on to Scene 4, got \(exitDestination(of: three))")
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1557,6 +1603,7 @@ struct CoordinateMathTests {
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
         testInteriorsDoNotSpin()
+        testThePrologueScenesLeadToEachOther()
         testSceneTwoQuadrantsDifferButAreNotColourCoded()
         testOnlySceneThreeAsksForAtmosphericDepth()
         testSceneThreePairsPlinthsToDistantObelisks()

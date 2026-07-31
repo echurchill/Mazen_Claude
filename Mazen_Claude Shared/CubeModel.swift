@@ -1021,8 +1021,13 @@ class CubeModel {
                 // tiles east of where this lands. A prop's `facing` is NOT rotated by a twist (only
                 // its tile's openings and uv are), so this is authored in FINAL orientation: pointing
                 // north here would leave the chamber edge-on to the player after the turn.
+                // → SCENE 3, which is literally the inside of this world: "this is literally the
+                // inside of the larger exterior world explored in Scene 2". The chamber was still
+                // pointing at temple-interior, the stand-in it was built against before Scene 3
+                // existed — so the prologue's chain broke at its second link and dropped the player
+                // into a dev world. A DOWNWARD elevator, which is the right shape for a descent.
                 cubies[ci].facelets[fi].props.append(
-                    Prop(kind: .portal, subRow: 1, subCol: 1, facing: .e, state: 1, transition: .push))
+                    Prop(kind: .portal, subRow: 1, subCol: 1, facing: .e, state: 13, transition: .push))
                 styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e, fieldStyle: 3))
                 cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
                 cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .e, state: 3))
