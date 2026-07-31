@@ -691,7 +691,24 @@ final class SceneBuilder {
         // that face enumerates the slice one-to-one. The cut plane sits one cell inward from it, so
         // the quad is that facelet's own transform slid along the inward normal — no new mesh, no new
         // coordinate math, and it inherits the twist automatically by being built the same way.
-        if let animMat = sliceAnimMatrix, !sr.isRefusal {
+        // …but only on a FLAT world. On a rounded one they are not merely wrong, they are
+        // unnecessary — and those are different claims worth keeping apart.
+        //
+        // The inflation applies the twist matrix BEFORE mapping onto the shell (see m14bTransform),
+        // so every rotated vertex lands on the sphere by construction: the surface cannot open into
+        // space, and there is no hole for a cut face to fill. A flat slab lifts AWAY and leaves a
+        // real gap, which is why these exist at all; a curved one slides over itself.
+        //
+        // Meanwhile the cut plane is interior geometry that stays flat while the shell inflates, so
+        // above roundness ~0.35 it shears out through the slab it belongs to (Eddie saw this, and it
+        // is why Scenes 2 and 4 are pinned to roundness 0). Skipping them lifts that pin.
+        //
+        // What this does NOT settle: the cube→sphere map commutes with 90° rotations but not with
+        // arbitrary ones, so mid-turn the rotated tiles will not tile the region exactly. Expect a
+        // small tangential seam at the slab boundary around 45°. No hole — a mismatch. Whether that
+        // reads as a flaw or as a world under strain is a question for eyes, and `-`/`=` now dial
+        // roundness live on any world so a scripted turn can be watched at both extremes.
+        if let animMat = sliceAnimMatrix, !sr.isRefusal, model.roundness <= 0.01 {
             let outward: CubeFace
             switch (sr.axis, sr.index == 0) {
             case (0, true):  outward = .negativeX
