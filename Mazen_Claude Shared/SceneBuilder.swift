@@ -81,6 +81,9 @@ final class SceneBuilder {
     /// Bond bands — the luminous seams tracing what holds the world rigid (Scene 4). Rebuilt from
     /// live topology each frame, so they follow a twist and vanish with the bond they describe.
     private var bondBandTiles: [TileEntry] = []
+    /// Scene 5's channels — the same spine geometry as a bond band, because they are the same shape:
+    /// a groove running from the tile centre out to each edge it continues through.
+    private var channelTiles: [TileEntry] = []
     private var celestialTiles: [TileEntry] = []
     /// Scene 3 — the suspended orb, and one beam per lit obelisk. Separate arrays because each has
     /// its own mesh, and each becomes a single instanced draw.
@@ -137,6 +140,7 @@ final class SceneBuilder {
         frameTiles.removeAll(keepingCapacity: true)
         cutFaceTiles.removeAll(keepingCapacity: true)
         bondBandTiles.removeAll(keepingCapacity: true)
+        channelTiles.removeAll(keepingCapacity: true)
         celestialTiles.removeAll(keepingCapacity: true)
         orbTiles.removeAll(keepingCapacity: true)
         beamTiles.removeAll(keepingCapacity: true)
@@ -679,6 +683,43 @@ final class SceneBuilder {
             }
         }
 
+        // SCENE 5's CHANNELS — "shallow physical grooves bound to facelets", drawn from the tile's own
+        // channel mask, and lit only where the current actually reaches. A groove that stops against
+        // a blank tile is the scene's central image: "thin dark cracks where channels have been
+        // rotated out of alignment". Unlit channel still draws — you have to be able to SEE the
+        // broken route in order to plan a repair.
+        if !model.channelReceivers.isEmpty {
+            let fed = gameState.channelReach
+            for face in CubeFace.allCases {
+                for r in 0..<model.size {
+                    for c in 0..<model.size {
+                        guard let (ci, fi) = model.faceletAt(face: face, row: r, col: c) else { continue }
+                        let facelet = model.cubies[ci].facelets[fi]
+                        let ch = facelet.mazeTile.channels
+                        guard !ch.isEmpty else { continue }
+                        var restM = model.restMatrix(face: face, row: r, col: c)
+                        if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) { restM = animMat * restM }
+                        let lift = SIMD3<Float>(restM.columns.2.x, restM.columns.2.y, restM.columns.2.z) * 0.004
+                        restM.columns.3 += SIMD4(lift.x, lift.y, lift.z, 0)
+                        var mask: UInt32 = 0
+                        if ch.contains(.north) { mask |= 1 }
+                        if ch.contains(.east)  { mask |= 2 }
+                        if ch.contains(.south) { mask |= 4 }
+                        if ch.contains(.west)  { mask |= 8 }
+                        let inst = InstanceDataSwift(
+                            modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
+                            materialID: 33, tileID: 0,
+                            discoveryAmount: fed.contains(facelet.id.rawValue) ? 1 : 0,
+                            styleSeed: mask,
+                            spinMatrix: spin, roundness: model.roundness,
+                            invHalfExtent: 1.0 / model.worldScale.faceDistance,
+                            reliefAmplitude: model.reliefAmplitude)
+                        channelTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.bandFloor))
+                    }
+                }
+            }
+        }
+
         // CUT FACES — give a turning slab its thickness (see `cutFaceTiles`).
         //
         // A slice is one cubie thick. Its outward side is a real cube face and renders normally; its
@@ -768,7 +809,11 @@ final class SceneBuilder {
         // failure mode beyond ~size 13) must never be possible again. Provisioning in Renderer
         // budgets 8 instances/tile, so this should be unreachable; if it ever fires, the budget
         // (not this check) is what needs raising.
-        let totalInstances = frameTiles.count + cutFaceTiles.count + bondBandTiles.count + orbTiles.count + beamTiles.count
+        // Split, because one long sum of mixed counts + reduces pushed the type-checker past its
+        // time budget once channels joined it.
+        let extras: Int = frameTiles.count + cutFaceTiles.count + bondBandTiles.count
+                        + orbTiles.count + beamTiles.count + channelTiles.count
+        let totalInstances = extras
             + mazeFloorTiles.values.reduce(0) { $0 + $1.count }
             + mazePathFloorTiles.values.reduce(0) { $0 + $1.count }
             + mazeWallTiles.values.reduce(0) { $0 + $1.count }
@@ -808,8 +853,8 @@ final class SceneBuilder {
                 instanceOffset: startIdx, instanceCount: bondBandTiles.count))
         }
 
-        // Scene 3's orb and beams — one instanced draw each.
-        for group in [orbTiles, beamTiles] where !group.isEmpty {
+        // Scene 3's orb and beams, and Scene 5's channels — one instanced draw each.
+        for group in [orbTiles, beamTiles, channelTiles] where !group.isEmpty {
             let mesh = group[0].mesh
             let startIdx = idx
             for entry in group { ptr[idx] = entry.instance; idx += 1 }

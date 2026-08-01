@@ -62,7 +62,7 @@ struct CoordinateMathTests {
         // One per entry in CubeModel's hubDestinations (the 9 legacy worlds + Scenes 1, 2 and 4; the
         // hub itself is skipped). Grows as prologue scenes are added — update alongside that list.
         // The grid grew to 4 rows × 4 columns when Scene 3 became the thirteenth destination.
-        check(hubPortals == 13, "expected 13 hub portals, found \(hubPortals)")
+        check(hubPortals == 14, "expected 14 hub portals, found \(hubPortals)")
 
         // The garden's temple door: a descent from an already-pushed world, so it must PUSH too.
         let garden = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
@@ -1255,6 +1255,56 @@ struct CoordinateMathTests {
         }
     }
 
+    /// Scene 5's puzzle, and the property that makes it a SCENE rather than a checklist.
+    ///
+    /// It is authored by breaking: the circuit is carved complete, then scrambled by known turns, so
+    /// a solution exists by construction — hand-authoring a three-receiver puzzle on a twisting 7³
+    /// gives no such guarantee. The scramble itself was chosen by search, and this pins what the
+    /// search was looking for: not merely solvable, but solvable in a way that can be got WRONG.
+    /// "One turn may connect the current to a receiver while disconnecting an earlier path."
+    static func testSceneFiveIsSolvableAndCanBeMadeWorse() {
+        func fresh() -> GameState { GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive) }
+        let gs = fresh()
+        let m = gs.cubeModel
+        check(m.channelReceivers.count == 3, "three receivers, got \(m.channelReceivers.count)")
+        check(m.channelSource != nil, "a source to feed them from")
+
+        func fedCount(_ g: GameState) -> Int {
+            let fed = g.channelReach
+            return g.cubeModel.channelReceivers.filter { fed.contains($0) }.count
+        }
+        let start = fedCount(gs)
+        check(start > 0, "the player should arrive with SOME of the circuit alive, got \(start)")
+        check(start < 3, "but not all of it — there would be no puzzle")
+        check(!gs.liveCircuit, "so the circuit is not live at the start")
+
+        // Every outer-slice turn available to the player.
+        var moves: [(Int, Int, Float)] = []
+        for a in 0..<3 { for i in [0, m.size - 1] { for cw in [Float.pi / 2, -.pi / 2] { moves.append((a, i, cw)) } } }
+
+        // SOLVABLE — within three turns, which is what the scramble was chosen to require.
+        var solved = false
+        outer: for a in moves {
+            for b in moves {
+                for c in moves {
+                    let g = fresh()
+                    for t in [a, b, c] { g.cubeModel.applySliceRotation(axis: t.0, index: t.1, angle: t.2) }
+                    if g.liveCircuit { solved = true; break outer }
+                }
+            }
+        }
+        check(solved, "no sequence of three turns completes the circuit — the scene is unwinnable")
+
+        // …and CAN BE MADE WORSE. Without this the scene is a monotone climb, which teaches nothing.
+        var regressed = false
+        for t in moves {
+            let g = fresh()
+            g.cubeModel.applySliceRotation(axis: t.0, index: t.1, angle: t.2)
+            if fedCount(g) < start { regressed = true; break }
+        }
+        check(regressed, "no turn can disconnect a receiver — every turn helps, so nothing is at stake")
+    }
+
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
     /// applied only on arrival THROUGH A PORTAL, so a world entered any other way — the boot world
     /// above all — left the player at PlayerState's default, the centre of the front face.
@@ -1647,6 +1697,7 @@ struct CoordinateMathTests {
         testSceneOneAmbienceTriggers()
         testWorldsPlaceThePlayerWhereTheySay()
         testInteriorsDoNotSpin()
+        testSceneFiveIsSolvableAndCanBeMadeWorse()
         testTwistsLeaveTheTopologyConsistent()
         testThePrologueScenesLeadToEachOther()
         testSceneTwoQuadrantsDifferButAreNotColourCoded()

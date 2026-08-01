@@ -809,6 +809,39 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 33) {
+        // SCENE 5's CHANNELS — "veins carrying liquid light", laid in shallow grooves. Same spine as
+        // a bond band (centre out to each edge the groove continues through), because they are the
+        // same shape; styleSeed carries the mask, discoveryAmount says whether the current reaches
+        // this tile.
+        //
+        // An UNLIT channel still draws, dark and dry. That is the scene's central image — "thin dark
+        // cracks where channels have been rotated out of alignment" — and you cannot plan a repair
+        // to a route you cannot see.
+        float2 uv = in.texCoord;
+        const float2 mid = float2(0.5, 0.5);
+        uint links = in.styleSeed;
+        float d = 1e9;
+        if (links & 1u) d = min(d, segmentDistance(uv, mid, float2(0.5, 0.0)));
+        if (links & 2u) d = min(d, segmentDistance(uv, mid, float2(1.0, 0.5)));
+        if (links & 4u) d = min(d, segmentDistance(uv, mid, float2(0.5, 1.0)));
+        if (links & 8u) d = min(d, segmentDistance(uv, mid, float2(0.0, 0.5)));
+        const float haloW = 0.10;
+        if (d > haloW) discard_fragment();
+        float core = smoothstep(0.040, 0.010, d);
+        float halo = smoothstep(haloW, 0.028, d);
+        float live = clamp(in.discoveryAmount, 0.0, 1.0);
+        // The current MOVES along the groove — keyed to world position so it flows across tiles
+        // rather than restarting in each, and only when the channel is actually fed.
+        float travel = fract(dot(in.worldPosition, float3(0.9, 0.9, 0.9)) - frame.time * 0.5);
+        float pulse = smoothstep(0.55, 1.0, 1.0 - abs(travel - 0.5) * 2.0) * live;
+        float3 dry  = float3(0.16, 0.17, 0.20);          // a groove cut in pale stone
+        float3 lit  = float3(0.55, 0.86, 1.00);
+        float3 tint = mix(dry, lit, live);
+        color = tint * (core * (0.6 + 1.4 * live) + halo * 0.35) + lit * pulse * 0.9 * core;
+        // Dry channels take the world's light; a live one carries its own.
+        float3 amb = skyAmbient * 0.4 + sunColor * 0.4 * halfLambert * shadowFactor;
+        lighting = mix(amb, float3(1.0), live);
     } else if (in.materialID == 32) {
         // SCENE 3's WALLS — "a patchwork of metal cubes and rectangular blocks: dark iron, tarnished
         // brass, dull steel, oxidized copper, blackened alloy, occasional pale ceramic or crystalline

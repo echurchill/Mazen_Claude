@@ -243,6 +243,7 @@ class GameState {
         tickObeliskAwakening(deltaTime)
         tickObeliskRebuff(deltaTime)
         tickChamberWave(deltaTime)
+        tickChannelCircuit(deltaTime)
         tickLayeredVessel(deltaTime)
         tickVesselDemo(deltaTime)
         tickAnchorFlash(deltaTime)
@@ -1029,6 +1030,34 @@ class GameState {
     private(set) var chamberWave: Float = 0
     private var chamberWaveFired = false
 
+    /// Scene 5 — receivers follow the current, moment to moment, and the way out appears when all
+    /// three hold at once. Ticked rather than event-driven because a twist can UNFEED a receiver as
+    /// easily as feed one, and the scene depends on the player seeing that happen.
+    private func tickChannelCircuit(_ dt: Float) {
+        guard !cubeModel.channelReceivers.isEmpty else { return }
+        let fed = channelReach
+        var changed = false
+        for cu in cubeModel.cubies.indices {
+            for f in cubeModel.cubies[cu].facelets.indices {
+                let id = cubeModel.cubies[cu].facelets[f].id.rawValue
+                guard cubeModel.channelReceivers.contains(id) else { continue }
+                for pi in cubeModel.cubies[cu].facelets[f].props.indices
+                where cubeModel.cubies[cu].facelets[f].props[pi].kind == .obelisk {
+                    let want: Float = fed.contains(id) ? 1 : 0
+                    let have = cubeModel.cubies[cu].facelets[f].props[pi].anim
+                    if abs(have - want) > 0.001 {
+                        // Ease, so a receiver going dark is something you SEE go dark.
+                        let next = have + max(-dt * 1.6, min(dt * 1.6, want - have))
+                        cubeModel.cubies[cu].facelets[f].props[pi].anim = next
+                        changed = true
+                    }
+                }
+            }
+        }
+        if changed { cubeModel.markTopologyChanged() }
+        if liveCircuit { cubeModel.createChosenExit(destinationID: 11) }   // → Scene 4 for now
+    }
+
     private func tickChamberWave(_ dt: Float) {
         if !chamberWaveFired, cubeModel.symbolPairedPlinths, sceneThreeAllObelisksAwake {
             chamberWaveFired = true
@@ -1071,6 +1100,62 @@ class GameState {
                                    TextureLoader.CausticSymbol.four.rawValue,
                                    TextureLoader.CausticSymbol.swirl.rawValue,
                                    TextureLoader.CausticSymbol.square.rawValue]
+
+    /// Scene 5 — every facelet the current reaches, by facelet id. Walked over CHANNELS, not over
+    /// openings: the current follows grooves, and a groove crossing a slab boundary only conducts if
+    /// the tile on the other side has one facing back. That is the whole scene — a twist rotates a
+    /// tile's channels, so it can join two runs or sever one, and neither is announced.
+    ///
+    /// Recomputed on demand rather than cached, because the thing it depends on is exactly the thing
+    /// the player is changing.
+    var channelReach: Set<Int> {
+        guard let src = cubeModel.channelSource,
+              let (sci, sfi) = cubeModel.faceletAt(face: src.face, row: src.row, col: src.col) else { return [] }
+        struct T: Hashable { let f: Int; let r: Int; let c: Int }
+        let n = cubeModel.size
+        var reached: Set<Int> = [cubeModel.cubies[sci].facelets[sfi].id.rawValue]
+        var q = [T(f: src.face.rawValue, r: src.row, c: src.col)], head = 0
+        var seen: Set<T> = [q[0]]
+        while head < q.count {
+            let t = q[head]; head += 1
+            guard let face = CubeFace(rawValue: t.f),
+                  let (ci, fi) = cubeModel.faceletAt(face: face, row: t.r, col: t.c) else { continue }
+            let ch = cubeModel.cubies[ci].facelets[fi].mazeTile.channels
+            for (dir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                        (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)]
+            where ch.contains(mask) {
+                let nr = t.r + dr, nc = t.c + dc
+                let nt: T
+                let back: SurfaceDirection
+                if nr >= 0, nr < n, nc >= 0, nc < n {
+                    nt = T(f: t.f, r: nr, c: nc); back = dir.opposite
+                } else {
+                    let cr = cubeModel.edgeCrossing(face: face, direction: dir, row: t.r, col: t.c)
+                    nt = T(f: cr.face.rawValue, r: cr.row, c: cr.col); back = cr.facing.opposite
+                }
+                guard let nFace = CubeFace(rawValue: nt.f),
+                      let (nci, nfi) = cubeModel.faceletAt(face: nFace, row: nt.r, col: nt.c) else { continue }
+                // BOTH ends must have a groove. A channel that stops against a blank tile is exactly
+                // the "thin dark crack where channels have been rotated out of alignment".
+                let backMask: DirectionMask = back == .north ? .north : back == .south ? .south
+                                            : back == .west ? .west : .east
+                guard cubeModel.cubies[nci].facelets[nfi].mazeTile.channels.contains(backMask) else { continue }
+                if seen.insert(nt).inserted {
+                    reached.insert(cubeModel.cubies[nci].facelets[nfi].id.rawValue)
+                    q.append(nt)
+                }
+            }
+        }
+        return reached
+    }
+
+    /// Scene 5 — all three receivers fed from the source AT ONCE. Not "each has been fed at some
+    /// point": the scene's whole subject is holding a relationship, so this is a snapshot.
+    var liveCircuit: Bool {
+        guard !cubeModel.channelReceivers.isEmpty else { return false }
+        let fed = channelReach
+        return cubeModel.channelReceivers.allSatisfy { fed.contains($0) }
+    }
 
     /// Scene 3 — every obelisk lit. The exit "is created only after all six obelisks are active".
     var sceneThreeAllObelisksAwake: Bool {

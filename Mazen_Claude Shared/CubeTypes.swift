@@ -254,6 +254,12 @@ struct MazeTile {
     /// 0 for every other world, so behaviour is unchanged by default.
     var wallType: UInt8 = 0
 
+    /// Scene 5 — which of this tile's edges carry a luminous CHANNEL. "They are not painted
+    /// markings. They are shallow physical grooves bound to facelets. When a slice turns, the
+    /// channel geometry on that slice rotates with it." So it rides the tile exactly as `openings`
+    /// does, and a twist can therefore break a circuit or complete one.
+    var channels: DirectionMask = []
+
     /// Geometric type of one edge (Phase B/F): wall if closed, open if a room interior,
     /// otherwise a gateway.
     func edgeType(_ dir: SurfaceDirection) -> EdgeType {

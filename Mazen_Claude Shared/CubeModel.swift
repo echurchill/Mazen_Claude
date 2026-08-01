@@ -16,6 +16,7 @@ enum WorldStamp {
     case sceneTwo        // Prologue Scene 2 "The Four Corners": four corner switches, a control plinth, and the way onward hidden on a face that must be TURNED into view
     case sceneOne        // Prologue Scene 1 "The First Clearing": a walled clearing, a break in its north wall, and a maze of vessels beyond — the opening, and the first sight of the Builders' objects
     case sceneThree      // Prologue Scene 3 "The Heart of the World": the INSIDE of Scene 2's world — six interior faces, six obelisks, six remote plinths, and a suspended orb at the centre
+    case sceneFive       // Prologue Scene 5 "The Broken Meridian": a live current routed across a pale world through channels that misaligned slices have broken
     case sceneFour       // Prologue Scene 4 "The First Turn": the player is handed the twist, and must first read and release a bond before the world will move
 
     /// The world this stamp wants hanging overhead, by name (see `GameState.skyCounterpart`).
@@ -25,6 +26,8 @@ enum WorldStamp {
     var skyCounterpart: String? {
         switch self {
         case .sceneFour: return "scene-2"   // the larger world overhead — Scene 4's fixed reference
+        case .sceneFive: return "scene-4"   // "the small dark Scene 4 world, visible in the persistent
+                                            //  configuration in which the player left it"
         default:         return nil         // default rule: the world beneath you, or the moon
         }
     }
@@ -47,6 +50,9 @@ enum PrologueSize {
     /// the script is explicit, and it has to be: the player must be able to see the orb from every
     /// face, which a larger chamber would put out of reach of the eye.
     static let sceneThree = 5
+    /// Scene 5. "Approximately 7x7x7" — big enough that a route crosses several faces, small enough
+    /// that the whole circuit can be held in the head.
+    static let sceneFive = 7
 }
 
 /// M20 — how a world's maze WALLS are rendered.
@@ -139,6 +145,15 @@ class CubeModel {
             // constraint that pins Scenes 2 and 4 to zero does not apply.
             roundness = 1.0
             reliefAmplitude = 0.02      // barely there: "small irregularities suggest natural earth"
+        case .sceneFive:
+            stampSceneFive()
+            naturalDressing = true
+            // The script asks for "substantial" roundness AND player twists, which used to be
+            // mutually exclusive: a turning slab's flat cut faces sheared through an inflated shell.
+            // Cut faces are now skipped on a rounded world — where the shell rotates onto itself and
+            // there is no hole for them to fill — so this scene can finally have both.
+            roundness = 0.85
+            reliefAmplitude = 0.01      // "low ridges and shallow channel beds", not hills
         case .sceneThree:
             stampSceneThree()
             roundness = 0.0             // "shape: hard-edged cube"
@@ -407,6 +422,125 @@ class CubeModel {
         }
     }
 
+
+
+    // MARK: - Prologue Scene 5 — "The Broken Meridian"
+
+    /// A pale world whose luminous channels have been broken by misaligned slices. The player must
+    /// route one live current to three receivers AT ONCE — and the difficulty is not finding three
+    /// switches, it is that "one turn may connect the current to a receiver while disconnecting an
+    /// earlier path. A turn that is locally beautiful may be globally wrong."
+    ///
+    /// AUTHORED BY BREAKING, not by designing. The circuit is carved COMPLETE — source to all three
+    /// receivers — and then a few known twists are applied to misalign it. That guarantees a
+    /// solution exists by construction, which hand-authoring a three-receiver puzzle on a twisting
+    /// 7³ absolutely does not; and because those scrambling twists share slabs, undoing one disturbs
+    /// another, which is the exact experience the scene is about. The script permits this: "the
+    /// exact sequence can be authored for engine constraints, but the dramatic shape should remain."
+    private func stampSceneFive() {
+        let n = size, c = n / 2
+
+        // Open ground: "low ridges, shallow channel beds, and raised causeways rather than enclosed
+        // corridors". The channels carry the puzzle; walls would only obstruct reading it.
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
+                    cubies[ci].facelets[fi].mazeTile.openings = [.north, .east, .south, .west]
+                    cubies[ci].facelets[fi].mazeTile.openEdges = [.north, .east, .south, .west]
+                    cubies[ci].facelets[fi].terrain = .plating
+                    cubies[ci].facelets[fi].tileState = .discovered
+                    cubies[ci].facelets[fi].discoveryAmount = 1.0
+                }
+            }
+        }
+
+        /// Walk a channel `steps` tiles from a starting tile, CROSSING FACES properly.
+        ///
+        /// The first attempt laid runs within a single face and assumed the tile across a cube edge
+        /// was the one with the same row/col. It is not — `edgeCrossing` conjugates both the tile and
+        /// the direction — so every run stopped dead at the first edge with a groove pointing at a
+        /// blank tile, and the circuit could not be completed by any sequence of turns. Walking it
+        /// asks the crossing where the next tile is instead of guessing.
+        ///
+        /// Returns where it ended, so the caller can put a receiver at the end of a run rather than
+        /// computing that position a second time and getting it wrong the same way.
+        @discardableResult
+        func layRun(from start: (face: CubeFace, row: Int, col: Int),
+                    heading: SurfaceDirection, steps: Int) -> (face: CubeFace, row: Int, col: Int) {
+            var here = start
+            var dir = heading
+            for _ in 0..<steps {
+                let (dr, dc) = dir == .north ? (-1, 0) : dir == .south ? (1, 0)
+                            : dir == .west ? (0, -1) : (0, 1)
+                let nr = here.row + dr, nc = here.col + dc
+                let next: (face: CubeFace, row: Int, col: Int)
+                let back: SurfaceDirection
+                if nr >= 0, nr < n, nc >= 0, nc < n {
+                    next = (here.face, nr, nc); back = dir.opposite
+                } else {
+                    let cr = edgeCrossing(face: here.face, direction: dir, row: here.row, col: here.col)
+                    next = (cr.face, cr.row, cr.col); back = cr.facing.opposite
+                    dir = cr.facing            // keep going the same way ON THE NEW FACE
+                }
+                let outMask: DirectionMask = back == .north ? .south : back == .south ? .north
+                                           : back == .west ? .east : .west
+                let backMask: DirectionMask = back == .north ? .north : back == .south ? .south
+                                            : back == .west ? .west : .east
+                if let (ci, fi) = faceletAt(face: here.face, row: here.row, col: here.col) {
+                    cubies[ci].facelets[fi].mazeTile.channels.insert(outMask)
+                }
+                if let (nci, nfi) = faceletAt(face: next.face, row: next.row, col: next.col) {
+                    cubies[nci].facelets[nfi].mazeTile.channels.insert(backMask)
+                }
+                here = next
+            }
+            return here
+        }
+
+        // THE SOURCE, and three runs out of it, each crossing onto a different face — the receivers
+        // are deliberately not reachable "by extending the current path through a single obvious
+        // turn". Long enough to cross an edge and continue on the far side.
+        channelSource = (face: .positiveZ, row: c, col: c)
+        let src = (face: CubeFace.positiveZ, row: c, col: c)
+        let ends = [layRun(from: src, heading: .north, steps: c + 1 + c),
+                    layRun(from: src, heading: .south, steps: c + 1 + c),
+                    layRun(from: src, heading: .west,  steps: c + 1 + c)]
+
+        channelReceivers = []
+        for end in ends {
+            guard let (ci, fi) = faceletAt(face: end.face, row: end.row, col: end.col) else { continue }
+            // A receiver reuses the obelisk: it stands off the surface and lights when fed, which is
+            // what the scene needs it to do. `anim` is its lit state, driven by the live circuit.
+            cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+            channelReceivers.append(cubies[ci].facelets[fi].id.rawValue)
+        }
+
+        if let (ci, fi) = faceletAt(face: src.face, row: src.row, col: src.col) {
+            // The source: a vessel, because Scene 5F puts "the layered vessels at the junctions" and
+            // this is the junction everything begins at.
+            var v = Prop(kind: .layeredVessel, subRow: 1, subCol: 1, facing: .s, state: 5, extraScale: 1.3)
+            v.anim = 3
+            cubies[ci].facelets[fi].props.append(v)
+        }
+
+        // NOW BREAK IT — with a scramble chosen by SEARCH rather than by taste.
+        //
+        // The first one I picked by hand was solvable in two turns and every turn helped, so the
+        // scene taught nothing: a monotone climb is a checklist, not a configuration problem. This
+        // one was found by enumerating three-turn scrambles and keeping those where the shortest
+        // solution is three turns, the player arrives with most of the circuit already working, and
+        // at least one available turn makes things WORSE. That last condition is the whole scene —
+        // "a turn that is locally beautiful may be globally wrong."
+        //
+        // Two turns on the same slab is a half-turn, which is why it appears twice: it displaces the
+        // channels further without adding an axis, so undoing it cannot be stumbled into.
+        for (axis, index) in [(0, 0), (0, 0), (2, 0)] {
+            applySliceRotation(axis: axis, index: index, angle: .pi / 2)
+        }
+
+        spawnLocation = (face: .positiveZ, row: c + 1, col: c, facing: .n)
+    }
 
     // MARK: - Prologue Scene 3 — "The Heart of the World"
 
@@ -1180,7 +1314,7 @@ class CubeModel {
         // (spawn = face centre, kept clear). Index 9 is the hub itself, so it is skipped. Dev
         // navigation: the prologue's scenes chain forward through their own portals, and this hub
         // exists so any of them can be reached directly while building.
-        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13]
+        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14]
         // Four rows now — the 3×4 grid filled up at twelve, and Scene 3 is the thirteenth.
         let gridRows = [c - 5, c - 3, c - 1, c + 1], gridCols = [c - 5, c - 2, c + 1, c + 4]
         for (slot, idx) in hubDestinations.enumerated() {
@@ -2937,6 +3071,11 @@ class CubeModel {
     /// obelisks invisible, since props need a discovered tile).
     var atmosphericDepth = false
 
+    /// Scene 5 — the source tile, and the three receivers, by facelet id. The circuit is "live" when
+    /// all three are fed from the source at once.
+    var channelSource: (face: CubeFace, row: Int, col: Int)? = nil
+    var channelReceivers: [Int] = []
+
     /// Whether an open edge may be crossed at its full width. True where the world draws no jamb
     /// posts to justify a narrower gap — i.e. dressed walls, where the stone sits on closed edges
     /// and an open edge is genuinely empty. The rule is "collision matches what you can see": a
@@ -3452,6 +3591,8 @@ class CubeModel {
                 if quarterTurns != 0 {
                     cubies[i].facelets[fi].mazeTile.openings = cubies[i].facelets[fi].mazeTile.openings.rotated(quarterTurns: quarterTurns)
                     cubies[i].facelets[fi].mazeTile.openEdges = cubies[i].facelets[fi].mazeTile.openEdges.rotated(quarterTurns: quarterTurns)
+                    // Scene 5's channels ride the tile too — that IS the scene's mechanic.
+                    cubies[i].facelets[fi].mazeTile.channels = cubies[i].facelets[fi].mazeTile.channels.rotated(quarterTurns: quarterTurns)
                     // Keep the floor texture glued to the tile through finalization.
                     cubies[i].facelets[fi].mazeTile.uvTurns = (cubies[i].facelets[fi].mazeTile.uvTurns + quarterTurns) % 4
                     // Carry any props around with the tile.
