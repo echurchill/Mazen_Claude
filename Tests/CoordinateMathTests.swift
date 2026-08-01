@@ -1314,6 +1314,85 @@ struct CoordinateMathTests {
     /// The distinction is the point: a junction vessel reads how many of ITS OWN arms carry current,
     /// so it can show three while the circuit is still broken. A vessel that tracked puzzle progress
     /// would be a hint, and this scene does not hint.
+    /// Scene 5C — "the circuit explains itself by failing visibly". The pulse is therefore not a
+    /// shader scroll but a front with a position, and the only property that matters is that it
+    /// STOPS WHERE THE ROUTE STOPS: a pulse that ran to the end of the world would teach the player
+    /// the opposite of the truth. Also checks that it cycles, since one failure the player missed
+    /// has to come round again.
+    static func testSceneFivePulseStopsWhereTheRouteDoes() {
+        let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
+        let depths = gs.channelDepths
+        check(!depths.isEmpty, "Scene 5 should have a reachable circuit to pulse through")
+        guard let src = gs.cubeModel.channelSource,
+              let (sci, sfi) = gs.cubeModel.faceletAt(face: src.face, row: src.row, col: src.col) else {
+            check(false, "Scene 5 has no channel source"); return
+        }
+        check(depths[gs.cubeModel.cubies[sci].facelets[sfi].id.rawValue] == 0,
+              "the source is zero steps from itself")
+        let maxDepth = Float(depths.values.max() ?? 0)
+        check(maxDepth > 0, "the current should reach past the source tile")
+        check(!gs.liveCircuit, "Scene 5 starts broken, so the pulse should fail somewhere")
+
+        var releases = 0, breaks = 0, overshoot: Float = 0
+        for _ in 0..<3600 {                              // a minute at 60 fps — several cycles
+            gs.update(deltaTime: 1.0 / 60.0)
+            overshoot = max(overshoot, gs.pulseFront - maxDepth)
+            for cue in gs.pendingAudioCues {
+                if case .channelPulse = cue { releases += 1 }
+                if case .channelIncomplete = cue { breaks += 1 }
+            }
+            gs.pendingAudioCues.removeAll()
+        }
+        check(overshoot <= 0.001,
+              "the pulse ran \(overshoot) steps PAST the end of the route — it has to die at the break")
+        check(releases >= 2, "the pulse should repeat; the source released \(releases) times")
+        check(breaks >= 2, "a broken circuit should sound its incomplete tone every cycle, got \(breaks)")
+        check(abs(releases - breaks) <= 1, "every cycle that starts should end, \(releases) vs \(breaks)")
+    }
+
+    /// 5K — "be reachable through the newly completed circuit route… be clearly highlighted by the
+    /// live current… avoid appearing as an arbitrary reward disconnected from the puzzle." Scene 5
+    /// borrowed Scene 3's chooser for a while, which picks the tile FARTHEST TO WALK TO and knows
+    /// nothing about channels — so it could put the door on a tile the current never reaches, which
+    /// is precisely the "arbitrary reward" the script rules out. Undo the stamp's scramble to make
+    /// the circuit live, then check where the door landed.
+    static func testSceneFiveExitStandsAtTheEndOfTheCurrent() {
+        let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
+        let m = gs.cubeModel
+        guard let spawn = m.spawnLocation else { check(false, "Scene 5 has no spawn"); return }
+        // The inverse of the stamp's scramble, in reverse order.
+        for (axis, index) in [(2, 0), (0, 0), (0, 0)] {
+            m.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)
+        }
+        check(gs.liveCircuit, "undoing the scramble should complete the circuit")
+        gs.update(deltaTime: 1.0 / 60.0)
+        guard let exit = m.chosenExit else { check(false, "a live circuit should create the exit"); return }
+        check(exit.face != spawn.face, "5K: the exit opens on a face other than the arrival face")
+        guard let (ci, fi) = m.faceletAt(face: exit.face, row: exit.row, col: exit.col) else {
+            check(false, "the exit is not a real tile"); return
+        }
+        let f = m.cubies[ci].facelets[fi]
+        check(!f.mazeTile.channels.isEmpty, "5K: the exit tile carries a channel, so the current can highlight it")
+        let depths = gs.channelDepths
+        guard let d = depths[f.id.rawValue] else {
+            check(false, "5K: the exit stands on a tile the current never reaches"); return
+        }
+        // The FAR end of the current: nothing the current reaches, and could hold a door, is deeper.
+        var deeper = 0
+        for face in CubeFace.allCases where face != spawn.face {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci2, fi2) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    let g = m.cubies[ci2].facelets[fi2]
+                    guard !g.mazeTile.channels.isEmpty, let dd = depths[g.id.rawValue] else { continue }
+                    // The chosen tile now carries the portal props, so only OTHER empties compete.
+                    if dd > d, g.props.isEmpty { deeper += 1 }
+                }
+            }
+        }
+        check(deeper == 0, "5K: \(deeper) fed channel tiles lie farther along the current than the door")
+    }
+
     static func testSceneFiveVesselsMirrorLocalTruthNotProgress() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let m = gs.cubeModel
@@ -1745,6 +1824,8 @@ struct CoordinateMathTests {
         testInteriorsDoNotSpin()
         testSceneFiveIsSolvableAndCanBeMadeWorse()
         testSceneFiveVesselsMirrorLocalTruthNotProgress()
+        testSceneFivePulseStopsWhereTheRouteDoes()
+        testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()
         testThePrologueScenesLeadToEachOther()
         testSceneTwoQuadrantsDifferButAreNotColourCoded()

@@ -94,6 +94,17 @@ enum AudioCue {
     /// world stays silent for several seconds afterwards. The disappearance should read as quiet and
     /// final rather than threatening, so this is a fold, not an alarm.
     case portalClosed(at: SIMD3<Float>?)
+    /// Scene 5C — the source releasing its slow pulse into the nearest channel. One per cycle, at
+    /// the basin, so the rhythm has an origin you can walk back to.
+    case channelPulse(at: SIMD3<Float>?)
+    /// Scene 5C — "a soft incomplete tone" where the pulse spreads against a dead end. Positioned AT
+    /// the break: this is the scene's only teacher, and what it has to teach is *where* the route
+    /// fails. Deliberately unresolved — an interval that wants a note that never comes.
+    case channelIncomplete(at: SIMD3<Float>?)
+    /// Scene 5D — a receiver the pulse has just reached. Brief while the circuit is still broken;
+    /// "temporary success is deliberately different from lasting success", so this is the same tone
+    /// the locked receiver sustains, heard once and let go.
+    case channelReceiverFed(at: SIMD3<Float>?)
 }
 
 /// Audio Phase C/D — a SUSTAINED sound the world is making from somewhere, republished every frame
@@ -103,7 +114,11 @@ enum AudioCue {
 /// never reaches for an audio framework, so the headless harness still links and occlusion stays
 /// testable without a speaker.
 struct AudioEmitter: Equatable {
-    enum Kind: Int { case obelisk, portal, vessel }
+    enum Kind: Int { case obelisk, portal, vessel
+        /// Scene 5 — the travelling pulse itself. Unlike the others this emitter MOVES continuously
+        /// rather than only under a twist, which is the whole point: "the pulse travels at walking
+        /// speed… slow enough for the player to follow on foot", so it can be followed by ear.
+        case pulse }
     /// Stable across frames — it is the FACELET's id, so an emitter keeps its identity while its
     /// position changes under a twist. Restarting the loop every frame would make a stutter, not a
     /// sound; this is what lets the engine tell "same source, moved" from "a new source".

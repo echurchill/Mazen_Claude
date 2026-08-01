@@ -1126,6 +1126,51 @@ class CubeModel {
     /// boundary", so of the candidates the FURTHEST by walking distance wins. Deterministic, and
     /// "fixed for the current world state once made": stamped once, never reconsidered.
     @discardableResult
+    /// 5K — Scene 5's own exit rule, which is NOT Scene 3's. Scene 3 puts its door as far from you
+    /// as walking allows; Scene 5's placement rules are all about the circuit:
+    ///
+    ///   - "be reachable through the newly completed circuit route"
+    ///   - "be clearly highlighted by the live current"
+    ///   - "avoid appearing as an arbitrary reward disconnected from the puzzle"
+    ///
+    /// So the door stands at the FAR END OF THE CURRENT — the fed channel tile deepest from the
+    /// source, on a face other than the one you arrived on. That satisfies 5L for free ("the player
+    /// follows the live current across the world to reach the portal"): the way to it is the thing
+    /// the player just repaired, and walking it means reading the route.
+    ///
+    /// `depths` comes from the caller because the reach walk lives with the scene's state, not here.
+    func createCircuitExit(destinationID: Int, depths: [Int: Int]) -> (face: CubeFace, row: Int, col: Int)? {
+        guard chosenExit == nil, let spawn = spawnLocation else { return nil }
+        var best: (ci: Int, fi: Int, face: CubeFace, r: Int, c: Int, d: Int)? = nil
+        for face in CubeFace.allCases where face != spawn.face {
+            for r in 0..<size {
+                for c in 0..<size {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { continue }
+                    let f = cubies[ci].facelets[fi]
+                    // ON the circuit, LIT by it, and not already occupied — a receiver, the source
+                    // or a junction vessel is a thing the scene already means something by.
+                    guard !f.mazeTile.channels.isEmpty, f.props.isEmpty,
+                          let d = depths[f.id.rawValue] else { continue }
+                    // Deterministic ties, so the door is in the same place every run.
+                    if best == nil || d > best!.d
+                        || (d == best!.d && (face.rawValue, r, c) < (best!.face.rawValue, best!.r, best!.c)) {
+                        best = (ci, fi, face, r, c, d)
+                    }
+                }
+            }
+        }
+        guard let pick = best else { return nil }
+        cubies[pick.ci].facelets[pick.fi].props.append(
+            Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: destinationID, transition: .push))
+        styledPortals.append(StyledPortal(ci: pick.ci, fi: pick.fi, facing: .n, fieldStyle: 2))
+        cubies[pick.ci].facelets[pick.fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+        cubies[pick.ci].facelets[pick.fi].props.append(
+            Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2))
+        chosenExit = (pick.face, pick.r, pick.c)
+        markTopologyChanged()
+        return (pick.face, pick.r, pick.c)
+    }
+
     func createChosenExit(destinationID: Int) -> (face: CubeFace, row: Int, col: Int)? {
         guard chosenExit == nil, let spawn = spawnLocation else { return nil }
         struct T: Hashable { let f: Int; let r: Int; let c: Int }
@@ -3230,6 +3275,17 @@ class CubeModel {
     /// Where a (cubie, facelet) pair currently sits on the surface. The reverse of `faceletAt`, and
     /// live rather than remembered: a twist moves facelets between grid slots, so anything holding a
     /// (ci, fi) — a styled portal, an emitter — has to ask again rather than cache.
+    /// Find a facelet by its stable id. Scene 5's pulse finds tiles by SEARCHING the depth map, so
+    /// it holds ids rather than coordinates and needs the way back.
+    func locate(faceletID id: Int) -> (face: CubeFace, row: Int, col: Int)? {
+        for ci in cubies.indices {
+            for fi in cubies[ci].facelets.indices where cubies[ci].facelets[fi].id.rawValue == id {
+                return locate(cubie: ci, facelet: fi)
+            }
+        }
+        return nil
+    }
+
     func locate(cubie ci: Int, facelet fi: Int) -> (face: CubeFace, row: Int, col: Int)? {
         let want = cubies[ci].facelets[fi].id.rawValue
         for face in CubeFace.allCases {

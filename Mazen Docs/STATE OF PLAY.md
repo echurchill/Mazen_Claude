@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,636 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,648 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -101,9 +101,20 @@ from the `` ` `` hub, whose grid grew a northern row to hold them.
 - **A green test hid all of it.** `testSceneFiveVesselsMirrorLocalTruthNotProgress` counted vessels
   *including* the source, which exists by construction, so `junctions > 0` could never fail. A count
   that includes the thing you are trying to prove exists is not a check. It now excludes the source.
-- **Still open:** the pale-stone surface the script asks for (it wears Scene 3's metal plating
-  because that is what existed), the travelling pulse sound (the last of Audio F), 5K's exit
-  placement rule (it borrows Scene 3's chooser), and 5J, the world-becomes-a-diagram.
+- **The pulse is real** (2026-08-01). It was a shader scroll: pretty, and a lie — it never stopped
+  where the route stopped, which is the only thing the scene has to teach ("the circuit explains
+  itself by failing visibly"). It is now a front advancing through the reach walk's DEPTH map at the
+  player's own gait, and the groove shader, the travelling emitter and the incomplete tone all read
+  that one number, so light and sound cannot drift apart. `discoveryAmount` carries depth + 1 for
+  channel tiles — clamps to 1 for "lit", subtracts back to the step count — so no instance field had
+  to be added. **Audio F is complete**; Scene 5's three voices sit at ratios of one 110 Hz
+  fundamental, the break a tritone that will not settle.
+- **5K has its own rule now.** It borrowed Scene 3's chooser, which picks the tile farthest to WALK
+  to and knows nothing about channels, so it could put the door where the current never goes — the
+  "arbitrary reward disconnected from the puzzle" the script rules out. The door now stands at the
+  far end of the live current, which gives 5L for free: the way to it is the thing you just repaired.
+- **The surface is pale stone** — Tiles141, Eddie's pick (material 34, texture slice 3).
+- **Still open:** 5J, the world-becomes-a-diagram.
 
 ## Where things stand — SCENE 1, and the app opens into the prologue (2026-07-31)
 
@@ -275,14 +286,13 @@ wrong. From a screenshot those look identical, which is why the first two took s
 
 The prologue chain is complete, so there is no longer one blocking scene. In order:
 
-1. **Finish Scene 5** — pale stone, the travelling pulse (unblocks the last of Audio F, scene-gated
-   since it was written), 5K's own exit rule. 5J is the ambitious one and should wait until the base
-   scene has been looked at.
+1. **The 34 fps on Scene 2's 11³** — Eddie: "we really should look at that soon" (2026-08-01).
+   Measured once, never diagnosed; the portal light and the denser scatter both landed in that
+   window and were never separated. The renderer is fill-bound, so it worsens with every scene that
+   adds full-screen work. **Do this before Scene 6 adds more.**
 2. **Scene 6 — "The World Remembered"** is the only scene never started. It is the one that reads
    `lastArrivalOrigin`, which Phase 0 recorded for it and nothing has used yet.
-3. **The 34 fps on Scene 2's 11³.** Measured once, never diagnosed; the portal light and the denser
-   scatter both landed in that window and were never separated. It matters more each time a scene
-   adds full-screen shader work, which Scene 3's beams already did on an unmeasured budget.
+3. **Scene 5's 5J**, the world-becoming-a-diagram — the one piece of that scene still unbuilt.
 
 Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends

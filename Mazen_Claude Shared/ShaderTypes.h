@@ -80,6 +80,10 @@ typedef struct
     /// 1 in a world whose distance fog should fall toward DARK rather than toward a sky horizon —
     /// an enclosed chamber has no horizon to fade into, so fading to grey reads as mist indoors.
     float darkHaze;
+    /// Scene 5C — how far the source's pulse has travelled, in channel-steps from the source, or -1
+    /// while nothing is travelling. The groove shader lights the tiles the front is passing; the
+    /// audio emitter follows the same number, so what you hear and what you see are one fact.
+    float channelPulse;
     vector_float3 portalLightPosition;   // world space; unused when the radius is 0
     float portalLightRadius;             // 0 = no portal light this frame
     vector_float3 portalLightColor;

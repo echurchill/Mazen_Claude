@@ -55,6 +55,12 @@ final class AudioEngine {
         // Scene 1B/1G — the two layers the opening is built on.
         static let birds = "ambience.birds"
         static let underTone = "ambience.undertone"
+        /// Scene 5C/5D — the circuit's three voices: the source letting a pulse go, the pulse itself
+        /// travelling (a loop that MOVES), and the soft incomplete tone where the route dies.
+        static let channelRelease = "channel.release"
+        static let channelPulse   = "emitter.channel.pulse"
+        static let channelBroken  = "channel.broken"
+        static let channelFed     = "channel.fed"
     }
 
     /// A world unit is ~18.9 m (WorldScale: eyeHeight 0.09u == 1.7 m). PHASE reasons in metres, so
@@ -149,6 +155,28 @@ final class AudioEngine {
             // the point: the same voice saying the opposite thing.
             try registerTone(identifier: EventID.portalClose, frequency: 147, duration: 2.2,
                              harmonics: [1.0, 0.6, 0.4, 0.25], spatial: true, sweepTo: 58)
+
+            // SCENE 5 — the circuit. One fundamental (110 Hz) with the three events sitting at
+            // simple ratios of it, because the scene's subject is things being IN or OUT of
+            // alignment and the ear should be able to hear a relationship the same way the eye can.
+            //
+            // The release is the source letting go: short, clean, on the fundamental.
+            try registerTone(identifier: EventID.channelRelease, frequency: 110, duration: 0.7,
+                             harmonics: [1.0, 0.4, 0.18], spatial: true, transient: 0.4)
+            // The pulse in flight: a quiet loop that travels with the front. Nearly a pure tone —
+            // it has to survive being heard from across a world without turning into noise.
+            try registerTone(identifier: EventID.channelPulse, frequency: 220, duration: 1.6,
+                             harmonics: [1.0, 0.22, 0.08], spatial: true, sustain: true, looping: true)
+            // A receiver fed: the fifth above, arriving and resolving. The same note whether the feed
+            // lasts or not — "temporary success is deliberately different from lasting success" is
+            // carried by how long you keep hearing it, not by a different sound.
+            try registerTone(identifier: EventID.channelFed, frequency: 165, duration: 1.1,
+                             harmonics: [1.0, 0.5, 0.25], spatial: true)
+            // The incomplete tone: a tritone above the fundamental, falling slightly and stopping.
+            // It is the one interval in the scene that does not want to sit still, which is the
+            // point — the route it describes does not sit still either.
+            try registerTone(identifier: EventID.channelBroken, frequency: 156, duration: 1.3,
+                             harmonics: [1.0, 0.45, 0.3, 0.15], spatial: true, rough: 0.15, sweepTo: 146)
 
             // Phase C — sustained emitter voices. An awakened obelisk hums; an open portal holds the
             // "low, stable tone" the scripts describe. Both loop, both are spatial, and both are
@@ -269,6 +297,9 @@ final class AudioEngine {
             case .switchDisengaged(let p):     fire(EventID.switchDown, at: spun(p))
             case .portalOpened(let p):         fire(EventID.portalOpen, at: spun(p))
             case .portalClosed(let p):         fire(EventID.portalClose, at: spun(p))
+            case .channelPulse(let p):         fire(EventID.channelRelease, at: spun(p))
+            case .channelIncomplete(let p):    fire(EventID.channelBroken, at: spun(p))
+            case .channelReceiverFed(let p):   fire(EventID.channelFed, at: spun(p))
             }
         }
     }
@@ -355,6 +386,7 @@ final class AudioEngine {
                 case .obelisk: id = e.voice >= 0 ? EventID.obeliskVoice(min(5, e.voice)) : EventID.obeliskHum
                 case .portal:  id = EventID.portalHum
                 case .vessel:  id = EventID.vesselHum
+                case .pulse:   id = EventID.channelPulse
                 }
                 let mixerParams = PHASEMixerParameters()
                 mixerParams.addSpatialMixerParameters(identifier: sm.identifier, source: src, listener: listener)

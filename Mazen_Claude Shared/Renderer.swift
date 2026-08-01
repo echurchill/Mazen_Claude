@@ -1032,6 +1032,7 @@ class Renderer: NSObject, MTKViewDelegate {
             chamberWoken: gameState.chamberWoken,
             chamberWave: gameState.chamberWave,
             darkHaze: gameState.cubeModel.atmosphericDepth ? 1 : 0,
+            channelPulse: gameState.pulseFront,
             portalLightPosition: portalLight.position,
             portalLightRadius: portalLight.radius,
             portalLightColor: portalLight.color,

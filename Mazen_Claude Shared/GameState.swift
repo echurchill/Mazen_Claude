@@ -244,6 +244,7 @@ class GameState {
         tickObeliskRebuff(deltaTime)
         tickChamberWave(deltaTime)
         tickChannelCircuit(deltaTime)
+        tickChannelPulse(deltaTime)
         tickLayeredVessel(deltaTime)
         tickVesselDemo(deltaTime)
         tickAnchorFlash(deltaTime)
@@ -867,6 +868,9 @@ class GameState {
                 }
             }
         }
+        // Scene 5 — the pulse, which is a single moving source rather than a thing standing on a
+        // tile, so it is appended once here rather than found in the sweep above.
+        if let pe = pulseEmitter { activeEmitters.append(pe) }
     }
 
     /// Scene 2 — "dust falls from nearby wall joints" / "dust shakes loose from moving walls".
@@ -1083,7 +1087,10 @@ class GameState {
         if changed { cubeModel.markTopologyChanged() }
         // 5K — the way out, created when the circuit goes live. → Scene 6 does not exist yet, so it
         // returns to the hub's Scene 4 for now.
-        if liveCircuit { cubeModel.createChosenExit(destinationID: 11) }
+        // 5K — placed by Scene 5's own rule (the far end of the live current), not Scene 3's
+        // "as far as you can walk", which would have put the door somewhere the circuit never goes.
+        // → Scene 6 does not exist yet, so it returns to the hub's Scene 4 for now.
+        if liveCircuit { cubeModel.createCircuitExit(destinationID: 11, depths: channelDepths) }
     }
 
     private func tickChamberWave(_ dt: Float) {
@@ -1136,16 +1143,21 @@ class GameState {
     ///
     /// Recomputed on demand rather than cached, because the thing it depends on is exactly the thing
     /// the player is changing.
-    var channelReach: Set<Int> {
+    var channelReach: Set<Int> { Set(channelDepths.keys) }
+
+    /// The same walk, keeping HOW FAR each tile is from the source in channel-steps. The set alone
+    /// answers "is this lit"; the pulse needs "when does the current get here", which is the same
+    /// question the BFS was already answering and throwing away.
+    var channelDepths: [Int: Int] {
         guard let src = cubeModel.channelSource,
-              let (sci, sfi) = cubeModel.faceletAt(face: src.face, row: src.row, col: src.col) else { return [] }
+              let (sci, sfi) = cubeModel.faceletAt(face: src.face, row: src.row, col: src.col) else { return [:] }
         struct T: Hashable { let f: Int; let r: Int; let c: Int }
         let n = cubeModel.size
-        var reached: Set<Int> = [cubeModel.cubies[sci].facelets[sfi].id.rawValue]
-        var q = [T(f: src.face.rawValue, r: src.row, c: src.col)], head = 0
-        var seen: Set<T> = [q[0]]
+        var reached: [Int: Int] = [cubeModel.cubies[sci].facelets[sfi].id.rawValue: 0]
+        var q = [(t: T(f: src.face.rawValue, r: src.row, c: src.col), d: 0)], head = 0
+        var seen: Set<T> = [q[0].t]
         while head < q.count {
-            let t = q[head]; head += 1
+            let (t, depth) = q[head]; head += 1
             guard let face = CubeFace(rawValue: t.f),
                   let (ci, fi) = cubeModel.faceletAt(face: face, row: t.r, col: t.c) else { continue }
             let ch = cubeModel.cubies[ci].facelets[fi].mazeTile.channels
@@ -1169,12 +1181,113 @@ class GameState {
                                             : back == .west ? .west : .east
                 guard cubeModel.cubies[nci].facelets[nfi].mazeTile.channels.contains(backMask) else { continue }
                 if seen.insert(nt).inserted {
-                    reached.insert(cubeModel.cubies[nci].facelets[nfi].id.rawValue)
-                    q.append(nt)
+                    reached[cubeModel.cubies[nci].facelets[nfi].id.rawValue] = depth + 1
+                    q.append((nt, depth + 1))
                 }
             }
         }
         return reached
+    }
+
+
+    // MARK: - Scene 5C — the travelling pulse
+
+    /// "At its center, liquid light gathers and releases a slow pulse into the nearest channel… The
+    /// pulse travels at walking speed… This repeating pulse is the puzzle's primary teaching tool.
+    /// The player is never shown an abstract diagram. The circuit explains itself by failing visibly."
+    ///
+    /// So the pulse is not decoration and cannot be a shader scroll: it has to reach a real place and
+    /// stop there, because WHERE it stops is the entire lesson. It is modelled as a front advancing
+    /// through the depth map — one number, in channel-steps from the source — which the groove
+    /// shader, the emitter and the failure tone all read, so light and sound cannot disagree about
+    /// where the current has got to.
+    private(set) var pulseFront: Float = -1
+    /// Where the current died this cycle, by facelet id: -1 while it is still travelling.
+    private(set) var pulseBrokeAt: Int = -1
+    private var pulseHold: Float = 0
+    private var pulseDepths: [Int: Int] = [:]
+
+    /// One tile per this many seconds. Taken from the player's own gait rather than tuned: the script
+    /// says walking speed, and "slow enough for the player to follow on foot" is a promise the pulse
+    /// has to keep even if the walk speed is retuned later.
+    var pulseTilesPerSecond: Float { player.moveSpeed / Float(player.standGrid) }
+
+    private func tickChannelPulse(_ dt: Float) {
+        guard !cubeModel.channelReceivers.isEmpty, cubeModel.channelSource != nil else { return }
+        pulseDepths = channelDepths
+        let maxDepth = Float(pulseDepths.values.max() ?? 0)
+
+        if pulseHold > 0 {
+            // "It spreads briefly against the dead end… the light withdraws toward the source and
+            // begins again." The hold IS that beat; the pulse stays put while it happens.
+            pulseHold -= dt
+            if pulseHold <= 0 { pulseFront = -1; pulseBrokeAt = -1 }
+            return
+        }
+
+        let previous = pulseFront
+        if pulseFront < 0 {
+            pulseFront = 0
+            pendingAudioCues.append(.channelPulse(at: faceletPosition(of: cubeModel.channelSource)))
+        } else {
+            pulseFront += dt * pulseTilesPerSecond
+        }
+
+        // A receiver the front has just crossed answers as it is fed, whether or not the circuit as
+        // a whole holds — that difference is the scene's subject, not a state to be hidden.
+        for id in cubeModel.channelReceivers {
+            guard let d = pulseDepths[id] else { continue }
+            if Float(d) > previous, Float(d) <= pulseFront {
+                pendingAudioCues.append(.channelReceiverFed(at: faceletPosition(ofFaceletID: id)))
+            }
+        }
+
+        if pulseFront >= maxDepth {
+            pulseFront = maxDepth
+            pulseHold = liveCircuit ? 0.8 : 1.6
+            if !liveCircuit {
+                // The deepest tile the current reached: the break the player has to find.
+                pulseBrokeAt = pulseDepths.first(where: { Float($0.value) == maxDepth })?.key ?? -1
+                pendingAudioCues.append(.channelIncomplete(at: faceletPosition(ofFaceletID: pulseBrokeAt)))
+            }
+        }
+    }
+
+    /// World position of a facelet by id — the pulse needs to place a sound at a tile it found by
+    /// searching, not by walking a face/row/col it already holds.
+    private func faceletPosition(ofFaceletID id: Int) -> SIMD3<Float>? {
+        guard id >= 0, let loc = cubeModel.locate(faceletID: id) else { return nil }
+        return faceletPosition(of: (face: loc.face, row: loc.row, col: loc.col))
+    }
+
+    /// REST position, deliberately unspun: `play(cues:worldSpin:)` and `updateEmitters(_:worldSpin:)`
+    /// both spin what they are given, so a position spun here would be spun twice and the whole
+    /// scene's audio would swing away from its geometry as the world turns.
+    private func faceletPosition(of loc: (face: CubeFace, row: Int, col: Int)?) -> SIMD3<Float>? {
+        guard let loc else { return nil }
+        let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
+        return SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+    }
+
+    /// The emitter that travels with the front, so the pulse can be followed by ear around the far
+    /// side of a world. Placed on the reached tile whose depth the front is currently passing,
+    /// choosing the one nearest the player when a branch means there are several.
+    private var pulseEmitter: AudioEmitter? {
+        guard pulseFront >= 0, !pulseDepths.isEmpty else { return nil }
+        let want = Int(pulseFront.rounded())
+        var best: (id: Int, pos: SIMD3<Float>, dist: Float)? = nil
+        let spin = worldSpinMatrix()
+        for (id, d) in pulseDepths where d == want {
+            guard let p = faceletPosition(ofFaceletID: id) else { continue }
+            // Compare in the SPUN frame, where the listener is, but publish the rest position.
+            let sp = spin * SIMD4(p, 1)
+            let dist = simd_length(SIMD3(sp.x, sp.y, sp.z) - viewOrigin)
+            if best == nil || dist < best!.dist { best = (id, p, dist) }
+        }
+        guard let b = best else { return nil }
+        // One STABLE id, not the tile's: the emitter is the pulse, which is a single moving thing.
+        // Keying it by tile would restart the loop at every tile boundary — a stutter, not a sound.
+        return AudioEmitter(id: -5001, kind: .pulse, position: b.pos, occlusion: 0)
     }
 
     /// Scene 5 — all three receivers fed from the source AT ONCE. Not "each has been fed at some

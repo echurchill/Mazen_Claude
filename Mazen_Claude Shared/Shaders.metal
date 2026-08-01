@@ -854,7 +854,19 @@ fragment float4 fragmentShader(
         // The current MOVES along the groove — keyed to world position so it flows across tiles
         // rather than restarting in each, and only when the channel is actually fed.
         float travel = fract(dot(in.worldPosition, float3(0.9, 0.9, 0.9)) - frame.time * 0.5);
-        float pulse = smoothstep(0.55, 1.0, 1.0 - abs(travel - 0.5) * 2.0) * live;
+        float flow = smoothstep(0.55, 1.0, 1.0 - abs(travel - 0.5) * 2.0) * live;
+
+        // THE PULSE. Not a scroll: `discoveryAmount` is depth+1, so this tile knows how many channel
+        // steps it is from the source, and `channelPulse` says which step the front has reached. The
+        // envelope is therefore the real front — it arrives here when the current does, and stops
+        // dead where the route stops, which is the whole of what Scene 5 teaches. The emitter that
+        // carries the pulse's sound reads the same number, so they cannot drift apart.
+        float depth = in.discoveryAmount - 1.0;
+        float pulse = flow * 0.35;
+        if (frame.channelPulse >= 0.0 && live > 0.5) {
+            float ahead = frame.channelPulse - depth;
+            pulse += exp(-ahead * ahead * 5.5);
+        }
         float3 dry  = float3(0.16, 0.17, 0.20);          // a groove cut in pale stone
         float3 lit  = float3(0.55, 0.86, 1.00);
         float3 tint = mix(dry, lit, live);

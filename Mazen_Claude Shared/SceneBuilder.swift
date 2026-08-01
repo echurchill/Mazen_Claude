@@ -712,7 +712,10 @@ final class SceneBuilder {
         // rotated out of alignment". Unlit channel still draws — you have to be able to SEE the
         // broken route in order to plan a repair.
         if !model.channelReceivers.isEmpty {
-            let fed = gameState.channelReach
+            // `discoveryAmount` carries BOTH facts the groove needs: lit-ness and how far along the
+            // route this tile is. Depth + 1 clamps to 1 for "lit" and subtracts back to the step
+            // count for the pulse, so no instance field had to be added for the second one.
+            let depths = gameState.channelDepths
             for face in CubeFace.allCases {
                 for r in 0..<model.size {
                     for c in 0..<model.size {
@@ -732,7 +735,7 @@ final class SceneBuilder {
                         let inst = InstanceDataSwift(
                             modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
                             materialID: 33, tileID: 0,
-                            discoveryAmount: fed.contains(facelet.id.rawValue) ? 1 : 0,
+                            discoveryAmount: depths[facelet.id.rawValue].map { Float($0) + 1 } ?? 0,
                             styleSeed: mask,
                             spinMatrix: spin, roundness: model.roundness,
                             invHalfExtent: 1.0 / model.worldScale.faceDistance,
