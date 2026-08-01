@@ -524,6 +524,31 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(v)
         }
 
+        // 5F — VESSELS AT THE JUNCTIONS. "Their bases touch the luminous grooves. Their rings contain
+        // small gaps or windows that show whether nearby channels are currently aligned… They do not
+        // give instructions. They mirror local truth."
+        //
+        // Placed where a channel BRANCHES — three arms or more — because a junction is where local
+        // truth is worth reading: it is the tile whose alignment decides which way the current can
+        // go. Their rings are driven per frame from live channel state (see tickChannelCircuit), so
+        // a vessel is never telling you anything the world is not.
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
+                    let ch = cubies[ci].facelets[fi].mazeTile.channels
+                    var arms = 0
+                    for d in [DirectionMask.north, .east, .south, .west] where ch.contains(d) { arms += 1 }
+                    guard arms >= 3 else { continue }
+                    guard !cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel }) else { continue }
+                    var v = Prop(kind: .layeredVessel, subRow: 1, subCol: 1, facing: .s,
+                                 state: 4, extraScale: 0.85, offsetX: 0.18, offsetY: 0.18)
+                    v.anim = 0
+                    cubies[ci].facelets[fi].props.append(v)
+                }
+            }
+        }
+
         // NOW BREAK IT — with a scramble chosen by SEARCH rather than by taste.
         //
         // The first one I picked by hand was solvable in two turns and every turn helped, so the
@@ -817,8 +842,10 @@ class CubeModel {
         spawnLocation = (face: .positiveZ, row: min(n - 1, c + 1), col: c, facing: .n)
         var portalCubie: Int? = nil
         if let (ci, fi) = faceletAt(face: .positiveZ, row: max(0, c - 1), col: max(0, c - 1)) {
+            // → SCENE 5, the pale world. This pointed at temple-interior while Scene 5 did not
+            // exist; now the prologue runs 1 → 2 → 3 → 4 → 5 unbroken.
             cubies[ci].facelets[fi].props.append(
-                Prop(kind: .portal, subRow: 1, subCol: 1, facing: .s, state: 1, transition: .push))
+                Prop(kind: .portal, subRow: 1, subCol: 1, facing: .s, state: 14, transition: .push))
             styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .s, fieldStyle: 2))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))
@@ -1315,10 +1342,15 @@ class CubeModel {
         // navigation: the prologue's scenes chain forward through their own portals, and this hub
         // exists so any of them can be reached directly while building.
         let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14]
-        // Four rows now — the 3×4 grid filled up at twelve, and Scene 3 is the thirteenth.
-        let gridRows = [c - 5, c - 3, c - 1, c + 1], gridCols = [c - 5, c - 2, c + 1, c + 4]
+        // WIDER, not deeper. The 3×4 grid filled up at twelve, and adding a fourth row put it at
+        // c+1 — SOUTH of the spawn, so the two newest doors were the only ones you had to turn
+        // around to find (Eddie). Row 0 is outside this world's region, so the grid cannot simply
+        // shift north; five columns fits fifteen destinations in the three rows that were always
+        // ahead of the player.
+        let gridRows = [c - 5, c - 3, c - 1]
+        let gridCols = [c - 5, c - 3, c - 1, c + 1, c + 3]
         for (slot, idx) in hubDestinations.enumerated() {
-            let gr = gridRows[slot / 4], gc = gridCols[slot % 4]
+            let gr = gridRows[slot / 5], gc = gridCols[slot % 5]
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
             // `.push`: stepping off the hub onto a destination ENTERS it, so that world's return
             // portal pops you back to the hub. (Phase 0 — this used to be inferred by the Renderer

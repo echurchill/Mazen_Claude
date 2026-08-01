@@ -1197,6 +1197,9 @@ struct CoordinateMathTests {
         check(exitDestination(of: two) == [13], "Scene 2's chamber descends into Scene 3, got \(exitDestination(of: two))")
 
         // Scene 3's exit does not exist until the orb chooses one, so complete the puzzle first.
+        let four = GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour)
+        check(exitDestination(of: four) == [14], "Scene 4 leads on to Scene 5, got \(exitDestination(of: four))")
+
         let three = GameState(size: PrologueSize.sceneThree, name: "s3", interior: true, stamp: .sceneThree)
         let m3 = three.cubeModel
         for cu in m3.cubies.indices {
@@ -1303,6 +1306,41 @@ struct CoordinateMathTests {
             if fedCount(g) < start { regressed = true; break }
         }
         check(regressed, "no turn can disconnect a receiver — every turn helps, so nothing is at stake")
+    }
+
+    /// 5F — "their rings contain small gaps or windows that show whether nearby channels are
+    /// currently aligned… They do not give instructions. They mirror local truth."
+    ///
+    /// The distinction is the point: a junction vessel reads how many of ITS OWN arms carry current,
+    /// so it can show three while the circuit is still broken. A vessel that tracked puzzle progress
+    /// would be a hint, and this scene does not hint.
+    static func testSceneFiveVesselsMirrorLocalTruthNotProgress() {
+        let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
+        let m = gs.cubeModel
+        var junctions = 0
+        for face in CubeFace.allCases {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    let f = m.cubies[ci].facelets[fi]
+                    guard f.props.contains(where: { $0.kind == .layeredVessel }) else { continue }
+                    junctions += 1
+                    // Every vessel stands ON a channel — "their bases touch the luminous grooves".
+                    check(!f.mazeTile.channels.isEmpty, "a vessel at (\(r),\(c)) stands on no channel")
+                }
+            }
+        }
+        check(junctions > 0, "Scene 5 should stand vessels at its junctions")
+        // Settle, then check at least one vessel reads live while the circuit as a whole is not.
+        for _ in 0..<240 { gs.update(deltaTime: 1.0 / 60.0) }
+        check(!gs.liveCircuit, "the scene starts with the circuit broken")
+        var anyLive = false
+        for cu in m.cubies {
+            for f in cu.facelets {
+                for p in f.props where p.kind == .layeredVessel && p.anim > 0.5 { anyLive = true }
+            }
+        }
+        check(anyLive, "a vessel on a fed junction should read live even though the circuit is not")
     }
 
     /// A world says where you stand, and that has to hold however you got there. `spawnLocation` was
@@ -1698,6 +1736,7 @@ struct CoordinateMathTests {
         testWorldsPlaceThePlayerWhereTheySay()
         testInteriorsDoNotSpin()
         testSceneFiveIsSolvableAndCanBeMadeWorse()
+        testSceneFiveVesselsMirrorLocalTruthNotProgress()
         testTwistsLeaveTheTopologyConsistent()
         testThePrologueScenesLeadToEachOther()
         testSceneTwoQuadrantsDifferButAreNotColourCoded()

@@ -1054,8 +1054,36 @@ class GameState {
                 }
             }
         }
+        // 5F — the junction vessels mirror LOCAL truth: how many of this tile's channel arms are
+        // actually carrying current. Not a hint and not a count of the puzzle's progress — just what
+        // is true here, which is why a vessel can read three while the circuit is still broken.
+        for cu in cubeModel.cubies.indices {
+            for f in cubeModel.cubies[cu].facelets.indices {
+                let facelet = cubeModel.cubies[cu].facelets[f]
+                guard facelet.props.contains(where: { $0.kind == .layeredVessel }),
+                      !facelet.mazeTile.channels.isEmpty else { continue }
+                let live = fed.contains(facelet.id.rawValue)
+                var arms = 0
+                for d in [DirectionMask.north, .east, .south, .west]
+                where facelet.mazeTile.channels.contains(d) { arms += 1 }
+                let want = live ? Float(min(3, arms)) : 0
+                for pi in cubeModel.cubies[cu].facelets[f].props.indices
+                where cubeModel.cubies[cu].facelets[f].props[pi].kind == .layeredVessel {
+                    let have = cubeModel.cubies[cu].facelets[f].props[pi].anim
+                    if abs(have - want) > 0.001 {
+                        // Eased, so "the ring rotates out of phase" when a twist breaks the route is
+                        // something the player can catch happening.
+                        cubeModel.cubies[cu].facelets[f].props[pi].anim =
+                            have + max(-dt * 1.2, min(dt * 1.2, want - have))
+                        changed = true
+                    }
+                }
+            }
+        }
         if changed { cubeModel.markTopologyChanged() }
-        if liveCircuit { cubeModel.createChosenExit(destinationID: 11) }   // → Scene 4 for now
+        // 5K — the way out, created when the circuit goes live. → Scene 6 does not exist yet, so it
+        // returns to the hub's Scene 4 for now.
+        if liveCircuit { cubeModel.createChosenExit(destinationID: 11) }
     }
 
     private func tickChamberWave(_ dt: Float) {
