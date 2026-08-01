@@ -273,22 +273,42 @@ wrong. From a screenshot those look identical, which is why the first two took s
 - **Audio F** is scene-gated: Scene 3's six kin tones and Scene 5's travelling pulse need those
   scenes to exist. **Occlusion is attenuation, not filtering** — PHASE offers no per-event gain on
   this path, so a walled-off source is pushed further away instead. It gets quieter, not duller.
-- **fps: DIAGNOSED (2026-08-01), and the standing assumption was wrong.** The renderer was *not*
-  fill-bound. Scene 2's 11³ spent **27.7 of its 27.9 ms on the CPU** with the GPU idle — and 18.4 ms
-  of that was re-placing dressed-wall props that had not moved. The derivation was already cached;
-  the PLACEMENT was not, because the world's idle spin is folded into every prop's matrix and so
-  every matrix changed every frame. Spin is one matrix common to all of them, so it now goes on at
-  pack time and the buckets survive across frames: **36 → 70 fps.**
-- **The same measurement found a silent bug.** Scene 2 wanted 19,944 asset instances against a
-  16,384 buffer, so ~3,600 props were dropped every frame — and which ones depended on dictionary
+- **fps: DIAGNOSED (2026-08-01), and BOTH standing assumptions were wrong.** The renderer was not
+  fill-bound. Scene 2's 11³ spent 27.7 of its 27.9 ms on the CPU with the GPU idle — 18.4 of it
+  re-placing dressed-wall props that had not moved. The derivation was cached; the PLACEMENT was
+  not, and could not be, because the world's idle spin is baked into every prop matrix. Spin is one
+  matrix common to all of them, so it now goes on at pack time and the buckets survive across
+  frames.
+- **The second wrong assumption was mine: those were DEBUG numbers.** In Release the CPU was never
+  the wall — the same frame costs 0.5 ms of CPU, and the asset cache is worth 3.3 ms of CPU but
+  almost nothing in frame time. It is still the right change (Eddie plays the Debug build from
+  Xcode, where it is 27.9 → 18.9 ms), but "36 → 70 fps" was a Debug measurement and is corrected
+  here. **Measure the configuration you are claiming about.**
+- **The GPU wall is the imported props, in both passes.** By ablation (`MAZEN_BENCH_ABLATE`):
+  removing asset draws from the main pass takes 21 ms to the 10 ms vsync floor; removing them from
+  the SHADOW pass takes 21 → 15.7, while removing the maze from the shadow pass changes nothing.
+  The maze geometry is nearly free; ~19,900 imported instances are the entire cost.
+- **Horizon + frustum culling at pack time** — Scene 2 draws 8,654 of 19,944 instead of all of them.
+  **Release: 21.1 → 11.4 ms (47 → 88 fps). Debug: 20.0 → 15.0 (50 → 67).** The test is deliberately
+  loose (a 2-unit frustum margin, a band past the horizon) because a culled instance loses its
+  SHADOW too — the shadow pass draws from the same buffer. Interiors are exempt from the horizon
+  test: you stand inside an inverted world, so every prop in the room reads as over the horizon and
+  the room empties.
+- **A cull test can cost more than it saves.** The first version called a method that did
+  `ablate.contains("cull")` — a string hash per instance, 20,000 times a frame. It spent 10 ms of
+  CPU to save 3 ms of GPU. Hoisting the planes and the flag into locals was the whole difference.
+- **The same work found a silent bug.** Scene 2 wanted 19,944 asset instances against a 16,384
+  buffer, so ~3,600 props were dropped every frame — and which ones depended on dictionary
   iteration order, so not the same ones twice. A missing piece of a stone wall reads as authored.
-  Buffer raised to 32,768 and an overflow now logs instead of quietly truncating. Drawing all of
-  them costs some of the win back: **Scene 2 lands at 18.9 ms / 53 fps, with 3,600 props that were
-  never there before.** CPU is now 7.3 ms of that, so the GPU is finally the wall.
-- **`MAZEN_BENCH=<world>` boots straight into a world and logs a per-frame breakdown** (update /
-  build / encode / wait-on-gpu, the build split, draws, instances, and what was dropped), then
-  exits. Built because "34 fps" had been sitting in this document for weeks as a number nobody could
-  reproduce on demand — which is the absence of a finding, not a finding.
+  Buffer raised to 32,768; overflow now logs instead of truncating quietly.
+- **`MAZEN_BENCH=<world>`** boots straight into a world and logs where the frame goes (update /
+  build / encode / wait-on-gpu, the build split, draws, instances, culled, dropped), then exits.
+  **`MAZEN_BENCH_ABLATE=shadow,assets,maze,translucent,cull,assetcache,shadowassets,shadowmaze`**
+  omits work so its cost can be read off the difference. Built because "34 fps" sat in this document
+  for weeks as a number nobody could reproduce — the absence of a finding, not a finding.
+- **Watch for**: shadows popping at the screen edge (the cull margin), and Scene 2's remaining
+  ~11 ms of GPU, which is still ~19,900 imported instances drawn twice. LOD or a shadow-caster
+  subset is the next lever.
 - The world list has moved on from the spreadsheet: the six scene scripts in `Scenes/` are the build
   target now, so `Prototype Worlds.ods` is in `Archive/` rather than tracking a plan nothing follows.
   (`metal_plate_02_1k/` and `To_be_evaluated/` were removed by Eddie, 2026-07-30.)
@@ -301,8 +321,8 @@ The prologue chain is complete, so there is no longer one blocking scene. In ord
    the prologue. It is also the payoff for something already built: Phase 0 records
    `lastArrivalOrigin` on every world specifically for Scene 6, and nothing has ever read it.
 2. **Scene 5's 5J**, the world-becoming-a-diagram — the one piece of that scene still unbuilt.
-3. **The GPU side of Scene 2**, now that the CPU is no longer the wall: 18.9 ms with 7.3 on the CPU
-   means ~11 ms of GPU, unexamined. `MAZEN_BENCH` makes it repeatable.
+3. **More GPU on Scene 2 if wanted**: 11.4 ms in Release after culling, still ~19,900 imported
+   instances drawn in two passes. LOD, or a reduced shadow-caster set, is the next lever.
 
 Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends

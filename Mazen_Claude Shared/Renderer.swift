@@ -495,6 +495,9 @@ class Renderer: NSObject, MTKViewDelegate {
         if let bench = ProcessInfo.processInfo.environment["MAZEN_BENCH"], !bench.isEmpty {
             worldStack = [buildWorld(named: bench)]
             benchFramesRemaining = Int(ProcessInfo.processInfo.environment["MAZEN_BENCH_FRAMES"] ?? "") ?? 600
+            ablate = Set((ProcessInfo.processInfo.environment["MAZEN_BENCH_ABLATE"] ?? "")
+                .split(separator: ",").map(String.init))
+            if !ablate.isEmpty { NSLog("BENCH ablating: %@", ablate.sorted().joined(separator: ",")) }
             NSLog("BENCH world=%@", bench)
         }
 #endif
@@ -955,6 +958,8 @@ class Renderer: NSObject, MTKViewDelegate {
         // compilable without a renderer.
         gameState.viewForward = framePose.forward
         gameState.viewOrigin = framePose.position
+        cullPlanes = Self.frustumPlanes(from: vp)
+        cullEye = framePose.position
         // Drain whatever the world asked to be heard this frame (same hand-off shape as
         // `portalRequested`): the model describes sounds, the renderer plays them.
         if !gameState.pendingAudioCues.isEmpty {
@@ -1181,6 +1186,48 @@ class Renderer: NSObject, MTKViewDelegate {
     /// sub-cell → facing) and are carried by `Prop.rotate` — the arena decorations turn with their
     /// slice exactly like the house. Scans by (face,row,col) so a prop carried to a neighbouring
     /// face reports its new position.
+    /// Is this prop worth submitting? Two tests, both with a generous margin, because an instance
+    /// dropped here loses its SHADOW as well as itself — the shadow pass draws from the same buffer.
+    ///
+    ///   - Behind the planet. Props sit on the surface of a world centred at the origin, so a point
+    ///     whose outward normal turns away from the eye is over the horizon. This is the one that
+    ///     matters in orbit, where the frustum holds the whole world and half of it is the far side.
+    ///   - Outside the frustum. This is the one that matters on foot, where nearly everything on a
+    ///     19 m-tile world is somewhere behind you.
+    /// Everything the test needs, in registers. The first version of this called a method that did
+    /// `ablate.contains("cull")` and walked an `[SIMD4]` — a string hash and an array bounds-check
+    /// per instance, 20,000 times a frame, which cost 10 ms of CPU to save 3 ms of GPU. Hoisting the
+    /// lot into locals is the whole difference between a win and a loss.
+    private struct CullFrustum {
+        var p0, p1, p2, p3, p4, p5: SIMD4<Float>
+        var eye: SIMD3<Float>
+        var enabled: Bool
+        /// The horizon test assumes props stand on the OUTSIDE of a world centred at the origin. An
+        /// inverted interior (M15.1) is the exact opposite — you stand inside it and its surface
+        /// faces inward — so every prop in the room would read as "over the horizon" and the room
+        /// would empty. Frustum culling still applies there; the horizon test does not.
+        var horizon: Bool
+        @inline(__always) func hides(_ p: SIMD3<Float>) -> Bool {
+            guard enabled else { return false }
+            let toEye = eye - p
+            let r2 = simd_length_squared(p)
+            if horizon, r2 > 1e-8, simd_length_squared(toEye) > 1e-8 {
+                if simd_dot(p * (1 / r2.squareRoot()), simd_normalize(toEye)) < -0.12 { return true }
+            }
+            let m = Renderer.cullMargin
+            if simd_dot(SIMD3(p0.x, p0.y, p0.z), p) + p0.w < -m { return true }
+            if simd_dot(SIMD3(p1.x, p1.y, p1.z), p) + p1.w < -m { return true }
+            if simd_dot(SIMD3(p2.x, p2.y, p2.z), p) + p2.w < -m { return true }
+            if simd_dot(SIMD3(p3.x, p3.y, p3.z), p) + p3.w < -m { return true }
+            if simd_dot(SIMD3(p4.x, p4.y, p4.z), p) + p4.w < -m { return true }
+            if simd_dot(SIMD3(p5.x, p5.y, p5.z), p) + p5.w < -m { return true }
+            return false
+        }
+    }
+    /// World units. A tile is 1.0 and the tallest dressed props stand well under half of one, so
+    /// this is roughly two tiles of slack for shadows cast in from off-screen.
+    private static let cullMargin: Float = 2.0
+
     private func updateAssetInstances() {
         assetDrawCmds.removeAll(keepingCapacity: true)
         // M20 (Eddie) — the first world (natural home clearing) is built in init, before the registry
@@ -1216,7 +1263,7 @@ class Renderer: NSObject, MTKViewDelegate {
                                     paletteSize: wallDressingPalette.walls.count
                                         + wallDressingPalette.rocks.count + wallDressingPalette.bushes.count,
                                     assetsLoaded: importedProps.count + houseAssembly.count)
-        let rebuild = token != assetCacheToken
+        let rebuild = token != assetCacheToken || ablate.contains("assetcache")
         assetCacheToken = token
         let tClear0 = CACurrentMediaTime()
         if rebuild {
@@ -1364,6 +1411,15 @@ class Renderer: NSObject, MTKViewDelegate {
         // (was 500, and 500 more in the shadow pass). Buckets that overflow the buffer are clamped,
         // same silent-cap behaviour as the old per-instance path.
         let tPack0 = CACurrentMediaTime()
+        let cull = CullFrustum(p0: cullPlanes.count == 6 ? cullPlanes[0] : SIMD4(0, 0, 0, 1),
+                               p1: cullPlanes.count == 6 ? cullPlanes[1] : SIMD4(0, 0, 0, 1),
+                               p2: cullPlanes.count == 6 ? cullPlanes[2] : SIMD4(0, 0, 0, 1),
+                               p3: cullPlanes.count == 6 ? cullPlanes[3] : SIMD4(0, 0, 0, 1),
+                               p4: cullPlanes.count == 6 ? cullPlanes[4] : SIMD4(0, 0, 0, 1),
+                               p5: cullPlanes.count == 6 ? cullPlanes[5] : SIMD4(0, 0, 0, 1),
+                               eye: cullEye,
+                               enabled: cullPlanes.count == 6 && !ablate.contains("cull"),
+                               horizon: !ws.interior)
         var inst = 0
         var dropped = 0
         for bucket in assetBuckets.values {
@@ -1374,13 +1430,17 @@ class Renderer: NSObject, MTKViewDelegate {
             for k in 0..<count {
                 var d = bucket.instances[k]
                 d.modelMatrix = spin * d.modelMatrix     // the one thing that changes every frame
+                let p = SIMD3(d.modelMatrix.columns.3.x, d.modelMatrix.columns.3.y, d.modelMatrix.columns.3.z)
+                if cull.hides(p) { benchCulled += 1; continue }
                 ptr[inst] = d
                 inst += 1
             }
+            let drawn = inst - base
+            guard drawn > 0 else { continue }
             assetDrawCmds.append(AssetDrawCmd(vertexBuffer: bucket.vertexBuffer, indexBuffer: bucket.indexBuffer,
                                               indexOffset: bucket.indexOffset, indexCount: bucket.indexCount,
                                               instanceIndex: base, diffuse: bucket.diffuse,
-                                              cutout: bucket.cutout, instanceCount: count))
+                                              cutout: bucket.cutout, instanceCount: drawn))
         }
         // NO SILENT CAPS. A clamp here deletes scenery, which looks like a level-design decision.
         if dropped > 0, !reportedAssetOverflow {
@@ -1402,6 +1462,11 @@ class Renderer: NSObject, MTKViewDelegate {
     /// "34 fps" is not a finding, it is the absence of one, and a number nobody can reproduce on
     /// demand gets argued about instead of fixed.
     private var benchFramesRemaining = 0
+    /// DEV — `MAZEN_BENCH_ABLATE=shadow,assets,...` omits work from the frame so its cost can be read
+    /// off the difference. Crude, and decisive: with the GPU as the wall, "how long did this pass
+    /// take" is otherwise a counter-heap exercise, while "what happens if it is not there" is a
+    /// comma-separated list.
+    private var ablate: Set<String> = []
     private var counterpartBuildMs: Float = 0
     private var subUniformsMs: Float = 0
     private var subAssetsMs: Float = 0
@@ -1414,6 +1479,22 @@ class Renderer: NSObject, MTKViewDelegate {
     private var benchAssetInstances = 0
     private var benchAssetDemand = 0
     private var reportedAssetOverflow = false
+    private var cullPlanes: [SIMD4<Float>] = []
+    private var cullEye = SIMD3<Float>(0, 0, 0)
+    private var benchCulled = 0
+
+    /// The six frustum planes of a view-projection, in world space (Gribb–Hartmann), each normalised
+    /// so a plane·point is a signed distance and a margin can be given in world units.
+    private static func frustumPlanes(from vp: float4x4) -> [SIMD4<Float>] {
+        let r0 = SIMD4<Float>(vp.columns.0.x, vp.columns.1.x, vp.columns.2.x, vp.columns.3.x)
+        let r1 = SIMD4<Float>(vp.columns.0.y, vp.columns.1.y, vp.columns.2.y, vp.columns.3.y)
+        let r2 = SIMD4<Float>(vp.columns.0.z, vp.columns.1.z, vp.columns.2.z, vp.columns.3.z)
+        let r3 = SIMD4<Float>(vp.columns.0.w, vp.columns.1.w, vp.columns.2.w, vp.columns.3.w)
+        return [r3 + r0, r3 - r0, r3 + r1, r3 - r1, r2, r3 - r2].map { p in
+            let n = simd_length(SIMD3(p.x, p.y, p.z))
+            return n > 0 ? p / n : p
+        }
+    }
     private var benchClearMs: Float = 0
     private var benchDressedMs: Float = 0
     /// What the asset buckets were built from. Anything here changing means they must be rebuilt;
@@ -1438,15 +1519,20 @@ class Renderer: NSObject, MTKViewDelegate {
 
     private func logBenchSample() {
         let p = gameState.perf
+        NSLog("BENCH   cull: enabled=%d horizon=%d eye=(%.2f %.2f %.2f) |eye|=%.2f faceDist=%.2f roundness=%.2f",
+              cullPlanes.count == 6 ? 1 : 0, gameState.worldScale.interior ? 0 : 1,
+              cullEye.x, cullEye.y, cullEye.z, simd_length(cullEye),
+              gameState.worldScale.faceDistance, gameState.cubeModel.roundness)
         NSLog("BENCH   assets: clearBuckets %.2f  dressedWalls %.2f  (buckets %d, dressed rebuilds %d/120 frames, style %@)",
               benchClearMs / 120, benchDressedMs / 120, assetBuckets.count,
               CubeModel.benchDressedRebuilds, String(describing: gameState.cubeModel.wallStyle))
         benchDressedMs = 0; CubeModel.benchDressedRebuilds = 0
         benchClearMs = 0
-        NSLog("BENCH   assets: propTiles() %.2f  placeProp %.2f  pack %.2f  |  %d tiles, %.0f props/frame, %d asset instances (wanted %d, cap %d)",
+        NSLog("BENCH   assets: propTiles() %.2f  placeProp %.2f  pack %.2f  |  %d tiles, %.0f props/frame, %d drawn of %d (culled %d, cap %d)",
               benchPropTilesMs / 120, benchPlaceMs / 120, benchPackMs / 120,
               benchPropTileCount, Float(benchPropCount) / 120, benchAssetInstances, benchAssetDemand,
-              assetInstanceBuffers[0].length / MemoryLayout<InstanceDataSwift>.stride)
+              benchCulled / 120, assetInstanceBuffers[0].length / MemoryLayout<InstanceDataSwift>.stride)
+        benchCulled = 0
         benchPropTilesMs = 0; benchPlaceMs = 0; benchPackMs = 0; benchPropCount = 0
         NSLog("BENCH   build split: frameUniforms %.2f  assetInstances %.2f  buildDrawCalls %.2f",
               subUniformsMs / 120, subAssetsMs / 120, subDrawCallsMs / 120)
@@ -1538,7 +1624,7 @@ class Renderer: NSObject, MTKViewDelegate {
         shadowPassDesc.depthAttachment.storeAction = .store
         shadowPassDesc.depthAttachment.clearDepth = 1.0
 
-        if let shadowEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: shadowPassDesc) {
+        if !ablate.contains("shadow"), let shadowEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: shadowPassDesc) {
             shadowEncoder.label = "Shadow Pass"
             shadowEncoder.setRenderPipelineState(shadowPipelineState)
             shadowEncoder.setDepthStencilState(depthState)
@@ -1548,7 +1634,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
             let idxBase = tileMeshLib.indexBuffer.gpuAddress
             let idxLen = tileMeshLib.indexBuffer.length
-            for dc in opaqueDrawCalls {
+            for dc in opaqueDrawCalls where !ablate.contains("shadowmaze") {
                 shadowEncoder.drawIndexedPrimitives(
                     primitiveType: .triangle,
                     indexCount: dc.indexCount,
@@ -1564,7 +1650,7 @@ class Renderer: NSObject, MTKViewDelegate {
             // M20: a cut-out sub-mesh (foliage) swaps to the alpha-tested shadow pipeline, so its
             // shadow follows the leaf silhouette instead of the solid card/blob it's painted on.
             // Only those draws pay for a fragment stage; the rest stay on the depth-only pipeline.
-            if !assetDrawCmds.isEmpty {
+            if !assetDrawCmds.isEmpty, !ablate.contains("shadowassets") {
                 vertexArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
                 var cutoutActive = false
                 var fragTableBound = false
@@ -1660,7 +1746,7 @@ class Renderer: NSObject, MTKViewDelegate {
         encoder.setDepthStencilState(depthState)
         let idxBufBase = tileMeshLib.indexBuffer.gpuAddress
         let idxBufLen = tileMeshLib.indexBuffer.length
-        for dc in opaqueDrawCalls {
+        for dc in opaqueDrawCalls where !ablate.contains("maze") {
             encoder.drawIndexedPrimitives(
                 primitiveType: .triangle,
                 indexCount: dc.indexCount,
@@ -1674,7 +1760,7 @@ class Renderer: NSObject, MTKViewDelegate {
         }
 
         // M12: imported props (each draw = its own vertex + uint32 range + optional texture).
-        if !assetDrawCmds.isEmpty {
+        if !assetDrawCmds.isEmpty, !ablate.contains("assets") {
             vertexArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             fragmentArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             for cmd in assetDrawCmds {
@@ -1716,7 +1802,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // Pass 2: translucent overlays (depth write OFF)
         encoder.setDepthStencilState(depthStateNoWrite)
-        for dc in translucentDrawCalls {
+        for dc in translucentDrawCalls where !ablate.contains("translucent") {
             encoder.drawIndexedPrimitives(
                 primitiveType: .triangle,
                 indexCount: dc.indexCount,
