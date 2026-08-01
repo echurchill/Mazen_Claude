@@ -65,7 +65,14 @@ struct CoordinateMathTests {
         // matters is that every door is a door, laid out where they can be walked to, which the
         // signpost and `.push` checks above cover. (It was a literal 14; Scene 6 made it 15.)
         check(hubPortals >= 14, "the hub lost doors: found only \(hubPortals)")
-        check(hubPortals <= 15, "the hub grid holds 15 doors (3 rows × 5); found \(hubPortals)")
+        // The grid is 3 rows × 6 columns since the Cyberpunk gallery made it sixteen. The ceiling
+        // matters: a slot past the end would silently drop a door rather than fail to build.
+        check(hubPortals <= 18, "the hub grid holds 18 doors (3 rows × 6); found \(hubPortals)")
+        // Every door in the hub must be somewhere the plaza actually is — an off-grid slot puts a
+        // portal outside the walkable region, where it reads as missing.
+        check(hubPortals == WorldCatalog.destinations.count - 1,
+              "the hub should show every destination but itself: \(hubPortals) doors for "
+              + "\(WorldCatalog.destinations.count) destinations")
 
         // The garden's temple door: a descent from an already-pushed world, so it must PUSH too.
         let garden = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
@@ -1857,6 +1864,68 @@ struct CoordinateMathTests {
         check(WorldCatalog.destinations.contains("scene-6"), "Scene 6 has no hub door")
     }
 
+    /// SCENE 6C's dressing. The underside is scenery, and scenery must not change the shape of the
+    /// world: the region has to stay walkable, and — the property Scene 6 depends on — it must stay
+    /// UNREACHABLE from Scene 2's own spawn. Machinery that blocked a lane, or a prop that somehow
+    /// opened one, would break the scene in a way that looks like level design.
+    static func testTheUndersideIsDressedWithoutChangingIt() {
+        let gs = prologueWorld("scene-2")
+        let m = gs.cubeModel
+        guard let home = m.spawnLocation, let six = m.spawn(arrivingFrom: "scene-5") else {
+            check(false, "Scene 2 states both arrivals"); return
+        }
+        let before = walkable(gs, from: (home.face, home.row, home.col))
+        let regionBefore = walkable(gs, from: (six.face, six.row, six.col))
+
+        // A stand-in kit: the stamp asks for roles, not for particular models, so the test does not
+        // depend on which pack is installed or on the Renderer being able to load anything.
+        var kit = CubeModel.UndersideMachinery()
+        kit.uprights = [0, 1]; kit.runs = [2, 3]; kit.boxes = [4]; kit.rails = [5]
+        kit.plates = [6]; kit.lamps = [7]
+        m.stampSceneSixUnderside(kit)
+
+        var dressed = 0, nearEdge = 0, farSide = 0
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .negativeX, row: r, col: c) else { continue }
+                let props = m.cubies[ci].facelets[fi].props.filter { $0.kind == .importedFoliage }
+                if !props.isEmpty {
+                    dressed += 1
+                    if c >= m.size - 3 { nearEdge += 1 }
+                    if c <= 2 { farSide += 1 }
+                }
+                // Nothing solid: the underside is something to read, not to squeeze past.
+                for p in props { check(!p.kind.isSolid, "underside machinery should not block a stand cell") }
+            }
+        }
+        check(dressed > 20, "the underside should actually be dressed, got \(dressed) tiles")
+        check(nearEdge > farSide,
+              "machinery should thicken toward the assembly edge (\(nearEdge) near vs \(farSide) far)")
+
+        // Shape unchanged, in both directions.
+        check(walkable(gs, from: (home.face, home.row, home.col)) == before,
+              "dressing the underside changed what Scene 2's own route can reach")
+        check(walkable(gs, from: (six.face, six.row, six.col)) == regionBefore,
+              "dressing the underside changed the shape of the arrival region")
+        guard let sixID = tileID(gs, (six.face, six.row, six.col)) else { return }
+        check(!before.contains(sixID), "the arrival became reachable from Scene 2's spawn")
+
+        // Deterministic: the same world every run, or a twist would carry different props each time.
+        let again = prologueWorld("scene-2")
+        again.cubeModel.stampSceneSixUnderside(kit)
+        var same = true
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (a, b) = m.faceletAt(face: .negativeX, row: r, col: c),
+                      let (x, y) = again.cubeModel.faceletAt(face: .negativeX, row: r, col: c) else { continue }
+                let l = m.cubies[a].facelets[b].props.map { "\($0.kind)\($0.state)" }
+                let rr = again.cubeModel.cubies[x].facelets[y].props.map { "\($0.kind)\($0.state)" }
+                if l != rr { same = false }
+            }
+        }
+        check(same, "the underside dressing is not deterministic")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2373,6 +2442,7 @@ struct CoordinateMathTests {
         testSceneFiveCanBeSolvedByTurningItBack()
         testNoSceneHandsOutItsExitEarly()
         testEveryDoorKnowsWhatItIsCalled()
+        testTheUndersideIsDressedWithoutChangingIt()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

@@ -127,6 +127,13 @@ enum AssetRegistry {
         }
         let dungeons = loadFlatPack("Dungeons Pack", "Dungeons")
         let naturePk = loadFlatPack("Nature Pack",   "Nature")
+        // Quaternius' Cyberpunk Game Kit (CC0), adopted 2026-08-01 for its STRUCTURAL half only:
+        // platforms, supports, rails, pipes, cables, AC units, antennae, lights. `OBJ/` holds that
+        // curated subset — the pack's enemies, character and pickups are a different game, and its
+        // neon signage and screens contradict the rule that meaning is read off the world's own
+        // geometry and never written down. Same OBJ + flat-Kd shape as the other three packs, so it
+        // needs no pipeline work.
+        let cyber    = loadFlatPack("Cyberpunk Pack", "Cyberpunk")
         let ruins    = loadFlatPack("Ruins Pack",    "Ruins",
                                     texBind: ["Leaf_Texture": "Leaf_Texture.png"])   // leaf-shaped mesh → cutout leaves; "Green" left flat (solid mesh would go holey)
 
@@ -196,7 +203,7 @@ enum AssetRegistry {
         } else {
             print("[AssetRegistry] house kit FAILED to load")
         }
-        return (props + dungeons + naturePk + ruins + megakit, house, houseDoor)
+        return (props + dungeons + naturePk + ruins + megakit + cyber, house, houseDoor)
     }
 
     // (The old `stamp(_:into:)` demo-decoration pass was retired with the demo overworld — the home

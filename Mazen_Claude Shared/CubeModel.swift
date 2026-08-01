@@ -1242,6 +1242,61 @@ class CubeModel {
         return (0, index, strip)
     }
 
+    /// SCENE 6C — the pieces the underside is built from, grouped by role rather than by name so the
+    /// stamp asks for "something that holds a floor up" instead of for a particular model.
+    struct UndersideMachinery {
+        var uprights: [Int] = []   // supports, antennae — things that stand
+        var runs: [Int] = []       // pipes, cables — things that carry
+        var boxes: [Int] = []      // AC units, computers — things that hum
+        var rails: [Int] = []      // rails, fence — things that stop you falling
+        var plates: [Int] = []     // platform sections — the underside of a floor
+        var lamps: [Int] = []      // street/square lights
+        var isEmpty: Bool { uprights.isEmpty && runs.isEmpty && boxes.isEmpty && rails.isEmpty }
+    }
+
+    /// Dress `-X` — the end-cap of the slab that Scene 2's twist turns, and the region Scene 6
+    /// arrives on. It is walkable and connected but was completely bare, which reads as an unfinished
+    /// level rather than as the back of a stage.
+    ///
+    /// "The area feels like the reverse side of a familiar stage… supports, seams, braces, and
+    /// machinery that were never visible from the original route."
+    ///
+    /// Density RISES toward the edge the portal assembly stands on (`-X` col 10 adjoins `+Z` col 0),
+    /// so the machinery reads as belonging to that structure and thins out into bare plate as you
+    /// walk away from it. Deterministic per tile: the same world every run, and a twist carries the
+    /// props with their tiles like anything else.
+    func stampSceneSixUnderside(_ kit: UndersideMachinery) {
+        guard !kit.isEmpty else { return }
+        let n = size
+        for r in 0..<n {
+            for c in 0..<n {
+                guard let (ci, fi) = faceletAt(face: .negativeX, row: r, col: c) else { continue }
+                guard cubies[ci].facelets[fi].props.isEmpty else { continue }
+                var h = UInt32(truncatingIfNeeded: r &* 73856093 ^ c &* 19349663 ^ 0x51ED2701)
+                h ^= h >> 13; h = h &* 2654435761; h ^= h >> 16
+                // 0 at the far side of the cap, 1 against the assembly edge.
+                let toward = Float(c) / Float(max(1, n - 1))
+                let chance = 0.15 + 0.55 * toward * toward
+                guard Float(h % 1000) / 1000.0 < chance else { continue }
+                // Which kind of thing stands here. Uprights and runs everywhere; the heavier
+                // structure (plates, boxes, rails, lamps) only near the assembly.
+                var pool: [Int] = kit.uprights + kit.runs
+                if toward > 0.55 { pool += kit.boxes + kit.rails }
+                if toward > 0.75 { pool += kit.plates + kit.lamps }
+                guard !pool.isEmpty else { continue }
+                let idx = pool[Int((h >> 7) % UInt32(pool.count))]
+                let sub = Int((h >> 3) % 9)
+                let facing = Heading8(rawValue: Int((h >> 11) % 8)) ?? .n
+                // 0.55…0.95 of the gallery target: machinery is human-scale, not landscape.
+                let scale = 0.55 + Float((h >> 17) % 40) / 100.0
+                cubies[ci].facelets[fi].props.append(
+                    Prop(kind: .importedFoliage, subRow: sub / 3, subCol: sub % 3,
+                         facing: facing, state: idx, extraScale: scale))
+            }
+        }
+        markTopologyChanged()
+    }
+
     /// The exit, built on the hidden `+Y` face from the first frame: two obelisks flanking a portal
     /// chamber, sealed and dark until the slab turns. They ride their facelets, so the twist carries
     /// them onto `+Z` with no spawning.
@@ -1421,16 +1476,19 @@ class CubeModel {
         // exists so any of them can be reached directly while building.
         // 15 = Scene 6, which is Scene 2 entered by Scene 5's route — the fifteenth and last slot
         // the three-row grid holds.
-        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15]
+        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16]
         // WIDER, not deeper. The 3×4 grid filled up at twelve, and adding a fourth row put it at
         // c+1 — SOUTH of the spawn, so the two newest doors were the only ones you had to turn
         // around to find (Eddie). Row 0 is outside this world's region, so the grid cannot simply
         // shift north; five columns fits fifteen destinations in the three rows that were always
         // ahead of the player.
+        // Six columns now: the fifth filled with Scene 6, and the Cyberpunk gallery needed a
+        // sixteenth. `cHi` is c+5, so the plaza already reaches far enough — no need to grow the
+        // region or add a row behind the player, which is what made the grid go wide the last time.
         let gridRows = [c - 5, c - 3, c - 1]
-        let gridCols = [c - 5, c - 3, c - 1, c + 1, c + 3]
+        let gridCols = [c - 5, c - 3, c - 1, c + 1, c + 3, c + 5]
         for (slot, idx) in hubDestinations.enumerated() {
-            let gr = gridRows[slot / 5], gc = gridCols[slot % 5]
+            let gr = gridRows[slot / gridCols.count], gc = gridCols[slot % gridCols.count]
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }
             // `.push`: stepping off the hub onto a destination ENTERS it, so that world's return
             // portal pops you back to the hub. (Phase 0 — this used to be inferred by the Renderer

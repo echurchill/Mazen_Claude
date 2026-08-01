@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,723 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,808 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -142,6 +142,24 @@ still hangs in its sky, because that binding is by name rather than by being fir
   distance resolving. The line-of-sight reveal it prompted stays for the worlds that still fog. The
   script's gradual-scale idea deserves another attempt with a different mechanism, probably tight
   distance fog rather than tile discovery.
+
+### Cyberpunk kit adopted for Scene 6's underside (2026-08-01)
+Quaternius' Cyberpunk Game Kit (CC0), same OBJ + flat-`Kd` shape as the other three packs, so it
+needed no pipeline work. **Structural half only** — 35 models: platforms, supports, rails, pipes,
+cables, AC units, antennae, lights. Left behind: the character, the enemies and turrets, the pickups
+(no combat, no inventory), and deliberately the neon signage and screens — meaning in this game is
+read off the world's own geometry and never written down, so legible signs and displays argue with
+the premise. The full pack sits in `Mazen_Models/Cyberpunk Pack/` (gitignored like the others);
+`OBJ/` is the curated subset the game loads. **No emissive materials in the pack** — every `Ke` is
+zero, so any neon must come from our own shaders.
+
+It dresses `-X`, Scene 6's arrival region, which was bare: density rises toward the edge the portal
+assembly stands on, so the machinery reads as belonging to that structure and thins into bare plate
+away from it. Non-solid, so it changes nothing about where the player can walk — asserted, along
+with the region staying unreachable from Scene 2's own spawn, and the dressing being deterministic.
+
+**`gallery-cyberpunk` (destination 16)** joins the hub, whose grid went to 3 rows × 6 columns; the
+plaza already reached that far, so nothing had to move.
 
 ### The puzzle-integrity suite (2026-08-01)
 Every existing test passed while Scene 2 was unsolvable, because they all checked PARTS: the

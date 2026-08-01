@@ -640,6 +640,13 @@ class Renderer: NSObject, MTKViewDelegate {
             w = GameState(size: 25, name: dest, stamp: .bare)
             w.cubeModel.stampPackGallery(packIndices("MegaKit "))
             w.cubeModel.noFog = true
+        case "gallery-cyberpunk":
+            // The Cyberpunk kit's structural half — the machinery Scene 6's underside is dressed
+            // with. Same aisled gallery as the other packs, so a new pack is looked at the same way
+            // every other one was.
+            w = GameState(size: 25, name: dest, stamp: .bare)
+            w.cubeModel.stampPackGallery(packIndices("Cyberpunk "))
+            w.cubeModel.noFog = true
         case "portal-hub":
             // M20 (Eddie) — the labeled hub of TARDIS portals + signposts. Size 15 fits the 3×3.
             w = GameState(size: 15, name: dest, stamp: .portalHub)
@@ -692,6 +699,10 @@ class Renderer: NSObject, MTKViewDelegate {
             // tool the player owns yet, so the player's own Q/E stays withheld here.
             w = GameState(size: PrologueSize.sceneTwo, name: dest, stamp: .sceneTwo)
             w.twistEnabled = false
+            // SCENE 6C — the far side of the slab the player turns here is Scene 6's arrival region,
+            // and it was bare. Dressed with the machinery kit, densest against the edge the portal
+            // assembly stands on, because that is the underside the player walks out to read.
+            w.cubeModel.stampSceneSixUnderside(undersideMachinery())
             w.cubeModel.stampGardenVegetation(gardenFlora())
             wallDressingPalette = wallFlora()
             w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
@@ -1196,6 +1207,25 @@ class Renderer: NSObject, MTKViewDelegate {
     /// pieces** for the structural backbone, plus **rocks** (Nature) and **bushes** (Nature + Ruins)
     /// packed at the base to overgrow it. Snow variants excluded (temperate). Reuses `GardenFlora`'s
     /// `walls`/`rocks`/`bushes` fields.
+    /// SCENE 6C — the machinery under a world's skin. Quaternius' Cyberpunk kit, structural half
+    /// only: "The player can see supports, seams, braces, and machinery that were never visible from
+    /// the original route." Grouped by what a piece IS, so the stamp can put uprights where a floor
+    /// needs holding up and runs where something has to be carried across.
+    private func undersideMachinery() -> CubeModel.UndersideMachinery {
+        var m = CubeModel.UndersideMachinery()
+        for (i, p) in importedProps.enumerated() where p.name.hasPrefix("Cyberpunk ") {
+            let name = p.name
+            func has(_ s: String) -> Bool { name.range(of: s, options: .caseInsensitive) != nil }
+            if has("Support") || has("Antenna")            { m.uprights.append(i) }
+            else if has("Pipe") || has("Cable")            { m.runs.append(i) }
+            else if has("AC") || has("Computer")           { m.boxes.append(i) }
+            else if has("Rail") || has("Fence")            { m.rails.append(i) }
+            else if has("Platform")                        { m.plates.append(i) }
+            else if has("Light")                           { m.lamps.append(i) }
+        }
+        return m
+    }
+
     private func wallFlora() -> CubeModel.GardenFlora {
         var f = CubeModel.GardenFlora()
         for (i, p) in importedProps.enumerated() {
