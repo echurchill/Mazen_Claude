@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,648 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,687 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -142,6 +142,19 @@ still hangs in its sky, because that binding is by name rather than by being fir
   distance resolving. The line-of-sight reveal it prompted stays for the worlds that still fog. The
   script's gradual-scale idea deserves another attempt with a different mechanism, probably tight
   distance fog rather than tile discovery.
+
+### Scene 2's lock had been dead (found 2026-08-01)
+`templeDoorStillSealed()` — the guard that makes the four corner switches inert once the door is
+open — identified the door as "the portal whose destination is **1**", i.e. `temple-interior`: the
+world Scene 2's chamber pointed at *before Scene 3 existed*. Repointing the chamber to Scene 3
+(destination 13) left that lookup finding nothing, falling through to `false`, and silently
+rejecting **every** switch press. No crash, no log, nothing on screen. Scene 2 has been unsolvable
+since, through every session that "verified" it by looking at it.
+
+A door identified by which world lies behind it breaks the day that world changes; a door identified
+by BEING SEALED does not. `testSceneTwoCanActuallyBeSolved` now walks the whole chain — every switch
+in both directions, the lock dissolving, the cylinder rising, the world turning, the chamber going
+live — because what broke was not a step but the join between two of them.
 
 ### Elsewhere
 - **The portal lights its surroundings** (Scene 1G). An emissive surface lights only itself, so the
@@ -295,6 +308,24 @@ wrong. From a screenshot those look identical, which is why the first two took s
   SHADOW too — the shadow pass draws from the same buffer. Interiors are exempt from the horizon
   test: you stand inside an inverted world, so every prop in the room reads as over the horizon and
   the room empties.
+- **The orbit camera never reported where it was (fixed 2026-08-01).** `cameraPosition` returned a
+  constant `(0, 0, orbitDistance)` in orbit — the camera as it sits *before* you drag it — while the
+  view matrix rotated properly. Harmless for as long as it only fed the audio listener and Scene 1's
+  "is the player looking at it" vessel test. Then prop culling asked it where the eye was and
+  believed the answer, so it kept whatever faced `+Z` however the world was turned: a band of
+  scenery tracking the world's spin rather than the camera. **A stale answer is worse than none,
+  because it looks like a plausible one.**
+- **And the cull test itself was wrong twice, in opposite directions.** A backface test asks whether
+  a surface is turned away from *where the eye is* — `dot(p̂, normalize(eye − p))`. The intermediate
+  version compared against the VIEW AXIS instead (`dot(p̂, ê)`), which culls the far half of every
+  oblique face while that face is plainly on screen; on a cube a whole side face reads as 90° from
+  the axis and vanished. Restored, with the outside-only gate that the first fix got right.
+- **The in-view diagnostic was itself vacuous** — it required the prop to be within 6 units, which
+  never fires from orbit 26 units out, so it read 0 through the entire time orbit was visibly broken.
+  It now means "near the middle of the screen, on a surface comfortably facing the eye", and it is
+  **proved sensitive**: `MAZEN_CULL_T=0.4` (a deliberately wrong cull) reports 1,137 killed while in
+  view; the shipping threshold reports 0, at every yaw, in both cameras. A check that cannot fail is
+  not a check.
 - **A cull test can cost more than it saves.** The first version called a method that did
   `ablate.contains("cull")` — a string hash per instance, 20,000 times a frame. It spent 10 ms of
   CPU to save 3 ms of GPU. Hoisting the planes and the flag into locals was the whole difference.

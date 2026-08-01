@@ -1783,12 +1783,20 @@ class GameState {
     }
 
     /// Is the temple door (the `state == 1` portal) still sealed? Used to gate the door plinth's F.
+    /// "Is the door this lock opens still shut?" — the switches go inert once it is open (Eddie).
+    ///
+    /// This used to look for a portal whose destination is 1, which is `temple-interior`: the world
+    /// Scene 2's chamber pointed at before Scene 3 existed. When the chamber was repointed to
+    /// Scene 3 (destination 13) this stopped finding anything, fell through to `false`, and the
+    /// guard in the switch branch silently rejected EVERY press — Scene 2's four-corner lock has
+    /// been dead since, with no error and nothing on screen to say so (Eddie's walkthrough,
+    /// 2026-08-01). A door identified by which world lies behind it breaks the day that world
+    /// changes; a door identified by BEING SEALED does not.
     private func templeDoorStillSealed() -> Bool {
-        for cu in cubeModel.cubies.indices {
-            for f in cubeModel.cubies[cu].facelets
-            where f.props.contains(where: { $0.kind == .portal && $0.state == 1 }) {
-                return cubeModel.sealedPortalCubies.contains(cu)
-            }
+        for cu in cubeModel.cubies.indices where cubeModel.sealedPortalCubies.contains(cu) {
+            if cubeModel.cubies[cu].facelets.contains(where: { f in
+                f.props.contains(where: { $0.kind == .portal })
+            }) { return true }
         }
         return false
     }

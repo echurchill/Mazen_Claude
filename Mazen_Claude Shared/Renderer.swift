@@ -505,6 +505,14 @@ class Renderer: NSObject, MTKViewDelegate {
             // The bench booted in orbit, which is the whole reason a cull test that only worked in
             // orbit shipped. First person is a different camera in a different place and has to be
             // measured as one.
+            if let t = ProcessInfo.processInfo.environment["MAZEN_CULL_T"], let v = Float(t) {
+                cullBackfaceThreshold = v
+                NSLog("BENCH cull threshold %.2f", v)
+            }
+            if let yaw = ProcessInfo.processInfo.environment["MAZEN_BENCH_YAW"], let y = Float(yaw) {
+                worldStack[worldStack.count - 1].camera.orbitRotation.x = y * .pi / 180
+                NSLog("BENCH orbit yaw %.0f°", y)
+            }
             if ProcessInfo.processInfo.environment["MAZEN_BENCH_FP"] != nil {
                 worldStack[worldStack.count - 1].camera.mode = .firstPerson
                 NSLog("BENCH first-person")
@@ -1238,16 +1246,25 @@ class Renderer: NSObject, MTKViewDelegate {
         /// Also off inside an inverted interior (M15.1), where the surface faces inward and every
         /// prop in the room would read as behind the world.
         var horizon: Bool
-        /// The proper condition, for an eye at distance E from the centre of a world of radius R:
-        /// a surface point is on the near side of the horizon when dot(p̂, ê) ≥ R/E. Stored rather
-        /// than recomputed per instance.
-        var horizonCos: Float
-        var eyeDir: SIMD3<Float>
+        /// How far past facing-away a surface has to be before it is dropped. Generous on purpose:
+        /// a culled instance loses its shadow too. `MAZEN_CULL_T` overrides it for bench runs — set
+        /// it positive to make the cull deliberately wrong and confirm the in-view diagnostic still
+        /// catches it.
+        var backface: Float
+
         @inline(__always) func hides(_ p: SIMD3<Float>) -> Bool {
             guard enabled else { return false }
             let r2 = simd_length_squared(p)
             if horizon, r2 > 1e-8 {
-                if simd_dot(p * (1 / r2.squareRoot()), eyeDir) < horizonCos {
+                // A BACKFACE test, not a sphere-horizon one: is this surface point turned away from
+                // where the eye actually is? `dot(p̂, ê)` — the version that replaced it for one
+                // commit — measures the angle from the VIEW AXIS instead, so it culled the far half
+                // of every oblique face while that face was plainly on screen. On a cube the whole
+                // of a side face reads as 90° from the axis and vanished.
+                let toEye = eye - p
+                let t2 = simd_length_squared(toEye)
+                if t2 > 1e-8,
+                   simd_dot(p * (1 / r2.squareRoot()), toEye * (1 / t2.squareRoot())) < backface {
                     Renderer.benchHorizonKills += 1
                     return true
                 }
@@ -1463,14 +1480,7 @@ class Renderer: NSObject, MTKViewDelegate {
                                // the geometric horizon are still plainly in view. In first person the
                                // frustum test does the work instead.
                                horizon: !ws.interior && simd_length(cullEye) > ws.faceDistance * 1.35,
-                               horizonCos: {
-                                   let e = simd_length(cullEye)
-                                   guard e > 1e-4 else { return -2 }
-                                   // −0.15 keeps a band of the far side, so a prop just past the
-                                   // limb still casts and still appears before it should.
-                                   return ws.faceDistance / e - 0.15
-                               }(),
-                               eyeDir: simd_length(cullEye) > 1e-4 ? simd_normalize(cullEye) : SIMD3(0, 0, 1))
+                               backface: cullBackfaceThreshold)
         var inst = 0
         var dropped = 0
         for bucket in assetBuckets.values {
@@ -1487,9 +1497,17 @@ class Renderer: NSObject, MTKViewDelegate {
                     // Diagnostic: anything WELL inside the view cone and close by must never be
                     // culled. This is the check the first cull test would have failed instantly.
                     if benchFramesRemaining > 0 {
+                        // "Plainly in view" has to mean something from BOTH cameras: near the middle
+                        // of the screen, and on a surface comfortably turned toward the eye. The
+                        // earlier version required the prop to be within 6 units, which never fires
+                        // from orbit 26 units out — it read 0 through the whole time orbit was
+                        // visibly broken. A diagnostic that cannot fail is not one.
                         let d = p - cullEye
                         let len = simd_length(d)
-                        if len > 1e-4, len < 6, simd_dot(simd_normalize(d), cullForward) > 0.6 {
+                        let r = simd_length(p)
+                        if len > 1e-4, r > 1e-4,
+                           simd_dot(d / len, cullForward) > 0.85,
+                           simd_dot(p / r, -d / len) > 0.25 {
                             Renderer.benchInViewKilled += 1
                         }
                     }
@@ -1530,6 +1548,7 @@ class Renderer: NSObject, MTKViewDelegate {
     /// take" is otherwise a counter-heap exercise, while "what happens if it is not there" is a
     /// comma-separated list.
     private var ablate: Set<String> = []
+    private var cullBackfaceThreshold: Float = -0.2
     private var counterpartBuildMs: Float = 0
     private var subUniformsMs: Float = 0
     private var subAssetsMs: Float = 0

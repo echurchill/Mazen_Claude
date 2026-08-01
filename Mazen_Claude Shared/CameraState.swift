@@ -62,7 +62,22 @@ struct CameraState {
     func cameraPosition(cubeModel: CubeModel, pose: FirstPersonPose?) -> SIMD3<Float> {
         switch mode {
         case .orbit:
-            return SIMD3(0, 0, orbitDistanceOverride ?? cubeModel.worldScale.orbitDistance)
+            // The orbit view is `translate * rotX * rotY`, so the camera's WORLD position is that
+            // view inverted, applied to the origin: rotY⁻¹ · rotX⁻¹ · (0, 0, d). This used to return
+            // the bare (0, 0, d) — the camera as it sits before you have dragged it — which is only
+            // right at zero rotation and silently wrong everywhere else.
+            //
+            // Nothing noticed while this was merely the audio listener's position and the "is the
+            // player looking at it" test for Scene 1's vessels. Prop culling then asked it where the
+            // eye was, believed the answer, and kept whatever faced +Z however the world was turned:
+            // a band of scenery that tracked the world's spin instead of the camera (Eddie:
+            // "scene 1 and 2 still have orbital culling happening"). A stale answer is worse than no
+            // answer, because it looks like a plausible one.
+            let d = orbitDistanceOverride ?? cubeModel.worldScale.orbitDistance
+            let invX = float4x4.rotation(radians: -orbitRotation.y, axis: SIMD3(1, 0, 0))
+            let invY = float4x4.rotation(radians: -orbitRotation.x, axis: SIMD3(0, 1, 0))
+            let e = invY * (invX * SIMD4<Float>(0, 0, d, 1))
+            return SIMD3(e.x, e.y, e.z)
         case .firstPerson:
             return pose?.eye ?? SIMD3(0, 0, 0)
         }

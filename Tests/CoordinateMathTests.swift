@@ -1504,6 +1504,89 @@ struct CoordinateMathTests {
               "the two regions overlap by \(fromHome.intersection(fromSix).count) tiles; they should be separate until 6D opens the way")
     }
 
+    /// SCENE 2, THE WHOLE SOLVE. Eddie's walkthrough found the four-corner lock completely dead: F
+    /// did nothing at any switch, so the scene could not be finished at all.
+    ///
+    /// The cause is worth remembering. `templeDoorStillSealed()` — the guard that makes the switches
+    /// inert once the door is open — identified the door as "the portal whose destination is 1",
+    /// i.e. `temple-interior`, the world Scene 2's chamber pointed at before Scene 3 was built.
+    /// Repointing the chamber to Scene 3 left that lookup finding nothing, falling through to
+    /// `false`, and rejecting every press. No crash, no log, nothing on screen — the switches simply
+    /// stopped answering, and stayed that way through every session since.
+    ///
+    /// So this test walks the whole chain rather than any one link, because what broke was not a
+    /// step but the connection between two of them.
+    static func testSceneTwoCanActuallyBeSolved() {
+        let gs = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
+        let m = gs.cubeModel
+        func stand(_ face: CubeFace, _ r: Int, _ c: Int) {
+            gs.player.face = face; gs.player.row = r; gs.player.col = c
+            gs.player.subRow = gs.player.standCenter; gs.player.subCol = gs.player.standCenter
+        }
+        func tiles(with kind: PropKind) -> [(face: CubeFace, r: Int, c: Int)] {
+            var out: [(face: CubeFace, r: Int, c: Int)] = []
+            for face in CubeFace.allCases {
+                for r in 0..<m.size {
+                    for c in 0..<m.size {
+                        guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                        if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == kind }) {
+                            out.append((face, r, c))
+                        }
+                    }
+                }
+            }
+            return out
+        }
+        func cap(_ t: (face: CubeFace, r: Int, c: Int)) -> Float {
+            guard let (ci, fi) = m.faceletAt(face: t.face, row: t.r, col: t.c) else { return -1 }
+            return m.cubies[ci].facelets[fi].props.first(where: { $0.kind == .switchCap })?.alignAnim ?? -1
+        }
+
+        let switches = tiles(with: .switchCap)
+        check(switches.count == 4, "Scene 2 has four corner switches, found \(switches.count)")
+        // EVERY switch answers F, in both directions. Three start engaged and one does not, so a
+        // test that only pressed one could pass while the other direction was broken.
+        for t in switches {
+            let before = cap(t)
+            stand(t.face, t.r, t.c); gs.interact()
+            check(cap(t) != before, "the switch at \(t.face) r\(t.r) c\(t.c) ignored F")
+            gs.interact()
+            check(cap(t) == before, "the switch at \(t.face) r\(t.r) c\(t.c) would not go back")
+        }
+
+        check(m.bondedGroups.count == 1, "the lock should be on before all four are engaged")
+        // Engage the one that starts disengaged: that completes the set and dissolves the lock.
+        if let off = switches.first(where: { cap($0) < 0.5 }) {
+            stand(off.face, off.r, off.c); gs.interact()
+        }
+        check(m.bondedGroups.isEmpty, "four engaged switches should dissolve the lock")
+
+        // The control plinth: F raises the cylinder, then F again turns the world.
+        guard let plinth = tiles(with: .plinth).first else { check(false, "Scene 2 has no control plinth"); return }
+        stand(plinth.face, plinth.r, plinth.c)
+        gs.interact()
+        check(!tiles(with: .alignmentCylinder).isEmpty, "the first press should raise the alignment cylinder")
+        for _ in 0..<600 { gs.update(deltaTime: 1.0 / 60.0) }
+        gs.interact()
+        for _ in 0..<600 { gs.update(deltaTime: 1.0 / 60.0) }
+
+        // The payoff: the hidden assembly has turned into view and its chamber is live.
+        var chamberSealed = true, chamberFace: CubeFace? = nil
+        for face in CubeFace.allCases {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .portal && $0.state == 13 }) {
+                        chamberFace = face
+                        chamberSealed = m.sealedPortalCubies.contains(ci)
+                    }
+                }
+            }
+        }
+        check(chamberFace == .positiveZ, "the turn should bring the chamber onto the played face, got \(String(describing: chamberFace))")
+        check(!chamberSealed, "the chamber portal should be live once the world has turned")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2013,6 +2096,7 @@ struct CoordinateMathTests {
         testTheInteriorStaysSolvedBetweenVisits()
         testAWorldCanNameADifferentDoorPerRoute()
         testSceneSixArrivesWhereSceneTwoCouldNotReach()
+        testSceneTwoCanActuallyBeSolved()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()
