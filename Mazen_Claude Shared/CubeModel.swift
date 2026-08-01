@@ -1242,6 +1242,55 @@ class CubeModel {
         return (0, index, strip)
     }
 
+    /// SCENE 5 — platform sections scattered over the pale world (Eddie, 2026-08-01). Inverted decks,
+    /// so what reads is the trussed underside rather than a flat plate: structure the Builders left
+    /// standing on a surface that is otherwise nothing but stone and light.
+    ///
+    /// It keeps off anything the scene means something by. A platform on a CHANNEL would sit on the
+    /// one thing the player has to be able to read across the whole world — the grooves are the
+    /// puzzle, and a deck over them is not decoration, it is a hidden wall.
+    func stampSceneFivePlatforms(_ plates: [Int]) {
+        guard !plates.isEmpty else { return }
+        let n = size
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for c in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { continue }
+                    let f = cubies[ci].facelets[fi]
+                    guard f.props.isEmpty, f.mazeTile.channels.isEmpty else { continue }
+                    // Nor next to one: a deck on the neighbouring tile still overhangs a groove that
+                    // has to be followed by eye from a distance.
+                    var besideChannel = false
+                    for (dir, dr, dc) in [(SurfaceDirection.north, -1, 0), (.south, 1, 0),
+                                          (.west, 0, -1), (.east, 0, 1)] {
+                        let nr = r + dr, nc = c + dc
+                        let loc: (face: CubeFace, row: Int, col: Int)
+                        if nr >= 0, nr < n, nc >= 0, nc < n { loc = (face, nr, nc) }
+                        else {
+                            let cr = edgeCrossing(face: face, direction: dir, row: r, col: c)
+                            loc = (cr.face, cr.row, cr.col)
+                        }
+                        if let (nci, nfi) = faceletAt(face: loc.face, row: loc.row, col: loc.col),
+                           !cubies[nci].facelets[nfi].mazeTile.channels.isEmpty { besideChannel = true }
+                    }
+                    guard !besideChannel else { continue }
+                    var h = UInt32(truncatingIfNeeded: r &* 73856093 ^ c &* 19349663
+                                   ^ face.rawValue &* 83492791 ^ 0x5EED_0005)
+                    h ^= h >> 13; h = h &* 2654435761; h ^= h >> 16
+                    guard h % 100 < 22 else { continue }          // ~a fifth of the free ground
+                    let idx = plates[Int((h >> 7) % UInt32(plates.count))]
+                    let sub = Int((h >> 3) % 9)
+                    let facing = Heading8(rawValue: Int((h >> 11) % 8)) ?? .n
+                    let scale = 0.7 + Float((h >> 17) % 60) / 100.0
+                    cubies[ci].facelets[fi].props.append(
+                        Prop(kind: .importedFoliage, subRow: sub / 3, subCol: sub % 3,
+                             facing: facing, state: idx, extraScale: scale))
+                }
+            }
+        }
+        markTopologyChanged()
+    }
+
     /// SCENE 6C — the pieces the underside is built from, grouped by role rather than by name so the
     /// stamp asks for "something that holds a floor up" instead of for a particular model.
     struct UndersideMachinery {
