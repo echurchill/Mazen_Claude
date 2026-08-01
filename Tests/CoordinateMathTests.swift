@@ -1196,6 +1196,24 @@ struct CoordinateMathTests {
         let two = GameState(size: PrologueSize.sceneTwo, name: "s2", stamp: .sceneTwo)
         check(exitDestination(of: two) == [13], "Scene 2's chamber descends into Scene 3, got \(exitDestination(of: two))")
 
+        // Scene 5 closes the loop: its exit leads back to SCENE 2 (destination 10), which is Scene 6
+        // — the same world, entered from a new direction. And it `goto`s rather than pushing, since
+        // pushing a world already on the stack would put one instance in it twice.
+        let five = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
+        for (axis, index) in [(2, 0), (0, 0), (0, 0)] {
+            five.cubeModel.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)
+        }
+        five.update(deltaTime: 1.0 / 60.0)
+        check(exitDestination(of: five) == [10],
+              "Scene 5 leads back into Scene 2 as Scene 6, got \(exitDestination(of: five))")
+        var sixTransition: WorldTransition? = nil
+        if let exit = five.cubeModel.chosenExit,
+           let (ci, fi) = five.cubeModel.faceletAt(face: exit.face, row: exit.row, col: exit.col) {
+            sixTransition = five.cubeModel.cubies[ci].facelets[fi].props
+                .first(where: { $0.kind == .portal })?.transition
+        }
+        check(sixTransition == .goto, "the return to Scene 2 must replace, not nest (got \(String(describing: sixTransition)))")
+
         // Scene 3's exit does not exist until the orb chooses one, so complete the puzzle first.
         let four = GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour)
         check(exitDestination(of: four) == [14], "Scene 4 leads on to Scene 5, got \(exitDestination(of: four))")
@@ -1428,6 +1446,62 @@ struct CoordinateMathTests {
         check(m.spawn(arrivingFrom: "scene-5")?.col == 2, "the route's door landed on the wrong tile")
         check(m.spawn(arrivingFrom: "scene-1")?.face == home.face,
               "naming one route must not move every other arrival")
+    }
+
+    /// Scene 6C — "The area feels like the reverse side of a familiar stage." Measured rather than
+    /// designed: the slab carrying Scene 2's hidden assembly is the x = 0 slab, and its outward
+    /// end-cap is the whole of `-X` — walkable, connected to itself, and reachable from nowhere
+    /// else, because Scene 2 seals every face into an island. That is the region, and the test that
+    /// matters is that it is genuinely UNREACHABLE from Scene 2's own route. The day it becomes
+    /// reachable, Scene 6's arrival stops being a discovery and becomes a place you could have
+    /// walked to.
+    static func testSceneSixArrivesWhereSceneTwoCouldNotReach() {
+        let gs = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
+        let m = gs.cubeModel
+        guard let home = m.spawnLocation, let six = m.spawn(arrivingFrom: "scene-5") else {
+            check(false, "Scene 2 should state both its own arrival and Scene 6's"); return
+        }
+        check(six.face != home.face, "Scene 6 must arrive on a different face from Scene 2's opening")
+
+        // Walk what is reachable from each, through openings, across face edges.
+        func reachable(from start: (face: CubeFace, row: Int, col: Int)) -> Set<Int> {
+            struct T: Hashable { let f: Int; let r: Int; let c: Int }
+            var seen: Set<T> = [T(f: start.face.rawValue, r: start.row, c: start.col)]
+            var ids: Set<Int> = []
+            var q = Array(seen), head = 0
+            while head < q.count {
+                let t = q[head]; head += 1
+                guard let face = CubeFace(rawValue: t.f),
+                      let (ci, fi) = m.faceletAt(face: face, row: t.r, col: t.c) else { continue }
+                ids.insert(m.cubies[ci].facelets[fi].id.rawValue)
+                let op = m.cubies[ci].facelets[fi].mazeTile.openings
+                for (dir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                            (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)]
+                where op.contains(mask) {
+                    let nr = t.r + dr, nc = t.c + dc
+                    let nt: T
+                    if nr >= 0, nr < m.size, nc >= 0, nc < m.size { nt = T(f: t.f, r: nr, c: nc) }
+                    else {
+                        let cr = m.edgeCrossing(face: face, direction: dir, row: t.r, col: t.c)
+                        nt = T(f: cr.face.rawValue, r: cr.row, c: cr.col)
+                    }
+                    if seen.insert(nt).inserted { q.append(nt) }
+                }
+            }
+            return ids
+        }
+        let fromHome = reachable(from: (home.face, home.row, home.col))
+        let fromSix = reachable(from: (six.face, six.row, six.col))
+        guard let (sci, sfi) = m.faceletAt(face: six.face, row: six.row, col: six.col) else {
+            check(false, "Scene 6's arrival is not a real tile"); return
+        }
+        let sixTile = m.cubies[sci].facelets[sfi]
+        check(!sixTile.mazeTile.openings.isEmpty, "Scene 6 arrives inside a sealed tile")
+        check(!fromHome.contains(sixTile.id.rawValue),
+              "Scene 6's arrival is walkable from Scene 2's spawn — the region is not new")
+        check(fromSix.count > 40, "the arrival region should be somewhere to explore, got \(fromSix.count) tiles")
+        check(fromHome.intersection(fromSix).isEmpty,
+              "the two regions overlap by \(fromHome.intersection(fromSix).count) tiles; they should be separate until 6D opens the way")
     }
 
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
@@ -1938,6 +2012,7 @@ struct CoordinateMathTests {
         testAPrologueWorldIsTheSamePlaceHoweverYouReachIt()
         testTheInteriorStaysSolvedBetweenVisits()
         testAWorldCanNameADifferentDoorPerRoute()
+        testSceneSixArrivesWhereSceneTwoCouldNotReach()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

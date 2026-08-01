@@ -1103,8 +1103,9 @@ class GameState {
         // returns to the hub's Scene 4 for now.
         // 5K — placed by Scene 5's own rule (the far end of the live current), not Scene 3's
         // "as far as you can walk", which would have put the door somewhere the circuit never goes.
-        // → Scene 6 does not exist yet, so it returns to the hub's Scene 4 for now.
-        if liveCircuit { cubeModel.createCircuitExit(destinationID: 11, depths: channelDepths) }
+        // → SCENE 6, which is Scene 2 RETURNED TO (destination 10): the same world, entered on the
+        // far side of the slab the player turned there. Not a new world; that is the whole point.
+        if liveCircuit { cubeModel.createCircuitExit(destinationID: 10, depths: channelDepths) }
     }
 
     private func tickChamberWave(_ dt: Float) {

@@ -1160,8 +1160,12 @@ class CubeModel {
             }
         }
         guard let pick = best else { return nil }
+        // `.goto`, not `.push`: Scene 6 is a RETURN to a world already on the stack, and pushing
+        // would put the same instance in it twice. "The player is not being sent backward. They are
+        // arriving from a new direction into a world that remembers" — the world it leaves stays in
+        // the registry with all its state, so replacing in place loses nothing and does not nest.
         cubies[pick.ci].facelets[pick.fi].props.append(
-            Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: destinationID, transition: .push))
+            Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: destinationID, transition: .goto))
         styledPortals.append(StyledPortal(ci: pick.ci, fi: pick.fi, facing: .n, fieldStyle: 2))
         cubies[pick.ci].facelets[pick.fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
         cubies[pick.ci].facelets[pick.fi].props.append(
@@ -1273,6 +1277,20 @@ class CubeModel {
                 cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
             }
         }
+        // SCENE 6A — where the player lands when they come back to this world from Scene 5.
+        //
+        // Measured, not chosen: the slab that carries this assembly is the x = 0 slab, and its
+        // outward end-cap is the whole of `-X` — 121 tiles that are walkable, fully connected to
+        // each other, and reachable from NOWHERE else, because Scene 2 seals every face into an
+        // island. It is the literal reverse side of the stage the player solved: cross the edge west
+        // of the assembly (+Z r4–r6 c0) and you are on `-X` r4–r6 c10, underneath it.
+        //
+        // "The area feels like the reverse side of a familiar stage. The player can see supports,
+        // seams, braces, and machinery that were never visible from the original route."
+        //
+        // The arrival stands at the far end of that cap, facing east toward the assembly edge, so
+        // the region is crossed on foot rather than arrived into.
+        arrivalSpawns["scene-5"] = (face: .negativeX, row: mid, col: 2, facing: .e)
     }
 
     /// M20 dev tool — the **gallery**: a flat grass grid with one prop/foliage variant per cell,
