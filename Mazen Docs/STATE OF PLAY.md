@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,687 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,723 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -142,6 +142,27 @@ still hangs in its sky, because that binding is by name rather than by being fir
   distance resolving. The line-of-sight reveal it prompted stays for the worlds that still fog. The
   script's gradual-scale idea deserves another attempt with a different mechanism, probably tight
   distance fog rather than tile discovery.
+
+### The puzzle-integrity suite (2026-08-01)
+Every existing test passed while Scene 2 was unsolvable, because they all checked PARTS: the
+switches were stamped, the lock was bonded, the turn moved the right slab. What broke was the JOIN.
+
+So there is now a suite that plays each scene with only what a player has — stand on a tile, press
+F, turn a slab — and asserts the scene can be finished:
+
+| test | what it plays |
+|---|---|
+| `testSceneOneCanBeWalkedToItsArch` | the arch exists, leads to Scene 2, and is reachable on foot from the spawn |
+| `testSceneTwoCanActuallyBeSolved` | four switches both ways → lock dissolves → cylinder rises → world turns → chamber goes live |
+| `testSceneThreeCanBeSolvedByPressingItsPlinths` | an obelisk REFUSES being touched; six plinths wake six obelisks; the exit appears only at the sixth, and is reachable |
+| `testSceneFourReleasesItsAnchorsAndThenTurns` | three anchors released by F, each permanent, the slab refused until the last |
+| `testSceneFiveCanBeSolvedByTurningItBack` | the scramble undone → circuit live → exit exists, stands on the current, and is reachable |
+| `testNoSceneHandsOutItsExitEarly` | no scene's way out exists before its puzzle is done (Scene 2's is present but SEALED, which is its image) |
+
+**They were mutation-tested, because a suite written after the fact that passes first try has proved
+nothing.** Re-introducing the door-identity bug fails 4 checks by name; making anchors stop releasing
+their bond, and a Scene 3 plinth wake every obelisk instead of its own, fails 27 more. Each mutation
+was reverted and the suite verified green again.
 
 ### Scene 2's lock had been dead (found 2026-08-01)
 `templeDoorStillSealed()` — the guard that makes the four corner switches inert once the door is

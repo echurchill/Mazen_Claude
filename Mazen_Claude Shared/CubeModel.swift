@@ -1125,7 +1125,6 @@ class CubeModel {
     /// for the structure — plus "preferably encourage the player to cross at least one more face
     /// boundary", so of the candidates the FURTHEST by walking distance wins. Deterministic, and
     /// "fixed for the current world state once made": stamped once, never reconsidered.
-    @discardableResult
     /// 5K — Scene 5's own exit rule, which is NOT Scene 3's. Scene 3 puts its door as far from you
     /// as walking allows; Scene 5's placement rules are all about the circuit:
     ///
@@ -1139,6 +1138,7 @@ class CubeModel {
     /// the player just repaired, and walking it means reading the route.
     ///
     /// `depths` comes from the caller because the reach walk lives with the scene's state, not here.
+    @discardableResult
     func createCircuitExit(destinationID: Int, depths: [Int: Int]) -> (face: CubeFace, row: Int, col: Int)? {
         guard chosenExit == nil, let spawn = spawnLocation else { return nil }
         var best: (ci: Int, fi: Int, face: CubeFace, r: Int, c: Int, d: Int)? = nil
@@ -1175,6 +1175,7 @@ class CubeModel {
         return (pick.face, pick.r, pick.c)
     }
 
+    @discardableResult
     func createChosenExit(destinationID: Int) -> (face: CubeFace, row: Int, col: Int)? {
         guard chosenExit == nil, let spawn = spawnLocation else { return nil }
         struct T: Hashable { let f: Int; let r: Int; let c: Int }

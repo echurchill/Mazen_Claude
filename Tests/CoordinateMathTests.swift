@@ -1587,6 +1587,238 @@ struct CoordinateMathTests {
         check(!chamberSealed, "the chamber portal should be live once the world has turned")
     }
 
+
+    // MARK: - PUZZLE INTEGRITY SUITE
+    //
+    // Scene 2's four-corner lock was dead for weeks (see `testSceneTwoCanActuallyBeSolved`) and
+    // every existing test still passed, because they all checked PARTS: the switches were stamped,
+    // the lock was bonded, the turn moved the right slab. What broke was the join — a guard that
+    // identified the door by the world behind it, in a world whose door had been repointed.
+    //
+    // So these tests do not check parts. Each one PLAYS its scene using only what a player has —
+    // stand on a tile, press F, turn a slab — and asserts the scene can be finished. They are slow
+    // and blunt on purpose; the failure they exist to catch is silent, and looks exactly like a
+    // working game until someone tries to play it.
+
+    /// Build a prologue world the way `Renderer.buildWorld` does — same size, same interior flag,
+    /// same withheld twist, same reveal. A world built any other way is not the one being shipped,
+    /// and a suite that tests a different world tests nothing.
+    static func prologueWorld(_ name: String) -> GameState {
+        let w: GameState
+        switch name {
+        case "scene-1": w = GameState(size: PrologueSize.sceneOne, name: name, stamp: .sceneOne)
+        case "scene-2": w = GameState(size: PrologueSize.sceneTwo, name: name, stamp: .sceneTwo)
+        case "scene-3": w = GameState(size: PrologueSize.sceneThree, name: name, interior: true, stamp: .sceneThree)
+        case "scene-4": w = GameState(size: PrologueSize.sceneFour, name: name, stamp: .sceneFour)
+        default:        w = GameState(size: PrologueSize.sceneFive, name: name, stamp: .sceneFive)
+        }
+        w.twistEnabled = (name == "scene-5")   // scenes 1-4 withhold it; Scene 4 grants it in play
+        if name != "scene-1" {                 // buildWorld reveals every world except Scene 1's
+            for cu in w.cubeModel.cubies.indices {
+                for f in w.cubeModel.cubies[cu].facelets.indices {
+                    w.cubeModel.cubies[cu].facelets[f].tileState = .discovered
+                    w.cubeModel.cubies[cu].facelets[f].discoveryAmount = 1.0
+                }
+            }
+        }
+        return w
+    }
+
+    /// Put the player on a tile, at its centre stand-cell — where F is pressed from.
+    static func stand(_ gs: GameState, _ face: CubeFace, _ r: Int, _ c: Int) {
+        gs.player.face = face; gs.player.row = r; gs.player.col = c
+        gs.player.subRow = gs.player.standCenter; gs.player.subCol = gs.player.standCenter
+        gs.player.isMoving = false; gs.player.isTurning = false
+    }
+
+    /// Every tile carrying a prop of this kind.
+    static func tiles(_ gs: GameState, with kind: PropKind) -> [(face: CubeFace, r: Int, c: Int)] {
+        var out: [(face: CubeFace, r: Int, c: Int)] = []
+        let m = gs.cubeModel
+        for face in CubeFace.allCases {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    if m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == kind }) {
+                        out.append((face, r, c))
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /// Tile ids reachable on foot from a tile, through openings, across face edges. Tile-level, so
+    /// it is an upper bound on where a player can get — which is the safe direction for a test that
+    /// asks "can this be finished".
+    static func walkable(_ gs: GameState, from start: (face: CubeFace, r: Int, c: Int)) -> Set<Int> {
+        let m = gs.cubeModel
+        struct T: Hashable { let f: Int; let r: Int; let c: Int }
+        var seen: Set<T> = [T(f: start.face.rawValue, r: start.r, c: start.c)]
+        var ids: Set<Int> = []
+        var q = Array(seen), head = 0
+        while head < q.count {
+            let t = q[head]; head += 1
+            guard let face = CubeFace(rawValue: t.f),
+                  let (ci, fi) = m.faceletAt(face: face, row: t.r, col: t.c) else { continue }
+            ids.insert(m.cubies[ci].facelets[fi].id.rawValue)
+            let op = m.cubies[ci].facelets[fi].mazeTile.openings
+            for (dir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                        (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)]
+            where op.contains(mask) {
+                let nr = t.r + dr, nc = t.c + dc
+                let nt: T
+                if nr >= 0, nr < m.size, nc >= 0, nc < m.size { nt = T(f: t.f, r: nr, c: nc) }
+                else {
+                    let cr = m.edgeCrossing(face: face, direction: dir, row: t.r, col: t.c)
+                    nt = T(f: cr.face.rawValue, r: cr.row, c: cr.col)
+                }
+                if seen.insert(nt).inserted { q.append(nt) }
+            }
+        }
+        return ids
+    }
+
+    /// The tile id of a facelet, for comparing against `walkable`.
+    static func tileID(_ gs: GameState, _ t: (face: CubeFace, r: Int, c: Int)) -> Int? {
+        guard let (ci, fi) = gs.cubeModel.faceletAt(face: t.face, row: t.r, col: t.c) else { return nil }
+        return gs.cubeModel.cubies[ci].facelets[fi].id.rawValue
+    }
+
+    /// SCENE 1 — no lock to undo; the scene is finished by FINDING the arch. So what has to hold is
+    /// that the arch exists, leads on to Scene 2, and can actually be walked to from where the
+    /// player wakes up. A maze whose exit is walled off reads exactly like a maze you have not
+    /// solved yet, which is the worst kind of bug: indistinguishable from the game working.
+    static func testSceneOneCanBeWalkedToItsArch() {
+        let gs = prologueWorld("scene-1")
+        guard let spawn = gs.cubeModel.spawnLocation else { check(false, "Scene 1 states its spawn"); return }
+        let doors = tiles(gs, with: .portal)
+        check(doors.count == 1, "Scene 1 has exactly one way on, found \(doors.count)")
+        guard let arch = doors.first, let archID = tileID(gs, arch) else { return }
+        let reach = walkable(gs, from: (spawn.face, spawn.row, spawn.col))
+        check(reach.contains(archID), "Scene 1's arch cannot be reached on foot from the spawn")
+        check(!gs.twistEnabled, "Scene 1 withholds the twist")
+    }
+
+    /// SCENE 3 — six plinths, each waking ONE obelisk elsewhere by its mark; the exit exists only
+    /// once every obelisk is awake. Played through F, including the beat that teaches the rule:
+    /// pressing F on an obelisk itself must NOT wake it.
+    static func testSceneThreeCanBeSolvedByPressingItsPlinths() {
+        let gs = prologueWorld("scene-3")
+        let m = gs.cubeModel
+        check(m.symbolPairedPlinths, "Scene 3 pairs plinths to obelisks by symbol")
+        let obelisks = tiles(gs, with: .obelisk)
+        check(obelisks.count == 6, "Scene 3 has six obelisks, found \(obelisks.count)")
+
+        // 3D — the obelisk refuses: "activating an obelisk directly does nothing".
+        if let ob = obelisks.first {
+            stand(gs, ob.face, ob.r, ob.c)
+            gs.interact()
+            check(!gs.sceneThreeAllObelisksAwake, "touching an obelisk should not solve anything")
+            if let (ci, fi) = m.faceletAt(face: ob.face, row: ob.r, col: ob.c) {
+                check(m.cubies[ci].facelets[fi].props.first(where: { $0.kind == .obelisk })?.anim ?? 1 <= 0.01,
+                      "an obelisk woke from being touched — the control is supposed to be elsewhere")
+            }
+        }
+
+        let plinths = tiles(gs, with: .switchCap)
+        check(plinths.count == 6, "Scene 3 has six plinths, found \(plinths.count)")
+        check(m.chosenExit == nil, "Scene 3's way out must not exist before the chamber is awake")
+        for (i, p) in plinths.enumerated() {
+            stand(gs, p.face, p.r, p.c)
+            gs.interact()
+            gs.update(deltaTime: 1.0 / 60.0)
+            if i < plinths.count - 1 {
+                check(!gs.sceneThreeAllObelisksAwake,
+                      "the chamber woke after only \(i + 1) of \(plinths.count) plinths")
+            }
+        }
+        check(gs.sceneThreeAllObelisksAwake, "pressing all six plinths should wake every obelisk")
+        guard let exit = m.chosenExit else { check(false, "an awake chamber creates its way out"); return }
+        // And it must be somewhere the player can get to.
+        if let spawn = m.spawnLocation, let exitID = tileID(gs, (exit.face, exit.row, exit.col)) {
+            check(walkable(gs, from: (spawn.face, spawn.row, spawn.col)).contains(exitID),
+                  "Scene 3's exit is not reachable on foot from where the player arrives")
+        }
+    }
+
+    /// SCENE 4 — three anchors, released by F in any order, each release permanent. The twist stays
+    /// refused until the last one is gone, and only then does the scripted turn connect the route to
+    /// the portal. This is the scene that hands the player the verb, so "the twist is still refused"
+    /// and "the twist is finally allowed" are both load-bearing.
+    static func testSceneFourReleasesItsAnchorsAndThenTurns() {
+        let gs = prologueWorld("scene-4")
+        let m = gs.cubeModel
+        let anchors = tiles(gs, with: .anchor)
+        check(anchors.count == 3, "Scene 4 has three anchors, found \(anchors.count)")
+        check(!m.bondedGroups.isEmpty, "Scene 4 starts locked")
+
+        let (axis, index) = m.sliceAxisAndIndex(for: m.spawnLocation?.face ?? .positiveZ)
+        check(m.bondsBlocking(axis: axis, index: index) > 0, "the player's slab starts bonded")
+
+        for (i, a) in anchors.enumerated() {
+            stand(gs, a.face, a.r, a.c)
+            gs.interact()
+            gs.update(deltaTime: 1.0 / 60.0)
+            if i < anchors.count - 1 {
+                check(!m.bondedGroups.isEmpty, "the lock let go after only \(i + 1) of 3 anchors")
+            }
+            // "Each release is permanent" — pressing it again must not put the bond back.
+            let groups = m.bondedGroups.count
+            gs.interact()
+            check(m.bondedGroups.count == groups, "pressing a released anchor changed the lock")
+        }
+        check(m.bondedGroups.isEmpty, "releasing all three anchors should free the world")
+        check(m.bondsBlocking(axis: axis, index: index) == 0, "the slab is still refused after every anchor is gone")
+    }
+
+    /// SCENE 5 — the broken circuit. Played the way the world is: turn slabs until the current
+    /// reaches all three receivers, and only then does the way out exist.
+    static func testSceneFiveCanBeSolvedByTurningItBack() {
+        let gs = prologueWorld("scene-5")
+        let m = gs.cubeModel
+        check(!gs.liveCircuit, "Scene 5 starts broken")
+        check(m.chosenExit == nil, "Scene 5's way out must not exist before the circuit is live")
+        check(m.channelReceivers.count == 3, "Scene 5 has three receivers, found \(m.channelReceivers.count)")
+
+        // The stamp's scramble, undone — the sequence a player finds by reading the grooves.
+        for (axis, index) in [(2, 0), (0, 0), (0, 0)] {
+            m.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)
+        }
+        check(gs.liveCircuit, "undoing the scramble should complete the circuit")
+        gs.update(deltaTime: 1.0 / 60.0)
+        guard let exit = m.chosenExit, let exitID = tileID(gs, (exit.face, exit.row, exit.col)) else {
+            check(false, "a live circuit creates the way out"); return
+        }
+        check(gs.channelDepths[exitID] != nil, "5K: the exit must stand on the live current")
+        if let spawn = m.spawnLocation {
+            check(walkable(gs, from: (spawn.face, spawn.row, spawn.col)).contains(exitID),
+                  "Scene 5's exit is not reachable on foot")
+        }
+    }
+
+    /// THE PROPERTY EVERY SCENE SHARES, checked in one place: a scene's way out does not exist
+    /// before its puzzle is done. A door that is already there is not a puzzle, and this is the
+    /// cheapest way to notice that a scene has quietly started solving itself.
+    static func testNoSceneHandsOutItsExitEarly() {
+        for name in ["scene-3", "scene-4", "scene-5"] {
+            let gs = prologueWorld(name)
+            check(gs.cubeModel.chosenExit == nil, "\(name) already has its exit at stamp")
+        }
+        // Scene 2's door EXISTS from the first frame — it is sealed and unreachable rather than
+        // absent, which is the scene's whole image ("a portal is present, but the maze does not
+        // connect to it"). So what must hold there is that it is SEALED.
+        let two = prologueWorld("scene-2")
+        var chamberSealed = false
+        for cu in two.cubeModel.cubies.indices {
+            for f in two.cubeModel.cubies[cu].facelets
+            where f.props.contains(where: { $0.kind == .portal && $0.state == 13 }) {
+                chamberSealed = two.cubeModel.sealedPortalCubies.contains(cu)
+            }
+        }
+        check(chamberSealed, "Scene 2's chamber should be sealed until the world turns")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2097,6 +2329,11 @@ struct CoordinateMathTests {
         testAWorldCanNameADifferentDoorPerRoute()
         testSceneSixArrivesWhereSceneTwoCouldNotReach()
         testSceneTwoCanActuallyBeSolved()
+        testSceneOneCanBeWalkedToItsArch()
+        testSceneThreeCanBeSolvedByPressingItsPlinths()
+        testSceneFourReleasesItsAnchorsAndThenTurns()
+        testSceneFiveCanBeSolvedByTurningItBack()
+        testNoSceneHandsOutItsExitEarly()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()
