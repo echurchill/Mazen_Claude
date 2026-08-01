@@ -52,6 +52,20 @@ class GameState {
     var backwardHeld = false
     var frameTimeMs: Float = 0
     var avgFrameTimeMs: Float = 0
+    /// Where a frame's CPU time actually goes, in ms, rolling-averaged with `avgFrameTimeMs`. A frame
+    /// time on its own cannot tell "the CPU is busy" from "the CPU is waiting for the GPU", and those
+    /// need opposite fixes — Scene 2's 11³ was slow for a year of sessions without anyone knowing
+    /// which. `cpuTotal` well under `avgFrameTimeMs` means the GPU is the wall.
+    struct FramePerf {
+        var update: Float = 0      // the model tick
+        var build: Float = 0       // instance assembly + draw-call bucketing
+        var encode: Float = 0      // filling the command buffer
+        var wait: Float = 0        // blocked on a frame in flight retiring — i.e. on the GPU
+        var drawCalls = 0
+        var instances = 0
+        var cpuTotal: Float { update + build + encode }
+    }
+    var perf = FramePerf()
 
     struct SliceRotation {
         var isActive = false

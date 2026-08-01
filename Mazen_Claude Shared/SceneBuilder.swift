@@ -1,4 +1,5 @@
 import Metal
+import QuartzCore
 import simd
 
 /// One tile's instance data paired with the mesh it should be drawn with.
@@ -125,6 +126,11 @@ final class SceneBuilder {
     /// *counterpart* world (the overworld) out in the sky of the world you're standing in, at an
     /// orbital position/scale. `includeCelestials` is false for that counterpart so it doesn't drag
     /// its own tiny sun/moon along. Both default to the identity/normal single-world render.
+    /// DEV — coarse phase accumulators, read and reset by the bench. Not a profiler; just enough to
+    /// tell which half of a 25 ms frame is the expensive one before anything is "optimised".
+    static var phaseTileLoopMs: Float = 0
+    static var phaseRestMs: Float = 0
+
     func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer,
                worldOffset: float4x4 = matrix_identity_float4x4, includeCelestials: Bool = true,
                includeMoon: Bool = true, sunOverride: SIMD3<Float>? = nil) -> SceneDrawData {
@@ -135,6 +141,7 @@ final class SceneBuilder {
         let capacity = buf.length / MemoryLayout<InstanceDataSwift>.stride
         let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: capacity)
 
+        let tPhase0 = CACurrentMediaTime()
         opaqueFogTiles.removeAll(keepingCapacity: true)
         dissolveTiles.removeAll(keepingCapacity: true)
         frameTiles.removeAll(keepingCapacity: true)
@@ -613,6 +620,8 @@ final class SceneBuilder {
             opaqueFogTiles.append(TileEntry(instance: markerInst, mesh: tileMeshLib.playerMarker))
         }
 
+        SceneBuilder.phaseTileLoopMs += Float(CACurrentMediaTime() - tPhase0) * 1000
+        let tPhase1 = CACurrentMediaTime()
         // ── SCENE 3: THE SUSPENDED HEART, AND THE BEAMS THAT REACH FOR IT ──────────────────────
         // An interior chamber's centre is the one place nothing has ever been drawn: the world is a
         // hollow shell and the middle of it was simply empty space. "Every surface of the chamber has
@@ -1071,6 +1080,7 @@ final class SceneBuilder {
             }
         }
 
+        SceneBuilder.phaseRestMs += Float(CACurrentMediaTime() - tPhase1) * 1000
         return SceneDrawData(opaque: opaqueDrawCalls, translucent: translucentDrawCalls, wallRange: wallRange)
     }
 

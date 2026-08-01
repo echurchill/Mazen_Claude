@@ -3544,9 +3544,13 @@ class CubeModel {
     /// per tile per frame (twist-safe: any topology change re-derives everything), just cached between
     /// changes. The palette/scales are fixed per world (the Renderer's `wallDressingPalette`), so the
     /// cache keys on `topologyVersion` alone.
+    /// DEV — how many times the dressed-wall derivation actually RAN, vs was served from cache.
+    static var benchDressedRebuilds = 0
+
     func dressedWallEntries(walls: [Int], rocks: [Int], bushes: [Int],
                             wallScale: Float, rockScale: Float, bushScale: Float) -> [(loc: PropTileEntry, props: [Prop])] {
         if dressedWallCache.version != topologyVersion {
+            CubeModel.benchDressedRebuilds += 1
             if dressedClearCache.version != topologyVersion {
                 dressedClearCache = (topologyVersion, dressedClearTiles())
             }

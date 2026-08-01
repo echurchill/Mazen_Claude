@@ -273,11 +273,22 @@ wrong. From a screenshot those look identical, which is why the first two took s
 - **Audio F** is scene-gated: Scene 3's six kin tones and Scene 5's travelling pulse need those
   scenes to exist. **Occlusion is attenuation, not filtering** — PHASE offers no per-event gain on
   this path, so a walled-off source is pushed further away instead. It gets quieter, not duller.
-- fps: 60–70 full screen, ~100 at launch size on Scene 4's 5³ (Eddie, 2026-07-30); **34 fps on
-  Scene 2's 11³** in orbit (2026-07-31), which may be nothing but eight times the tiles — the portal
-  light and the denser scatter both landed in between and it has not been measured properly. It
-  tracks window AREA, so the renderer is fill-bound: adding props is cheap, adding full-screen
-  shader work is not. Worth remembering for Scene 3's beams.
+- **fps: DIAGNOSED (2026-08-01), and the standing assumption was wrong.** The renderer was *not*
+  fill-bound. Scene 2's 11³ spent **27.7 of its 27.9 ms on the CPU** with the GPU idle — and 18.4 ms
+  of that was re-placing dressed-wall props that had not moved. The derivation was already cached;
+  the PLACEMENT was not, because the world's idle spin is folded into every prop's matrix and so
+  every matrix changed every frame. Spin is one matrix common to all of them, so it now goes on at
+  pack time and the buckets survive across frames: **36 → 70 fps.**
+- **The same measurement found a silent bug.** Scene 2 wanted 19,944 asset instances against a
+  16,384 buffer, so ~3,600 props were dropped every frame — and which ones depended on dictionary
+  iteration order, so not the same ones twice. A missing piece of a stone wall reads as authored.
+  Buffer raised to 32,768 and an overflow now logs instead of quietly truncating. Drawing all of
+  them costs some of the win back: **Scene 2 lands at 18.9 ms / 53 fps, with 3,600 props that were
+  never there before.** CPU is now 7.3 ms of that, so the GPU is finally the wall.
+- **`MAZEN_BENCH=<world>` boots straight into a world and logs a per-frame breakdown** (update /
+  build / encode / wait-on-gpu, the build split, draws, instances, and what was dropped), then
+  exits. Built because "34 fps" had been sitting in this document for weeks as a number nobody could
+  reproduce on demand — which is the absence of a finding, not a finding.
 - The world list has moved on from the spreadsheet: the six scene scripts in `Scenes/` are the build
   target now, so `Prototype Worlds.ods` is in `Archive/` rather than tracking a plan nothing follows.
   (`metal_plate_02_1k/` and `To_be_evaluated/` were removed by Eddie, 2026-07-30.)
@@ -286,13 +297,12 @@ wrong. From a screenshot those look identical, which is why the first two took s
 
 The prologue chain is complete, so there is no longer one blocking scene. In order:
 
-1. **The 34 fps on Scene 2's 11³** — Eddie: "we really should look at that soon" (2026-08-01).
-   Measured once, never diagnosed; the portal light and the denser scatter both landed in that
-   window and were never separated. The renderer is fill-bound, so it worsens with every scene that
-   adds full-screen work. **Do this before Scene 6 adds more.**
-2. **Scene 6 — "The World Remembered"** is the only scene never started. It is the one that reads
-   `lastArrivalOrigin`, which Phase 0 recorded for it and nothing has used yet.
-3. **Scene 5's 5J**, the world-becoming-a-diagram — the one piece of that scene still unbuilt.
+1. **Scene 6 — "The World Remembered"**, the only scene never started, and the one that finishes
+   the prologue. It is also the payoff for something already built: Phase 0 records
+   `lastArrivalOrigin` on every world specifically for Scene 6, and nothing has ever read it.
+2. **Scene 5's 5J**, the world-becoming-a-diagram — the one piece of that scene still unbuilt.
+3. **The GPU side of Scene 2**, now that the CPU is no longer the wall: 18.9 ms with 7.3 on the CPU
+   means ~11 ms of GPU, unexamined. `MAZEN_BENCH` makes it repeatable.
 
 Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends

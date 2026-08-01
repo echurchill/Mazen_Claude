@@ -449,7 +449,11 @@ class Renderer: NSObject, MTKViewDelegate {
 
         var assetBufs: [MTLBuffer] = []
         for _ in 0..<maxBuffersInFlight {
-            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 16384, options: .storageModeShared)!)  // M20: the garden's replaced foliage walls + heavy greenery need headroom (was 512→4096)
+            // 32768: Scene 2's 11³ asks for 19,944 asset instances and was being clamped to 16,384, so ~3,600
+            // props went missing every frame — and WHICH ones depended on dictionary iteration order, so it
+            // was not even the same ones twice. Found by the bench, not by looking: a hole in a stone wall
+            // reads as authored. (was 512 → 4096 → 16384)
+            assetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 32768, options: .storageModeShared)!)
         }
         self.assetInstanceBuffers = assetBufs
 
@@ -488,6 +492,11 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // The real boot world, built the one way worlds are built.
         worldStack = [buildWorld(named: "scene-1")]
+        if let bench = ProcessInfo.processInfo.environment["MAZEN_BENCH"], !bench.isEmpty {
+            worldStack = [buildWorld(named: bench)]
+            benchFramesRemaining = Int(ProcessInfo.processInfo.environment["MAZEN_BENCH_FRAMES"] ?? "") ?? 600
+            NSLog("BENCH world=%@", bench)
+        }
 #endif
     }
 
@@ -881,8 +890,10 @@ class Renderer: NSObject, MTKViewDelegate {
         if let cp = counterpart {
             let cbuf = counterpartInstanceBuffers[currentBufferIndex]
             let offset = Self.skyWorldOffset(cs: gameState.celestialSystem, time: gameState.time)
+            let tcp = CACurrentMediaTime()
             let cresult = sceneBuilder.build(gameState: cp, tileMeshLib: tileMeshLib,
                                              instanceBuffer: cbuf, worldOffset: offset, includeCelestials: false)
+            counterpartBuildMs += Float(CACurrentMediaTime() - tcp) * 1000
             counterpartOpaqueDrawCalls = cresult.opaque
         }
     }
@@ -1191,7 +1202,30 @@ class Renderer: NSObject, MTKViewDelegate {
         let sliceMat = sr.currentMatrix   // single source: SliceRotation (R2.3)
         let step = ws.subCellStep
         // PERF — clear the persistent buckets, keeping their capacity (entries persist across frames).
-        for key in assetBuckets.keys { assetBuckets[key]?.instances.removeAll(keepingCapacity: true) }
+        // PERF — the buckets are a CACHE now. Rebuilding them was 18 of Scene 2's 28 ms per frame
+        // (measured: `MAZEN_BENCH=scene-2`), and almost none of it was ever different from the frame
+        // before. A twist rebuilds every frame while it is in flight, because the slice matrix moves
+        // the props it carries; everything else waits for the world to actually change.
+        let token = AssetCacheToken(world: ObjectIdentifier(gameState),
+                                    worldName: gameState.name,
+                                    topology: model.topologyVersion,
+                                    twisting: sr.isActive,
+                                    twistFrame: sr.isActive ? frameIndex : 0,
+                                    roundness: model.roundness,
+                                    relief: model.reliefAmplitude,
+                                    paletteSize: wallDressingPalette.walls.count
+                                        + wallDressingPalette.rocks.count + wallDressingPalette.bushes.count,
+                                    assetsLoaded: importedProps.count + houseAssembly.count)
+        let rebuild = token != assetCacheToken
+        assetCacheToken = token
+        let tClear0 = CACurrentMediaTime()
+        if rebuild {
+            // `Array(keys)` deliberately: iterating the dictionary's own keys view while mutating it
+            // through the subscript keeps a second reference to the storage alive, which turns every
+            // in-place mutation into a full copy of the dictionary.
+            for key in Array(assetBuckets.keys) { assetBuckets[key]?.instances.removeAll(keepingCapacity: true) }
+        }
+        benchClearMs += Float(CACurrentMediaTime() - tClear0) * 1000
 
         // Accumulate one instance into its (mesh, submesh, texture) bucket — packed + drawn instanced below.
         func bucketAppend(_ mesh: AssetMesh, indexOffset: Int, indexCount: Int,
@@ -1247,7 +1281,12 @@ class Renderer: NSObject, MTKViewDelegate {
             let localY = Float(prop.subRow - 1) * step + prop.offsetY
             var placement = model.inflatedPlacement(base: base, localX: localX, localY: localY)
             if sr.isActive && sr.affectedCubies.contains(ci) { placement = sliceMat * placement }
-            let tileM = spin * placement
+            // NO SPIN HERE. The world's idle spin is one matrix common to every instance, so baking
+            // it in per prop is what made this whole pass per-frame work: everything else a prop's
+            // matrix depends on (topology, slice, roundness, relief) only changes when the world
+            // does. Spin is applied once per instance at pack time instead, which leaves these
+            // buckets cacheable across frames.
+            let tileM = placement
                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4), axis: SIMD3(0, 0, 1))
             switch prop.kind {
             case .importedAsset, .importedFoliage:
@@ -1279,14 +1318,23 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // PERF: iterate only the facelets that CARRY props (cached per topologyVersion) instead of
         // scanning all 6×n² tiles per frame. Prop fields are read live; a twist bumps the version.
-        for e in model.propTiles() {
+        let tPT0 = CACurrentMediaTime()
+        if rebuild {
+        let entries = model.propTiles()
+        let tPT1 = CACurrentMediaTime()
+        benchPropTilesMs += Float(tPT1 - tPT0) * 1000
+        benchPropTileCount = entries.count
+        for e in entries {
             // Nothing stands on a tile you have never seen. This path never checked, so in a fogged
             // world the trees and vessels floated in the mist while the walls beside them did not
             // exist yet — which is what made Scene 1 look like it was being built as Eddie walked.
             guard model.cubies[e.ci].facelets[e.fi].tileState != .unknown else { continue }
             let base = model.restMatrix(face: e.face, row: e.row, col: e.col)
             let props = model.cubies[e.ci].facelets[e.fi].props
+            benchPropCount += props.count
             for prop in props { placeProp(prop, base: base, ci: e.ci) }
+        }
+        benchPlaceMs += Float(CACurrentMediaTime() - tPT1) * 1000
         }
 
         // M20 — DYNAMIC dressed walls (twist-safe stone walls). For a `.dressed` world the hedge mesh is
@@ -1295,7 +1343,8 @@ class Renderer: NSObject, MTKViewDelegate {
         // like the hedge mesh. PERF: the derivation is cached per topologyVersion (a twist/discovery
         // re-derives everything); PLACEMENT stays per-frame (placeProp applies the live slice matrix),
         // so mid-twist animation still swings the walls with their slice.
-        if model.wallStyle == .dressed && (!wallDressingPalette.walls.isEmpty
+        let tDressed0 = CACurrentMediaTime()
+        if rebuild, model.wallStyle == .dressed, (!wallDressingPalette.walls.isEmpty
                                            || !wallDressingPalette.rocks.isEmpty
                                            || !wallDressingPalette.bushes.isEmpty) {
             let mUnit = ws.eyeHeight / 1.7
@@ -1309,24 +1358,109 @@ class Renderer: NSObject, MTKViewDelegate {
             }
         }
 
+        benchDressedMs += Float(CACurrentMediaTime() - tDressed0) * 1000
         // PERF — pack the buckets: write each bucket's instances contiguously into the shared buffer
         // and emit ONE instanced draw command per bucket. 500 copies of the same wall piece = 1 draw
         // (was 500, and 500 more in the shadow pass). Buckets that overflow the buffer are clamped,
         // same silent-cap behaviour as the old per-instance path.
+        let tPack0 = CACurrentMediaTime()
         var inst = 0
+        var dropped = 0
         for bucket in assetBuckets.values {
             let count = min(bucket.instances.count, cap - inst)
+            dropped += bucket.instances.count - count
             guard count > 0 else { continue }
             let base = inst
-            for k in 0..<count { ptr[inst] = bucket.instances[k]; inst += 1 }
+            for k in 0..<count {
+                var d = bucket.instances[k]
+                d.modelMatrix = spin * d.modelMatrix     // the one thing that changes every frame
+                ptr[inst] = d
+                inst += 1
+            }
             assetDrawCmds.append(AssetDrawCmd(vertexBuffer: bucket.vertexBuffer, indexBuffer: bucket.indexBuffer,
                                               indexOffset: bucket.indexOffset, indexCount: bucket.indexCount,
                                               instanceIndex: base, diffuse: bucket.diffuse,
                                               cutout: bucket.cutout, instanceCount: count))
         }
+        // NO SILENT CAPS. A clamp here deletes scenery, which looks like a level-design decision.
+        if dropped > 0, !reportedAssetOverflow {
+            reportedAssetOverflow = true
+            NSLog("asset instance buffer full: %d of %d dropped in '%@' — raise the buffer",
+                  dropped, inst + dropped, gameState.name)
+        }
+        benchPackMs += Float(CACurrentMediaTime() - tPack0) * 1000
+        benchAssetInstances = inst
+        benchAssetDemand = assetBuckets.values.reduce(0) { $0 + $1.instances.count }
     }
 
     // MARK: - MTKViewDelegate
+
+    private var perfSamples: (update: Float, build: Float, encode: Float, wait: Float) = (0, 0, 0, 0)
+    private var perfSampleCount = 0
+    /// DEV — `MAZEN_BENCH=<world name>` boots straight into that world and logs a timing breakdown
+    /// every 120 frames, then exits. Scene 2's 11³ was measured once by eye and never diagnosed;
+    /// "34 fps" is not a finding, it is the absence of one, and a number nobody can reproduce on
+    /// demand gets argued about instead of fixed.
+    private var benchFramesRemaining = 0
+    private var counterpartBuildMs: Float = 0
+    private var subUniformsMs: Float = 0
+    private var subAssetsMs: Float = 0
+    private var subDrawCallsMs: Float = 0
+    private var benchPropTilesMs: Float = 0
+    private var benchPlaceMs: Float = 0
+    private var benchPackMs: Float = 0
+    private var benchPropTileCount = 0
+    private var benchPropCount = 0
+    private var benchAssetInstances = 0
+    private var benchAssetDemand = 0
+    private var reportedAssetOverflow = false
+    private var benchClearMs: Float = 0
+    private var benchDressedMs: Float = 0
+    /// What the asset buckets were built from. Anything here changing means they must be rebuilt;
+    /// nothing here changing means last frame's are still correct.
+    private struct AssetCacheToken: Equatable {
+        let world: ObjectIdentifier
+        /// The world's NAME as well as its identity: `ObjectIdentifier` is an address, and a freed
+        /// world's address being handed to its replacement is not hypothetical here — that is exactly
+        /// what produced the intermittent magenta (attachment residency keyed the same way).
+        let worldName: String
+        let topology: UInt64
+        let twisting: Bool
+        let twistFrame: Int
+        let roundness: Float
+        let relief: Float
+        let paletteSize: Int
+        /// Imported meshes arrive after boot, and a world whose topology has not changed since would
+        /// otherwise keep serving buckets built when there was nothing to put in them.
+        let assetsLoaded: Int
+    }
+    private var assetCacheToken: AssetCacheToken? = nil
+
+    private func logBenchSample() {
+        let p = gameState.perf
+        NSLog("BENCH   assets: clearBuckets %.2f  dressedWalls %.2f  (buckets %d, dressed rebuilds %d/120 frames, style %@)",
+              benchClearMs / 120, benchDressedMs / 120, assetBuckets.count,
+              CubeModel.benchDressedRebuilds, String(describing: gameState.cubeModel.wallStyle))
+        benchDressedMs = 0; CubeModel.benchDressedRebuilds = 0
+        benchClearMs = 0
+        NSLog("BENCH   assets: propTiles() %.2f  placeProp %.2f  pack %.2f  |  %d tiles, %.0f props/frame, %d asset instances (wanted %d, cap %d)",
+              benchPropTilesMs / 120, benchPlaceMs / 120, benchPackMs / 120,
+              benchPropTileCount, Float(benchPropCount) / 120, benchAssetInstances, benchAssetDemand,
+              assetInstanceBuffers[0].length / MemoryLayout<InstanceDataSwift>.stride)
+        benchPropTilesMs = 0; benchPlaceMs = 0; benchPackMs = 0; benchPropCount = 0
+        NSLog("BENCH   build split: frameUniforms %.2f  assetInstances %.2f  buildDrawCalls %.2f",
+              subUniformsMs / 120, subAssetsMs / 120, subDrawCallsMs / 120)
+        subUniformsMs = 0; subAssetsMs = 0; subDrawCallsMs = 0
+        NSLog("BENCH   phases/frame: tileLoop %.2f ms  rest %.2f ms  (counterpart build %.2f ms)",
+              SceneBuilder.phaseTileLoopMs / 120, SceneBuilder.phaseRestMs / 120, counterpartBuildMs / 120)
+        SceneBuilder.phaseTileLoopMs = 0; SceneBuilder.phaseRestMs = 0; counterpartBuildMs = 0
+        NSLog("BENCH %@ size=%d  frame %.2f ms (%.0f fps)  cpu %.2f = update %.2f + build %.2f + encode %.2f  |  wait-on-gpu %.2f  |  draws %d  instances %d",
+              gameState.name, gameState.cubeModel.size, gameState.avgFrameTimeMs,
+              gameState.avgFrameTimeMs > 0 ? 1000 / gameState.avgFrameTimeMs : 0,
+              p.cpuTotal, p.update, p.build, p.encode, p.wait, p.drawCalls, p.instances)
+        benchFramesRemaining -= 120
+        if benchFramesRemaining <= 0 { NSLog("BENCH done"); exit(0) }
+    }
 
     func draw(in view: MTKView) {
 #if !targetEnvironment(simulator)
@@ -1342,7 +1476,9 @@ class Renderer: NSObject, MTKViewDelegate {
             frameTimeSamples.removeAll()
         }
 
+        let tUpdate0 = CACurrentMediaTime()
         gameState.update(deltaTime: dt)
+        let tUpdate1 = CACurrentMediaTime()
 
         // M11.2: a portal interaction switches worlds — through a fade (M11.2b). Clear the flag on
         // the requesting world and start the transition; the swap happens at the fully-black midpoint.
@@ -1357,7 +1493,9 @@ class Renderer: NSObject, MTKViewDelegate {
               let renderPassDesc = view.currentMTL4RenderPassDescriptor else { return }
 
         let waitValue = UInt64(frameIndex - maxBuffersInFlight)
+        let tWait0 = CACurrentMediaTime()
         endFrameEvent.wait(untilSignaledValue: waitValue, timeoutMS: 10)
+        let tWait1 = CACurrentMediaTime()
 
         // After the wait: the frames that could still be reading the OLD attachments have retired,
         // so it is now safe to drop them and register whatever this frame is actually drawing into.
@@ -1372,9 +1510,16 @@ class Renderer: NSObject, MTKViewDelegate {
         allocator.reset()
         commandBuffer.beginCommandBuffer(allocator: allocator)
 
+        let tBuild0 = CACurrentMediaTime()
         updateFrameUniforms()
+        let tUni = CACurrentMediaTime()
         updateAssetInstances()
+        let tAsset = CACurrentMediaTime()
         buildDrawCalls()
+        let tBuild1 = CACurrentMediaTime()
+        subUniformsMs += Float(tUni - tBuild0) * 1000
+        subAssetsMs += Float(tAsset - tUni) * 1000
+        subDrawCallsMs += Float(tBuild1 - tAsset) * 1000
 
         // ── Shadow pass ──────────────────────────────────────────
         vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
@@ -1594,6 +1739,29 @@ class Renderer: NSObject, MTKViewDelegate {
         }
 
         encoder.endEncoding()
+
+        // Everything from the end of buildDrawCalls to here is encoding.
+        let tEncode1 = CACurrentMediaTime()
+        perfSamples.update += Float(tUpdate1 - tUpdate0) * 1000
+        perfSamples.build  += Float(tBuild1 - tBuild0) * 1000
+        perfSamples.encode += Float(tEncode1 - tBuild1) * 1000
+        perfSamples.wait   += Float(tWait1 - tWait0) * 1000
+        perfSampleCount += 1
+        if perfSampleCount >= 120 {
+            let n = Float(perfSampleCount)
+            gameState.perf.update = perfSamples.update / n
+            gameState.perf.build  = perfSamples.build / n
+            gameState.perf.encode = perfSamples.encode / n
+            gameState.perf.wait   = perfSamples.wait / n
+            gameState.perf.drawCalls = opaqueDrawCalls.count + translucentDrawCalls.count
+                + counterpartOpaqueDrawCalls.count + assetDrawCmds.count
+            gameState.perf.instances = opaqueDrawCalls.reduce(0) { $0 + $1.instanceCount }
+                + translucentDrawCalls.reduce(0) { $0 + $1.instanceCount }
+                + counterpartOpaqueDrawCalls.reduce(0) { $0 + $1.instanceCount }
+                + assetDrawCmds.reduce(0) { $0 + $1.instanceCount }
+            perfSamples = (0, 0, 0, 0); perfSampleCount = 0
+            if benchFramesRemaining > 0 { logBenchSample() }
+        }
 
         commandBuffer.useResidencySet((view.layer as! CAMetalLayer).residencySet)
         commandBuffer.endCommandBuffer()
