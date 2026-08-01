@@ -1419,7 +1419,9 @@ class CubeModel {
         // (spawn = face centre, kept clear). Index 9 is the hub itself, so it is skipped. Dev
         // navigation: the prologue's scenes chain forward through their own portals, and this hub
         // exists so any of them can be reached directly while building.
-        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14]
+        // 15 = Scene 6, which is Scene 2 entered by Scene 5's route — the fifteenth and last slot
+        // the three-row grid holds.
+        let hubDestinations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15]
         // WIDER, not deeper. The 3×4 grid filled up at twelve, and adding a fourth row put it at
         // c+1 — SOUTH of the spawn, so the two newest doors were the only ones you had to turn
         // around to find (Eddie). Row 0 is outside this world's region, so the grid cannot simply

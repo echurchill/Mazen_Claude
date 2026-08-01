@@ -270,13 +270,16 @@ class Renderer: NSObject, MTKViewDelegate {
                                      "scene-4",      // index 11 — prologue Scene 4
                                      "scene-1",      // index 12 — prologue Scene 1, the opening
                                      "scene-3",      // index 13 — prologue Scene 3, the interior
-                                     "scene-5"]      // index 14 — prologue Scene 5, the pale world
+                                     "scene-5",      // index 14 — prologue Scene 5, the pale world
+                                     "scene-6"]      // index 15 — prologue Scene 6: NOT a world of its
+                                                     // own. It is Scene 2 returned to from Scene 5,
+                                                     // and resolves to that instance (see below).
     /// Destination indices belonging to the PROLOGUE, as opposed to the legacy dev worlds. Their
     /// hub doors wear DARSIT red rather than TARDIS blue, so the scenes read apart at a glance
     /// (Eddie: every scene added from the script gets one). Named rather than bare literals in
     /// SceneBuilder, so appending destinations cannot silently repaint the wrong door — and ADD to
     /// this whenever a scene is added, or its door will come up blue.
-    static let prologueDestinationIDs: Set<Int> = [10, 11, 12, 13, 14]   // scenes 2, 4, 1, 3, 5
+    static let prologueDestinationIDs: Set<Int> = [10, 11, 12, 13, 14, 15]   // scenes 2, 4, 1, 3, 5, 6
     /// The same scenes by name. Derived, so adding a prologue scene to `prologueDestinationIDs`
     /// (which already gives it a DARSIT door) also makes it single-instance — one place the list
     /// is maintained, not two that can silently disagree.
@@ -510,6 +513,9 @@ class Renderer: NSObject, MTKViewDelegate {
                 NSLog("BENCH cull threshold %.2f", v)
             }
             if let yaw = ProcessInfo.processInfo.environment["MAZEN_BENCH_YAW"], let y = Float(yaw) {
+                // Setting the angle is not enough: worlds do not all boot in orbit, so the "orbit"
+                // rows of the last measurement were first person wearing an orbit label.
+                worldStack[worldStack.count - 1].camera.mode = .orbit
                 worldStack[worldStack.count - 1].camera.orbitRotation.x = y * .pi / 180
                 NSLog("BENCH orbit yaw %.0f°", y)
             }
@@ -748,8 +754,15 @@ class Renderer: NSObject, MTKViewDelegate {
         gameState.forwardHeld = false; gameState.backwardHeld = false
         let departingMode = gameState.camera.mode   // FPV stays FPV across worlds (Eddie, M15.2)
         let departingName = gameState.name          // Phase 0: recorded on the arriving world
-        let dest = Self.portalDestinations.indices.contains(destinationID)
+        var dest = Self.portalDestinations.indices.contains(destinationID)
             ? Self.portalDestinations[destinationID] : "moon"
+        // SCENE 6 IS SCENE 2. "Scene 6 must use the actual persisted state of Scene 2, not a visually
+        // similar duplicate" — so its hub door does not build a world, it resolves to the Scene 2
+        // instance and declares that you arrived FROM SCENE 5. That origin is what picks the arrival
+        // on `-X`, the far side of the slab the player turned there; without it the door would drop
+        // you at Scene 2's own opening and there would be no Scene 6 at all.
+        let sceneSixReturn = (dest == "scene-6")
+        if sceneSixReturn { dest = "scene-2" }
         // Phase 0 — the portal says how it travels (see `WorldTransition`). This replaces the old
         // name-matching (`dest == "temple-interior"` / `name == "portal-hub"`), which was two special
         // cases for four worlds and had no way to express the six-scene prologue. `.auto` preserves
@@ -790,7 +803,9 @@ class Renderer: NSObject, MTKViewDelegate {
         // Arrival = stepping OUT of a door (Eddie, M15.2): same camera mode as you left in, and
         // you emerge looking the portal's exit direction — the door at your back.
         let arriving = gameState
-        arriving.lastArrivalOrigin = departingName   // Phase 0: "how you got here", for route-keyed behaviour
+        // Phase 0: "how you got here", for route-keyed behaviour. The Scene 6 door says Scene 5
+        // however you actually reached it, because Scene 6 IS that route.
+        arriving.lastArrivalOrigin = sceneSixReturn ? "scene-5" : departingName
         // Scene 2A — the way back CLOSES behind you. Only in the prologue's scenes, which are
         // explicitly one-way ("no going back to the prologue's world"); the dev hub and the sandbox
         // worlds keep their doors, or building would become a chore.
@@ -1232,41 +1247,47 @@ class Renderer: NSObject, MTKViewDelegate {
     /// lot into locals is the whole difference between a win and a loss.
     private struct CullFrustum {
         var p0, p1, p2, p3, p4, p5: SIMD4<Float>
-        var eye: SIMD3<Float>
+        /// The eye in the world's OWN (unspun) frame, so a prop can be tested against the geometry
+        /// it was authored in — see `surfaceNormal`.
+        var eyeRest: SIMD3<Float>
         var enabled: Bool
-        /// The horizon test is only meaningful when the camera is WELL OUTSIDE the world, and the
-        /// first version of it was not: `dot(p̂, normalize(eye - p)) < -0.12` compares a prop's
-        /// outward direction against the direction to the eye, which degenerates the moment the eye
-        /// sits ON the surface. Standing on a 5.5-unit world with the eye 0.09 above it, a prop a few
-        /// tiles to one side has p̂ pointing sideways and the vector to the eye pointing back the
-        /// other way — dot ≈ −0.7 — so it was "over the horizon" and vanished. That emptied Scene 2
-        /// on foot (Eddie: "very little is populating while in POV") and it is exactly why: the test
-        /// only ever behaved in orbit, which is the only place it was measured.
-        ///
-        /// Also off inside an inverted interior (M15.1), where the surface faces inward and every
-        /// prop in the room would read as behind the world.
+        /// The far-side test runs only from ORBIT, and only from outside the world's bounding
+        /// sphere. It used to be gated on `|eye| > faceDistance × 1.35`, which a WALKING PLAYER
+        /// crosses: on a 5³ world the eye is 2.59 units out at the middle of a face and 4.38 at a
+        /// corner, so the test switched itself on as Eddie walked toward one and took the walls with
+        /// it. A threshold that the thing it is meant to exclude can wander across is not a gate.
         var horizon: Bool
-        /// How far past facing-away a surface has to be before it is dropped. Generous on purpose:
-        /// a culled instance loses its shadow too. `MAZEN_CULL_T` overrides it for bench runs — set
-        /// it positive to make the cull deliberately wrong and confirm the in-view diagnostic still
-        /// catches it.
+        var roundness: Float
         var backface: Float
 
-        @inline(__always) func hides(_ p: SIMD3<Float>) -> Bool {
+        /// The OUTWARD NORMAL at a surface point, in the rest frame. `p̂` is exact on a sphere and
+        /// wrong by up to 55° at a cube's corners — which is why chunks went missing near the edges
+        /// of faces seen obliquely from orbit: their `p̂` tilts away from the face they belong to.
+        /// A cube's normal is its dominant axis; blend the two by roundness and both worlds are right.
+        @inline(__always) func surfaceNormal(_ pr: SIMD3<Float>, _ inv: Float) -> SIMD3<Float> {
+            let a = abs(pr)
+            let axis: SIMD3<Float> = (a.x >= a.y && a.x >= a.z) ? SIMD3(pr.x < 0 ? -1 : 1, 0, 0)
+                                   : (a.y >= a.z)               ? SIMD3(0, pr.y < 0 ? -1 : 1, 0)
+                                                                : SIMD3(0, 0, pr.z < 0 ? -1 : 1)
+            let radial = pr * inv
+            let n = axis + (radial - axis) * roundness
+            let l = simd_length(n)
+            return l > 1e-6 ? n / l : radial
+        }
+
+        /// `pr` is the prop in the rest frame; `p` the same prop spun into the world, for the planes.
+        @inline(__always) func hides(rest pr: SIMD3<Float>, world p: SIMD3<Float>) -> Bool {
             guard enabled else { return false }
-            let r2 = simd_length_squared(p)
+            let r2 = simd_length_squared(pr)
             if horizon, r2 > 1e-8 {
-                // A BACKFACE test, not a sphere-horizon one: is this surface point turned away from
-                // where the eye actually is? `dot(p̂, ê)` — the version that replaced it for one
-                // commit — measures the angle from the VIEW AXIS instead, so it culled the far half
-                // of every oblique face while that face was plainly on screen. On a cube the whole
-                // of a side face reads as 90° from the axis and vanished.
-                let toEye = eye - p
+                let toEye = eyeRest - pr
                 let t2 = simd_length_squared(toEye)
-                if t2 > 1e-8,
-                   simd_dot(p * (1 / r2.squareRoot()), toEye * (1 / t2.squareRoot())) < backface {
-                    Renderer.benchHorizonKills += 1
-                    return true
+                if t2 > 1e-8 {
+                    let n = surfaceNormal(pr, 1 / r2.squareRoot())
+                    if simd_dot(n, toEye * (1 / t2.squareRoot())) < backface {
+                        Renderer.benchHorizonKills += 1
+                        return true
+                    }
                 }
             }
             let m = Renderer.cullMargin
@@ -1279,6 +1300,7 @@ class Renderer: NSObject, MTKViewDelegate {
             return false
         }
     }
+
     /// World units. A tile is 1.0 and the tallest dressed props stand well under half of one, so
     /// this is roughly two tiles of slack for shadows cast in from off-screen.
     private static let cullMargin: Float = 2.0
@@ -1472,14 +1494,25 @@ class Renderer: NSObject, MTKViewDelegate {
                                p3: cullPlanes.count == 6 ? cullPlanes[3] : SIMD4(0, 0, 0, 1),
                                p4: cullPlanes.count == 6 ? cullPlanes[4] : SIMD4(0, 0, 0, 1),
                                p5: cullPlanes.count == 6 ? cullPlanes[5] : SIMD4(0, 0, 0, 1),
-                               eye: cullEye,
+                               eyeRest: {
+                                   // The world spins under a fixed camera, so the eye is moved INTO
+                                   // the world's own frame once per frame rather than every prop
+                                   // being spun out of it. `spin` is a pure rotation, so transposing
+                                   // inverts it.
+                                   let inv = spin.transpose
+                                   let e = inv * SIMD4<Float>(cullEye, 1)
+                                   return SIMD3(e.x, e.y, e.z)
+                               }(),
                                enabled: cullPlanes.count == 6 && !ablate.contains("cull"),
-                               // Only from properly outside: on the surface R/E ≈ 1 and the horizon
-                               // is a couple of tiles away, which is not what the renderer draws —
-                               // the ground curves gently and props have height, so things well past
-                               // the geometric horizon are still plainly in view. In first person the
-                               // frustum test does the work instead.
-                               horizon: !ws.interior && simd_length(cullEye) > ws.faceDistance * 1.35,
+                               // ORBIT ONLY, and only from outside the world's bounding sphere —
+                               // whose radius is the CORNER distance on a cube, faceDistance·√3, not
+                               // faceDistance. The camera mode is the real gate; the radius is the
+                               // belt to its braces. Anything softer is a threshold a walking player
+                               // can cross, which is exactly what happened.
+                               horizon: !ws.interior
+                                   && gameState.camera.mode == .orbit
+                                   && simd_length(cullEye) > ws.faceDistance * 1.732 * 1.2,
+                               roundness: model.roundness,
                                backface: cullBackfaceThreshold)
         var inst = 0
         var dropped = 0
@@ -1490,9 +1523,11 @@ class Renderer: NSObject, MTKViewDelegate {
             let base = inst
             for k in 0..<count {
                 var d = bucket.instances[k]
+                let rest = d.modelMatrix.columns.3
+                let rest3 = SIMD3(rest.x, rest.y, rest.z)
                 d.modelMatrix = spin * d.modelMatrix     // the one thing that changes every frame
                 let p = SIMD3(d.modelMatrix.columns.3.x, d.modelMatrix.columns.3.y, d.modelMatrix.columns.3.z)
-                if cull.hides(p) {
+                if cull.hides(rest: rest3, world: p) {
                     benchCulled += 1
                     // Diagnostic: anything WELL inside the view cone and close by must never be
                     // culled. This is the check the first cull test would have failed instantly.
@@ -1502,13 +1537,22 @@ class Renderer: NSObject, MTKViewDelegate {
                         // earlier version required the prop to be within 6 units, which never fires
                         // from orbit 26 units out — it read 0 through the whole time orbit was
                         // visibly broken. A diagnostic that cannot fail is not one.
+                        // Facing is judged by the SURFACE NORMAL, not by p̂: at a cube's corners the
+                        // two differ by up to 55°, and the p̂ version raised false alarms on exactly
+                        // the props the normal-based cull was right to drop. The margin is wide —
+                        // the cull fires at −0.2, this complains only above +0.35 — so the check is
+                        // a guard rail rather than a restatement of the rule it is guarding.
                         let d = p - cullEye
                         let len = simd_length(d)
-                        let r = simd_length(p)
-                        if len > 1e-4, r > 1e-4,
-                           simd_dot(d / len, cullForward) > 0.85,
-                           simd_dot(p / r, -d / len) > 0.25 {
-                            Renderer.benchInViewKilled += 1
+                        let rr = simd_length_squared(rest3)
+                        if len > 1e-4, rr > 1e-8,
+                           simd_dot(d / len, cullForward) > 0.85 {
+                            let n = cull.surfaceNormal(rest3, 1 / rr.squareRoot())
+                            let toEyeRest = cull.eyeRest - rest3
+                            let t = simd_length(toEyeRest)
+                            if t > 1e-4, simd_dot(n, toEyeRest / t) > 0.35 {
+                                Renderer.benchInViewKilled += 1
+                            }
                         }
                     }
                     continue
@@ -1609,6 +1653,7 @@ class Renderer: NSObject, MTKViewDelegate {
               Renderer.benchHorizonKills / 120, Renderer.benchFrustumKills / 120,
               Renderer.benchInViewKilled / 120)
         Renderer.benchHorizonKills = 0; Renderer.benchFrustumKills = 0; Renderer.benchInViewKilled = 0
+        NSLog("BENCH   camera: %@", gameState.camera.mode == .orbit ? "orbit" : "first-person")
         NSLog("BENCH   cull: enabled=%d horizon=%d eye=(%.2f %.2f %.2f) |eye|=%.2f faceDist=%.2f roundness=%.2f",
               cullPlanes.count == 6 ? 1 : 0, gameState.worldScale.interior ? 0 : 1,
               cullEye.x, cullEye.y, cullEye.z, simd_length(cullEye),

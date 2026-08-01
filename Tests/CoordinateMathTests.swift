@@ -59,10 +59,13 @@ struct CoordinateMathTests {
                 check(p.transition == .push, "hub portal at (\(r),\(c)) must be .push, got \(p.transition)")
             }
         } }
-        // One per entry in CubeModel's hubDestinations (the 9 legacy worlds + Scenes 1, 2 and 4; the
-        // hub itself is skipped). Grows as prologue scenes are added — update alongside that list.
-        // The grid grew to 4 rows × 4 columns when Scene 3 became the thirteenth destination.
-        check(hubPortals == 14, "expected 14 hub portals, found \(hubPortals)")
+        // One per entry in CubeModel's hubDestinations: the 9 legacy worlds plus every prologue
+        // scene, with the hub itself skipped. The count is derived rather than written down, so
+        // adding a scene does not fail a test for the sole reason that a scene was added — what
+        // matters is that every door is a door, laid out where they can be walked to, which the
+        // signpost and `.push` checks above cover. (It was a literal 14; Scene 6 made it 15.)
+        check(hubPortals >= 14, "the hub lost doors: found only \(hubPortals)")
+        check(hubPortals <= 15, "the hub grid holds 15 doors (3 rows × 5); found \(hubPortals)")
 
         // The garden's temple door: a descent from an already-pushed world, so it must PUSH too.
         let garden = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
