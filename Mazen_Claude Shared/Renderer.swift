@@ -654,9 +654,6 @@ class Renderer: NSObject, MTKViewDelegate {
             // Prologue Scene 5 — the pale world. Player twists ENABLED and needed constantly: this
             // is the first scene where the verb is the tool rather than the revelation.
             w = GameState(size: PrologueSize.sceneFive, name: dest, stamp: .sceneFive)
-            // Structure standing on the pale world — inverted decks, clear of the channels and of
-            // the tiles beside them, since the grooves have to stay readable across open ground.
-            w.cubeModel.stampSceneFivePlatforms(undersideMachinery().plates)
             // Scene 4's world hangs overhead "in the persistent configuration in which the player
             // left it" — the same registry edge that hangs Scene 2 over Scene 4.
             w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),

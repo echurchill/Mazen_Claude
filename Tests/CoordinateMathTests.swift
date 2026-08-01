@@ -1965,43 +1965,6 @@ struct CoordinateMathTests {
         check(gs.pendingScriptedTwist == nil, "the owed turn should be cleared once paid")
     }
 
-    /// Scene 5's scattered platforms are decoration, and decoration in this scene has a hard rule:
-    /// stay off the grooves. The channels ARE the puzzle — they are read across open ground from a
-    /// distance — so a deck sitting on one, or overhanging from the tile next door, is not scenery,
-    /// it is a wall the player cannot see the point of.
-    static func testSceneFivePlatformsKeepOffTheCircuit() {
-        let gs = prologueWorld("scene-5")
-        let m = gs.cubeModel
-        let liveBefore = gs.channelDepths
-        let receivers = Set(m.channelReceivers)
-
-        m.stampSceneFivePlatforms([0, 1, 2, 3])
-        var placed = 0
-        for face in CubeFace.allCases {
-            for r in 0..<m.size {
-                for c in 0..<m.size {
-                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
-                    let f = m.cubies[ci].facelets[fi]
-                    let decks = f.props.filter { $0.kind == .importedFoliage }
-                    guard !decks.isEmpty else { continue }
-                    placed += decks.count
-                    check(f.mazeTile.channels.isEmpty,
-                          "a platform is standing on a channel at \(face) r\(r) c\(c)")
-                    check(!receivers.contains(f.id.rawValue), "a platform is standing on a receiver")
-                    for p in decks { check(!p.kind.isSolid, "a platform should not block the ground") }
-                }
-            }
-        }
-        check(placed > 15, "the surface should actually be scattered, got \(placed) platforms")
-        // The circuit is untouched: same tiles fed, same receivers, same answer.
-        check(gs.channelDepths == liveBefore, "scattering platforms changed what the current reaches")
-        check(!gs.liveCircuit, "Scene 5 still starts broken")
-        for (axis, index) in [(2, 0), (0, 0), (0, 0)] {
-            m.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)
-        }
-        check(gs.liveCircuit, "Scene 5 is no longer solvable with platforms on it")
-    }
-
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2520,7 +2483,6 @@ struct CoordinateMathTests {
         testEveryDoorKnowsWhatItIsCalled()
         testTheUndersideIsDressedWithoutChangingIt()
         testAScriptedTurnWaitsRatherThanVanishing()
-        testSceneFivePlatformsKeepOffTheCircuit()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

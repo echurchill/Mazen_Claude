@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,808 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,815 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -160,6 +160,25 @@ with the region staying unreachable from Scene 2's own spawn, and the dressing b
 
 **`gallery-cyberpunk` (destination 16)** joins the hub, whose grid went to 3 rows × 6 columns; the
 plaza already reached that far, so nothing had to move.
+
+### Rigid imported props sit badly on ROUNDED worlds (2026-08-01)
+Tried scattering the Cyberpunk platform decks over Scene 5 and reverted it the same day (Eddie: "they
+look odd due to the roundness"). Worth writing down as a constraint rather than a one-off:
+
+An imported asset is **rigid**. `inflatedPlacement` seats its anchor on the curved surface and tilts
+it to the local normal, but the mesh itself stays flat — so a BROAD flat model on a world with
+`roundness = 1` meets a surface curving away beneath it, and either floats at its edges or cuts into
+the ground. The bigger the footprint, the worse: a 4×4 deck spans enough of a 7³ world to show it
+plainly.
+
+So on rounded worlds prefer props that are **tall and narrow** (supports, antennae, pipes) or small
+enough that the curvature under them is negligible — which is why the same kit reads correctly on
+Scene 6's underside: `-X` belongs to Scene 2, whose `roundness` is **0**. Flat and wide is a
+cube-world material.
+
+The real fix, if broad decks are ever wanted on a curved world, is to give imported meshes the same
+per-vertex inflation the maze geometry already gets (M14b), rather than to keep hunting for models
+that happen not to show it.
 
 ### The puzzle-integrity suite (2026-08-01)
 Every existing test passed while Scene 2 was unsolvable, because they all checked PARTS: the
