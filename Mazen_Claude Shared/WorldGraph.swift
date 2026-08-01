@@ -23,6 +23,25 @@ struct WorldKey: Hashable, CustomStringConvertible {
 final class WorldRegistry {
     private var worlds: [WorldKey: GameState] = [:]
 
+    /// Names that must resolve to ONE instance however they are reached. The prologue's scenes are
+    /// the case that matters: there is one Scene 2, and Scene 6 returns to *it* — "Scene 6 must use
+    /// the actual persisted state of Scene 2, not a visually similar duplicate. The scene depends on
+    /// trust. If the world resets here, the theme collapses."
+    ///
+    /// The policy lived in the Renderer, which cannot be reached from the test harness — so the one
+    /// property Scene 6 is built on had no test. It is universe policy, not rendering.
+    var singleInstanceNames: Set<String> = []
+
+    /// Resolve by route, honouring `singleInstanceNames`: a single-instance world is bound to this
+    /// new edge as well, so both routes lead to the same place with the same scars.
+    func resolve(destination: String, origin: String, create: () -> GameState) -> GameState {
+        let key = WorldKey(destination: destination, origin: origin)
+        if let w = worlds[key] { return w }
+        let w = (singleInstanceNames.contains(destination) ? anyNamed(destination) : nil) ?? create()
+        worlds[key] = w
+        return w
+    }
+
     /// Resolve a key, creating the world on first reference (persistent thereafter).
     func world(for key: WorldKey, create: () -> GameState) -> GameState {
         if let w = worlds[key] { return w }

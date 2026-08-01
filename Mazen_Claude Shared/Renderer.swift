@@ -242,7 +242,11 @@ class Renderer: NSObject, MTKViewDelegate {
     /// The universe (M15.0 world graph): every world reachable by route, keyed
     /// `(destination, origin)`, lazily created, persistent — scars keep. The stack above is the
     /// navigation *history*; this is the *universe*. Sky/counterpart lookups resolve through it.
-    let worldRegistry = WorldRegistry()
+    let worldRegistry: WorldRegistry = {
+        let r = WorldRegistry()
+        r.singleInstanceNames = Renderer.prologueWorldNames
+        return r
+    }()
     /// M17 Phase 0 — the player's cross-world knowledge (memories, glyphs, attunement). Held here,
     /// outside the world stack, so it persists across every portal. Inert until a beat uses it.
     let playerKnowledge = PlayerKnowledge()
@@ -737,15 +741,14 @@ class Renderer: NSObject, MTKViewDelegate {
             exitWorld()
             pushed = false
         } else {
-            let key = WorldKey(destination: dest, origin: gameState.name)
             // The prologue's scenes are single-instance: one Scene 2, however you reach it. Every
             // other world keeps the registry's per-edge default, where arriving by a new door may
             // legitimately yield a variant. Without this, Scene 4 building Scene 2 for its sky
             // would leave a *second* Scene 2 behind the hub door — you would walk into a world that
             // was not the one overhead, and the two would diverge on the first twist.
-            let world = worldRegistry.world(for: key) {
-                (Self.prologueWorldNames.contains(dest) ? self.worldRegistry.anyNamed(dest) : nil)
-                    ?? self.buildWorld(named: dest)
+            // (The rule itself now lives on the registry, where it can be tested.)
+            let world = worldRegistry.resolve(destination: dest, origin: gameState.name) {
+                self.buildWorld(named: dest)
             }
             if replacing {
                 // `goto` — the destination becomes the current world in place. The world we leave
@@ -779,7 +782,10 @@ class Renderer: NSObject, MTKViewDelegate {
             // that stands. The fallback assumes a world's first portal is its entrance, which is only
             // true for the older worlds — a scene whose exit is hidden on another face (Scene 2) would
             // otherwise drop the player onto that face, walled in.
-            if let spawn = arriving.cubeModel.spawnLocation {
+            // Route-keyed: a world may name a different arrival point per origin (Scene 6 returns
+            // to Scene 2 on a face Scene 2's own entrance never reaches). `lastArrivalOrigin` is set
+            // just above, so this is the first thing that has ever read it.
+            if let spawn = arriving.cubeModel.spawn(arrivingFrom: arriving.lastArrivalOrigin) {
                 arriving.player.face = spawn.face
                 arriving.player.row = spawn.row
                 arriving.player.col = spawn.col

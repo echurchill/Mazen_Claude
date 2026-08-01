@@ -1319,6 +1319,117 @@ struct CoordinateMathTests {
     /// STOPS WHERE THE ROUTE STOPS: a pulse that ran to the end of the world would teach the player
     /// the opposite of the truth. Also checks that it cycles, since one failure the player missed
     /// has to come round again.
+    /// SCENE 6's FOUNDATION. "Scene 6 must use the actual persisted state of Scene 2, not a visually
+    /// similar duplicate… The scene depends on trust. If the world resets here, the theme collapses."
+    ///
+    /// The whole scene is a return to a world the player already changed, so this is the one property
+    /// it cannot be built without — and until now the rule lived in the Renderer, which the harness
+    /// cannot reach, so it had no test at all.
+    static func testAPrologueWorldIsTheSamePlaceHoweverYouReachIt() {
+        let registry = WorldRegistry()
+        registry.singleInstanceNames = ["scene-2", "scene-3"]
+
+        var builds = 0
+        func makeSceneTwo() -> GameState {
+            builds += 1
+            return GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
+        }
+        // First visit: arrived from Scene 1.
+        let first = registry.resolve(destination: "scene-2", origin: "scene-1", create: makeSceneTwo)
+        check(builds == 1, "the first visit builds the world")
+
+        // Change it, the way the player does: turn a slab, and discover a tile.
+        first.cubeModel.applySliceRotation(axis: 1, index: 0, angle: .pi / 2)
+        let scarred = first.cubeModel.topologyVersion
+        guard let (ci, fi) = first.cubeModel.faceletAt(face: .positiveZ, row: 0, col: 0) else {
+            check(false, "scene-2 has no (0,0) on +Z"); return
+        }
+        first.cubeModel.cubies[ci].facelets[fi].tileState = .discovered
+        let openings = first.cubeModel.cubies[ci].facelets[fi].mazeTile.openings
+
+        // Scene 6: the same world, reached from Scene 5 instead. Not a rebuild, and not a copy.
+        let returned = registry.resolve(destination: "scene-2", origin: "scene-5", create: makeSceneTwo)
+        check(builds == 1, "returning by a NEW route must not build a second Scene 2 (built \(builds))")
+        check(returned === first, "Scene 6 must arrive in the very world Scene 2 left behind")
+        check(returned.cubeModel.topologyVersion == scarred, "the twist did not survive the return")
+        check(returned.cubeModel.cubies[ci].facelets[fi].tileState == .discovered,
+              "what the player had seen was forgotten")
+        check(returned.cubeModel.cubies[ci].facelets[fi].mazeTile.openings == openings,
+              "the maze reconnected itself between visits")
+
+        // And the sky lookup finds that same instance, so what hangs overhead is the place you
+        // walked in — this is what `anyNamed` exists for.
+        check(registry.anyNamed("scene-2") === first, "the world overhead is a different Scene 2")
+
+        // A world NOT on the single-instance list keeps the registry's per-edge default: arriving by
+        // a different door may legitimately be a different place. Scene 6 depends on the distinction.
+        var galleryBuilds = 0
+        func makeGallery() -> GameState {
+            galleryBuilds += 1
+            return GameState(size: 5, name: "gallery-a", stamp: .bare)
+        }
+        _ = registry.resolve(destination: "gallery-a", origin: "hub", create: makeGallery)
+        _ = registry.resolve(destination: "gallery-a", origin: "scene-1", create: makeGallery)
+        check(galleryBuilds == 2, "a per-edge world should vary by route, got \(galleryBuilds) builds")
+    }
+
+    /// Scene 3's interior is the second half of Scene 6's promise: "the player has returned to a
+    /// solved machine. The machine is still solved." Six obelisks lit, orb connected, and the exit
+    /// it created still standing.
+    static func testTheInteriorStaysSolvedBetweenVisits() {
+        let registry = WorldRegistry()
+        registry.singleInstanceNames = ["scene-3"]
+        let three = registry.resolve(destination: "scene-3", origin: "scene-2") {
+            GameState(size: PrologueSize.sceneThree, name: "scene-3", interior: true, stamp: .sceneThree)
+        }
+        // Wake every obelisk, the way the scene does, and let the exit be created.
+        for cu in three.cubeModel.cubies.indices {
+            for f in three.cubeModel.cubies[cu].facelets.indices {
+                for p in three.cubeModel.cubies[cu].facelets[f].props.indices
+                where three.cubeModel.cubies[cu].facelets[f].props[p].kind == .obelisk {
+                    three.cubeModel.cubies[cu].facelets[f].props[p].anim = 1
+                }
+            }
+        }
+        for _ in 0..<10 { three.update(deltaTime: 1.0 / 60.0) }
+        check(three.sceneThreeAllObelisksAwake, "the chamber should be awake once every obelisk is lit")
+        // 3K's exit is created by the plinth INTERACTION, not by the obelisks being lit — lighting
+        // them here is a shortcut past that path, so the door is placed directly. What is being
+        // tested is that it survives the return, not what creates it.
+        three.cubeModel.createChosenExit(destinationID: 11)
+        let exit = three.cubeModel.chosenExit
+        check(exit != nil, "Scene 3 should be able to place its exit")
+
+        let again = registry.resolve(destination: "scene-3", origin: "scene-6") {
+            check(false, "Scene 6 rebuilt the interior instead of returning to it")
+            return GameState(size: PrologueSize.sceneThree, name: "scene-3", interior: true, stamp: .sceneThree)
+        }
+        check(again === three, "the second descent must reach the same chamber")
+        check(again.sceneThreeAllObelisksAwake, "the machine forgot it was solved")
+        check(again.cubeModel.chosenExit?.face == exit?.face
+              && again.cubeModel.chosenExit?.row == exit?.row,
+              "the portal Scene 3 created is no longer where it was left")
+    }
+
+    /// Scene 6A — "They are arriving from a new direction into a world that remembers." The arrival
+    /// point is a property of the ROUTE, not of the world: the same Scene 2, entered from Scene 5,
+    /// must land on the region that only exists because of the twist made there.
+    static func testAWorldCanNameADifferentDoorPerRoute() {
+        let gs = GameState(size: PrologueSize.sceneTwo, name: "scene-2", stamp: .sceneTwo)
+        let m = gs.cubeModel
+        guard let home = m.spawnLocation else { check(false, "scene-2 states its own arrival"); return }
+        // Unknown routes, and no route at all, keep the world's own opening image.
+        check(m.spawn(arrivingFrom: nil)?.face == home.face, "no route named ⇒ the world's own spawn")
+        check(m.spawn(arrivingFrom: "scene-1")?.face == home.face, "an unnamed route ⇒ the same")
+        // A named route overrides it, and only it.
+        let far: CubeFace = home.face == .negativeY ? .positiveY : .negativeY
+        m.arrivalSpawns["scene-5"] = (face: far, row: 1, col: 2, facing: .n)
+        check(m.spawn(arrivingFrom: "scene-5")?.face == far, "the route's own door was ignored")
+        check(m.spawn(arrivingFrom: "scene-5")?.col == 2, "the route's door landed on the wrong tile")
+        check(m.spawn(arrivingFrom: "scene-1")?.face == home.face,
+              "naming one route must not move every other arrival")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -1824,6 +1935,9 @@ struct CoordinateMathTests {
         testInteriorsDoNotSpin()
         testSceneFiveIsSolvableAndCanBeMadeWorse()
         testSceneFiveVesselsMirrorLocalTruthNotProgress()
+        testAPrologueWorldIsTheSamePlaceHoweverYouReachIt()
+        testTheInteriorStaysSolvedBetweenVisits()
+        testAWorldCanNameADifferentDoorPerRoute()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

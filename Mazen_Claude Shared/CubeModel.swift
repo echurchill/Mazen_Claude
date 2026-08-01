@@ -3620,6 +3620,22 @@ class CubeModel {
     /// their arrival point instead of having it inferred.
     var spawnLocation: (face: CubeFace, row: Int, col: Int, facing: Heading8)? = nil
 
+    /// Where the player arrives WHEN THEY COME FROM A PARTICULAR WORLD, keyed by that world's name.
+    ///
+    /// Scene 6 is the whole reason this exists: "The player is not being sent backward. They are
+    /// arriving from a new direction into a world that remembers." It is the same Scene 2, and the
+    /// player must land on the region that only became reachable because of the twist they made
+    /// there — so the arrival point is a property of the ROUTE, not of the world.
+    ///
+    /// Falls back to `spawnLocation` for any origin not named here, which is every world today.
+    var arrivalSpawns: [String: (face: CubeFace, row: Int, col: Int, facing: Heading8)] = [:]
+
+    /// The arrival point for someone coming from `origin` — the route's, if it has one.
+    func spawn(arrivingFrom origin: String?) -> (face: CubeFace, row: Int, col: Int, facing: Heading8)? {
+        if let origin, let byRoute = arrivalSpawns[origin] { return byRoute }
+        return spawnLocation
+    }
+
     /// Scene 2 — the plinth that reports lock progress, when it is NOT adjacent to the door it
     /// reports on. The garden's plinth sits beside its door, so `updateDoorPlinths` can find it by
     /// looking around the door; Scene 2's central plinth is deliberately far from the exit ("a map of
