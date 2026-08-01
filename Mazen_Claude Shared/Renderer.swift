@@ -502,6 +502,13 @@ class Renderer: NSObject, MTKViewDelegate {
             ablate = Set((ProcessInfo.processInfo.environment["MAZEN_BENCH_ABLATE"] ?? "")
                 .split(separator: ",").map(String.init))
             if !ablate.isEmpty { NSLog("BENCH ablating: %@", ablate.sorted().joined(separator: ",")) }
+            // The bench booted in orbit, which is the whole reason a cull test that only worked in
+            // orbit shipped. First person is a different camera in a different place and has to be
+            // measured as one.
+            if ProcessInfo.processInfo.environment["MAZEN_BENCH_FP"] != nil {
+                worldStack[worldStack.count - 1].camera.mode = .firstPerson
+                NSLog("BENCH first-person")
+            }
             NSLog("BENCH world=%@", bench)
         }
 #endif
@@ -966,6 +973,7 @@ class Renderer: NSObject, MTKViewDelegate {
         gameState.viewOrigin = framePose.position
         cullPlanes = Self.frustumPlanes(from: vp)
         cullEye = framePose.position
+        cullForward = framePose.forward
         // Drain whatever the world asked to be heard this frame (same hand-off shape as
         // `portalRequested`): the model describes sounds, the renderer plays them.
         if !gameState.pendingAudioCues.isEmpty {
@@ -1208,25 +1216,39 @@ class Renderer: NSObject, MTKViewDelegate {
         var p0, p1, p2, p3, p4, p5: SIMD4<Float>
         var eye: SIMD3<Float>
         var enabled: Bool
-        /// The horizon test assumes props stand on the OUTSIDE of a world centred at the origin. An
-        /// inverted interior (M15.1) is the exact opposite — you stand inside it and its surface
-        /// faces inward — so every prop in the room would read as "over the horizon" and the room
-        /// would empty. Frustum culling still applies there; the horizon test does not.
+        /// The horizon test is only meaningful when the camera is WELL OUTSIDE the world, and the
+        /// first version of it was not: `dot(p̂, normalize(eye - p)) < -0.12` compares a prop's
+        /// outward direction against the direction to the eye, which degenerates the moment the eye
+        /// sits ON the surface. Standing on a 5.5-unit world with the eye 0.09 above it, a prop a few
+        /// tiles to one side has p̂ pointing sideways and the vector to the eye pointing back the
+        /// other way — dot ≈ −0.7 — so it was "over the horizon" and vanished. That emptied Scene 2
+        /// on foot (Eddie: "very little is populating while in POV") and it is exactly why: the test
+        /// only ever behaved in orbit, which is the only place it was measured.
+        ///
+        /// Also off inside an inverted interior (M15.1), where the surface faces inward and every
+        /// prop in the room would read as behind the world.
         var horizon: Bool
+        /// The proper condition, for an eye at distance E from the centre of a world of radius R:
+        /// a surface point is on the near side of the horizon when dot(p̂, ê) ≥ R/E. Stored rather
+        /// than recomputed per instance.
+        var horizonCos: Float
+        var eyeDir: SIMD3<Float>
         @inline(__always) func hides(_ p: SIMD3<Float>) -> Bool {
             guard enabled else { return false }
-            let toEye = eye - p
             let r2 = simd_length_squared(p)
-            if horizon, r2 > 1e-8, simd_length_squared(toEye) > 1e-8 {
-                if simd_dot(p * (1 / r2.squareRoot()), simd_normalize(toEye)) < -0.12 { return true }
+            if horizon, r2 > 1e-8 {
+                if simd_dot(p * (1 / r2.squareRoot()), eyeDir) < horizonCos {
+                    Renderer.benchHorizonKills += 1
+                    return true
+                }
             }
             let m = Renderer.cullMargin
-            if simd_dot(SIMD3(p0.x, p0.y, p0.z), p) + p0.w < -m { return true }
-            if simd_dot(SIMD3(p1.x, p1.y, p1.z), p) + p1.w < -m { return true }
-            if simd_dot(SIMD3(p2.x, p2.y, p2.z), p) + p2.w < -m { return true }
-            if simd_dot(SIMD3(p3.x, p3.y, p3.z), p) + p3.w < -m { return true }
-            if simd_dot(SIMD3(p4.x, p4.y, p4.z), p) + p4.w < -m { return true }
-            if simd_dot(SIMD3(p5.x, p5.y, p5.z), p) + p5.w < -m { return true }
+            if simd_dot(SIMD3(p0.x, p0.y, p0.z), p) + p0.w < -m { Renderer.benchFrustumKills += 1; return true }
+            if simd_dot(SIMD3(p1.x, p1.y, p1.z), p) + p1.w < -m { Renderer.benchFrustumKills += 1; return true }
+            if simd_dot(SIMD3(p2.x, p2.y, p2.z), p) + p2.w < -m { Renderer.benchFrustumKills += 1; return true }
+            if simd_dot(SIMD3(p3.x, p3.y, p3.z), p) + p3.w < -m { Renderer.benchFrustumKills += 1; return true }
+            if simd_dot(SIMD3(p4.x, p4.y, p4.z), p) + p4.w < -m { Renderer.benchFrustumKills += 1; return true }
+            if simd_dot(SIMD3(p5.x, p5.y, p5.z), p) + p5.w < -m { Renderer.benchFrustumKills += 1; return true }
             return false
         }
     }
@@ -1425,7 +1447,20 @@ class Renderer: NSObject, MTKViewDelegate {
                                p5: cullPlanes.count == 6 ? cullPlanes[5] : SIMD4(0, 0, 0, 1),
                                eye: cullEye,
                                enabled: cullPlanes.count == 6 && !ablate.contains("cull"),
-                               horizon: !ws.interior)
+                               // Only from properly outside: on the surface R/E ≈ 1 and the horizon
+                               // is a couple of tiles away, which is not what the renderer draws —
+                               // the ground curves gently and props have height, so things well past
+                               // the geometric horizon are still plainly in view. In first person the
+                               // frustum test does the work instead.
+                               horizon: !ws.interior && simd_length(cullEye) > ws.faceDistance * 1.35,
+                               horizonCos: {
+                                   let e = simd_length(cullEye)
+                                   guard e > 1e-4 else { return -2 }
+                                   // −0.15 keeps a band of the far side, so a prop just past the
+                                   // limb still casts and still appears before it should.
+                                   return ws.faceDistance / e - 0.15
+                               }(),
+                               eyeDir: simd_length(cullEye) > 1e-4 ? simd_normalize(cullEye) : SIMD3(0, 0, 1))
         var inst = 0
         var dropped = 0
         for bucket in assetBuckets.values {
@@ -1437,7 +1472,19 @@ class Renderer: NSObject, MTKViewDelegate {
                 var d = bucket.instances[k]
                 d.modelMatrix = spin * d.modelMatrix     // the one thing that changes every frame
                 let p = SIMD3(d.modelMatrix.columns.3.x, d.modelMatrix.columns.3.y, d.modelMatrix.columns.3.z)
-                if cull.hides(p) { benchCulled += 1; continue }
+                if cull.hides(p) {
+                    benchCulled += 1
+                    // Diagnostic: anything WELL inside the view cone and close by must never be
+                    // culled. This is the check the first cull test would have failed instantly.
+                    if benchFramesRemaining > 0 {
+                        let d = p - cullEye
+                        let len = simd_length(d)
+                        if len > 1e-4, len < 6, simd_dot(simd_normalize(d), cullForward) > 0.6 {
+                            Renderer.benchInViewKilled += 1
+                        }
+                    }
+                    continue
+                }
                 ptr[inst] = d
                 inst += 1
             }
@@ -1485,8 +1532,12 @@ class Renderer: NSObject, MTKViewDelegate {
     private var benchAssetInstances = 0
     private var benchAssetDemand = 0
     private var reportedAssetOverflow = false
+    static var benchHorizonKills = 0
+    static var benchFrustumKills = 0
     private var cullPlanes: [SIMD4<Float>] = []
     private var cullEye = SIMD3<Float>(0, 0, 0)
+    private var cullForward = SIMD3<Float>(0, 0, 1)
+    static var benchInViewKilled = 0
     private var benchCulled = 0
 
     /// The six frustum planes of a view-projection, in world space (Gribb–Hartmann), each normalised
@@ -1525,6 +1576,10 @@ class Renderer: NSObject, MTKViewDelegate {
 
     private func logBenchSample() {
         let p = gameState.perf
+        NSLog("BENCH   cull kills/frame: horizon %d, frustum %d  |  KILLED WHILE PLAINLY IN VIEW: %d",
+              Renderer.benchHorizonKills / 120, Renderer.benchFrustumKills / 120,
+              Renderer.benchInViewKilled / 120)
+        Renderer.benchHorizonKills = 0; Renderer.benchFrustumKills = 0; Renderer.benchInViewKilled = 0
         NSLog("BENCH   cull: enabled=%d horizon=%d eye=(%.2f %.2f %.2f) |eye|=%.2f faceDist=%.2f roundness=%.2f",
               cullPlanes.count == 6 ? 1 : 0, gameState.worldScale.interior ? 0 : 1,
               cullEye.x, cullEye.y, cullEye.z, simd_length(cullEye),

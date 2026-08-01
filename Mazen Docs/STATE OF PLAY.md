@@ -289,7 +289,8 @@ wrong. From a screenshot those look identical, which is why the first two took s
   the SHADOW pass takes 21 → 15.7, while removing the maze from the shadow pass changes nothing.
   The maze geometry is nearly free; ~19,900 imported instances are the entire cost.
 - **Horizon + frustum culling at pack time** — Scene 2 draws 8,654 of 19,944 instead of all of them.
-  **Release: 21.1 → 11.4 ms (47 → 88 fps). Debug: 20.0 → 15.0 (50 → 67).** The test is deliberately
+  **Release: 21.1 → 11.5 ms (47 → 87 fps) in orbit, and first person reaches the 100 fps vsync
+  floor.** The test is deliberately
   loose (a 2-unit frustum margin, a band past the horizon) because a culled instance loses its
   SHADOW too — the shadow pass draws from the same buffer. Interiors are exempt from the horizon
   test: you stand inside an inverted world, so every prop in the room reads as over the horizon and
@@ -297,6 +298,17 @@ wrong. From a screenshot those look identical, which is why the first two took s
 - **A cull test can cost more than it saves.** The first version called a method that did
   `ablate.contains("cull")` — a string hash per instance, 20,000 times a frame. It spent 10 ms of
   CPU to save 3 ms of GPU. Hoisting the planes and the flag into locals was the whole difference.
+- **THE HORIZON TEST WAS MEASURED ONLY IN ORBIT, AND ONLY WORKED THERE (fixed 2026-08-01).** It
+  compared a prop's outward direction against the direction to the eye — fine from 26 units away,
+  meaningless from 0.09 above the surface, where a prop a few tiles to one side has p̂ pointing
+  sideways and the eye lying the other way (dot ≈ −0.7). It emptied Scene 2 on foot: Eddie's POV
+  screenshot showed bare ground with a couple of bushes on the skyline. The bench booted in orbit,
+  so nothing caught it. Now: the real condition (`dot(p̂, ê) ≥ R/E`), and applied ONLY when the
+  camera is properly outside the world (`|eye| > faceDistance × 1.35`); on foot the frustum test
+  does the work. **`MAZEN_BENCH_FP=1` benches in first person**, and the bench reports
+  "KILLED WHILE PLAINLY IN VIEW" — anything culled within 6 units and well inside the view cone.
+  It reads 0 in both cameras now and would have been enormous before. **A camera-dependent
+  optimisation has to be measured from every camera.**
 - **The same work found a silent bug.** Scene 2 wanted 19,944 asset instances against a 16,384
   buffer, so ~3,600 props were dropped every frame — and which ones depended on dictionary
   iteration order, so not the same ones twice. A missing piece of a stone wall reads as authored.
