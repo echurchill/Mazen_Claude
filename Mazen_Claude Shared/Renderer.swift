@@ -153,10 +153,7 @@ class Renderer: NSObject, MTKViewDelegate {
     /// Human-readable sign text for each hub destination, index-aligned with `portalDestinations`.
     /// Signpost text, indexed the same way as `portalDestinations`. Index 9 is the hub itself, which
     /// is never its own signpost — hence the blank placeholder keeping the two lists aligned.
-    static let destinationLabels = ["Moon", "Temple Interior", "Natural World", "The Garden", "Gallery",
-                                    "Dungeons Gallery", "Nature Gallery", "Ruins Gallery", "MegaKit Gallery",
-                                    "", "Scene 2 Four Corners", "Scene 4 First Turn", "Scene 1 First Clearing",
-                                    "Scene 3 Heart of the World", "Scene 5 Broken Meridian"]
+    static let destinationLabels = WorldCatalog.labels
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
         "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
@@ -263,23 +260,13 @@ class Renderer: NSObject, MTKViewDelegate {
 
     /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
     /// sub-world a portal simply pops back out; the destination only matters from the root.
-    static let portalDestinations = ["moon", "temple-interior", "natural", "garden", "gallery",
-                                     "gallery-dungeons", "gallery-nature", "gallery-ruins", "gallery-megakit",
-                                     "portal-hub",   // index 9 — the labeled hub (reached by the ` key)
-                                     "scene-2",      // index 10 — prologue Scene 2 (APPEND only: portal props store this index)
-                                     "scene-4",      // index 11 — prologue Scene 4
-                                     "scene-1",      // index 12 — prologue Scene 1, the opening
-                                     "scene-3",      // index 13 — prologue Scene 3, the interior
-                                     "scene-5",      // index 14 — prologue Scene 5, the pale world
-                                     "scene-6"]      // index 15 — prologue Scene 6: NOT a world of its
-                                                     // own. It is Scene 2 returned to from Scene 5,
-                                                     // and resolves to that instance (see below).
+    static let portalDestinations = WorldCatalog.destinations
     /// Destination indices belonging to the PROLOGUE, as opposed to the legacy dev worlds. Their
     /// hub doors wear DARSIT red rather than TARDIS blue, so the scenes read apart at a glance
     /// (Eddie: every scene added from the script gets one). Named rather than bare literals in
     /// SceneBuilder, so appending destinations cannot silently repaint the wrong door — and ADD to
     /// this whenever a scene is added, or its door will come up blue.
-    static let prologueDestinationIDs: Set<Int> = [10, 11, 12, 13, 14, 15]   // scenes 2, 4, 1, 3, 5, 6
+    static let prologueDestinationIDs: Set<Int> = WorldCatalog.prologueIDs
     /// The same scenes by name. Derived, so adding a prologue scene to `prologueDestinationIDs`
     /// (which already gives it a DARSIT door) also makes it single-instance — one place the list
     /// is maintained, not two that can silently disagree.

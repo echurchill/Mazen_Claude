@@ -1822,6 +1822,41 @@ struct CoordinateMathTests {
         check(chamberSealed, "Scene 2's chamber should be sealed until the world turns")
     }
 
+    /// A portal Prop stores an INDEX; its signpost samples the same index out of the label list. Two
+    /// index-aligned lists that live apart will drift, and this one did: Scene 6 was appended as
+    /// destination 15 while the labels stopped at 14, so its sign sampled a slice that did not exist
+    /// and came back reading "Moon" — a door in the hub confidently pointing at the wrong world
+    /// (Eddie). Nothing could have caught it, because both lists lived on the Renderer, which this
+    /// harness cannot compile. They are now in `WorldCatalog`, and this is why.
+    static func testEveryDoorKnowsWhatItIsCalled() {
+        check(WorldCatalog.labels.count == WorldCatalog.destinations.count,
+              "\(WorldCatalog.destinations.count) destinations but \(WorldCatalog.labels.count) labels — "
+              + "a door at the end of the longer list will read as whatever slice 0 happens to be")
+        for (i, name) in WorldCatalog.destinations.enumerated() {
+            // Guarded, not assumed: when the lists DO drift, indexing the shorter one traps and
+            // takes the whole suite down with it — the first run of this test crashed the binary
+            // instead of reporting, which hides every other result in the file.
+            guard WorldCatalog.labels.indices.contains(i) else { continue }
+            if name == "portal-hub" {
+                check(WorldCatalog.labels[i].isEmpty, "the hub does not signpost itself")
+            } else {
+                check(!WorldCatalog.labels[i].isEmpty, "destination \(i) (\(name)) has no sign text")
+            }
+        }
+        // Every prologue id must name a real destination — these paint the DARSIT doors and decide
+        // which worlds are single-instance, so an id past the end silently drops both.
+        for id in WorldCatalog.prologueIDs {
+            check(WorldCatalog.destinations.indices.contains(id),
+                  "prologue id \(id) is past the end of the destination list")
+        }
+        // Names are unique: two entries with the same name would resolve to one world by different
+        // indices, and only one of the two doors would keep its state.
+        check(Set(WorldCatalog.destinations).count == WorldCatalog.destinations.count,
+              "duplicate destination names in the catalogue")
+        // Scene 6 is the one destination that is not its own world — it must name Scene 2's.
+        check(WorldCatalog.destinations.contains("scene-6"), "Scene 6 has no hub door")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2337,6 +2372,7 @@ struct CoordinateMathTests {
         testSceneFourReleasesItsAnchorsAndThenTurns()
         testSceneFiveCanBeSolvedByTurningItBack()
         testNoSceneHandsOutItsExitEarly()
+        testEveryDoorKnowsWhatItIsCalled()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

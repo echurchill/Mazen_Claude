@@ -72,3 +72,38 @@ final class WorldRegistry {
         return worlds.values.filter { seen.insert(ObjectIdentifier($0)).inserted }
     }
 }
+
+
+/// The catalogue of places a portal can lead, and what a signpost says about each.
+///
+/// These two lists are INDEX-ALIGNED — a portal Prop stores an index into `destinations`, and its
+/// signpost samples the same index out of `labels`. They lived on the Renderer, which the test
+/// harness cannot compile, so nothing could check that they stayed the same length: adding Scene 6
+/// as destination 15 left `labels` with 15 entries, and its signpost sampled a slice that does not
+/// exist and came back reading "Moon" (Eddie). Here they can be tested, and are.
+///
+/// APPEND ONLY. A portal prop stores the index, so reordering silently re-aims every existing door.
+enum WorldCatalog {
+    static let destinations = ["moon", "temple-interior", "natural", "garden", "gallery",
+                               "gallery-dungeons", "gallery-nature", "gallery-ruins", "gallery-megakit",
+                               "portal-hub",   // index 9 — the labeled hub (reached by the ` key)
+                               "scene-2",      // index 10 — prologue Scene 2
+                               "scene-4",      // index 11 — prologue Scene 4
+                               "scene-1",      // index 12 — prologue Scene 1, the opening
+                               "scene-3",      // index 13 — prologue Scene 3, the interior
+                               "scene-5",      // index 14 — prologue Scene 5, the pale world
+                               "scene-6"]      // index 15 — NOT a world of its own: Scene 2 returned
+                                               // to from Scene 5, resolved to that instance.
+
+    /// Sign text, index-aligned with `destinations`. Index 9 is the hub itself, which never signposts
+    /// itself — the blank keeps the two lists in step.
+    static let labels = ["Moon", "Temple Interior", "Natural World", "The Garden", "Gallery",
+                         "Dungeons Gallery", "Nature Gallery", "Ruins Gallery", "MegaKit Gallery",
+                         "", "Scene 2 Four Corners", "Scene 4 First Turn", "Scene 1 First Clearing",
+                         "Scene 3 Heart of the World", "Scene 5 Broken Meridian",
+                         "Scene 6 World Remembered"]
+
+    /// The prologue's scenes, whose hub doors wear DARSIT red rather than TARDIS blue, and which are
+    /// single-instance: one Scene 2, however it is reached.
+    static let prologueIDs: Set<Int> = [10, 11, 12, 13, 14, 15]
+}
