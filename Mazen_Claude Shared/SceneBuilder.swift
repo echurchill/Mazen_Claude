@@ -293,7 +293,14 @@ final class SceneBuilder {
                             var footprintBoost: Float = 1
                             if prop.kind == .obelisk && prop.extraScale != 1 {
                                 treeScale = prop.extraScale
-                                footprintBoost = 2.1                      // ~1.6 m across, 7 m tall
+                                // Scale the HEIGHT only and leave the footprint at the authored mesh
+                                // size, which lands on a relation worth keeping: the obelisk's base
+                                // half-width (`baseH`, 0.062) and the channel's halo half-width
+                                // (`haloW`, 0.062) are the same number, so the shaft is exactly as
+                                // wide as the groove it stands on. It also blunts the pyramidion —
+                                // the cap keeps its 0.24 height while its base widens, so the tip
+                                // stops reading as a needle point (Eddie).
+                                footprintBoost = 1 / prop.extraScale
                             }
                             if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder
                                 || prop.kind == .foliageCard || prop.kind == .greeneryCard || prop.kind == .treeBillboard {
