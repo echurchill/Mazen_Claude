@@ -231,6 +231,13 @@ class GameState {
 
     func update(deltaTime: Float) {
         time += deltaTime * timeScale
+        // A turn the world owes from a control already pressed — fired the moment the player is
+        // settled enough to watch it, rather than being lost because they were mid-stride.
+        if let owed = pendingScriptedTwist, !sliceRotation.isActive, !player.isMoving, !player.isTurning {
+            pendingScriptedTwist = nil
+            startScriptedSliceRotation(axis: owed.axis, index: owed.index,
+                                       clockwise: owed.clockwise, speed: owed.speed)
+        }
         camera.updateOrbit(deltaTime: deltaTime)
 
         if player.updateMovement(deltaTime: deltaTime) {
@@ -533,8 +540,22 @@ class GameState {
     /// own twist (2.5, ≈0.4 s): this one happens at the far edge of the world, and at that distance a
     /// snap was over before you could find it — or missed completely if you were facing away. The
     /// slower sweep also reads as the script asks, "a machine executing an ancient, exact motion."
+    /// A scripted turn the world owes the player, held until they are standing still.
+    ///
+    /// This used to be dropped on the floor: the plinth's alignment finishes on whatever frame it
+    /// finishes on, and if the player was mid-step or mid-turn at that moment the guard below
+    /// returned and the turn simply never happened — leaving a raised, aligned rotator and a world
+    /// that had not moved, so the next F was needed to fire it again. That reads as a third press
+    /// (Eddie: "one F raises, second F rotates the rotator, third F makes the slice move").
+    /// A control the player pressed should not lose its effect because they were still walking.
+    private(set) var pendingScriptedTwist: (axis: Int, index: Int, clockwise: Bool, speed: Float)? = nil
+
     func startScriptedSliceRotation(axis: Int, index: Int, clockwise: Bool, speed: Float = 0.7) {
-        guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else { return }
+        guard !sliceRotation.isActive && !player.isMoving && !player.isTurning else {
+            pendingScriptedTwist = (axis, index, clockwise, speed)
+            return
+        }
+        pendingScriptedTwist = nil
         let angle: Float = clockwise ? -.pi / 2 : .pi / 2
         let cubieIndices = cubeModel.cubieIndicesInSlice(axis: axis, index: index)
 

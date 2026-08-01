@@ -1926,6 +1926,45 @@ struct CoordinateMathTests {
         check(same, "the underside dressing is not deterministic")
     }
 
+    /// A scripted turn is fired by an ANIMATION finishing — the plinth's alignment reaching 1 — which
+    /// lands on whatever frame it lands on. If the player happened to be mid-step or mid-turn at that
+    /// instant, `startScriptedSliceRotation` returned early and the turn was gone: a raised, aligned
+    /// rotator and a world that had not moved, needing another press to fire it again. The world owes
+    /// the turn from the moment the control was used; it may wait for the player to settle, but it
+    /// may not forget.
+    static func testAScriptedTurnWaitsRatherThanVanishing() {
+        let gs = prologueWorld("scene-2")
+        let m = gs.cubeModel
+        guard let s = m.scriptedTwistSlice else { check(false, "Scene 2 names the slab its lock turns"); return }
+        // Undo the lock first: a bonded slab refuses the turn for a REASON, and testing the
+        // deferral against a refusal that is supposed to happen proves nothing. (This is why the
+        // first run of this test failed — the test was wrong, not the code.)
+        for t in tiles(gs, with: .switchCap) {
+            guard let (ci, fi) = m.faceletAt(face: t.face, row: t.r, col: t.c) else { continue }
+            if (m.cubies[ci].facelets[fi].props.first { $0.kind == .switchCap }?.alignAnim ?? 0) < 0.5 {
+                stand(gs, t.face, t.r, t.c); gs.interact()
+            }
+        }
+        check(m.bondedGroups.isEmpty, "the lock should be undone before testing the turn")
+        let before = m.cubies.map { $0.position }
+
+        // The player is mid-stride when the alignment completes.
+        gs.player.isMoving = true
+        gs.startScriptedSliceRotation(axis: s.axis, index: s.index, clockwise: s.clockwise)
+        check(!gs.sliceRotation.isActive, "a turn should not start under a walking player")
+        check(m.cubies.map { $0.position } == before, "the world turned while the player was mid-step")
+        check(gs.pendingScriptedTwist != nil, "the turn was dropped instead of being remembered")
+
+        // They stop. The world pays what it owes, without another press.
+        gs.player.isMoving = false
+        gs.update(deltaTime: 1.0 / 60.0)
+        check(gs.sliceRotation.isActive || m.cubies.map { $0.position } != before,
+              "the owed turn never happened once the player stood still")
+        for _ in 0..<300 { gs.update(deltaTime: 1.0 / 60.0) }
+        check(m.cubies.map { $0.position } != before, "the slab never actually moved")
+        check(gs.pendingScriptedTwist == nil, "the owed turn should be cleared once paid")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2443,6 +2482,7 @@ struct CoordinateMathTests {
         testNoSceneHandsOutItsExitEarly()
         testEveryDoorKnowsWhatItIsCalled()
         testTheUndersideIsDressedWithoutChangingIt()
+        testAScriptedTurnWaitsRatherThanVanishing()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()
