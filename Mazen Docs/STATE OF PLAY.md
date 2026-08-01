@@ -1,6 +1,6 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-07-31. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-08-01. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
 
 ## The 60-second catch-up
 
@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **218,050 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,636 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -63,6 +63,47 @@ M14 shape-as-meaning (superellipsoid) → M15 inverted-cube interiors → **M16 
 - **Tests: 218,050** — the harness now compiles GameState (portal gating + cache invariants covered).
 - **Shipping landmine flagged:** imported models load from an absolute dev path — fine now, blocks
   sharing builds ([Known Issues](Known%20Issues.md)).
+
+## Where things stand — SCENES 3 AND 5; the chain is whole (2026-07-31 → 08-01)
+
+**All six prologue worlds now exist and lead into each other**, and every one of them is reachable
+from the `` ` `` hub, whose grid grew a northern row to hold them.
+
+### Scene 3 — "The Heart of the World"
+- **Six obelisks fire beams into the cube's centre, where an orb hangs.** The orb is at an interior
+  centre — a place nothing had ever rendered — and it lights the chamber rather than merely glowing:
+  orb and beams are published as segment (line) lights from `GameState.chamberEmitters`, the single
+  source both `SceneBuilder` and `Renderer` read, so what is drawn and what lights are never two
+  descriptions of the same thing that can drift apart.
+- The chamber wakes **in stages** and fires its wave once. Plinths bind 1:1 to distant obelisks.
+- Called "the only real performance risk" in the build plan. It costs less than feared: the renderer
+  is fill-bound, and six beams are geometry, not full-screen work.
+- **Still open:** 3H's authored maze and dead ends (the layout is still procedural), 3L nebula
+  parallax.
+
+### Scene 5 — "The Broken Meridian"
+- A luminous **circuit laid across the world's surface**: a source, runs of channel that cross face
+  edges, and receivers at the ends. The circuit is broken on arrival; a turn that brings the runs
+  back into line completes it. Solvability is asserted, not assumed — a probe walks the circuit for
+  the scramble the stamp applies.
+- **The channel walker was the whole scene's bug.** `layChannel` assumed cross-face neighbours share
+  a row/col, which is false at four of the six seams, so runs stopped dead at an edge and the scene
+  was unwinnable. `layRun` now uses `edgeCrossing` and carries the reoriented heading forward. The
+  solvability probe caught it; nothing about the world's appearance did.
+- **Eddie's screenshot found three more** (fixed 2026-08-01), and one of them is a lesson about
+  rounded worlds: an overlay lifted in the MODEL MATRIX has its lift *discarded*, because the Cobb
+  inflation projects the footprint back onto the shell. The channels were being drawn and were
+  z-fighting the ground. Lift belongs in LOCAL z, which the inflation extrudes along the normal.
+  The other two: junction vessels asked for 3+ channel arms, and three runs from one source have
+  exactly one branch point (now they stand where a channel crosses a face edge — where the slabs
+  part, so where a turn can break the route); and the receivers used the stock obelisk, a 1.16-unit
+  shaft on a world of radius 3.5.
+- **A green test hid all of it.** `testSceneFiveVesselsMirrorLocalTruthNotProgress` counted vessels
+  *including* the source, which exists by construction, so `junctions > 0` could never fail. A count
+  that includes the thing you are trying to prove exists is not a check. It now excludes the source.
+- **Still open:** the pale-stone surface the script asks for (it wears Scene 3's metal plating
+  because that is what existed), the travelling pulse sound (the last of Audio F), 5K's exit
+  placement rule (it borrows Scene 3's chooser), and 5J, the world-becomes-a-diagram.
 
 ## Where things stand — SCENE 1, and the app opens into the prologue (2026-07-31)
 
@@ -231,11 +272,21 @@ wrong. From a screenshot those look identical, which is why the first two took s
   (`metal_plate_02_1k/` and `To_be_evaluated/` were removed by Eddie, 2026-07-30.)
 
 ## Next
-**Scene 3 — "The Heart of the World"** is the only prologue scene left before the chain is whole,
-and by far the most new tech: six obelisk beams to the cube's centre, a refracting orb at an
-interior centre (nothing renders there today), and 1:1 plinth→obelisk binding. The build plan calls
-it "the only real performance risk", and audio C+D were meant to land before it — they have.
-Scenes 5 and 6 exist as drafts only.
+
+The prologue chain is complete, so there is no longer one blocking scene. In order:
+
+1. **Finish Scene 5** — pale stone, the travelling pulse (unblocks the last of Audio F, scene-gated
+   since it was written), 5K's own exit rule. 5J is the ambitious one and should wait until the base
+   scene has been looked at.
+2. **Scene 6 — "The World Remembered"** is the only scene never started. It is the one that reads
+   `lastArrivalOrigin`, which Phase 0 recorded for it and nothing has used yet.
+3. **The 34 fps on Scene 2's 11³.** Measured once, never diagnosed; the portal light and the denser
+   scatter both landed in that window and were never separated. It matters more each time a scene
+   adds full-screen shader work, which Scene 3's beams already did on an unmeasured budget.
+
+Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
+and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
+(3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
 
 ## Immediate next actions on resume
 
