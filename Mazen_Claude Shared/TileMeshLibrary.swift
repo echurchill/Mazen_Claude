@@ -18,6 +18,7 @@ class TileMeshLibrary {
     let fieldFloor: TileMesh      // M19: a full-tile tessellated ground quad (grass/water — no path split)
     let orbMesh: TileMesh         // Scene 3: the suspended heart at the chamber's centre
     let beamMesh: TileMesh        // Scene 3: one obelisk-to-orb beam, a unit length along +Z
+    let channelFloor: TileMesh    // Scene 5: bandFloor, lifted in LOCAL z so it clears the ground on a ROUNDED world
     let bandFloor: TileMesh       // Same quad with NORMALISED [0,1]² UVs — for overlays that reason in tile
                                   // fractions (bond bands). fieldFloor bakes `uvScale` into its UVs for
                                   // texture tiling, which is wrong for anything measuring "half a tile".
@@ -284,6 +285,10 @@ class TileMeshLibrary {
         let fieldStart = allIndices.count
         Self.addFieldFloor(to: &allVerts, indices: &allIndices, ws: ws)
         fieldFloor = TileMesh(vertexOffset: 0, indexOffset: fieldStart, indexCount: allIndices.count - fieldStart)
+
+        let channelStart = allIndices.count
+        Self.addFieldFloor(to: &allVerts, indices: &allIndices, ws: ws, normalisedUV: true, lift: 0.004)
+        channelFloor = TileMesh(vertexOffset: 0, indexOffset: channelStart, indexCount: allIndices.count - channelStart)
 
         let orbStart = allIndices.count
         Self.addOrb(to: &allVerts, indices: &allIndices)
@@ -813,9 +818,14 @@ class TileMeshLibrary {
     /// measure in tile fractions; with the tiling UVs, uv 0.5 is a quarter of the way across at
     /// uvScale 2, which is exactly how the bond bands ended up as a thin off-centre line.
     private static func addFieldFloor(to verts: inout [MazeVertexSwift], indices: inout [UInt32],
-                                      ws: WorldScale, normalisedUV: Bool = false) {
+                                      ws: WorldScale, normalisedUV: Bool = false, lift: Float = 0) {
         let hs = ws.floorHalfSize
-        let z = ws.floorY
+        // `lift` raises the quad in LOCAL z. Lifting the model MATRIX is what an overlay wants
+        // on a flat world, but on a rounded one the inflation projects the footprint back onto the
+        // shell and the offset is simply lost — so the overlay z-fights the ground it sits on, which
+        // is why Scene 5's channels were invisible. Local z survives: the inflation extrudes height
+        // along the curved normal.
+        let z = ws.floorY + lift
         let n = max(1, ws.floorTess) * 3     // match the maze floor's per-tile vertex density
         let step = 2 * hs / Float(n)
         for jr in 0..<n {

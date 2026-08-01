@@ -1318,6 +1318,7 @@ struct CoordinateMathTests {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let m = gs.cubeModel
         var junctions = 0
+        var sourceVessels = 0
         for face in CubeFace.allCases {
             for r in 0..<m.size {
                 for c in 0..<m.size {
@@ -1325,12 +1326,19 @@ struct CoordinateMathTests {
                     let f = m.cubies[ci].facelets[fi]
                     guard f.props.contains(where: { $0.kind == .layeredVessel }) else { continue }
                     junctions += 1
+                    if let src = m.channelSource,
+                       src.face == face, src.row == r, src.col == c { sourceVessels += 1 }
                     // Every vessel stands ON a channel — "their bases touch the luminous grooves".
                     check(!f.mazeTile.channels.isEmpty, "a vessel at (\(r),\(c)) stands on no channel")
                 }
             }
         }
-        check(junctions > 0, "Scene 5 should stand vessels at its junctions")
+        // `junctions > 0` was a WEAK CHECK: the channel SOURCE carries a vessel by construction, so
+        // the count was 1 and the test passed green while the scene had no junction vessels at all
+        // — the fault Eddie's screenshot showed. Count only vessels that are NOT the source.
+        check(junctions - sourceVessels >= 3,
+              "Scene 5 should stand vessels at its junctions, not only at the source "
+              + "(found \(junctions) vessels, \(sourceVessels) of them the source)")
         // Settle, then check at least one vessel reads live while the circuit as a whole is not.
         for _ in 0..<240 { gs.update(deltaTime: 1.0 / 60.0) }
         check(!gs.liveCircuit, "the scene starts with the circuit broken")

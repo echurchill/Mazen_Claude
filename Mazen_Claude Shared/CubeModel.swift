@@ -512,7 +512,11 @@ class CubeModel {
             guard let (ci, fi) = faceletAt(face: end.face, row: end.row, col: end.col) else { continue }
             // A receiver reuses the obelisk: it stands off the surface and lights when fed, which is
             // what the scene needs it to do. `anim` is its lit state, driven by the live circuit.
-            cubies[ci].facelets[fi].props.append(Prop(kind: .obelisk, subRow: 1, subCol: 1))
+            // A third the size of the stock obelisk: at full size a 1.16-unit shaft on a world of
+            // radius 3.5 reads as a girder driven through the planet rather than a marker standing
+            // on it (Eddie's screenshot).
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .obelisk, subRow: 1, subCol: 1, extraScale: 0.32))
             channelReceivers.append(cubies[ci].facelets[fi].id.rawValue)
         }
 
@@ -532,14 +536,21 @@ class CubeModel {
         // truth is worth reading: it is the tile whose alignment decides which way the current can
         // go. Their rings are driven per frame from live channel state (see tickChannelCircuit), so
         // a vessel is never telling you anything the world is not.
+        // Where a channel crosses a FACE EDGE. Looking for three-armed junctions found nothing but
+        // the source itself — three runs radiating from one tile has exactly one branch point — and
+        // a vessel that only ever stands where the current begins mirrors nothing.
+        //
+        // A face edge is the interesting place regardless: it is where the slabs part, so it is
+        // precisely where a turn can break the route. "Their rings contain small gaps or windows
+        // that show whether nearby channels are currently aligned."
         for face in CubeFace.allCases {
             for r in 0..<n {
                 for col in 0..<n {
                     guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
                     let ch = cubies[ci].facelets[fi].mazeTile.channels
-                    var arms = 0
-                    for d in [DirectionMask.north, .east, .south, .west] where ch.contains(d) { arms += 1 }
-                    guard arms >= 3 else { continue }
+                    guard !ch.isEmpty else { continue }
+                    let onEdge = (r == 0 || r == n - 1 || col == 0 || col == n - 1)
+                    guard onEdge else { continue }
                     guard !cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel }) else { continue }
                     var v = Prop(kind: .layeredVessel, subRow: 1, subCol: 1, facing: .s,
                                  state: 4, extraScale: 0.85, offsetX: 0.18, offsetY: 0.18)

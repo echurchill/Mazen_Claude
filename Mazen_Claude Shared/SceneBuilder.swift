@@ -279,6 +279,11 @@ final class SceneBuilder {
                             // AND a per-instance jitter, so a stand / rock field reads as many
                             // distinct objects, not three repeated sizes. Trunk matches its tree.
                             var treeScale: Float = 1.0
+                            // An obelisk that authored its own scale takes it. Scene 5's receivers are
+                            // obelisks on a 7³ world, where the stock 1.16-unit shaft is a THIRD of the
+                            // planet's radius and reads as a girder through the world (Eddie's
+                            // screenshot). Everything else keeps the authored mesh size.
+                            if prop.kind == .obelisk && prop.extraScale != 1 { treeScale = prop.extraScale }
                             if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder
                                 || prop.kind == .foliageCard || prop.kind == .greeneryCard || prop.kind == .treeBillboard {
                                 var sj = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 40503 &+ UInt32(prop.subRow &* 7 &+ prop.subCol)
@@ -699,8 +704,8 @@ final class SceneBuilder {
                         guard !ch.isEmpty else { continue }
                         var restM = model.restMatrix(face: face, row: r, col: c)
                         if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) { restM = animMat * restM }
-                        let lift = SIMD3<Float>(restM.columns.2.x, restM.columns.2.y, restM.columns.2.z) * 0.004
-                        restM.columns.3 += SIMD4(lift.x, lift.y, lift.z, 0)
+                        // No matrix lift here — `channelFloor` carries it in local z, which is the only
+                        // kind of lift that survives being inflated onto a rounded world.
                         var mask: UInt32 = 0
                         if ch.contains(.north) { mask |= 1 }
                         if ch.contains(.east)  { mask |= 2 }
@@ -714,7 +719,7 @@ final class SceneBuilder {
                             spinMatrix: spin, roundness: model.roundness,
                             invHalfExtent: 1.0 / model.worldScale.faceDistance,
                             reliefAmplitude: model.reliefAmplitude)
-                        channelTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.bandFloor))
+                        channelTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.channelFloor))
                     }
                 }
             }
