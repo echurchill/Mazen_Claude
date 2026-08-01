@@ -1441,12 +1441,20 @@ class Renderer: NSObject, MTKViewDelegate {
                 let userScale: Float = prop.kind == .importedFoliage ? prop.extraScale : 1
                 let fs: Float = (maxDim > 0 ? p.target / maxDim : 1) * userScale
                 let c = p.mesh.center
-                let orient = p.yUp ? float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0)) : matrix_identity_float4x4
-                let ty = p.yUp ? c.z * fs : -c.y * fs
+                // Y-up kits rotate +90° about X so mesh +Y becomes world +Z. An INVERTED model turns
+                // the other way (−90°), which puts mesh +Y at world −Z — upside down — and then the
+                // face that must rest on the floor is the mesh's TOP, so the seating height comes
+                // from `boundsMax` rather than `boundsMin`, and the centring flips sign with it.
+                let orient = p.yUp
+                    ? float4x4.rotation(radians: p.inverted ? -.pi / 2 : .pi / 2, axis: SIMD3(1, 0, 0))
+                    : matrix_identity_float4x4
+                let ty = p.yUp ? (p.inverted ? -c.z * fs : c.z * fs) : -c.y * fs
                 // Rest the base on the floor, then bury by `sink`·height so rounded
                 // rocks/bushes seat instead of balancing on their lowest vertex.
                 let heightU = (p.yUp ? p.mesh.size.y : p.mesh.size.z) * fs
-                let tz = ws.floorY - (p.yUp ? p.mesh.boundsMin.y : p.mesh.boundsMin.z) * fs - prop.sink * heightU
+                let restOn = p.yUp ? (p.inverted ? -p.mesh.boundsMax.y : p.mesh.boundsMin.y)
+                                   : p.mesh.boundsMin.z
+                let tz = ws.floorY - restOn * fs - prop.sink * heightU
                 let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
                 emit(p.mesh, m, diffuse: p.diffuse, submeshMaterials: p.submeshMaterials)
             case .houseCorner:

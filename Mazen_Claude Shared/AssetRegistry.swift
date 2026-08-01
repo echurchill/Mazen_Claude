@@ -24,6 +24,12 @@ struct ImportedProp {
     /// DIFFERENT texture (a Quaternius tree = bark + leaves). Empty ⇒ use `diffuse` / flat colours.
     /// A nil diffuse falls back to that sub-mesh's flat `Kd` colour.
     var submeshMaterials: [SubmeshMaterial] = []
+    /// Stand this model ON ITS HEAD. The Cyberpunk kit's platform sections are authored as things
+    /// you walk on: a broad flat deck with all the trusses, pipes and vents hung beneath it. Placed
+    /// the right way up on a surface, the deck lies on the ground and every interesting face is
+    /// buried in it. Inverted, the deck beds down flat and the machinery it carries is what you see
+    /// — which is precisely what Scene 6's underside is (Eddie, 2026-08-01).
+    var inverted: Bool = false
 }
 
 /// One piece of the imported modular house, positioned in a quarter's tile-local frame
@@ -117,8 +123,11 @@ enum AssetRegistry {
                 let mats: [SubmeshMaterial] = texByMat.isEmpty ? [] : mesh.submeshes.map {
                     texByMat[$0.materialName] ?? SubmeshMaterial(diffuse: nil, cutout: false)
                 }
+                // Platform decks are the one family that wants inverting (see `inverted`).
+                let flip = prefix == "Cyberpunk" && f.hasPrefix("Platform")
                 let p = ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget,
-                                     yUp: true, name: "\(prefix) \(f)", galleryOnly: true, submeshMaterials: mats)
+                                     yUp: true, name: "\(prefix) \(f)", galleryOnly: true,
+                                     submeshMaterials: mats, inverted: flip)
                 lock.lock(); out[i] = p; lock.unlock()
             }
             let loaded = out.compactMap { $0 }
