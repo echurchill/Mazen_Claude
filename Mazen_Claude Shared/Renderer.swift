@@ -699,10 +699,20 @@ class Renderer: NSObject, MTKViewDelegate {
             w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
         }
         // Gardens, gallery worlds, and the hub reveal only their own stamped region (no reveal-all).
-        // Scene 1 joins the reveal-only-what-you-stamped list: its fog is the point. "The maze is
-        // not shown all at once… the player should understand its scale gradually through movement,
-        // not through an overhead view."
-        if !dest.hasPrefix("gallery") && dest != "garden" && dest != "portal-hub" && dest != "scene-1" {
+        //
+        // SCENE 1 IS NO LONGER EXCLUDED (Eddie, 2026-08-01) — though the exclusion turned out to be
+        // INERT, which is worth writing down. `stampSceneOne` marks every one of its 486 facelets
+        // discovered, so keeping Scene 1 off the reveal-all list changed nothing: measured, the world
+        // is fully discovered at stamp either way. The popping Eddie saw while walking was not
+        // discovery at all — it was the broken horizon cull, which killed anything more than a couple
+        // of tiles away and let it back in as he approached. That is fixed separately.
+        //
+        // The line goes anyway, so a dead exclusion cannot come back to life the day the stamp stops
+        // discovering its own tiles. The script's "understand its scale gradually through movement"
+        // still deserves a mechanism; tile discovery was the wrong one twice (the volumetric fog
+        // before it arrived as blocks lifting out of mist). Tight DISTANCE FOG is the idea worth
+        // trying: nothing pops, the far maze is simply hazy.
+        if !dest.hasPrefix("gallery") && dest != "garden" && dest != "portal-hub" {
             Self.setupInitialDiscovery(gameState: w)
         }
         // An authored sky (`skyCounterpart`) is bound as a real edge now, while we can still build
