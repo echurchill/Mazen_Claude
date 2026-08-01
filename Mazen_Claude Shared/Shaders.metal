@@ -809,6 +809,22 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 34) {
+        // PALE STONE paving — Scene 5's surface. "Smooth pale stone, laid in wide slabs."
+        // A facelet is ~19 m, so the 512-px sheet is repeated a few times across it to bring the
+        // slabs to a walkable size rather than stretching one slab over the whole tile. The tone is
+        // pushed slightly cool and its contrast pulled IN: the scene's one bright thing has to be
+        // the channel, and a busy floor was what made the world read as a dark disco ball.
+        float2 uv = in.texCoord * 3.0;
+        float3 stone = diffuseArray.sample(texSampler, uv, 3).rgb;
+        float3 mean = float3(0.72, 0.71, 0.70);
+        stone = mix(mean, stone, 0.72) * float3(0.97, 0.99, 1.03);
+        // Per-tile drift so a plain of identical slabs does not read as wallpaper.
+        stone *= 0.94 + 0.12 * valueNoise(float2(seedF * 3.1, seedF * 7.7));
+        float3 nrm = normalArray.sample(texSampler, uv, 3).rgb * 2.0 - 1.0;
+        float bump = clamp(0.85 + 0.30 * nrm.z, 0.7, 1.1);
+        color = stone * bump;
+        lighting = skyAmbient * 0.34 + sunColor * 0.66 * halfLambert * shadowFactor;
     } else if (in.materialID == 33) {
         // SCENE 5's CHANNELS — "veins carrying liquid light", laid in shallow grooves. Same spine as
         // a bond band (centre out to each edge the groove continues through), because they are the
@@ -826,9 +842,13 @@ fragment float4 fragmentShader(
         if (links & 2u) d = min(d, segmentDistance(uv, mid, float2(1.0, 0.5)));
         if (links & 4u) d = min(d, segmentDistance(uv, mid, float2(0.5, 1.0)));
         if (links & 8u) d = min(d, segmentDistance(uv, mid, float2(0.0, 0.5)));
-        const float haloW = 0.10;
+        // WIDTH. A facelet is ~18.9 m, so these are metres: the halo was 1.9 m each side — a 3.8 m
+        // road, not a groove — and its lit core alone was as wide as the obelisk beside it is tall
+        // is wrong for "veins". 0.062 puts the groove at ~2.3 m overall, about the width of a
+        // receiver's base, which is the relation the two objects should have.
+        const float haloW = 0.062;
         if (d > haloW) discard_fragment();
-        float core = smoothstep(0.040, 0.010, d);
+        float core = smoothstep(0.024, 0.006, d);
         float halo = smoothstep(haloW, 0.028, d);
         float live = clamp(in.discoveryAmount, 0.0, 1.0);
         // The current MOVES along the groove — keyed to world position so it flows across tiles
@@ -838,7 +858,12 @@ fragment float4 fragmentShader(
         float3 dry  = float3(0.16, 0.17, 0.20);          // a groove cut in pale stone
         float3 lit  = float3(0.55, 0.86, 1.00);
         float3 tint = mix(dry, lit, live);
-        color = tint * (core * (0.6 + 1.4 * live) + halo * 0.35) + lit * pulse * 0.9 * core;
+        // BRIGHTNESS. The lit core used to evaluate to ~1.85 in blue and ~1.1 in red, so both
+        // clamped and the blue-white tint the scene asks for was thrown away — the groove rendered
+        // as flat white paint and the travelling pulse was invisible, being extra brightness added
+        // to something already at the ceiling. Keep the resting line UNDER 1.0 so it keeps its
+        // colour, and let the pulse be the only thing that blows out.
+        color = tint * (core * (0.50 + 0.45 * live) + halo * 0.32) + lit * pulse * 0.50 * core;
         // Dry channels take the world's light; a live one carries its own.
         float3 amb = skyAmbient * 0.4 + sunColor * 0.4 * halfLambert * shadowFactor;
         lighting = mix(amb, float3(1.0), live);

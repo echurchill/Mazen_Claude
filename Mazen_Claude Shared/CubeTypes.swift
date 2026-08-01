@@ -414,6 +414,10 @@ enum TerrainKind: UInt8 {
     case water
     case regolith   // M19 moon — grey dust; walkable like grass, no walls
     case plating    // riveted metal plate (material 25) — the exposed shell of a turning slab, and Scene 3's interior language
+    case paleStone  // pale travertine paving (material 34) — Scene 5's surface. A luminous groove
+                    // needs ground that is bright and QUIET: plating's panel-to-panel tonal jumps
+                    // compete with the channel for the eye, which is why Scene 5 read as a dark
+                    // disco ball. Texture slice 3 (Tiles141, Eddie's pick, 2026-08-01).
 }
 
 /// One prop instance: what it is, which 3×3 sub-cell it stands on, and how it faces.

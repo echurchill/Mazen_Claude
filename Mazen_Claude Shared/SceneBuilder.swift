@@ -246,12 +246,13 @@ final class SceneBuilder {
                                          roundness: roundness, invHalf: invHalf, relief: relief,
                                          naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed,
                                      metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib)
-                        case .grass, .water, .regolith, .plating:
+                        case .grass, .water, .regolith, .plating, .paleStone:
                             // M19: a full-tile ground quad, no walls. Grass (14) / water (15) /
                             // regolith (16) share the fieldFloor mesh, so they batch into one draw.
                             let mat: UInt32 = facelet.terrain == .water ? 15
                                             : facelet.terrain == .regolith ? 16
-                                            : facelet.terrain == .plating ? 25 : 14
+                                            : facelet.terrain == .plating ? 25
+                                            : facelet.terrain == .paleStone ? 34 : 14
                             let fieldInst = InstanceDataSwift(modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
                                 materialID: mat,
                                 tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
@@ -283,7 +284,17 @@ final class SceneBuilder {
                             // obelisks on a 7³ world, where the stock 1.16-unit shaft is a THIRD of the
                             // planet's radius and reads as a girder through the world (Eddie's
                             // screenshot). Everything else keeps the authored mesh size.
-                            if prop.kind == .obelisk && prop.extraScale != 1 { treeScale = prop.extraScale }
+                            // An obelisk that authored its own scale takes it, and takes it FATTER.
+                            // The mesh is a true obelisk (~1:9 base-to-tip, which is what the real
+                            // ones are); shrunk to a third for a small world that ratio stops
+                            // reading as a monument and starts reading as a needle (Eddie). Widen
+                            // the FOOTPRINT only — the shader splits footprint from height on a
+                            // curved world, so height keeps the authored scale.
+                            var footprintBoost: Float = 1
+                            if prop.kind == .obelisk && prop.extraScale != 1 {
+                                treeScale = prop.extraScale
+                                footprintBoost = 2.1                      // ~1.6 m across, 7 m tall
+                            }
                             if prop.kind == .tree || prop.kind == .treeTrunk || prop.kind == .boulder
                                 || prop.kind == .foliageCard || prop.kind == .greeneryCard || prop.kind == .treeBillboard {
                                 var sj = UInt32(truncatingIfNeeded: facelet.id.rawValue) &* 40503 &+ UInt32(prop.subRow &* 7 &+ prop.subCol)
@@ -339,7 +350,7 @@ final class SceneBuilder {
                             let pm = restM
                                 * float4x4.translation(Float(prop.subCol - 1) * step + prop.offsetX, Float(prop.subRow - 1) * step + prop.offsetY, 0)
                                 * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180) + extraYaw, axis: SIMD3(0, 0, 1))
-                                * float4x4.scale(treeScale)
+                                * float4x4.scale(treeScale * footprintBoost, treeScale * footprintBoost, treeScale)
                             // M16.6/M20 — the alignment cylinder (GROW) and switch cap (flush↔out) animate
                             // their HEIGHT. Pass it as heightScale about the plinth top (applied to the
                             // vertex's local z in the shader), NOT a modelMatrix Z-scale: a non-uniform Z

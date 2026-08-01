@@ -448,7 +448,10 @@ class CubeModel {
                     guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
                     cubies[ci].facelets[fi].mazeTile.openings = [.north, .east, .south, .west]
                     cubies[ci].facelets[fi].mazeTile.openEdges = [.north, .east, .south, .west]
-                    cubies[ci].facelets[fi].terrain = .plating
+                    // Scene 5 is "smooth pale stone", not Scene 3's ironwork. It wore plating because that was
+                    // what existed, and a dark, high-contrast floor is the worst possible ground for a
+                    // world whose whole subject is light running through it.
+                    cubies[ci].facelets[fi].terrain = .paleStone
                     cubies[ci].facelets[fi].tileState = .discovered
                     cubies[ci].facelets[fi].discoveryAmount = 1.0
                 }

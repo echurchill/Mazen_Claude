@@ -380,9 +380,9 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // Textures
         self.diffuseArray = TextureLoader.loadTextureArray(device: device,
-            names: ["hedge_diff", "gravel_diff", "stone_diff"], srgb: true)
+            names: ["hedge_diff", "gravel_diff", "stone_diff", "palestone_diff"], srgb: true)
         self.normalArray = TextureLoader.loadTextureArray(device: device,
-            names: ["hedge_nor", "gravel_nor", "stone_nor"], srgb: false)
+            names: ["hedge_nor", "gravel_nor", "stone_nor", "palestone_nor"], srgb: false)
         self.skyboxTexture = TextureLoader.loadTexture2D(device: device, name: "skybox", srgb: true)
         // DEBUG (Eddie): preload the composite skyboxes so 'L' can cycle them in place. Dev-only path.
         if let sb = self.skyboxTexture { self.debugSkyboxes = [sb]; self.debugSkyboxNames = ["default"] }
