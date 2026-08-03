@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,840 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,854 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -160,6 +160,28 @@ with the region staying unreachable from Scene 2's own spawn, and the dressing b
 
 **`gallery-cyberpunk` (destination 16)** joins the hub, whose grid went to 3 rows × 6 columns; the
 plaza already reached that far, so nothing had to move.
+
+### Scene 4 could be stranded, and the fix is a picture (2026-08-03)
+Eddie released all three anchors, then pressed the vessel, and the scene was over: no twist, Q/E
+dead, nothing on screen saying why. The vessel only performed `if !bondedGroups.isEmpty` — a stand-in
+for "this is not Scene 1" — so with the lock already gone the teacher fell silent and the verb was
+never handed over. **A property of the vessel was being inferred from the state of something else.**
+
+Two changes, and the second is Eddie's and is the better one:
+
+1. `CubeModel.vesselTeachesTheTwist`, set by Scene 4's stamp. The world says what its vessel is for,
+   so the vessel behaves the same whatever has already happened to the lock.
+2. **The anchors wait for the vessel, and say so.** Until it has been used an anchor is not a control
+   — it wears the **vessel's own mark** (a new `.vessel` caustic glyph: the lathe silhouette in
+   blobs, same dot language as the ordinals and the portal) and refuses, flashing the mark while a
+   tone answers from the vessel's direction. The lock shows you its key. It is a hint in the only
+   language the prologue allows, and it makes the stranding order unenterable.
+
+Worth keeping: mutation testing showed change 1 is **unreachable through play** once change 2 is in
+— no player-level test can distinguish it, because the bonds can never be empty when the vessel is
+first pressed. It is asserted directly instead (dissolve the bonds through the model, then press the
+vessel). A guarantee worth having is a guarantee worth testing on its own terms, or the next person
+deletes it as dead code.
 
 ### Touch could not press anything (2026-08-03)
 `interact()` was called from exactly one place — macOS's `F`. iOS had tap/double-tap/swipe/pinch and

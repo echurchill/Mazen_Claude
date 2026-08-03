@@ -8,7 +8,7 @@ import simd
 /// enum in TextureLoader.swift gains/reorders cases, update this copy (the compiler can't catch it).
 enum TextureLoader {
     enum CausticSymbol: Int, CaseIterable {
-        case blank = 0, one, two, three, four, swirl, portal, square, threeOfFour, fourFilled
+        case blank = 0, one, two, three, four, swirl, portal, square, threeOfFour, fourFilled, vessel
     }
     static let progressMaskBase = CausticSymbol.allCases.count
 }
@@ -1763,6 +1763,27 @@ struct CoordinateMathTests {
         check(anchors.count == 3, "Scene 4 has three anchors, found \(anchors.count)")
         check(!m.bondedGroups.isEmpty, "Scene 4 starts locked")
 
+        // THE ANCHORS WAIT FOR THE VESSEL (Eddie, 2026-08-03). Until it has been used they are not
+        // controls: they wear its mark and refuse. This ordering is what makes the scene teachable —
+        // and it is also what stops the player stranding themselves, since releasing every anchor
+        // first used to leave the vessel with no lock to demonstrate against and no twist ever
+        // granted. Both halves are asserted, because either alone can regress into a dead end.
+        check(m.vesselTeachesTheTwist, "Scene 4's vessel is the one that teaches the twist")
+        let lockedGroups = m.bondedGroups.count
+        for a in anchors { stand(gs, a.face, a.r, a.c); gs.interact() }
+        check(m.bondedGroups.count == lockedGroups,
+              "the anchors released before the vessel was used — the scene can be stranded")
+        check(!gs.twistEnabled, "the twist should still be withheld")
+
+        // Now the vessel. It must work whatever the player has already tried.
+        guard let vessel = tiles(gs, with: .layeredVessel).first else {
+            check(false, "Scene 4 has a vessel"); return
+        }
+        stand(gs, vessel.face, vessel.r, vessel.c)
+        gs.interact()
+        for _ in 0..<900 { gs.update(deltaTime: 1.0 / 60.0) }
+        check(gs.twistEnabled, "using the vessel is what hands over the twist")
+
         let (axis, index) = m.sliceAxisAndIndex(for: m.spawnLocation?.face ?? .positiveZ)
         check(m.bondsBlocking(axis: axis, index: index) > 0, "the player's slab starts bonded")
 
@@ -2021,6 +2042,68 @@ struct CoordinateMathTests {
         check(gs.liveCircuit, "the six rotators should be able to complete the circuit without Q/E")
         gs.update(deltaTime: 1.0 / 60.0)
         check(m.chosenExit != nil, "completing it by rotator should still create the way out")
+    }
+
+    /// The order-independence itself, as its own test, because it is the property that broke: Eddie
+    /// released all three anchors, then pressed the vessel, and the scene was over — the vessel only
+    /// performed while a lock still existed, so with the lock gone it said nothing and the twist was
+    /// never handed over. Nothing on screen said why.
+    ///
+    /// Two separate guarantees now hold it up, and this asserts both from the player's side:
+    ///   • the anchors refuse until the vessel has been used (so the bad order cannot be entered);
+    ///   • the vessel performs regardless of the lock's state (so if it ever is, nothing is lost).
+    static func testSceneFourCannotBeStrandedByOrder() {
+        for anchorsFirst in [true, false] {
+            let gs = prologueWorld("scene-4")
+            let m = gs.cubeModel
+            let anchors = tiles(gs, with: .anchor)
+            guard let vessel = tiles(gs, with: .layeredVessel).first else {
+                check(false, "Scene 4 has a vessel"); return
+            }
+            if anchorsFirst {
+                for a in anchors { stand(gs, a.face, a.r, a.c); gs.interact() }
+            }
+            stand(gs, vessel.face, vessel.r, vessel.c)
+            gs.interact()
+            for _ in 0..<900 { gs.update(deltaTime: 1.0 / 60.0) }
+            check(gs.twistEnabled,
+                  "the vessel failed to hand over the twist (anchors first: \(anchorsFirst))")
+            for a in anchors { stand(gs, a.face, a.r, a.c); gs.interact() }
+            check(m.bondedGroups.isEmpty,
+                  "the anchors did not release (anchors first: \(anchorsFirst))")
+            let (axis, index) = m.sliceAxisAndIndex(for: gs.player.face)
+            check(m.bondsBlocking(axis: axis, index: index) == 0,
+                  "the slab is still refused (anchors first: \(anchorsFirst))")
+        }
+        // THE BELT, tested apart from the braces. With the anchors waiting, a player can no longer
+        // reach a state where the lock is gone but the vessel is untouched — so the second guarantee
+        // (the vessel performs regardless of the lock) is unreachable through play, and a mutation
+        // that removes it passes every player-level test. That is exactly the kind of quiet
+        // regression that put the softlock here in the first place, so it is asserted directly:
+        // dissolve the bonds through the model, then press the vessel.
+        do {
+            let gs = prologueWorld("scene-4")
+            let m = gs.cubeModel
+            for cu in m.cubies.indices where !m.bondedGroups.isEmpty { m.removeBond(containing: cu) }
+            check(m.bondedGroups.isEmpty, "the bonds should be gone for this check")
+            guard let v = tiles(gs, with: .layeredVessel).first else { check(false, "no vessel"); return }
+            stand(gs, v.face, v.r, v.c)
+            gs.interact()
+            for _ in 0..<900 { gs.update(deltaTime: 1.0 / 60.0) }
+            check(gs.twistEnabled,
+                  "with no lock left, the vessel went silent — the old softlock is back")
+        }
+
+        // Scene 1's vessels stay scenery: "if the player approaches the vessels, nothing dramatic
+        // happens". The distinction is a property of the WORLD now, not of whether a lock survives.
+        let one = prologueWorld("scene-1")
+        check(!one.cubeModel.vesselTeachesTheTwist, "Scene 1's vessels are not teachers")
+        if let v = tiles(one, with: .layeredVessel).first {
+            stand(one, v.face, v.r, v.c)
+            one.interact()
+            for _ in 0..<300 { one.update(deltaTime: 1.0 / 60.0) }
+            check(!one.twistEnabled, "Scene 1 must not hand over the twist")
+        }
     }
 
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
@@ -2536,6 +2619,7 @@ struct CoordinateMathTests {
         testSceneOneCanBeWalkedToItsArch()
         testSceneThreeCanBeSolvedByPressingItsPlinths()
         testSceneFourReleasesItsAnchorsAndThenTurns()
+        testSceneFourCannotBeStrandedByOrder()
         testSceneFiveCanBeSolvedByTurningItBack()
         testNoSceneHandsOutItsExitEarly()
         testEveryDoorKnowsWhatItIsCalled()

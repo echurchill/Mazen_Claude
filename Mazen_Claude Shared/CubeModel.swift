@@ -745,6 +745,7 @@ class CubeModel {
     private func stampSceneFour() {
         let n = size, c = n / 2
         wallStyle = .dressed
+        vesselTeachesTheTwist = true
 
         // Reveal EVERY face. The anchors are deliberately spread across the world so releasing them
         // circumnavigates it, and the script asks for "fog of discovery: minimal or disabled" — a
@@ -3286,6 +3287,16 @@ class CubeModel {
     /// not available on a touch screen (Eddie), and a control you can walk up to and press is also
     /// simply a better fit for a world whose whole subject is turning things into alignment.
     var faceRotators = false
+
+    /// Scene 4 — this world's layered vessel is the thing that TEACHES the twist, and pressing it
+    /// grants the verb. Scene 1's vessels are scenery that will turn out not to have been scenery,
+    /// and must stay inert.
+    ///
+    /// The difference used to be inferred from "does this world still have a lock", which is not a
+    /// property of the vessel at all: release Scene 4's three anchors before touching it and the
+    /// teacher fell silent, so the twist was never granted and the scene could not be finished
+    /// (Eddie, 2026-08-03 — he played in exactly that order). A world says what its vessel is for.
+    var vesselTeachesTheTwist = false
     var channelReceivers: [Int] = []
 
     /// Whether an open edge may be crossed at its full width. True where the world draws no jamb

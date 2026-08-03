@@ -448,12 +448,25 @@ final class SceneBuilder {
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .anchor {
-                                // Bound anchors carry the lock's livery so they read as part of one
-                                // structure; a released one goes dull and stays that way.
-                                color = prop.anim > 0.5 ? SIMD4(0.95, 0.78, 0.20, 1.0)
-                                                        : SIMD4(0.34, 0.33, 0.30, 1.0)
-                                if refusalGlow > 0 && prop.anim > 0.5 {
-                                    color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow)
+                                // WAITING FOR THE VESSEL (Eddie, 2026-08-03). Until the vessel has
+                                // been used, an anchor is not a control yet — it wears the vessel's
+                                // own mark, which is the whole instruction: go and find that, then
+                                // come back. It reads as a lock showing you its key rather than as a
+                                // control that ignores you, and it means the player cannot release
+                                // the anchors first and strand themselves with a teacher gone quiet.
+                                let waitingForVessel = model.vesselTeachesTheTwist && !gameState.vesselInspected
+                                if waitingForVessel {
+                                    materialID = 22
+                                    propStyleSeed = UInt32(TextureLoader.CausticSymbol.vessel.rawValue)
+                                    color = SIMD4(0.72, 0.68, 0.45, 1.0)
+                                } else {
+                                    // Bound anchors carry the lock's livery so they read as part of
+                                    // one structure; a released one goes dull and stays that way.
+                                    color = prop.anim > 0.5 ? SIMD4(0.95, 0.78, 0.20, 1.0)
+                                                            : SIMD4(0.34, 0.33, 0.30, 1.0)
+                                    if refusalGlow > 0 && prop.anim > 0.5 {
+                                        color = mix(color, SIMD4(1.0, 0.10, 0.06, 1.0), t: refusalGlow)
+                                    }
                                 }
                                 // 4D beat 6 — "three distant points around the world answer with brief
                                 // flashes". The anchors name themselves, so the player learns where the

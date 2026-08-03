@@ -380,7 +380,7 @@ enum TextureLoader {
     /// the vase sentence uses for "2 planets / 3 ringed planets" — the tutorial is the dictionary
     /// entry (see Mazen Docs/Builder Glyphs — 4D Shadows.md).
     enum CausticSymbol: Int, CaseIterable {
-        case blank = 0, one, two, three, four, swirl, portal, square, threeOfFour, fourFilled
+        case blank = 0, one, two, three, four, swirl, portal, square, threeOfFour, fourFilled, vessel
 
         /// Target points in a centred [-1,1] square — what the caustic concentrates light into.
         /// Deliberately blob-space: a mushy dot is still a dot, so these read at zero attunement.
@@ -400,6 +400,27 @@ enum TextureLoader {
                     let a = t * .pi * 4.5, r = 0.05 + t * 0.77
                     return SIMD2(cos(a) * r, sin(a) * r)
                 }
+            case .vessel:
+                // THE LAYERED VESSEL, in outline. Scene 4's anchors wear this until the vessel has
+                // been used, so a player who walks up to a lock is told where to go next in the only
+                // language the prologue allows: a picture of a thing they have already walked past
+                // in three scenes. Same reasoning as `.portal` — the world is the Rosetta stone, so
+                // a mark means the thing it looks like.
+                //
+                // A lathe silhouette: flat wide base, a soft shoulder, tapering to a narrow crown.
+                var p: [SIMD2<Float>] = []
+                let yb: Float = -0.84, yt: Float = 0.78
+                for i in 0...15 {
+                    let t = Float(i) / 15.0
+                    let y = yb + (yt - yb) * t
+                    let r = 0.58 * pow(1 - t, 0.62) + 0.07 * sin(t * .pi)
+                    p.append(SIMD2(-r, y)); p.append(SIMD2(r, y))
+                }
+                for i in 1...5 {                                    // the base it stands on
+                    p.append(SIMD2(-0.58 + 1.16 * Float(i) / 6.0, yb))
+                }
+                p.append(SIMD2(-0.10, yt)); p.append(SIMD2(0.10, yt))   // the crown, closed
+                return p
             case .portal:
                 // The police-box portal — a thing the player has SEEN, so it teaches diegetically
                 // ("the world is the Rosetta stone"). Silhouette only: posts, roof, lamp, and two
@@ -458,7 +479,7 @@ enum TextureLoader {
         /// gradient will drive globally later — the tutorial is the crisp end.)
         var blobScale: Float {
             switch self {
-            case .swirl, .portal:            return 0.5
+            case .swirl, .portal, .vessel:   return 0.5
             case .square:                    return 0.57
             case .threeOfFour, .fourFilled:  return 0.5   // medium so the hollow ring reads
             default:                         return 1.0   // blank / 1–4 ordinals: bold soft blobs

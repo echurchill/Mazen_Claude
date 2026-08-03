@@ -1655,12 +1655,16 @@ class GameState {
         // Scene 4D — the VESSEL. Activating it makes it demonstrate the turn, and fail: the ring
         // attempts, the vessel strains, the anchors answer, and the twist becomes the player's.
         if cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel }) {
-            // …but only where there is something for it to demonstrate. Scene 1 is explicit that
-            // "if the player approaches the vessels, nothing dramatic happens" — they are scenery
-            // that will turn out not to have been scenery, and a vessel that performs on demand in
-            // the opening spends that reveal before it has been set up. A world with no lock has
-            // nothing to say, so it says nothing.
-            if !cubeModel.bondedGroups.isEmpty {
+            // …but only where the world says its vessel is a teacher. Scene 1 is explicit that "if
+            // the player approaches the vessels, nothing dramatic happens" — they are scenery that
+            // will turn out not to have been scenery, and a vessel that performs on demand in the
+            // opening spends that reveal before it has been set up.
+            //
+            // This used to ask "does the world still have a lock", which is not a fact about the
+            // vessel. Releasing Scene 4's three anchors first emptied `bondedGroups`, so the vessel
+            // went silent, the twist was never granted, and the scene became unfinishable with no
+            // sign that anything was wrong (Eddie played in that order and got stuck).
+            if cubeModel.vesselTeachesTheTwist {
                 let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
                 beginVesselDemo(at: sliceCentre(axis: axis, index: index))
             }
@@ -1672,6 +1676,27 @@ class GameState {
         // canRotateSlice refuses while ANY bonded group straddles the slab.
         if let aIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .anchor }) {
             guard cubeModel.cubies[ci].facelets[fi].props[aIdx].anim > 0.5 else { return }  // already released
+            // AN ANCHOR IS NOT A CONTROL UNTIL THE VESSEL HAS SPOKEN (Eddie, 2026-08-03). While it
+            // waits it wears the vessel's mark, so refusing here is the same sentence the anchor is
+            // already saying in pictures. It also removes the order that used to strand the player:
+            // releasing every anchor first left the vessel with no lock to demonstrate against.
+            if cubeModel.vesselTeachesTheTwist && !vesselInspected {
+                // The mark flashes and a tone answers from the vessel's own direction — the lesson
+                // and the way to it arriving together, as with Scene 3's refused obelisks.
+                cubeModel.cubies[ci].facelets[fi].props[aIdx].alignAnim = 1
+                var vesselAt: SIMD3<Float>? = nil
+                for cu in cubeModel.cubies.indices {
+                    for f in cubeModel.cubies[cu].facelets.indices
+                    where cubeModel.cubies[cu].facelets[f].props.contains(where: { $0.kind == .layeredVessel }) {
+                        if let loc = cubeModel.locate(cubie: cu, facelet: f) {
+                            let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
+                            vesselAt = SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)
+                        }
+                    }
+                }
+                pendingAudioCues.append(.switchDisengaged(at: vesselAt))
+                return
+            }
             cubeModel.cubies[ci].facelets[fi].props[aIdx].anim = 0
             cubeModel.removeBond(containing: ci)
             pendingAudioCues.append(.switchDisengaged(at: nil))   // released, at the player's hand
