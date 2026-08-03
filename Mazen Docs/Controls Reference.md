@@ -49,7 +49,8 @@
 
 | Gesture | Action |
 |---|---|
-| Tap | Move forward (first-person mode only) |
+| **Tap (standing on something usable)** | **Interact — the touch equivalent of `F`.** Portals, vessels, anchors, switches, plinths, dials, chests and Scene 5's rotators. Until 2026-08-03 touch had no way to reach `interact()` at all, so every control in the prologue was keyboard-only. |
+| Tap (anywhere else) | Move forward (first-person mode only) |
 | Double-tap | Toggle camera mode (orbit / first-person) |
 | Swipe up | Move forward (first-person mode) |
 | Swipe down | Move backward (first-person mode) |
@@ -59,6 +60,18 @@
 | Two-finger swipe right | Rotate face slice clockwise (first-person mode) |
 | Two-finger swipe left | Rotate face slice counterclockwise (first-person mode) |
 | Pinch | Orbit zoom in/out (range 3–15, orbit mode only) |
+
+## Scene 5 — rotators instead of keys
+
+Scene 5 carries **six rotator controls, one near the middle of each face**. Each turns **the slab it
+stands on** — the outer layer of the face under your feet, the same slab `Q`/`E` would turn from
+there — one quarter turn per use, always the same way round (so three uses reverse one). They are
+placed off the channels and off the source, receivers and vessels, and they are stamped *after* the
+scramble so "off the circuit" is true of the world you actually walk.
+
+They exist because `Q`/`E` cannot be pressed on a phone, and the scene is now solvable using nothing
+but walking and pressing — asserted by `testSceneFiveCanBeSolvedByItsRotatorsAlone`, which never
+touches the keyboard verb.
 
 ## Notes
 

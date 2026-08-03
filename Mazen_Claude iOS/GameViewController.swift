@@ -78,10 +78,23 @@ class GameViewController: UIViewController {
 
     // MARK: - First-Person Gestures
 
+    /// TAP = macOS's F where there is something to press, and "walk forward" everywhere else
+    /// (Eddie, 2026-08-03). Touch had no way to reach `interact()` at all — every control in the
+    /// prologue, from Scene 2's switches to Scene 5's rotators, was keyboard-only, which quietly
+    /// made the whole game unplayable on a phone.
+    ///
+    /// Disambiguated by WHERE THE PLAYER IS STANDING rather than by a second gesture: a tap on a
+    /// tile carrying something usable uses it, and anywhere else it walks. The player can still
+    /// cross their own controls, because walking onto the tile is a swipe or a tap from the tile
+    /// before it.
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
         guard let gs = renderer?.gameState else { return }
         guard gs.camera.mode == .firstPerson else { return }
-        gs.player.tryMoveForward(cubeModel: gs.cubeModel)
+        if gs.hasInteractableHere {
+            gs.interact()
+        } else {
+            gs.player.tryMoveForward(cubeModel: gs.cubeModel)
+        }
     }
 
     @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {

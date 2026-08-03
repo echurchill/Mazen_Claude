@@ -1610,6 +1610,22 @@ class GameState {
                 Float(p.subCol) * k + k / 2 + (step > 0 ? p.offsetX / step : 0))
     }
 
+    /// What F (and, on iOS, a tap) acts on. Shared with `hasInteractableHere` so the touch path
+    /// cannot drift from the keyboard one.
+    static let interactableKinds: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap,
+                                                   .plinth, .dial, .chest, .alignmentCylinder]
+
+    /// Is the player standing on something worth pressing? On iOS a tap means "walk forward", so it
+    /// can only mean "use this" where there is something to use — otherwise the player could never
+    /// cross their own controls.
+    var hasInteractableHere: Bool {
+        guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col)
+        else { return false }
+        return cubeModel.cubies[ci].facelets[fi].props.contains {
+            GameState.interactableKinds.contains($0.kind)
+        }
+    }
+
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
         let props = cubeModel.cubies[ci].facelets[fi].props
@@ -1620,7 +1636,7 @@ class GameState {
         //
         // Walking THROUGH a portal is unaffected: that fires from the portal's own centre sub-cell,
         // continuously, and is the primary way doors are used. This only decides what F means.
-        let interactable: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap, .plinth, .dial, .chest]
+        let interactable = GameState.interactableKinds
         let here = (row: Float(player.subRow), col: Float(player.subCol))
         let nearest = props.filter { interactable.contains($0.kind) }.min { a, b in
             let pa = standPosition(of: a), pb = standPosition(of: b)
@@ -1743,6 +1759,20 @@ class GameState {
             let where_ = sliceCentre(axis: 0, index: cubeModel.cubies[ci].position.x >= 0 ? Int(cubeModel.cubies[ci].position.x) : 0)
             pendingAudioCues.append(engaged ? .switchDisengaged(at: where_) : .switchEngaged(at: where_))
             refreshSwitchLock()
+            return
+        }
+        // SCENE 5 — a FACE ROTATOR. The slab it turns is the one it stands on: the outer layer of
+        // the face under the player's feet, which is the same slab Q/E would turn from here. So the
+        // control means the same thing wherever it ends up after a turn carries it somewhere new —
+        // it turns the face you are looking at, not a slab it was born remembering.
+        if cubeModel.faceRotators,
+           cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .alignmentCylinder }) {
+            // Ignored rather than queued while the world is already moving: a control pressed a
+            // dozen times while reading a route must not bank up turns the player has forgotten
+            // asking for.
+            guard !sliceRotation.isActive, !player.isMoving, !player.isTurning else { return }
+            let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
+            startScriptedSliceRotation(axis: axis, index: index, clockwise: true)
             return
         }
         // M16.6 (Eddie): F at the READY door plinth (lock undone, door still sealed, no cylinder yet)

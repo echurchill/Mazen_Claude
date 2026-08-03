@@ -1965,6 +1965,64 @@ struct CoordinateMathTests {
         check(gs.pendingScriptedTwist == nil, "the owed turn should be cleared once paid")
     }
 
+    /// SCENE 5's ROTATORS (Eddie, 2026-08-03). Q/E are keyboard-only, which is no use on a touch
+    /// screen, so the world carries six standing controls — one per face — each turning the slab it
+    /// stands on. The test that matters is not that they exist but that they are ENOUGH: the scene
+    /// must be completable by walking up to controls and pressing them, with the keyboard verb never
+    /// used. If it is not, the touch player is stuck in a world they can see the answer to.
+    static func testSceneFiveCanBeSolvedByItsRotatorsAlone() {
+        let gs = prologueWorld("scene-5")
+        let m = gs.cubeModel
+        check(m.faceRotators, "Scene 5 should carry its rotators")
+
+        // One per face, and never on the circuit or on top of something else.
+        var perFace: [CubeFace: Int] = [:]
+        for face in CubeFace.allCases {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    let f = m.cubies[ci].facelets[fi]
+                    guard f.props.contains(where: { $0.kind == .alignmentCylinder }) else { continue }
+                    perFace[face, default: 0] += 1
+                    check(f.mazeTile.channels.isEmpty, "a rotator stands on a channel at \(face) r\(r) c\(c)")
+                    check(!f.props.contains { $0.kind == .obelisk || $0.kind == .layeredVessel },
+                          "a rotator shares a tile with a receiver or vessel at \(face)")
+                }
+            }
+        }
+        for face in CubeFace.allCases {
+            check(perFace[face] == 1, "\(face) should carry exactly one rotator, has \(perFace[face] ?? 0)")
+        }
+
+        /// Walk to the rotator currently on `face` and press it, then let the turn finish.
+        func press(_ face: CubeFace) {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    guard m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .alignmentCylinder })
+                    else { continue }
+                    stand(gs, face, r, c)
+                    check(gs.hasInteractableHere, "a tap on the rotator's tile should reach it")
+                    gs.interact()
+                    for _ in 0..<180 { gs.update(deltaTime: 1.0 / 60.0) }
+                    return
+                }
+            }
+            check(false, "no rotator found on \(face)")
+        }
+
+        // The scramble was three quarter-turns: (0,0) twice and (2,0) once — which are the outer
+        // slabs of −X and −Z, so exactly two of the six controls can undo it. Each press turns one
+        // quarter the other way, so: −Z once, −X twice.
+        check(!gs.liveCircuit, "Scene 5 starts broken")
+        press(.negativeZ)
+        press(.negativeX)
+        press(.negativeX)
+        check(gs.liveCircuit, "the six rotators should be able to complete the circuit without Q/E")
+        gs.update(deltaTime: 1.0 / 60.0)
+        check(m.chosenExit != nil, "completing it by rotator should still create the way out")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2483,6 +2541,7 @@ struct CoordinateMathTests {
         testEveryDoorKnowsWhatItIsCalled()
         testTheUndersideIsDressedWithoutChangingIt()
         testAScriptedTurnWaitsRatherThanVanishing()
+        testSceneFiveCanBeSolvedByItsRotatorsAlone()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

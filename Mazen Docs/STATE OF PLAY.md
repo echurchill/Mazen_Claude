@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,815 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,840 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -160,6 +160,22 @@ with the region staying unreachable from Scene 2's own spawn, and the dressing b
 
 **`gallery-cyberpunk` (destination 16)** joins the hub, whose grid went to 3 rows × 6 columns; the
 plaza already reached that far, so nothing had to move.
+
+### Touch could not press anything (2026-08-03)
+`interact()` was called from exactly one place — macOS's `F`. iOS had tap/double-tap/swipe/pinch and
+no route to it at all, so every control in the prologue (Scene 2's switches, Scene 4's anchors,
+Scene 3's plinths, every portal used by `F` rather than walked through) was **keyboard-only**. The
+game has been quietly unplayable on a phone for as long as those controls have existed, and no test
+could see it because the model layer does not know which platform is calling it.
+
+Tap now means `F` **where the player is standing on something usable**, and "walk forward" everywhere
+else — disambiguated by position rather than by a second gesture, so a player can still walk over
+their own controls. `GameState.interactableKinds` is shared by `interact()` and `hasInteractableHere`
+so the touch path cannot drift from the keyboard one.
+
+Scene 5 gained **six face rotators** in the same pass (Eddie: "Q/E won't work well on touch
+screens"), each turning the slab it stands on. The test that matters is not that they exist but that
+they are ENOUGH — the scene is solvable by walking and pressing alone.
 
 ### Rigid imported props sit badly on ROUNDED worlds (2026-08-01)
 Tried scattering the Cyberpunk platform decks over Scene 5 and reverted it the same day (Eddie: "they

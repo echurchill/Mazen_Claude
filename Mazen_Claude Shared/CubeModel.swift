@@ -578,6 +578,11 @@ class CubeModel {
             applySliceRotation(axis: axis, index: index, angle: .pi / 2)
         }
 
+        // AFTER the scramble, deliberately: the rotators are placed on the world as the player
+        // finds it, so "off the channels" is true of the world they will actually walk. Stamped
+        // before, the scramble would carry them onto whatever tiles it liked.
+        stampFaceRotators()
+
         spawnLocation = (face: .positiveZ, row: c + 1, col: c, facing: .n)
     }
 
@@ -1240,6 +1245,37 @@ class CubeModel {
             }
         }
         return (0, index, strip)
+    }
+
+    /// Scene 5's six rotators — one near the middle of each face, kept off the channels and off
+    /// anything already standing there (the source, the receivers, the junction vessels). Searched
+    /// outward from the face centre rather than placed at it, because the centre of `+Z` IS the
+    /// source: the natural spot is taken on exactly the face the player arrives on.
+    func stampFaceRotators() {
+        let n = size, c = n / 2
+        faceRotators = true
+        for face in CubeFace.allCases {
+            var best: (r: Int, col: Int, d: Int)? = nil
+            for r in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
+                    let f = cubies[ci].facelets[fi]
+                    guard f.props.isEmpty, f.mazeTile.channels.isEmpty else { continue }
+                    // Manhattan distance from the middle: nearest free tile wins, ties by row then
+                    // column so the six controls land in the same place every run.
+                    let d = abs(r - c) + abs(col - c)
+                    if best == nil || d < best!.d { best = (r, col, d) }
+                }
+            }
+            guard let spot = best, let (ci, fi) = faceletAt(face: face, row: spot.r, col: spot.col) else { continue }
+            cubies[ci].facelets[fi].props.append(Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .n))
+            // Already risen: Scene 2's rotator grows out of its disc once, as a reveal. This one is
+            // a tool the player uses over and over, so it stands ready — the ceremony belongs to a
+            // one-off, not to something pressed a dozen times while reading a route.
+            var cyl = Prop(kind: .alignmentCylinder, subRow: 1, subCol: 1, facing: .n, state: 0)
+            cyl.anim = 1
+            cubies[ci].facelets[fi].props.append(cyl)
+        }
     }
 
     /// SCENE 6C — the pieces the underside is built from, grouped by role rather than by name so the
@@ -3244,6 +3280,12 @@ class CubeModel {
     /// Scene 5 — the source tile, and the three receivers, by facelet id. The circuit is "live" when
     /// all three are fed from the source at once.
     var channelSource: (face: CubeFace, row: Int, col: Int)? = nil
+
+    /// Scene 5 — the world carries a ROTATOR on every face: a standing control that turns the slab
+    /// it stands on, one quarter turn per use. Q/E do the same thing from the keyboard, but a key is
+    /// not available on a touch screen (Eddie), and a control you can walk up to and press is also
+    /// simply a better fit for a world whose whole subject is turning things into alignment.
+    var faceRotators = false
     var channelReceivers: [Int] = []
 
     /// Whether an open edge may be crossed at its full width. True where the world draws no jamb
