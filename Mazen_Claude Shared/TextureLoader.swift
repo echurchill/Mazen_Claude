@@ -401,25 +401,41 @@ enum TextureLoader {
                     return SIMD2(cos(a) * r, sin(a) * r)
                 }
             case .vessel:
-                // THE LAYERED VESSEL, in outline. Scene 4's anchors wear this until the vessel has
-                // been used, so a player who walks up to a lock is told where to go next in the only
-                // language the prologue allows: a picture of a thing they have already walked past
-                // in three scenes. Same reasoning as `.portal` — the world is the Rosetta stone, so
-                // a mark means the thing it looks like.
+                // THE LAYERED VESSEL, in outline — traced from the MESH'S OWN LATHE PROFILE
+                // (`TileMeshLibrary.addLayeredVessel`) rather than drawn freehand, so the mark is a
+                // picture of the object the player has walked past in three scenes. Scene 4's
+                // anchors wear it until the vessel has been used: the lock showing you its key, in
+                // the only language the prologue allows.
                 //
-                // A lathe silhouette: flat wide base, a soft shoulder, tapering to a narrow crown.
+                // The three chambers are ABSTRACTED — one widest point each, pinched hard between —
+                // because the literal profile's bulges merge into a column at plinth size. Same
+                // reasoning as `.portal`: silhouette only, detail would collide into mush.
+                let profile: [(r: Float, h: Float)] = [
+                    (0.30, 0.00), (0.38, 0.05), (0.20, 0.14),   // foot and its stem
+                    (0.60, 0.34), (0.44, 0.52), (0.18, 0.62),   // the broad lower bowl
+                    (0.48, 0.82), (0.34, 0.98), (0.16, 1.06),   // the middle chamber
+                    (0.38, 1.24), (0.26, 1.40), (0.15, 1.47),   // the upper chamber
+                    (0.26, 1.55),                               // the flared collar
+                ]
+                func nx(_ r: Float) -> Float { r / 0.60 * 0.62 }
+                func ny(_ h: Float) -> Float { -0.88 + (h / 1.55) * 1.76 }
                 var p: [SIMD2<Float>] = []
-                let yb: Float = -0.84, yt: Float = 0.78
-                for i in 0...15 {
-                    let t = Float(i) / 15.0
-                    let y = yb + (yt - yb) * t
-                    let r = 0.58 * pow(1 - t, 0.62) + 0.07 * sin(t * .pi)
-                    p.append(SIMD2(-r, y)); p.append(SIMD2(r, y))
+                for i in 0..<(profile.count - 1) {
+                    let x0 = nx(profile[i].r), y0 = ny(profile[i].h)
+                    let x1 = nx(profile[i + 1].r), y1 = ny(profile[i + 1].h)
+                    let steps = max(1, Int((((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)).squareRoot()
+                                            / 0.19).rounded()))
+                    for k in 0..<steps {
+                        let t = Float(k) / Float(steps)
+                        let x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t
+                        p.append(SIMD2(-x, y)); p.append(SIMD2(x, y))
+                    }
                 }
-                for i in 1...5 {                                    // the base it stands on
-                    p.append(SIMD2(-0.58 + 1.16 * Float(i) / 6.0, yb))
+                let xt = nx(profile[profile.count - 1].r), yt = ny(profile[profile.count - 1].h)
+                p.append(SIMD2(-xt, yt)); p.append(SIMD2(xt, yt)); p.append(SIMD2(0, yt))
+                for i in 1...3 {                                  // the foot it stands on
+                    p.append(SIMD2(-nx(0.30) + 2 * nx(0.30) * Float(i) / 4.0, ny(0)))
                 }
-                p.append(SIMD2(-0.10, yt)); p.append(SIMD2(0.10, yt))   // the crown, closed
                 return p
             case .portal:
                 // The police-box portal — a thing the player has SEEN, so it teaches diegetically
@@ -479,7 +495,8 @@ enum TextureLoader {
         /// gradient will drive globally later — the tutorial is the crisp end.)
         var blobScale: Float {
             switch self {
-            case .swirl, .portal, .vessel:   return 0.5
+            case .swirl, .portal:            return 0.5
+            case .vessel:                    return 0.78   // chunky blobs: a stack of tiers, read at a glance
             case .square:                    return 0.57
             case .threeOfFour, .fourFilled:  return 0.5   // medium so the hollow ring reads
             default:                         return 1.0   // blank / 1–4 ordinals: bold soft blobs
