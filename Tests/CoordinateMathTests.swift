@@ -1962,10 +1962,32 @@ struct CoordinateMathTests {
 
         // A stand-in kit: the stamp asks for roles, not for particular models, so the test does not
         // depend on which pack is installed or on the Renderer being able to load anything.
+        // Dress it the way `buildWorld` does — vegetation first, so the clearing has something to
+        // clear. Without this the test would pass on a face that was never planted.
+        var flora = CubeModel.GardenFlora()
+        flora.bushes = [90]; flora.rocks = [91]; flora.grasses = [92]; flora.flowers = [93]
+        m.stampGardenVegetation(flora)
+        var planted = 0
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .negativeX, row: r, col: c) else { continue }
+                planted += m.cubies[ci].facelets[fi].props.filter { $0.kind == .importedFoliage }.count
+            }
+        }
+        check(planted > 0, "the test needs the underside planted before it can prove it gets cleared")
+
         var kit = CubeModel.UndersideMachinery()
         kit.uprights = [0, 1]; kit.runs = [2, 3]; kit.boxes = [4]; kit.rails = [5]
         kit.plates = [6]; kit.lamps = [7]
         m.stampSceneSixUnderside(kit)
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .negativeX, row: r, col: c) else { continue }
+                for p in m.cubies[ci].facelets[fi].props where p.kind == .importedFoliage {
+                    check(p.state < 90, "a plant survived on the underside (model \(p.state))")
+                }
+            }
+        }
 
         var dressed = 0, nearEdge = 0, farSide = 0
         for r in 0..<m.size {
@@ -1982,6 +2004,13 @@ struct CoordinateMathTests {
             }
         }
         check(dressed > 20, "the underside should actually be dressed, got \(dressed) tiles")
+        // NOTHING GROWS ON THE UNDERSIDE (Eddie, 2026-08-03). Scene 2 scatters ground foliage over
+        // every face but +Z — this one included — and a bush on the back of a turning slab is the one
+        // thing that stops it reading as machinery. The stamp clears the face before dressing it, and
+        // the wall dressing treats the whole face as "keep clear" so no overgrowth returns.
+        check(m.undersideFace == .negativeX, "the underside should name its own face")
+        check(m.dressedClearTiles().count >= m.size * m.size,
+              "the underside's walls should be exempt from overgrowth")
         check(nearEdge > farSide,
               "machinery should thicken toward the assembly edge (\(nearEdge) near vs \(farSide) far)")
 

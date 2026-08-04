@@ -417,14 +417,18 @@ enum TextureLoader {
                     (0.38, 1.24), (0.26, 1.40), (0.15, 1.47),   // the upper chamber
                     (0.26, 1.55),                               // the flared collar
                 ]
-                func nx(_ r: Float) -> Float { r / 0.60 * 0.62 }
-                func ny(_ h: Float) -> Float { -0.88 + (h / 1.55) * 1.76 }
+                // 0.90 overall, so the mark sits just inside the swirl's footprint (that spiral runs
+                // to r = 0.82; this now stands 1.58 tall against its 1.64) — Eddie asked for the two
+                // to read at the same size on a plinth top.
+                let k: Float = 0.90
+                func nx(_ r: Float) -> Float { r / 0.60 * 0.62 * k }
+                func ny(_ h: Float) -> Float { (-0.88 + (h / 1.55) * 1.76) * k }
                 var p: [SIMD2<Float>] = []
                 for i in 0..<(profile.count - 1) {
                     let x0 = nx(profile[i].r), y0 = ny(profile[i].h)
                     let x1 = nx(profile[i + 1].r), y1 = ny(profile[i + 1].h)
                     let steps = max(1, Int((((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)).squareRoot()
-                                            / 0.19).rounded()))
+                                            / (0.19 * k)).rounded()))
                     for k in 0..<steps {
                         let t = Float(k) / Float(steps)
                         let x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t
@@ -496,7 +500,7 @@ enum TextureLoader {
         var blobScale: Float {
             switch self {
             case .swirl, .portal:            return 0.5
-            case .vessel:                    return 0.78   // chunky blobs: a stack of tiers, read at a glance
+            case .vessel:                    return 0.70   // chunky blobs, scaled with the glyph (0.78 × 0.90)
             case .square:                    return 0.57
             case .threeOfFour, .fourFilled:  return 0.5   // medium so the hollow ring reads
             default:                         return 1.0   // blank / 1–4 ordinals: bold soft blobs

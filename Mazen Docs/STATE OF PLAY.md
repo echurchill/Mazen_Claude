@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,875 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,927 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -503,13 +503,20 @@ Small and unblocking, good filler while something compiles: Scene 1's wall-absor
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
 
-### Waiting on Eddie's eyes
-- Scene 6's `-X` machinery: does it read as the back of a stage, or as clutter?
-- The vessel glyph on a waiting anchor — and whether borrowing the switch-cap's resin material for it
-  looks wrong beside the brass an anchor wears once live.
-- Scene 5's rotators: one per face, and whether a control that rides its own turn reads as intended.
-- **Everything since the routing change**, which is the big one: walls now APPEAR where two tiles
-  disagree after a turn. That is correct, and it is new.
+### Eddie's verdicts (2026-08-03)
+- **The routing change: ACCEPTED.** "The new wall logic looks pretty good… mark it as done." He will
+  keep an eye out; the invariants (conservation, symmetry, reversibility) are in the suite.
+- **Scene 5's rotators: accepted** — look and work as intended.
+- **The vessel glyph: accepted, scaled down** to 0.90 so it sits inside the swirl's footprint
+  (1.58 tall against the spiral's 1.64), at his request that the two read at the same size.
+- **Scene 6's machinery: accepted, minus the greenery.** "I like Scene 6's machinery. I think we
+  could lose the plants and natural stuff though." The underside now clears the world's own scatter
+  off its face before laying machinery, and its walls are exempt from overgrowth — a bush on the
+  back of a turning slab is the one thing that stops it reading as a machine.
+
+### Still waiting on his eyes
+- Whether the waiting anchor's borrowed switch-cap resin material looks wrong beside the brass an
+  anchor wears once live.
 
 ## Immediate next actions on resume
 

@@ -702,11 +702,13 @@ class Renderer: NSObject, MTKViewDelegate {
             // SCENE 6C — the far side of the slab the player turns here is Scene 6's arrival region,
             // and it was bare. Dressed with the machinery kit, densest against the edge the portal
             // assembly stands on, because that is the underside the player walks out to read.
-            w.cubeModel.stampSceneSixUnderside(undersideMachinery())
             w.cubeModel.stampGardenVegetation(gardenFlora())
             wallDressingPalette = wallFlora()
             w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
                                           archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
+            // LAST: the underside clears the world's dressing off its face before laying machinery,
+            // so it has to run after everything that dresses.
+            w.cubeModel.stampSceneSixUnderside(undersideMachinery())
         default:
             w = GameState(size: Self.moonWorldSize, name: dest, stamp: .lunar)  // M19: grey regolith moon
         }

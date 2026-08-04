@@ -1283,7 +1283,21 @@ class CubeModel {
     /// props with their tiles like anything else.
     func stampSceneSixUnderside(_ kit: UndersideMachinery) {
         guard !kit.isEmpty else { return }
+        undersideFace = .negativeX
         let n = size
+        // Clear whatever the world's own dressing put here first. Scene 2 scatters ground foliage
+        // over every face but `+Z`, which includes this one — and a bush on the underside of a
+        // turning slab is the one thing that stops it reading as the back of a stage.
+        for r in 0..<n {
+            for c in 0..<n {
+                guard let (ci, fi) = faceletAt(face: .negativeX, row: r, col: c) else { continue }
+                cubies[ci].facelets[fi].props.removeAll {
+                    $0.kind == .importedFoliage || $0.kind == .greeneryCard
+                        || $0.kind == .foliageCard || $0.kind == .treeBillboard
+                        || $0.kind == .tree || $0.kind == .treeTrunk || $0.kind == .boulder
+                }
+            }
+        }
         for r in 0..<n {
             for c in 0..<n {
                 guard let (ci, fi) = faceletAt(face: .negativeX, row: r, col: c) else { continue }
@@ -2452,6 +2466,17 @@ class CubeModel {
     func dressedClearTiles() -> Set<Int> {
         let puzzle: Set<PropKind> = [.switchBase, .switchCap, .plinth, .obelisk, .alignmentCylinder]
         var s = Set<Int>()
+        // The underside grows nothing: its walls are structure, not hedgerow, so the dressing skips
+        // the rocks and bushes there the same way it does around a puzzle piece.
+        if let under = undersideFace {
+            for r in 0..<size {
+                for c in 0..<size {
+                    if let (ci, fi) = faceletAt(face: under, row: r, col: c) {
+                        s.insert(cubies[ci].facelets[fi].id.rawValue)
+                    }
+                }
+            }
+        }
         for face in CubeFace.allCases {
             for r in 0..<size {
                 for cc in 0..<size {
@@ -3276,6 +3301,12 @@ class CubeModel {
     /// teacher fell silent, so the twist was never granted and the scene could not be finished
     /// (Eddie, 2026-08-03 — he played in exactly that order). A world says what its vessel is for.
     var vesselTeachesTheTwist = false
+
+    /// The face that is Scene 6's underside — the end-cap of the slab Scene 2's twist turns. Nothing
+    /// grows there: it is the back of a machine, so the ground scatter and the wall overgrowth both
+    /// leave it alone (Eddie, 2026-08-03: "I like Scene 6's machinery. I think we could lose the
+    /// plants and natural stuff though").
+    var undersideFace: CubeFace? = nil
     var channelReceivers: [Int] = []
 
     /// Whether an open edge may be crossed at its full width. True where the world draws no jamb
