@@ -503,6 +503,16 @@ Small and unblocking, good filler while something compiles: Scene 1's wall-absor
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
 
+### Render plan executed: Tier 1 + 2 (2026-08-03)
+B4 (WorldCatalog is the one name), B1 (Renderer split into frame loop / world stack / asset
+instancer / bench), B2 (the six scene stamps out of CubeModel into `Stamps/`, with `run-tests.sh`
+updated in the same commit — the trap the plan named). A1 shadow-caster subset (casters-first
+packing; the shadow pass draws the prefix) and A2 projected-size LOD with hysteresis are in:
+**Scene 2 Release orbit 13.2 → 10.5 ms (76 → 95 fps)**, FP at the floor. A4 was measured out —
+after A1 the shadow pass costs nothing (equal frame time with it ablated) — and A3 is held.
+Thresholds calibrated from a measured size histogram after the guessed ones matched zero instances.
+Eddie's eyes still owed: shadows gone under small scatter (~<3 m), and LOD popping while zooming.
+
 ### Eddie's verdicts (2026-08-03)
 - **The routing change: ACCEPTED.** "The new wall logic looks pretty good… mark it as done." He will
   keep an eye out; the invariants (conservation, symmetry, reversibility) are in the suite.

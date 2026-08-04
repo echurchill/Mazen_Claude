@@ -16,6 +16,16 @@ extension Renderer {
               cullPlanes.count == 6 ? 1 : 0, gameState.worldScale.interior ? 0 : 1,
               cullEye.x, cullEye.y, cullEye.z, simd_length(cullEye),
               gameState.worldScale.faceDistance, gameState.cubeModel.roundness)
+        if !Renderer.benchSizeSamples.isEmpty {
+            let sorted = Renderer.benchSizeSamples.sorted()
+            func pct(_ q: Double) -> Float { sorted[min(sorted.count - 1, Int(Double(sorted.count) * q))] }
+            NSLog("BENCH   instance world-size units: p10 %.3f  p25 %.3f  p50 %.3f  p75 %.3f  p90 %.3f  max %.3f",
+                  pct(0.10), pct(0.25), pct(0.50), pct(0.75), pct(0.90), sorted.last!)
+            Renderer.benchSizeSamples.removeAll(keepingCapacity: true)
+        }
+        NSLog("BENCH   A1/A2: non-casters %d/frame, LOD-dropped %d/frame",
+              benchNonCasters / 120, benchLODDropped / 120)
+        benchNonCasters = 0; benchLODDropped = 0
         NSLog("BENCH   assets: clearBuckets %.2f  dressedWalls %.2f  (buckets %d, dressed rebuilds %d/120 frames, style %@)",
               benchClearMs / 120, benchDressedMs / 120, assetBuckets.count,
               CubeModel.benchDressedRebuilds, String(describing: gameState.cubeModel.wallStyle))

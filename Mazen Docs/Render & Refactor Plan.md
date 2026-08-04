@@ -1,5 +1,13 @@
 # Render & Refactor Plan
 
+**Status (2026-08-03): Tier 1 (B4, B1, B2) and Tier 2 (A1, A2) are BUILT. A4 was measured out —
+after A1 the shadow pass costs nothing measurable (10.58 vs 10.58 ms with it ablated), so there is
+nothing for an update-rate scheme to save. A3 is HELD at Eddie's direction. Results: Scene 2
+Release orbit 13.2 → 10.5 ms (76 → 95 fps); first person 98–100. Thresholds were calibrated from a
+measured size histogram (the first guess was 8× off and matched nothing — the counter reading zero
+is what caught it). Awaiting Eddie's eyes: missing shadows under ~3 m scatter, and LOD popping
+while zooming.**
+
 *Analysis only — nothing here is built. Written 2026-08-03 after a code survey plus the measured
 numbers from the `MAZEN_BENCH` work. Each item carries a **gate**: the measurement that decides
 whether it ships, because two of this month's perf beliefs ("fill-bound", "36→70 fps") turned out

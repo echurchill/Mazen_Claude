@@ -212,9 +212,10 @@ extension Renderer {
                                      indexOffset: indexOffset,
                                      diffuse: diffuse.map(ObjectIdentifier.init))
             if assetBuckets[key] == nil {
+                let dim = max(mesh.size.x, max(mesh.size.y, mesh.size.z))
                 assetBuckets[key] = AssetBucket(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer,
                                                 indexOffset: indexOffset, indexCount: indexCount,
-                                                diffuse: diffuse, cutout: cutout)
+                                                diffuse: diffuse, cutout: cutout, meshMaxDim: dim)
             }
             assetBuckets[key]?.instances.append(data)
         }
@@ -382,13 +383,42 @@ extension Renderer {
                                    && simd_length(cullEye) > ws.faceDistance * 1.732 * 1.2,
                                roundness: model.roundness,
                                backface: cullBackfaceThreshold)
+        // A1/A2 thresholds, in world units (a tile is 1.0 ≈ 18.9 m).
+        //
+        //   casterMinSize — below this an instance does not cast: its shadow-map footprint is a few
+        //     texels bought at full vertex cost. ~0.85 m: grass, flowers, pebbles, cables stop
+        //     casting; bushes, rocks, walls, platforms keep.
+        //   lodMaxSize — only instances SMALLER than this participate in LOD at all. Structure never
+        //     pops, whatever the distance.
+        //   lodDropRatio / lodShowRatio — distance ÷ world-size. Beyond drop it goes; it must come
+        //     back NEARER than it left (show < drop) or zooming shimmers at the boundary — the
+        //     hysteresis the cull-margin lesson demands. At these ratios a 0.5 m plant drops ~7
+        //     tiles out in first person and is gone from orbit entirely, where it was ~2 px.
+        // CALIBRATED to the measured distribution (bench p10 0.096 / p50 0.197 / p90 0.237): the
+        // first guess (0.045/0.035) was ~8× low and matched nothing — flowers here are 2 m, walls
+        // 4 m. 0.16 ≈ 3 m: grass, flowers, small rocks, cables below; bushes, walls, trees,
+        // platforms above.
+        let casterMinSize: Float = 0.16
+        let lodMaxSize: Float = 0.16
+        let lodDropRatio: Float = 110    // a 2 m plant drops beyond ~13 units (~250 m)
+        let lodShowRatio: Float = 90     // and returns nearer, so the boundary cannot shimmer
+        let subsetOn = !ablate.contains("shadowsubset")
+        let lodOn = !ablate.contains("lod")
+
         var inst = 0
         var dropped = 0
-        for bucket in assetBuckets.values {
+        for (key, bucket) in assetBuckets {
             let count = min(bucket.instances.count, cap - inst)
             dropped += bucket.instances.count - count
             guard count > 0 else { continue }
+            // A2 hysteresis state, aligned to this bucket's (cached, stable) instance order.
+            if lodShown[key]?.count != bucket.instances.count {
+                lodShown[key] = [Bool](repeating: true, count: bucket.instances.count)
+            }
             let base = inst
+            // A1 — casters first: write casting instances straight to the buffer, hold the rest in
+            // scratch, append them after. The shadow pass then draws only the front of the range.
+            packScratch.removeAll(keepingCapacity: true)
             for k in 0..<count {
                 var d = bucket.instances[k]
                 let rest = d.modelMatrix.columns.3
@@ -425,6 +455,33 @@ extension Renderer {
                     }
                     continue
                 }
+                // Instance world size: mesh extent × the matrix's largest column scale (inverted
+                // platforms are non-uniform, so take the max).
+                let m = d.modelMatrix
+                let sc = max(simd_length(SIMD3(m.columns.0.x, m.columns.0.y, m.columns.0.z)),
+                             max(simd_length(SIMD3(m.columns.1.x, m.columns.1.y, m.columns.1.z)),
+                                 simd_length(SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z))))
+                let worldSize = bucket.meshMaxDim * sc
+                if benchFramesRemaining > 0 { Renderer.benchSizeSamples.append(worldSize) }
+                // A2 — small scatter beyond its distance goes, with hysteresis.
+                if lodOn, worldSize < lodMaxSize, worldSize > 1e-6 {
+                    let ratio = simd_length(p - cullEye) / worldSize
+                    let wasShown = lodShown[key]![k]
+                    let show = ratio < (wasShown ? lodDropRatio : lodShowRatio)
+                    lodShown[key]![k] = show
+                    if !show { benchLODDropped += 1; continue }
+                }
+                // A1 — casters go to the buffer now; the rest wait so casters pack first.
+                if subsetOn, worldSize < casterMinSize {
+                    benchNonCasters += 1
+                    packScratch.append(d)
+                    continue
+                }
+                ptr[inst] = d
+                inst += 1
+            }
+            let casters = inst - base
+            for d in packScratch where inst - base < count {
                 ptr[inst] = d
                 inst += 1
             }
@@ -433,7 +490,8 @@ extension Renderer {
             assetDrawCmds.append(AssetDrawCmd(vertexBuffer: bucket.vertexBuffer, indexBuffer: bucket.indexBuffer,
                                               indexOffset: bucket.indexOffset, indexCount: bucket.indexCount,
                                               instanceIndex: base, diffuse: bucket.diffuse,
-                                              cutout: bucket.cutout, instanceCount: drawn))
+                                              cutout: bucket.cutout, instanceCount: drawn,
+                                              casterCount: casters))
         }
         // NO SILENT CAPS. A clamp here deletes scenery, which looks like a level-design decision.
         if dropped > 0, !reportedAssetOverflow {

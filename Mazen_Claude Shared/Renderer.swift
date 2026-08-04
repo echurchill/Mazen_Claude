@@ -31,6 +31,9 @@ struct AssetDrawCmd {
     let diffuse: MTLTexture?
     var cutout: Bool = false    // diffuse is a cut-out ⇒ alpha-test it in the shadow pass too
     var instanceCount: Int = 1  // PERF: one instanced draw per unique (mesh, submesh, texture)
+    /// A1 — instances are packed CASTERS FIRST, so the shadow pass draws [base, base+casterCount)
+    /// and the main pass draws the whole range. Grass does not cast; walls and platforms do.
+    var casterCount: Int = 0
 }
 
 /// PERF — identity of one instanced asset draw: the same sub-mesh with the same texture, drawn N times
@@ -49,6 +52,9 @@ struct AssetBucket {
     let indexCount: Int
     let diffuse: MTLTexture?
     let cutout: Bool
+    /// The mesh's largest dimension, for size tests at pack time (A1 shadow subset, A2 LOD):
+    /// world size of an instance ≈ meshMaxDim × its matrix scale.
+    let meshMaxDim: Float
     var instances: [InstanceDataSwift] = []
 }
 
@@ -833,6 +839,14 @@ class Renderer: NSObject, MTKViewDelegate {
     var benchAssetDemand = 0
     var reportedAssetOverflow = false
     var benchClearMs: Float = 0
+    var benchNonCasters = 0
+    static var benchSizeSamples: [Float] = []
+    var benchLODDropped = 0
+    /// A1 pack scratch — non-casters held back while a bucket's casters are written first.
+    var packScratch: [InstanceDataSwift] = []
+    /// A2 — per-bucket hysteresis state, aligned to each bucket's instances array; rebuilt with the
+    /// cache. `true` = currently shown.
+    var lodShown: [AssetBucketKey: [Bool]] = [:]
     var benchDressedMs: Float = 0
     var assetCacheToken: AssetCacheToken? = nil
     static var benchHorizonKills = 0
@@ -968,11 +982,15 @@ class Renderer: NSObject, MTKViewDelegate {
                         fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue)
                     }
                     vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+                    // A1 — only the caster prefix: instances are packed casters-first, so the
+                    // range [base, base+casterCount) is exactly the props big enough for their
+                    // shadow to be worth its vertex cost.
+                    guard cmd.casterCount > 0 else { continue }
                     shadowEncoder.drawIndexedPrimitives(
                         primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
                         indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
                         indexBufferLength: cmd.indexBuffer.length - cmd.indexOffset * MemoryLayout<UInt32>.stride,
-                        instanceCount: cmd.instanceCount, baseVertex: 0, baseInstance: cmd.instanceIndex)
+                        instanceCount: cmd.casterCount, baseVertex: 0, baseInstance: cmd.instanceIndex)
                 }
                 vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
                 vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
