@@ -2379,11 +2379,16 @@ struct CoordinateMathTests {
         }
         check(second.face != three.cubeModel.spawnLocation?.face,
               "the second descent must land on a face the first never used")
-        var metal = 0
-        for cu in three.cubeModel.cubies { for f in cu.facelets {
-            for p in f.props where p.kind == .layeredVessel && p.state == 6 { metal += 1 }
-        } }
-        check(metal == 1, "the metal vessel stands in the chamber, found \(metal)")
+        // 6H — the metal vessel must NOT exist on the first visit (Eddie met it early): it arrives
+        // with the scene-6 route, so the "familiar but transformed" reveal is earned by the route.
+        func metalVessels() -> Int {
+            var n = 0
+            for cu in three.cubeModel.cubies { for f in cu.facelets {
+                for p in f.props where p.kind == .layeredVessel && p.state == 6 { n += 1 }
+            } }
+            return n
+        }
+        check(metalVessels() == 0, "the metal vessel appeared before the scene-6 route entered")
 
         for t in tiles(three, with: .switchCap) { stand(three, t.face, t.r, t.c); three.interact() }
         for _ in 0..<10 { three.update(deltaTime: 1.0 / 60.0) }
@@ -2395,6 +2400,7 @@ struct CoordinateMathTests {
         three.update(deltaTime: 1.0 / 60.0)
         check(three.cubeModel.routeKeyedExit == nil,
               "two facts are not three: scene-2-turned is still missing")
+        check(metalVessels() == 1, "the scene-6 route should bring exactly one metal vessel, got \(metalVessels())")
 
         three.routeFacts.insert("scene-2-turned")
         three.update(deltaTime: 1.0 / 60.0)

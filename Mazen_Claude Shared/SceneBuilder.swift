@@ -373,7 +373,7 @@ final class SceneBuilder {
                             // in modelMatrix corrupts the curved-world footprint/height split and floated
                             // the flush cap on the garden (Eddie).
                             var heightScale: Float = 1, heightPivot: Float = 0
-                            if prop.kind == .alignmentCylinder || prop.kind == .switchCap {
+                            if prop.kind == .alignmentCylinder || prop.kind == .switchCap || prop.kind == .latch {
                                 heightPivot = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
                                 if prop.kind == .alignmentCylinder {
                                     heightScale = max(0.001, prop.anim)                          // rise from the disc
@@ -443,10 +443,18 @@ final class SceneBuilder {
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .latch {
-                                // 6D — a latch is a circuit fixture in the underside's language:
-                                // dark until engaged, filled when it is, flashing on a rebuff.
-                                materialID = 35
-                                color = SIMD4(1, 1, 1, 1)
+                                // 6D — Scene 2's switch dialect: material 22, `state` = the ordinal
+                                // dot glyph (one/two/three), engaged = the cap rising, exactly the
+                                // grammar the four corners taught. A rebuffed latch flashes emissive
+                                // for the moment its alignAnim decays — "you were heard; not yet".
+                                if prop.alignAnim > 0.01 {
+                                    materialID = 12
+                                    color = SIMD4(1.0, 0.82, 0.30, 1.0) * prop.alignAnim
+                                } else {
+                                    materialID = 22
+                                    propStyleSeed = UInt32(max(0, prop.state))
+                                    color = SIMD4(1, 1, 1, 1)
+                                }
                             }
                             if prop.kind == .channelBasin || prop.kind == .channelBowl {
                                 // Scene 5's circuit fixtures — material 35 lights them from the
@@ -596,9 +604,7 @@ final class SceneBuilder {
                             else if prop.kind == .channelBasin || prop.kind == .channelBowl {
                                 discovery = max(0, min(1, prop.anim))
                             }
-                            else if prop.kind == .latch {
-                                discovery = max(max(0, min(1, prop.anim)), prop.alignAnim * 0.8)
-                            }
+
                             // Scene 3D — the refusal. A faint flash on the symbol of the obelisk the
                             // player just touched, and only that one: enough to say "you were heard"
                             // without ever saying "yes".

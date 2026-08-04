@@ -1165,6 +1165,8 @@ class GameState {
 
     private func tickRouteKeyedArrival(_ dt: Float) {
         if arrivalAcknowledge > 0 { arrivalAcknowledge = max(0, arrivalAcknowledge - dt / 6.0) }
+        // 6H — the metal vessel exists only once the scene-6 route has entered this chamber.
+        if routeFacts.contains("via-underside") { cubeModel.ensureMetalVessel() }
         // 6I — "the new portal should open only because three facts are true simultaneously:
         // Scene 2's exterior world remains twisted; Scene 3's interior world remains solved; the
         // player returned through Scene 5, entering the interior from a new route." The first two

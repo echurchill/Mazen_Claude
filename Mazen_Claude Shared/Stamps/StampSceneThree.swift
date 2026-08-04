@@ -64,24 +64,6 @@ extension CubeModel {
         // the player enters knowingly."
         arrivalSpawns["scene-6"] = (face: .negativeZ, row: n - 1, col: c, facing: .n)
 
-        // 6H — THE METAL VESSEL, beside the new entrance: the familiar lathe "built from the same
-        // metals as the chamber… its proportions match the vessels from Scenes 1, 4 and 5. When a
-        // beam pulses, one of its rings answers a fraction of a second later." `state == 6` is the
-        // metal variant — the same grammar in this world's material language.
-        // On the first EMPTY tile near the entrance — the fixed guess landed on a plinth's tile,
-        // and the vessel branch of interact() then swallowed that plinth's press: six plinths,
-        // five obelisks, an unfinishable chamber. The suite caught it the same hour.
-        vessel: for dr in 1...3 {
-            for dc in [-1, 1, 0, -2, 2] {
-                let r = n - 1 - dr, col = c + dc
-                guard r >= 0, col >= 0, col < n,
-                      let (vci, vfi) = faceletAt(face: .negativeZ, row: r, col: col),
-                      cubies[vci].facelets[vfi].props.isEmpty else { continue }
-                cubies[vci].facelets[vfi].props.append(
-                    Prop(kind: .layeredVessel, subRow: 1, subCol: 1, facing: .s, state: 6, extraScale: 1.15))
-                break vessel
-            }
-        }
 
         // Fog stays ON (the script asks for it), but the six faces are large and the maze is the
         // point — reveal the arrival tile's surroundings so the first frame is not a wall of grey.
@@ -232,5 +214,30 @@ extension CubeModel {
         routeKeyedExit = (face, pick.r, pick.c)
         markTopologyChanged()
         return routeKeyedExit
+    }
+
+    /// 6H — the METAL VESSEL, created when the scene-6 route first enters, NOT at stamp: on the
+    /// first descent the chamber holds no vessel at all, and meeting one already standing there
+    /// would spend the "familiar but transformed" reveal before the route that earns it (Eddie
+    /// found it waiting on his first visit). Seated on searched, verified-empty ground — the fixed
+    /// guess once landed on a plinth's tile and interact()'s vessel branch swallowed that plinth's
+    /// press.
+    func ensureMetalVessel() {
+        let n = size, c = n / 2
+        for cu in cubies { for f in cu.facelets {
+            if f.props.contains(where: { $0.kind == .layeredVessel && $0.state == 6 }) { return }
+        } }
+        vessel: for dr in 1...3 {
+            for dc in [-1, 1, 0, -2, 2] {
+                let r = n - 1 - dr, col = c + dc
+                guard r >= 0, col >= 0, col < n,
+                      let (vci, vfi) = faceletAt(face: .negativeZ, row: r, col: col),
+                      cubies[vci].facelets[vfi].props.isEmpty else { continue }
+                cubies[vci].facelets[vfi].props.append(
+                    Prop(kind: .layeredVessel, subRow: 1, subCol: 1, facing: .s, state: 6, extraScale: 1.15))
+                markTopologyChanged()
+                break vessel
+            }
+        }
     }
 }

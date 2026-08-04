@@ -40,6 +40,11 @@ extension CubeModel {
         for (i, r) in [c - 1, c, c + 1].enumerated() {
             guard let (ci, fi) = faceletAt(face: .negativeX, row: r, col: n - 1) else { continue }
             cubies[ci].facelets[fi].props.removeAll { !$0.kind.isSolid }
+            // The latch speaks Scene 2's dialect on purpose (Eddie): a base plate and a cap
+            // carrying the ordinal in dots — one, two, three — because the player has already
+            // learned that grammar at the four corners, and 6D's lesson is the ORDER, not a new
+            // language.
+            cubies[ci].facelets[fi].props.append(Prop(kind: .switchBase, subRow: 1, subCol: 1, facing: .w))
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .latch, subRow: 1, subCol: 1, facing: .w, state: i + 1))
         }
