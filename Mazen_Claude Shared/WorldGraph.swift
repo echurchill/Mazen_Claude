@@ -108,4 +108,16 @@ enum WorldCatalog {
     /// The prologue's scenes, whose hub doors wear DARSIT red rather than TARDIS blue, and which are
     /// single-instance: one Scene 2, however it is reached.
     static let prologueIDs: Set<Int> = [10, 11, 12, 13, 14, 15]
+
+    /// The same scenes by name — derived, so adding an id above also makes the scene single-instance
+    /// and gives it a red door from the one list.
+    static let prologueNames: Set<String> = Set(prologueIDs.compactMap {
+        destinations.indices.contains($0) ? destinations[$0] : nil
+    })
+
+    /// Resolve a portal Prop's `state` to a world name; out-of-range falls back to the moon, which
+    /// is where every unmapped door has always led.
+    static func destination(for id: Int) -> String {
+        destinations.indices.contains(id) ? destinations[id] : "moon"
+    }
 }

@@ -150,10 +150,6 @@ class Renderer: NSObject, MTKViewDelegate {
     /// M20 (Eddie): rendered text sign-boards (RGBA array); slice = a portal-hub destination. `nil` ⇒
     /// signposts fall back to plain wood. Order matches `Renderer.portalDestinations` (+0 = "Home").
     var labelArray: MTLTexture?
-    /// Human-readable sign text for each hub destination, index-aligned with `portalDestinations`.
-    /// Signpost text, indexed the same way as `portalDestinations`. Index 9 is the hub itself, which
-    /// is never its own signpost — hence the blank placeholder keeping the two lists aligned.
-    static let destinationLabels = WorldCatalog.labels
     /// misc_greenery card filenames (order = slice index; also the HUD name).
     static let greenerySets = [
         "vegetation_clover_02", "vegetation_daffodil_01", "vegetation_daisie_05", "vegetation_fern_01",
@@ -241,7 +237,7 @@ class Renderer: NSObject, MTKViewDelegate {
     /// navigation *history*; this is the *universe*. Sky/counterpart lookups resolve through it.
     let worldRegistry: WorldRegistry = {
         let r = WorldRegistry()
-        r.singleInstanceNames = Renderer.prologueWorldNames
+        r.singleInstanceNames = WorldCatalog.prologueNames
         return r
     }()
     /// M17 Phase 0 — the player's cross-world knowledge (memories, glyphs, attunement). Held here,
@@ -260,19 +256,6 @@ class Renderer: NSObject, MTKViewDelegate {
 
     /// What a portal Prop's `state` means (M15.2): an index into this table. From inside any
     /// sub-world a portal simply pops back out; the destination only matters from the root.
-    static let portalDestinations = WorldCatalog.destinations
-    /// Destination indices belonging to the PROLOGUE, as opposed to the legacy dev worlds. Their
-    /// hub doors wear DARSIT red rather than TARDIS blue, so the scenes read apart at a glance
-    /// (Eddie: every scene added from the script gets one). Named rather than bare literals in
-    /// SceneBuilder, so appending destinations cannot silently repaint the wrong door — and ADD to
-    /// this whenever a scene is added, or its door will come up blue.
-    static let prologueDestinationIDs: Set<Int> = WorldCatalog.prologueIDs
-    /// The same scenes by name. Derived, so adding a prologue scene to `prologueDestinationIDs`
-    /// (which already gives it a DARSIT door) also makes it single-instance — one place the list
-    /// is maintained, not two that can silently disagree.
-    static let prologueWorldNames: Set<String> = Set(prologueDestinationIDs.compactMap {
-        portalDestinations.indices.contains($0) ? portalDestinations[$0] : nil
-    })
     var lastFrameTime: CFTimeInterval = 0
     var frameTimeSamples: [Float] = []
     var debugSingleTile = false
@@ -396,7 +379,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.greeneryArray = nil
         self.treeSpriteArray = nil   // M20: WenrexaTrees billboards removed (Eddie) — folder no longer used
         self.causticArray = TextureLoader.makeCausticArray(device: device)
-        self.labelArray = TextureLoader.makeLabelArray(device: device, labels: Self.destinationLabels)
+        self.labelArray = TextureLoader.makeLabelArray(device: device, labels: WorldCatalog.labels)
         self.texSampler = PipelineFactory.makeSampler(device: device)
         // A 1×1 array-texture placeholder for the unconditionally-declared foliage slots (see the
         // `placeholderArray` doc comment). Never sampled — just keeps the binding legal.
@@ -754,8 +737,7 @@ class Renderer: NSObject, MTKViewDelegate {
         gameState.forwardHeld = false; gameState.backwardHeld = false
         let departingMode = gameState.camera.mode   // FPV stays FPV across worlds (Eddie, M15.2)
         let departingName = gameState.name          // Phase 0: recorded on the arriving world
-        var dest = Self.portalDestinations.indices.contains(destinationID)
-            ? Self.portalDestinations[destinationID] : "moon"
+        var dest = WorldCatalog.destination(for: destinationID)
         // SCENE 6 IS SCENE 2. "Scene 6 must use the actual persisted state of Scene 2, not a visually
         // similar duplicate" — so its hub door does not build a world, it resolves to the Scene 2
         // instance and declares that you arrived FROM SCENE 5. That origin is what picks the arrival
@@ -809,7 +791,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // Scene 2A — the way back CLOSES behind you. Only in the prologue's scenes, which are
         // explicitly one-way ("no going back to the prologue's world"); the dev hub and the sandbox
         // worlds keep their doors, or building would become a chore.
-        if Self.prologueWorldNames.contains(arriving.name) && pushed {
+        if WorldCatalog.prologueNames.contains(arriving.name) && pushed {
             arriving.closeArrivalDoorway()
         }
         arriving.camera.mode = departingMode
