@@ -12,6 +12,12 @@ swiftc -O \
     "$SHARED/CubeTypes.swift" \
     "$SHARED/EdgeCrossing.swift" \
     "$SHARED/CubeModel.swift" \
+    "$SHARED/Stamps/StampSceneOne.swift" \
+    "$SHARED/Stamps/StampSceneTwo.swift" \
+    "$SHARED/Stamps/StampSceneThree.swift" \
+    "$SHARED/Stamps/StampSceneFour.swift" \
+    "$SHARED/Stamps/StampSceneFive.swift" \
+    "$SHARED/Stamps/StampSceneSix.swift" \
     "$SHARED/PlayerState.swift" \
     "$SHARED/PlayerKnowledge.swift" \
     "$SHARED/CameraState.swift" \
