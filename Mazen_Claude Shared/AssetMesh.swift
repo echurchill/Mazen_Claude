@@ -31,6 +31,11 @@ final class AssetMesh {
     let submeshes: [AssetSubmesh]
     let boundsMin: SIMD3<Float>
     let boundsMax: SIMD3<Float>
+    /// The highest y at which the mesh still has REAL BULK, ignoring thin outliers — a railing post,
+    /// an aerial, a hanging cable. Seating a model on its bounding extreme balances it on whatever
+    /// sticks out furthest, which is how an inverted platform came to hover with "a little thing
+    /// sticking down" holding it up (Eddie, 2026-08-03). Resting on bulk puts the deck on the floor.
+    let broadTopY: Float
 
     var totalIndexCount: Int { submeshes.reduce(0) { $0 + $1.indexCount } }
     var center: SIMD3<Float> { (boundsMin + boundsMax) * 0.5 }
@@ -103,6 +108,25 @@ final class AssetMesh {
         self.submeshes = subs
         self.boundsMin = bmin
         self.boundsMax = bmax
+        // Bucket the vertices by height and walk down from the top until a band holds a meaningful
+        // share of them. A deck is thousands of vertices; a strut is a handful.
+        var broad = bmax.y
+        let span = bmax.y - bmin.y
+        if span > 1e-5, verts.count > 24 {
+            let bins = 48
+            var hist = [Int](repeating: 0, count: bins)
+            for v in verts {
+                let b = min(bins - 1, max(0, Int((v.position.y - bmin.y) / span * Float(bins))))
+                hist[b] += 1
+            }
+            let peak = hist.max() ?? 0
+            let floorCount = max(2, Int(Float(peak) * 0.12))
+            for b in stride(from: bins - 1, through: 0, by: -1) where hist[b] >= floorCount {
+                broad = bmin.y + (Float(b) + 1) / Float(bins) * span
+                break
+            }
+        }
+        self.broadTopY = broad
         if verboseDebugLog { print("[AssetMesh] \(url.lastPathComponent): \(verts.count) verts, \(indices.count) indices, \(subs.count) submeshes") }
     }
 

@@ -1447,15 +1447,21 @@ class Renderer: NSObject, MTKViewDelegate {
                 // the other way (−90°), which puts mesh +Y at world −Z — upside down — and then the
                 // face that must rest on the floor is the mesh's TOP, so the seating height comes
                 // from `boundsMax` rather than `boundsMin`, and the centring flips sign with it.
-                let orient = p.yUp
+                // `laidFlat` simply declines the Y-up rotation, which leaves the model's length
+                // along the ground instead of standing on end.
+                let standing = p.yUp && !p.laidFlat
+                let orient = standing
                     ? float4x4.rotation(radians: p.inverted ? -.pi / 2 : .pi / 2, axis: SIMD3(1, 0, 0))
                     : matrix_identity_float4x4
-                let ty = p.yUp ? (p.inverted ? -c.z * fs : c.z * fs) : -c.y * fs
+                let ty = standing ? (p.inverted ? -c.z * fs : c.z * fs) : -c.y * fs
                 // Rest the base on the floor, then bury by `sink`·height so rounded
                 // rocks/bushes seat instead of balancing on their lowest vertex.
-                let heightU = (p.yUp ? p.mesh.size.y : p.mesh.size.z) * fs
-                let restOn = p.yUp ? (p.inverted ? -p.mesh.boundsMax.y : p.mesh.boundsMin.y)
-                                   : p.mesh.boundsMin.z
+                let heightU = (standing ? p.mesh.size.y : p.mesh.size.z) * fs
+                // An INVERTED model rests on its BULK, not on its highest vertex: seating a platform
+                // on a lone railing post leaves the deck hanging in the air with a spike holding it
+                // up, which is exactly what Eddie circled.
+                let restOn = standing ? (p.inverted ? -p.mesh.broadTopY : p.mesh.boundsMin.y)
+                                      : p.mesh.boundsMin.z
                 let tz = ws.floorY - restOn * fs - prop.sink * heightU
                 let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
                 emit(p.mesh, m, diffuse: p.diffuse, submeshMaterials: p.submeshMaterials)

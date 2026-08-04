@@ -30,6 +30,11 @@ struct ImportedProp {
     /// buried in it. Inverted, the deck beds down flat and the machinery it carries is what you see
     /// — which is precisely what Scene 6's underside is (Eddie, 2026-08-01).
     var inverted: Bool = false
+    /// Lay the model DOWN rather than standing it up. The Cyberpunk cables are authored hanging from
+    /// a platform's underside — long in −Y — so the usual Y-up rotation stands them on end as poles
+    /// (Eddie: "Cable_Small should be laying down on the ground not pointing up"). Skipping that
+    /// rotation puts their length along the ground.
+    var laidFlat: Bool = false
 }
 
 /// One piece of the imported modular house, positioned in a quarter's tile-local frame
@@ -125,9 +130,10 @@ enum AssetRegistry {
                 }
                 // Platform decks are the one family that wants inverting (see `inverted`).
                 let flip = prefix == "Cyberpunk" && f.hasPrefix("Platform")
+                let flat = prefix == "Cyberpunk" && f.hasPrefix("Cable")
                 let p = ImportedProp(mesh: mesh, diffuse: nil, faceOffset: (0, 0), target: galleryTarget,
                                      yUp: true, name: "\(prefix) \(f)", galleryOnly: true,
-                                     submeshMaterials: mats, inverted: flip)
+                                     submeshMaterials: mats, inverted: flip, laidFlat: flat)
                 lock.lock(); out[i] = p; lock.unlock()
             }
             let loaded = out.compactMap { $0 }

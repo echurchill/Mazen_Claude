@@ -1304,20 +1304,49 @@ class CubeModel {
                 guard cubies[ci].facelets[fi].props.isEmpty else { continue }
                 var h = UInt32(truncatingIfNeeded: r &* 73856093 ^ c &* 19349663 ^ 0x51ED2701)
                 h ^= h >> 13; h = h &* 2654435761; h ^= h >> 16
+                // A SECOND hash, not more shifts of the first. `h >> 27` leaves five bits — a maximum
+                // of 31 — so a "< 55%" test on it is always true, and every deck came up raised
+                // (measured: 32 of 32). One 32-bit word does not hold six independent decisions.
+                var h2 = UInt32(truncatingIfNeeded: r &* 19349663 ^ c &* 83492791 ^ 0x9E37_79B9)
+                h2 ^= h2 >> 15; h2 = h2 &* 2246822519; h2 ^= h2 >> 13
                 // 0 at the far side of the cap, 1 against the assembly edge.
                 let toward = Float(c) / Float(max(1, n - 1))
-                let chance = 0.15 + 0.55 * toward * toward
+                let chance = 0.30 + 0.45 * toward * toward
                 guard Float(h % 1000) / 1000.0 < chance else { continue }
-                // Which kind of thing stands here. Uprights and runs everywhere; the heavier
-                // structure (plates, boxes, rails, lamps) only near the assembly.
-                var pool: [Int] = kit.uprights + kit.runs
-                if toward > 0.55 { pool += kit.boxes + kit.rails }
-                if toward > 0.75 { pool += kit.plates + kit.lamps }
-                guard !pool.isEmpty else { continue }
-                let idx = pool[Int((h >> 7) % UInt32(pool.count))]
                 let sub = Int((h >> 3) % 9)
                 let facing = Heading8(rawValue: Int((h >> 11) % 8)) ?? .n
-                // 0.55…0.95 of the gallery target: machinery is human-scale, not landscape.
+
+                // DECKS EVERYWHERE, not only against the assembly (Eddie: "I was expecting lots more
+                // platform_4x1 and its siblings strewn about"). They are the thing that makes this
+                // read as the underside of a built surface rather than a floor with clutter on it.
+                if !kit.plates.isEmpty, h2 % 100 < 45 {
+                    let plate = kit.plates[Int((h >> 7) % UInt32(kit.plates.count))]
+                    // Some stand on a PILLAR (Eddie's suggestion), which is what a raised deck wants
+                    // in a place like this: `sink` is negative here, so it LIFTS by that fraction of
+                    // the model's own height rather than burying it, and a support goes under it on
+                    // the same sub-cell to carry the load.
+                    let raised = !kit.uprights.isEmpty && (h2 >> 8) % 100 < 55
+                    var deck = Prop(kind: .importedFoliage, subRow: sub / 3, subCol: sub % 3,
+                                    facing: facing, state: plate,
+                                    extraScale: 0.75 + Float((h >> 17) % 45) / 100.0)
+                    if raised {
+                        deck.sink = -(0.55 + Float((h2 >> 16) % 35) / 100.0)
+                        let post = kit.uprights[Int((h >> 9) % UInt32(kit.uprights.count))]
+                        cubies[ci].facelets[fi].props.append(
+                            Prop(kind: .importedFoliage, subRow: sub / 3, subCol: sub % 3,
+                                 facing: facing, state: post, extraScale: 0.9))
+                    }
+                    cubies[ci].facelets[fi].props.append(deck)
+                    continue
+                }
+
+                // Everything else: uprights and runs anywhere, the heavier fittings nearer the
+                // assembly, so the structure thickens toward what it belongs to.
+                var pool: [Int] = kit.uprights + kit.runs
+                if toward > 0.45 { pool += kit.boxes + kit.rails }
+                if toward > 0.70 { pool += kit.lamps }
+                guard !pool.isEmpty else { continue }
+                let idx = pool[Int((h >> 7) % UInt32(pool.count))]
                 let scale = 0.55 + Float((h >> 17) % 40) / 100.0
                 cubies[ci].facelets[fi].props.append(
                     Prop(kind: .importedFoliage, subRow: sub / 3, subCol: sub % 3,

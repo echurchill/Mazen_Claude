@@ -2004,6 +2004,24 @@ struct CoordinateMathTests {
             }
         }
         check(dressed > 20, "the underside should actually be dressed, got \(dressed) tiles")
+        // A MIX, not a single verdict repeated. The first version of the raise decision tested
+        // `(h >> 27) % 100 < 55` — five bits, maximum 31 — so it was always true and every deck came
+        // up on a pillar. One 32-bit hash does not hold six independent choices, and "it looked
+        // varied" would never have caught it: measured, it was 32 of 32.
+        var decks = 0, raisedDecks = 0
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                guard let (ci, fi) = m.faceletAt(face: .negativeX, row: r, col: c) else { continue }
+                for p in m.cubies[ci].facelets[fi].props
+                where p.kind == .importedFoliage && kit.plates.contains(p.state) {
+                    decks += 1
+                    if p.sink < 0 { raisedDecks += 1 }
+                }
+            }
+        }
+        check(decks >= 8, "the underside should carry platform decks, got \(decks)")
+        check(raisedDecks > 0 && raisedDecks < decks,
+              "decks should be a MIX of seated and pillar-raised, got \(raisedDecks) of \(decks)")
         // NOTHING GROWS ON THE UNDERSIDE (Eddie, 2026-08-03). Scene 2 scatters ground foliage over
         // every face but +Z — this one included — and a bush on the back of a turning slab is the one
         // thing that stops it reading as machinery. The stamp clears the face before dressing it, and
