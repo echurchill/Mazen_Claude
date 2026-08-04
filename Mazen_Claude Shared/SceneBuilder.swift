@@ -442,6 +442,12 @@ final class SceneBuilder {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }
+                            if prop.kind == .latch {
+                                // 6D — a latch is a circuit fixture in the underside's language:
+                                // dark until engaged, filled when it is, flashing on a rebuff.
+                                materialID = 35
+                                color = SIMD4(1, 1, 1, 1)
+                            }
                             if prop.kind == .channelBasin || prop.kind == .channelBowl {
                                 // Scene 5's circuit fixtures — material 35 lights them from the
                                 // bottom up as `anim` rises (dark / filling 0.55 / locked 1.0).
@@ -589,6 +595,9 @@ final class SceneBuilder {
                             else if prop.kind == .obelisk && prop.anim > 0 { discovery = prop.anim }
                             else if prop.kind == .channelBasin || prop.kind == .channelBowl {
                                 discovery = max(0, min(1, prop.anim))
+                            }
+                            else if prop.kind == .latch {
+                                discovery = max(max(0, min(1, prop.anim)), prop.alignAnim * 0.8)
                             }
                             // Scene 3D — the refusal. A faint flash on the symbol of the obelisk the
                             // player just touched, and only that one: enough to say "you were heard"

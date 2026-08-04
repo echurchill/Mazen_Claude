@@ -30,6 +30,19 @@ extension CubeModel {
         guard !kit.isEmpty else { return }
         undersideFace = .negativeX
         let n = size
+        let c = n / 2
+        // 6D — THE THREE LATCHES, before the scatter so their tiles stay theirs. They hang along
+        // the assembly edge: the portal chamber sits at +Z (c, 0) flanked by its obelisks at
+        // (c−1, 0) and (c+1, 0), and crossing west from those tiles lands on −X rows c−1, c, c+1,
+        // col n−1 — directly beneath the structure. "Three suspended stone latches connected to the
+        // two obelisks above and to a sealed interior hatch ahead… activate the latches in physical
+        // order along the structure." `state` is that order: left obelisk, chamber, right obelisk.
+        for (i, r) in [c - 1, c, c + 1].enumerated() {
+            guard let (ci, fi) = faceletAt(face: .negativeX, row: r, col: n - 1) else { continue }
+            cubies[ci].facelets[fi].props.removeAll { !$0.kind.isSolid }
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .latch, subRow: 1, subCol: 1, facing: .w, state: i + 1))
+        }
         // Clear whatever the world's own dressing put here first. Scene 2 scatters ground foliage
         // over every face but `+Z`, which includes this one — and a bush on the underside of a
         // turning slab is the one thing that stops it reading as the back of a stage.
@@ -186,4 +199,24 @@ extension CubeModel {
         "Tall Purple", "Wide Purple", "Dead", "Orange", "Dark Red",
         "Tall Green", "Dark Green", "Red Tree", "Dark Yellow",
     ]
+
+    /// 6D's payoff and 6E's door: "activating it opens a hatch, corridor, or small chamber leading
+    /// INWARD." The hatch is the second descent — a portal into the Scene 3 interior — standing one
+    /// tile in from the middle latch, so the player turns from the third latch and the way down is
+    /// ahead of them. Destination 13 with `.push`, exactly like the first descent; what differs is
+    /// the ROUTE, which is what Scene 6 is about.
+    func createUndersideHatch() {
+        guard undersideHatch == nil else { return }
+        let n = size, c = n / 2
+        guard let (ci, fi) = faceletAt(face: .negativeX, row: c, col: n - 2) else { return }
+        // The tile may carry scatter machinery; the hatch replaces it — a door was always under there.
+        cubies[ci].facelets[fi].props.removeAll()
+        cubies[ci].facelets[fi].props.append(
+            Prop(kind: .portal, subRow: 1, subCol: 1, facing: .e, state: 13, transition: .push))
+        styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e, fieldStyle: 3))
+        cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+        cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .e, state: 3))
+        undersideHatch = (.negativeX, c, n - 2)
+        markTopologyChanged()
+    }
 }

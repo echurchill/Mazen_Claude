@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,994 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **250,018 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -502,6 +502,32 @@ The prologue chain is complete and every scene is playable end to end. In order:
 Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
+
+### Scene 6 critical path (2026-08-03)
+The dead end is open. Built and play-tested end to end:
+- **6D** — three latches beneath the assembly on `-X`, engaged in physical order; out-of-order
+  presses rebuff and the ANSWERING tone comes from the latch that is next (Scene 3's
+  refusal-teaches pattern). The third opens the **hatch**: the second descent, a portal into
+  Scene 3's interior.
+- **The route problem, solved where it belongs**: both descents depart a world *named* scene-2, so
+  `WorldCatalog.routeName` counts a departure from a Scene-2-entered-from-Scene-5 as the
+  **scene-6 route** — that one rule is what lets the same door land differently.
+- **6E/6F** — the second descent arrives on `-Z`, a face the first visit never used, into a chamber
+  still solved (persistence already guaranteed).
+- **6G** — the chamber answers the route: arrival acknowledgement brightens the nearest beam,
+  fading over ~6 s.
+- **6H** — the **metal vessel** stands near the new entrance (`state 6`), its rings stepping a
+  quarter-turn one beat behind the chamber's clock. First placement landed on a plinth tile and
+  swallowed its press — six plinths, five obelisks — caught by the suite the same hour; it now
+  seats on verified-empty ground.
+- **6I/6J** — the **route-keyed portal**: opens only when three facts hold at once — Scene 2 still
+  turned (honest geometry, queried across worlds at the swap and stamped as a route fact),
+  Scene 3 solved, and arrival via the underside. Distinct chooser (never the nebula frame's tile),
+  aperture-sized field, and the four remembered tones sound together at creation. It points at the
+  hub until an Act I destination exists.
+
+Deferred: 6J's layered portal image, 6K's sweeping view, the 6A afterimage, and the route-keyed
+sky decision (Eddie's call). Mutations caught by name: order-free latches, a two-fact portal.
 
 ### Scene 5 polish pass (2026-08-03)
 The five items from the analysis doc, all played by tests and mutation-checked:

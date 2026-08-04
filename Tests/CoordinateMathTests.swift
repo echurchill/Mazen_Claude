@@ -2312,6 +2312,104 @@ struct CoordinateMathTests {
         check(full == 4, "the basin and all three bowls should lock full, got \(full)")
     }
 
+    /// SCENE 6's CRITICAL PATH, played: the latches in and out of order, the hatch, the route name
+    /// that tells the second descent from the first, and the route-keyed portal that opens only when
+    /// three facts hold at once. "The scene depends on trust."
+    static func testSceneSixLatchesHatchAndRouteKeyedPortal() {
+        // 6D — the latches. Scene 6's world is Scene 2 with the underside dressed.
+        let gs = prologueWorld("scene-2")
+        let m = gs.cubeModel
+        var kit = CubeModel.UndersideMachinery()
+        kit.uprights = [0]; kit.runs = [1]; kit.boxes = [2]; kit.rails = [3]; kit.plates = [4]; kit.lamps = [5]
+        m.stampSceneSixUnderside(kit)
+
+        var latches: [Int: (face: CubeFace, r: Int, c: Int)] = [:]
+        for face in CubeFace.allCases {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    for p in m.cubies[ci].facelets[fi].props where p.kind == .latch {
+                        latches[p.state] = (face, r, c)
+                        check(face == .negativeX, "a latch is off the underside, at \(face)")
+                    }
+                }
+            }
+        }
+        check(latches.count == 3, "three latches, found \(latches.count)")
+        func latchAnim(_ ordinal: Int) -> Float {
+            guard let t = latches[ordinal], let (ci, fi) = m.faceletAt(face: t.face, row: t.r, col: t.c)
+            else { return -1 }
+            return m.cubies[ci].facelets[fi].props.first { $0.kind == .latch && $0.state == ordinal }?.anim ?? -1
+        }
+
+        // Out of order: the third refuses, and nothing opens.
+        stand(gs, latches[3]!.face, latches[3]!.r, latches[3]!.c)
+        gs.interact()
+        check(latchAnim(3) < 0.5, "latch 3 engaged out of order")
+        check(m.undersideHatch == nil, "the hatch opened early")
+
+        // In order: each engages, the third opens the hatch — a portal to the interior.
+        for ordinal in 1...3 {
+            let t = latches[ordinal]!
+            stand(gs, t.face, t.r, t.c)
+            check(gs.hasInteractableHere, "a latch should answer a tap")
+            gs.interact()
+            check(latchAnim(ordinal) > 0.5, "latch \(ordinal) should engage in order")
+        }
+        guard let hatch = m.undersideHatch else { check(false, "three latches should open the hatch"); return }
+        check(hatch.face == .negativeX, "the hatch belongs to the underside")
+        if let (hci, hfi) = m.faceletAt(face: hatch.face, row: hatch.row, col: hatch.col) {
+            let door = m.cubies[hci].facelets[hfi].props.first { $0.kind == .portal }
+            check(door?.state == 13, "the hatch descends into Scene 3, got \(String(describing: door?.state))")
+            check(door?.transition == .push, "the second descent pushes, like the first")
+        }
+
+        // The ROUTE: both descents depart a world named scene-2; only the one whose Scene 2 was
+        // itself entered from Scene 5 counts as scene-6. This rule is what everything below keys on.
+        check(WorldCatalog.routeName(departingWorld: "scene-2", itsOrigin: "scene-5") == "scene-6",
+              "the underside descent should count as the scene-6 route")
+        check(WorldCatalog.routeName(departingWorld: "scene-2", itsOrigin: "scene-1") == "scene-2",
+              "the first descent must stay the scene-2 route")
+
+        // 6E/6F/6I — the interior, entered by the new route, still solved, with Scene 2's state
+        // carried across as a fact. Solve the chamber, then supply the facts the swap would stamp.
+        let three = prologueWorld("scene-3")
+        guard let second = three.cubeModel.spawn(arrivingFrom: "scene-6") else {
+            check(false, "Scene 3 names its second entrance"); return
+        }
+        check(second.face != three.cubeModel.spawnLocation?.face,
+              "the second descent must land on a face the first never used")
+        var metal = 0
+        for cu in three.cubeModel.cubies { for f in cu.facelets {
+            for p in f.props where p.kind == .layeredVessel && p.state == 6 { metal += 1 }
+        } }
+        check(metal == 1, "the metal vessel stands in the chamber, found \(metal)")
+
+        for t in tiles(three, with: .switchCap) { stand(three, t.face, t.r, t.c); three.interact() }
+        for _ in 0..<10 { three.update(deltaTime: 1.0 / 60.0) }
+        check(three.sceneThreeAllObelisksAwake, "the chamber should solve")
+        check(three.cubeModel.routeKeyedExit == nil,
+              "the route-keyed portal must NOT open from being solved alone")
+
+        three.routeFacts.insert("via-underside")
+        three.update(deltaTime: 1.0 / 60.0)
+        check(three.cubeModel.routeKeyedExit == nil,
+              "two facts are not three: scene-2-turned is still missing")
+
+        three.routeFacts.insert("scene-2-turned")
+        three.update(deltaTime: 1.0 / 60.0)
+        guard let rk = three.cubeModel.routeKeyedExit else {
+            check(false, "all three facts should open the route-keyed portal"); return
+        }
+        if let ce = three.cubeModel.chosenExit {
+            check(!(rk.face == ce.face && rk.row == ce.row && rk.col == ce.col),
+                  "the new portal must not stand on the nebula frame's tile")
+        }
+        // And Scene 2's fact is honest geometry: turned before, not after undoing.
+        let two2 = prologueWorld("scene-2")
+        check(!two2.cubeModel.sceneTwoIsTurned, "an unsolved Scene 2 is not turned")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2833,6 +2931,7 @@ struct CoordinateMathTests {
         testAScriptedTurnWaitsRatherThanVanishing()
         testSceneFiveCanBeSolvedByItsRotatorsAlone()
         testSceneFiveFixturesAndCompletion()
+        testSceneSixLatchesHatchAndRouteKeyedPortal()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

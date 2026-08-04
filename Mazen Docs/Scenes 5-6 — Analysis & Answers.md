@@ -3,7 +3,10 @@
 **Status: Scene 5 items 1–5 BUILT (2026-08-03) — diagnostic pulse, three receiver states, basin +
 bowls (material 35), seamless live circuit, and the 5J bloom (channels flood, the tile grid
 surfaces on the pale stone, then settles to a resting glow). Deferred as planned: 5K's staged
-emergence, 5H's near-miss aids. Scene 6 untouched, next.**
+emergence, 5H's near-miss aids. Scene 6 critical path BUILT same day: 6D latches + hatch,
+route naming (`WorldCatalog.routeName`), 6E/6F second descent onto `-Z`, 6G arrival
+acknowledgement, 6H metal vessel, 6I/6J three-fact route-keyed portal. Deferred: 6J's portal
+image, 6K, the 6A afterimage, and the sky decision (Eddie's).**
 
 *Written 2026-08-03, against the scripts in `Scenes/` (read-only) and the code as it stands.
 Analysis only — recommendations, not work done. Companion to the

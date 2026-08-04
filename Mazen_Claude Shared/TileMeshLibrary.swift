@@ -262,6 +262,8 @@ class TileMeshLibrary {
         // Scene 4's anchor borrows the switch cap's plate — a recessed control in a plate is the same
         // shape — until it has a mesh of its own.
         propMeshes[PropKind.anchor.rawValue] = propMeshes[PropKind.switchCap.rawValue]
+        // Scene 6D's latch borrows the same recessed plate — a control in a plate — like the anchor.
+        propMeshes[PropKind.latch.rawValue] = propMeshes[PropKind.switchCap.rawValue]
 
         let treeStart = allIndices.count
         Self.addTree(to: &allVerts, indices: &allIndices, ws: ws)

@@ -120,4 +120,16 @@ enum WorldCatalog {
     static func destination(for id: Int) -> String {
         destinations.indices.contains(id) ? destinations[id] : "moon"
     }
+
+    /// The ROUTE a departure counts as — which is not always the departing world's name.
+    ///
+    /// Scene 6 is Scene 2 re-entered from Scene 5, so BOTH descents into the interior depart from a
+    /// world named "scene-2": the chamber elevator on the first visit, and the underside hatch on
+    /// the return. `lastArrivalOrigin` alone cannot tell them apart, and Scene 6's whole thesis —
+    /// "route of arrival can change what a familiar world makes available" — depends on the
+    /// difference. A Scene 2 that was itself entered from Scene 5 IS Scene 6, so departures from it
+    /// count as the scene-6 route.
+    static func routeName(departingWorld name: String, itsOrigin: String?) -> String {
+        (name == "scene-2" && itsOrigin == "scene-5") ? "scene-6" : name
+    }
 }

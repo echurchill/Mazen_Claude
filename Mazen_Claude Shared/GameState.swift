@@ -37,6 +37,12 @@ class GameState {
     /// boot). Scene 6's orb reacts to the route by which the player re-entered a solved world; this is
     /// the minimum that has to be remembered for "how you got here" to be answerable at all.
     var lastArrivalOrigin: String? = nil
+    /// Facts about HOW this world was reached that it cannot compute itself — stamped at the portal
+    /// swap by the layer that can see other worlds (see 6I). Plain strings, model-testable.
+    var routeFacts: Set<String> = []
+    /// 6G — "the player's new arrival position becomes part of a new calculation": 1 on arriving by
+    /// a new route, decaying over ~6 s while the chamber answers (nearest beam brightens).
+    var arrivalAcknowledge: Float = 0
     // M9.5-3: slow idle spin of the whole game cube (a planet turning under its sun).
     var spinEnabled = true
     var spinPeriod: Float = 120   // seconds per full rotation
@@ -266,6 +272,8 @@ class GameState {
         tickChamberWave(deltaTime)
         tickChannelCircuit(deltaTime)
         tickChannelPulse(deltaTime)
+        tickRouteKeyedArrival(deltaTime)
+        tickMetalVessel()
         tickLayeredVessel(deltaTime)
         tickVesselDemo(deltaTime)
         tickAnchorFlash(deltaTime)
@@ -740,7 +748,8 @@ class GameState {
         for cu in cubeModel.cubies.indices {
             for fi in cubeModel.cubies[cu].facelets.indices {
                 for pi in cubeModel.cubies[cu].facelets[fi].props.indices
-                where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .anchor
+                where (cubeModel.cubies[cu].facelets[fi].props[pi].kind == .anchor
+                        || cubeModel.cubies[cu].facelets[fi].props[pi].kind == .latch)
                     && cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim > 0 {
                     cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim =
                         max(0, cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim - dt / 0.9)
@@ -1043,10 +1052,18 @@ class GameState {
                 let dist = simd_length(toC)
                 guard dist > 1e-4 else { continue }
                 let dir = toC / dist
+                // 6G — "when the player steps fully into the interior, the nearest active beam
+                // brightens": the beam whose obelisk stands closest to the player carries the
+                // arrival acknowledgement, fading over ~6 s. The chamber answering the ROUTE.
+                var beamGlow = min(1, p.anim)
+                if arrivalAcknowledge > 0 {
+                    let d = simd_length(from - viewOrigin)
+                    if d < 4.0 { beamGlow = min(1.6, beamGlow * (1 + arrivalAcknowledge * 0.8 * (1 - d / 4.0))) }
+                }
                 out.append(ChamberEmitter(a: from + dir * (reach * 0.16),
                                           b: centre - dir * (orbR * 1.55),
                                           radius: reach * 0.012,
-                                          glow: min(1, p.anim), isOrb: false))
+                                          glow: beamGlow, isOrb: false))
             }
         }
         guard total > 0 else { return [] }
@@ -1144,6 +1161,49 @@ class GameState {
         // → SCENE 6, which is Scene 2 RETURNED TO (destination 10): the same world, entered on the
         // far side of the slab the player turned there. Not a new world; that is the whole point.
         if liveCircuit { cubeModel.createCircuitExit(destinationID: 10, depths: channelDepths) }
+    }
+
+    private func tickRouteKeyedArrival(_ dt: Float) {
+        if arrivalAcknowledge > 0 { arrivalAcknowledge = max(0, arrivalAcknowledge - dt / 6.0) }
+        // 6I — "the new portal should open only because three facts are true simultaneously:
+        // Scene 2's exterior world remains twisted; Scene 3's interior world remains solved; the
+        // player returned through Scene 5, entering the interior from a new route." The first two
+        // arrive as route facts; the third IS the route. "It is a response to accumulated history."
+        if cubeModel.routeKeyedExit == nil,
+           routeFacts.contains("via-underside"),
+           routeFacts.contains("scene-2-turned"),
+           sceneThreeAllObelisksAwake {
+            if let at = cubeModel.createRouteKeyedExit(destinationID: 9) {
+                let mtx = cubeModel.restMatrix(face: at.face, row: at.row, col: at.col)
+                let p = SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)
+                // 6J — "the portal sound includes familiar fragments… they align into one new tone":
+                // the four remembered voices, played together.
+                pendingAudioCues.append(.portalOpened(at: p))
+                pendingAudioCues.append(.channelPulse(at: p))
+                pendingAudioCues.append(.twistStrain)
+                pendingAudioCues.append(.switchEngaged(at: p))
+            }
+        }
+    }
+
+    /// 6H — the metal vessel: "when a beam pulses, one of its rings answers a fraction of a second
+    /// later." The beams breathe on the chamber's clock, so the rings step a quarter-turn on the
+    /// same clock, one beat behind — the same grammar in metal.
+    private func tickMetalVessel() {
+        guard cubeModel.symbolPairedPlinths else { return }
+        let step = Float(Int((time - 0.4) / 3.2) % 4)
+        for cu in cubeModel.cubies.indices {
+            for f in cubeModel.cubies[cu].facelets.indices {
+                for pi in cubeModel.cubies[cu].facelets[f].props.indices
+                where cubeModel.cubies[cu].facelets[f].props[pi].kind == .layeredVessel
+                    && cubeModel.cubies[cu].facelets[f].props[pi].state == 6 {
+                    if cubeModel.cubies[cu].facelets[f].props[pi].anim != step {
+                        cubeModel.cubies[cu].facelets[f].props[pi].anim = step
+                        cubeModel.markTopologyChanged()
+                    }
+                }
+            }
+        }
     }
 
     private func tickChamberWave(_ dt: Float) {
@@ -1674,7 +1734,7 @@ class GameState {
     /// cannot drift from the keyboard one.
     static let interactableKinds: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap,
                                                    .plinth, .dial, .chest, .alignmentCylinder,
-                                                   .channelBasin]
+                                                   .channelBasin, .latch]
 
     /// Is the player standing on something worth pressing? On iOS a tap means "walk forward", so it
     /// can only mean "use this" where there is something to use — otherwise the player could never
@@ -1845,6 +1905,49 @@ class GameState {
             let where_ = sliceCentre(axis: 0, index: cubeModel.cubies[ci].position.x >= 0 ? Int(cubeModel.cubies[ci].position.x) : 0)
             pendingAudioCues.append(engaged ? .switchDisengaged(at: where_) : .switchEngaged(at: where_))
             refreshSwitchLock()
+            return
+        }
+        // SCENE 6D — a LATCH. "The player does not need to turn the world. They need to cross the
+        // underside route and activate the latches in physical order along the structure." In order:
+        // it engages, and the assembly above answers. Out of order: it rebuffs, and the answering
+        // tone comes FROM THE LATCH THAT IS NEXT — the lesson and the direction at once, the same
+        // pattern as Scene 3's refused obelisks.
+        if let lIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .latch }) {
+            let ordinal = cubeModel.cubies[ci].facelets[fi].props[lIdx].state
+            guard cubeModel.cubies[ci].facelets[fi].props[lIdx].anim < 0.5 else { return }   // already engaged
+            if ordinal == cubeModel.latchesEngaged + 1 {
+                cubeModel.cubies[ci].facelets[fi].props[lIdx].anim = 1
+                cubeModel.latchesEngaged += 1
+                pendingAudioCues.append(.switchEngaged(at: nil))
+                // "Each latch sends sound and light upward into the visible portal assembly" — the
+                // answer is positioned at the chamber above, across the seam.
+                if let (aci, afi) = cubeModel.faceletAt(face: .positiveZ, row: cubeModel.size / 2, col: 0),
+                   let loc = cubeModel.locate(cubie: aci, facelet: afi) {
+                    let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
+                    pendingAudioCues.append(.twistLocked(at: SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)))
+                }
+                if cubeModel.latchesEngaged == 3 {
+                    cubeModel.createUndersideHatch()
+                    pendingAudioCues.append(.portalOpened(at: nil))
+                }
+            } else {
+                // The rebuff: this latch flashes, and the NEXT one in order answers from where it is.
+                cubeModel.cubies[ci].facelets[fi].props[lIdx].alignAnim = 1
+                var answerAt: SIMD3<Float>? = nil
+                for cu in cubeModel.cubies.indices {
+                    for f in cubeModel.cubies[cu].facelets.indices {
+                        for p in cubeModel.cubies[cu].facelets[f].props
+                        where p.kind == .latch && p.state == cubeModel.latchesEngaged + 1 {
+                            if let loc = cubeModel.locate(cubie: cu, facelet: f) {
+                                let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
+                                answerAt = SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)
+                            }
+                        }
+                    }
+                }
+                pendingAudioCues.append(.switchDisengaged(at: answerAt))
+            }
+            cubeModel.markTopologyChanged()
             return
         }
         // SCENE 5C — the BASIN: F releases the diagnostic pulse.

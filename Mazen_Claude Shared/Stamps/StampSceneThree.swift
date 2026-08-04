@@ -58,6 +58,30 @@ extension CubeModel {
         // Arrival: on the floor, looking across the chamber. "The player enters from above" — the
         // descent from Scene 2 lands them on a surface, and every surface here is a floor.
         spawnLocation = (face: .positiveZ, row: n - 1, col: c, facing: .n)
+        // 6E — the SECOND DESCENT arrives by a face the first visit never used: the chamber is
+        // entered from `+Z` originally, so the underside route lands on `-Z`, the far side of the
+        // interior. "Unlike the first descent, there is no dramatic falling sensation. This time,
+        // the player enters knowingly."
+        arrivalSpawns["scene-6"] = (face: .negativeZ, row: n - 1, col: c, facing: .n)
+
+        // 6H — THE METAL VESSEL, beside the new entrance: the familiar lathe "built from the same
+        // metals as the chamber… its proportions match the vessels from Scenes 1, 4 and 5. When a
+        // beam pulses, one of its rings answers a fraction of a second later." `state == 6` is the
+        // metal variant — the same grammar in this world's material language.
+        // On the first EMPTY tile near the entrance — the fixed guess landed on a plinth's tile,
+        // and the vessel branch of interact() then swallowed that plinth's press: six plinths,
+        // five obelisks, an unfinishable chamber. The suite caught it the same hour.
+        vessel: for dr in 1...3 {
+            for dc in [-1, 1, 0, -2, 2] {
+                let r = n - 1 - dr, col = c + dc
+                guard r >= 0, col >= 0, col < n,
+                      let (vci, vfi) = faceletAt(face: .negativeZ, row: r, col: col),
+                      cubies[vci].facelets[vfi].props.isEmpty else { continue }
+                cubies[vci].facelets[vfi].props.append(
+                    Prop(kind: .layeredVessel, subRow: 1, subCol: 1, facing: .s, state: 6, extraScale: 1.15))
+                break vessel
+            }
+        }
 
         // Fog stays ON (the script asks for it), but the six faces are large and the maze is the
         // point — reveal the arrival tile's surroundings so the first frame is not a wall of grey.
@@ -157,4 +181,56 @@ extension CubeModel {
         }
     }
 
+
+    /// 6I — where the route-keyed portal stands: chosen like Scene 3's own exit (far from the
+    /// player's arrival, walkable), but it must NOT be the nebula frame's tile — "the previous
+    /// nebula portal remains as evidence of the first completion. The new portal is distinct:
+    /// narrower, quieter." Deterministic, and deliberately a separate chooser: the first door is
+    /// where the ORB pointed; this one answers the ROUTE.
+    func createRouteKeyedExit(destinationID: Int) -> (face: CubeFace, row: Int, col: Int)? {
+        guard routeKeyedExit == nil, let spawn = arrivalSpawns["scene-6"] ?? spawnLocation else { return nil }
+        struct T: Hashable { let f: Int; let r: Int; let c: Int }
+        var dist: [T: Int] = [T(f: spawn.face.rawValue, r: spawn.row, c: spawn.col): 0]
+        var q = Array(dist.keys), head = 0
+        while head < q.count {
+            let t = q[head]; head += 1
+            guard let face = CubeFace(rawValue: t.f) else { continue }
+            let op = passableOpenings(face: face, row: t.r, col: t.c)
+            for (sdir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                         (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)]
+            where op.contains(mask) {
+                let nr = t.r + dr, nc = t.c + dc
+                let nt: T
+                if nr >= 0, nr < size, nc >= 0, nc < size { nt = T(f: t.f, r: nr, c: nc) }
+                else {
+                    let cr = edgeCrossing(face: face, direction: sdir, row: t.r, col: t.c)
+                    nt = T(f: cr.face.rawValue, r: cr.row, c: cr.col)
+                }
+                if dist[nt] == nil { dist[nt] = dist[T(f: t.f, r: t.r, c: t.c)]! + 1; q.append(nt) }
+            }
+        }
+        var best: (t: T, d: Int)? = nil
+        for (t, d) in dist {
+            guard let face = CubeFace(rawValue: t.f),
+                  let (ci, fi) = faceletAt(face: face, row: t.r, col: t.c),
+                  cubies[ci].facelets[fi].props.isEmpty else { continue }
+            if let ce = chosenExit, ce.face == face, ce.row == t.r, ce.col == t.c { continue }
+            if best == nil || d > best!.d
+                || (d == best!.d && (t.f, t.r, t.c) < (best!.t.f, best!.t.r, best!.t.c)) {
+                best = (t, d)
+            }
+        }
+        guard let pick = best?.t, let face = CubeFace(rawValue: pick.f),
+              let (ci, fi) = faceletAt(face: face, row: pick.r, col: pick.c) else { return nil }
+        cubies[ci].facelets[fi].props.append(
+            Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: destinationID, transition: .push))
+        styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 2))
+        cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
+        // "Less like a doorway and more like an aperture" — the field at ~0.6 of a door.
+        cubies[ci].facelets[fi].props.append(
+            Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2, extraScale: 0.6))
+        routeKeyedExit = (face, pick.r, pick.c)
+        markTopologyChanged()
+        return routeKeyedExit
+    }
 }

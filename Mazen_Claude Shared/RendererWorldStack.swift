@@ -207,6 +207,7 @@ extension Renderer {
         // with walk-through portals, an un-cleared "forward held" would ping-pong through gates.
         gameState.forwardHeld = false; gameState.backwardHeld = false
         let departingMode = gameState.camera.mode   // FPV stays FPV across worlds (Eddie, M15.2)
+        let departingOrigin = gameState.lastArrivalOrigin
         let departingName = gameState.name          // Phase 0: recorded on the arriving world
         var dest = WorldCatalog.destination(for: destinationID)
         // SCENE 6 IS SCENE 2. "Scene 6 must use the actual persisted state of Scene 2, not a visually
@@ -257,8 +258,22 @@ extension Renderer {
         // you emerge looking the portal's exit direction — the door at your back.
         let arriving = gameState
         // Phase 0: "how you got here", for route-keyed behaviour. The Scene 6 door says Scene 5
-        // however you actually reached it, because Scene 6 IS that route.
-        arriving.lastArrivalOrigin = sceneSixReturn ? "scene-5" : departingName
+        // however you actually reached it, because Scene 6 IS that route; and a departure FROM a
+        // Scene 2 that was itself entered from Scene 5 counts as the scene-6 route — that is what
+        // lets the second descent land differently from the first (WorldCatalog.routeName).
+        arriving.lastArrivalOrigin = sceneSixReturn ? "scene-5"
+            : WorldCatalog.routeName(departingWorld: departingName, itsOrigin: departingOrigin)
+        // 6I — the route-keyed portal opens only when three facts hold at once, one of which
+        // belongs to ANOTHER WORLD. The model layer cannot reach the registry, so the fact is
+        // carried across at the swap: queried here, where the registry lives, and stamped onto the
+        // arriving world as a plain string it can test locally.
+        if arriving.name == "scene-3", arriving.lastArrivalOrigin == "scene-6" {
+            arriving.routeFacts.insert("via-underside")
+            arriving.arrivalAcknowledge = 1
+            if let two = worldRegistry.anyNamed("scene-2"), two.cubeModel.sceneTwoIsTurned {
+                arriving.routeFacts.insert("scene-2-turned")
+            }
+        }
         // Scene 2A — the way back CLOSES behind you. Only in the prologue's scenes, which are
         // explicitly one-way ("no going back to the prologue's world"); the dev hub and the sandbox
         // worlds keep their doors, or building would become a chore.

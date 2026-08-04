@@ -340,4 +340,17 @@ extension CubeModel {
         return (0, index, strip)
     }
 
+
+    /// Has this world's scripted turn happened — is the hidden assembly facing the player's face?
+    /// Asked ACROSS worlds by Scene 6's route-keyed portal ("Scene 2's exterior world remains
+    /// twisted"), so it reads current geometry rather than any remembered flag: if a later twist
+    /// puts the chamber back, the fact honestly stops being true.
+    var sceneTwoIsTurned: Bool {
+        for cu in cubies.indices {
+            for f in cubies[cu].facelets where f.props.contains(where: { $0.kind == .portal && $0.state == 13 }) {
+                if let loc = locate(faceletID: f.id.rawValue) { return loc.face == .positiveZ }
+            }
+        }
+        return false
+    }
 }

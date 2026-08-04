@@ -2114,6 +2114,14 @@ class CubeModel {
     /// leave it alone (Eddie, 2026-08-03: "I like Scene 6's machinery. I think we could lose the
     /// plants and natural stuff though").
     var undersideFace: CubeFace? = nil
+
+    /// Scene 6D — how many latches are engaged, in order. The hatch inward exists at 3.
+    var latchesEngaged = 0
+    /// Scene 6D/6E — where the hatch to the interior opened, once it has. (Stored here, not in the
+    /// stamp extension: extensions cannot hold stored properties.)
+    var undersideHatch: (face: CubeFace, row: Int, col: Int)? = nil
+    /// Scene 6I — where the route-keyed portal stands, once the three conditions have met.
+    var routeKeyedExit: (face: CubeFace, row: Int, col: Int)? = nil
     var channelReceivers: [Int] = []
 
     /// Whether an open edge may be crossed at its full width. True where the world draws no jamb
