@@ -818,6 +818,21 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 35) {
+        // SCENE 5's CIRCUIT FIXTURES — the source basin and the receiver bowls. Pale translucent
+        // mineral that FILLS with the channels' own light from the bottom up: `discoveryAmount` is
+        // the fill level (dark / 0.55 filling / 1.0 locked), and uv.y is each vertex's height
+        // fraction, so the light has a real surface it rises past. A locked fixture also breathes
+        // faintly in the source's rhythm, which is the visible half of "the tone joins the rhythm".
+        float fill = clamp(in.discoveryAmount, 0.0, 1.0);
+        float3 mineral = float3(0.62, 0.64, 0.66);
+        float3 lit = float3(0.55, 0.86, 1.00);
+        float below = smoothstep(fill + 0.03, fill - 0.06, in.texCoord.y);   // 1 under the fill line
+        float breathe = fill >= 0.97 ? 0.08 * sin(frame.time * 2.6) : 0.0;
+        // The 5J bloom lifts every fixture with the world.
+        float glow = clamp(below * (0.35 + 0.65 * fill) + frame.worldBloom * 0.35 + breathe, 0.0, 1.0);
+        color = mix(mineral, lit, glow);
+        lighting = skyAmbient * 0.4 + sunColor * 0.45 * halfLambert * shadowFactor + glow * 0.55;
     } else if (in.materialID == 34) {
         // PALE STONE paving — Scene 5's surface. "Smooth pale stone, laid in wide slabs."
         // A facelet is ~19 m, so the 512-px sheet is repeated a few times across it to bring the
@@ -834,6 +849,17 @@ fragment float4 fragmentShader(
         float bump = clamp(0.85 + 0.30 * nrm.z, 0.7, 1.1);
         color = stone * bump;
         lighting = skyAmbient * 0.34 + sunColor * 0.66 * halfLambert * shadowFactor;
+        // 5J — "secondary channels catch reflected light, revealing the underlying grid and face
+        // boundaries": during the bloom, every TILE boundary carries a faint line of the channels'
+        // light, and the world reads as the diagram it always was. texCoord is 0…1 per tile here,
+        // so the boundary is simply the frame of the uv square.
+        if (frame.worldBloom > 0.001) {
+            float2 tuv = in.texCoord;
+            float edge = min(min(tuv.x, 1.0 - tuv.x), min(tuv.y, 1.0 - tuv.y));
+            float line = smoothstep(0.035, 0.0, edge);
+            color = mix(color, float3(0.55, 0.86, 1.00), line * frame.worldBloom * 0.45);
+            lighting += line * frame.worldBloom * 0.3;
+        }
     } else if (in.materialID == 33) {
         // SCENE 5's CHANNELS — "veins carrying liquid light", laid in shallow grooves. Same spine as
         // a bond band (centre out to each edge the groove continues through), because they are the
@@ -874,8 +900,13 @@ fragment float4 fragmentShader(
         float pulse = flow * 0.35;
         if (frame.channelPulse >= 0.0 && live > 0.5) {
             float ahead = frame.channelPulse - depth;
-            pulse += exp(-ahead * ahead * 5.5);
+            // The diagnostic pulse (5C) is "slightly brighter" — the same front, more of it.
+            pulse += exp(-ahead * ahead * 5.5) * (1.0 + frame.channelPulseBright * 0.8);
         }
+        // 5J — the bloom: when the circuit locks, every groove floods to full for a few seconds,
+        // then settles brighter than it began. Applied to `live` so dry-tile grooves stay dark —
+        // "every channel that BELONGS TO THE COMPLETED CIRCUIT glows".
+        live = max(live, frame.worldBloom * step(0.5, live));
         float3 dry  = float3(0.16, 0.17, 0.20);          // a groove cut in pale stone
         float3 lit  = float3(0.55, 0.86, 1.00);
         float3 tint = mix(dry, lit, live);

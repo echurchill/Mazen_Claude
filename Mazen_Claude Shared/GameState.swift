@@ -874,6 +874,10 @@ class GameState {
                     // An AWAKENED obelisk hums; a dormant one is silent. Scene 2 lights them one at
                     // a time, so the world gains a voice per solved step.
                     if facelet.props.contains(where: { $0.kind == .obelisk && $0.anim > 0.01 }) { kind = .obelisk }
+                    // Scene 5 — a receiver locked into the live circuit holds its tone ("the tone
+                    // joins the source rhythm"); one merely fed stays silent between pulses, which
+                    // is the audible half of temporary-vs-lasting.
+                    else if facelet.props.contains(where: { $0.kind == .channelBowl && $0.anim > 0.9 }) { kind = .obelisk }
                     // Scene 1E — one of them "emits a barely audible tone". Deliberately quiet and
                     // occluded like anything else, so it is something you notice you have been
                     // hearing rather than something you hear.
@@ -1076,13 +1080,26 @@ class GameState {
         guard !cubeModel.channelReceivers.isEmpty else { return }
         let fed = channelReach
         var changed = false
+        // 5D's THREE STATES, not two — "temporary success is deliberately different from lasting
+        // success" is a scene pillar, and it used to be invisible: a receiver was lit or dark.
+        //   dark 0        the current does not reach it
+        //   filling 0.55  fed right now, but the circuit as a whole is broken — the bowl holds
+        //                 light while the pulse feeds it and loses it when the pulse withdraws
+        //   locked 1.0    part of the live circuit; full, steady, and it hums
+        let locked = liveCircuit
         for cu in cubeModel.cubies.indices {
             for f in cubeModel.cubies[cu].facelets.indices {
                 let id = cubeModel.cubies[cu].facelets[f].id.rawValue
-                guard cubeModel.channelReceivers.contains(id) else { continue }
-                for pi in cubeModel.cubies[cu].facelets[f].props.indices
-                where cubeModel.cubies[cu].facelets[f].props[pi].kind == .obelisk {
-                    let want: Float = fed.contains(id) ? 1 : 0
+                for pi in cubeModel.cubies[cu].facelets[f].props.indices {
+                    let kind = cubeModel.cubies[cu].facelets[f].props[pi].kind
+                    let want: Float
+                    if kind == .channelBowl, cubeModel.channelReceivers.contains(id) {
+                        want = locked ? 1 : (fed.contains(id) ? 0.55 : 0)
+                    } else if kind == .channelBasin {
+                        // 5I.9 — "the source basin fills completely" when the circuit locks; a
+                        // faint working glow the rest of the time, so it reads as the origin.
+                        want = locked ? 1 : 0.18
+                    } else { continue }
                     let have = cubeModel.cubies[cu].facelets[f].props[pi].anim
                     if abs(have - want) > 0.001 {
                         // Ease, so a receiver going dark is something you SEE go dark.
@@ -1279,14 +1296,57 @@ class GameState {
         }
 
         if pulseFront >= maxDepth {
-            pulseFront = maxDepth
-            pulseHold = liveCircuit ? 0.8 : 1.6
-            if !liveCircuit {
+            if liveCircuit {
+                // 5I — "it no longer withdraws… the circuit becomes self-sustaining." The front
+                // wraps straight back to the source: a rhythm, not a retry.
+                pulseFront = 0
+                pulseBright = 0
+                pendingAudioCues.append(.channelPulse(at: faceletPosition(of: cubeModel.channelSource)))
+            } else {
+                pulseFront = maxDepth
+                pulseHold = 1.6
+                pulseBright = 0
                 // The deepest tile the current reached: the break the player has to find.
                 pulseBrokeAt = pulseDepths.first(where: { Float($0.value) == maxDepth })?.key ?? -1
                 pendingAudioCues.append(.channelIncomplete(at: faceletPosition(ofFaceletID: pulseBrokeAt)))
             }
         }
+
+        tickWorldBloom(dt)
+    }
+
+    /// 5C — the diagnostic pulse: F at the basin releases a brighter front IMMEDIATELY, so a
+    /// configuration can be tested without waiting out the natural cycle. "The source does not
+    /// solve anything by itself. It reveals what the current world state permits."
+    private(set) var pulseBright: Float = 0
+    func triggerDiagnosticPulse() {
+        pulseHold = 0
+        pulseBrokeAt = -1
+        pulseFront = 0
+        pulseBright = 1
+        pendingAudioCues.append(.channelPulse(at: faceletPosition(of: cubeModel.channelSource)))
+    }
+
+    /// 5J — "for several seconds after completion, the entire planetoid illuminates… then secondary
+    /// channels catch reflected light, revealing the underlying grid." Ramps to full over ~2.5 s
+    /// when the circuit first locks, holds, then settles to a resting glow — the world stays
+    /// brighter than it was, because it has been made continuous, not merely repaired.
+    private(set) var worldBloom: Float = 0
+    private var bloomElapsed: Float = -1
+    private func tickWorldBloom(_ dt: Float) {
+        if bloomElapsed < 0 {
+            guard liveCircuit else { return }
+            bloomElapsed = 0
+            // The three receiver tones and the source align — every voice already registered.
+            for id in cubeModel.channelReceivers {
+                pendingAudioCues.append(.channelReceiverFed(at: faceletPosition(ofFaceletID: id)))
+            }
+        }
+        bloomElapsed += dt
+        let t = bloomElapsed
+        if t < 2.5 { worldBloom = t / 2.5 }
+        else if t < 6.5 { worldBloom = 1 }
+        else { worldBloom = max(0.3, 1 - (t - 6.5) / 4.0 * 0.7) }
     }
 
     /// World position of a facelet by id — the pulse needs to place a sound at a tile it found by
@@ -1613,7 +1673,8 @@ class GameState {
     /// What F (and, on iOS, a tap) acts on. Shared with `hasInteractableHere` so the touch path
     /// cannot drift from the keyboard one.
     static let interactableKinds: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap,
-                                                   .plinth, .dial, .chest, .alignmentCylinder]
+                                                   .plinth, .dial, .chest, .alignmentCylinder,
+                                                   .channelBasin]
 
     /// Is the player standing on something worth pressing? On iOS a tap means "walk forward", so it
     /// can only mean "use this" where there is something to use — otherwise the player could never
@@ -1784,6 +1845,11 @@ class GameState {
             let where_ = sliceCentre(axis: 0, index: cubeModel.cubies[ci].position.x >= 0 ? Int(cubeModel.cubies[ci].position.x) : 0)
             pendingAudioCues.append(engaged ? .switchDisengaged(at: where_) : .switchEngaged(at: where_))
             refreshSwitchLock()
+            return
+        }
+        // SCENE 5C — the BASIN: F releases the diagnostic pulse.
+        if cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .channelBasin }) {
+            triggerDiagnosticPulse()
             return
         }
         // SCENE 5 — a FACE ROTATOR. The slab it turns is the one it stands on: the outer layer of

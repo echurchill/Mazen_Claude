@@ -244,6 +244,14 @@ class TileMeshLibrary {
         Self.addLayeredVessel(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.layeredVessel.rawValue] = TileMesh(vertexOffset: 0, indexOffset: vesselStart, indexCount: allIndices.count - vesselStart)
 
+        let basinStart = allIndices.count
+        Self.addChannelBasin(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.channelBasin.rawValue] = TileMesh(vertexOffset: 0, indexOffset: basinStart, indexCount: allIndices.count - basinStart)
+
+        let bowlStart = allIndices.count
+        Self.addChannelBowl(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.channelBowl.rawValue] = TileMesh(vertexOffset: 0, indexOffset: bowlStart, indexCount: allIndices.count - bowlStart)
+
         let switchBaseStart = allIndices.count
         Self.addSwitchBase(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.switchBase.rawValue] = TileMesh(vertexOffset: 0, indexOffset: switchBaseStart, indexCount: allIndices.count - switchBaseStart)
@@ -1436,6 +1444,60 @@ class TileMeshLibrary {
     ///   u ≥ 2     → the body; u−2 runs 0…1 once around from the front seam
     ///               v = ringIndex + t  (0,1,2 = the three major rings, t local within the band)
     ///               v = 3 + t          (plain stem/bowl — no seam)
+    /// Revolve a (radius, height) profile about local z — the shared spine of the Scene 5 fixtures.
+    /// `uv.y` carries a 0…1 FILL coordinate (height / total height): material 35 lights the fixture
+    /// from the bottom up as its `anim` rises, which is what makes a bowl read as FILLING.
+    private static func latheProfile(_ profile: [(r: Float, h: Float)], seg: Int, ws: WorldScale,
+                                     verts: inout [MazeVertexSwift], indices: inout [UInt32]) {
+        let mUnit: Float = ws.eyeHeight / 1.7
+        let z0 = ws.floorY
+        let hMax = profile.map { $0.h }.max() ?? 1
+        for i in 0..<(profile.count - 1) {
+            let (r0, h0) = profile[i], (r1, h1) = profile[i + 1]
+            let zA = z0 + h0 * mUnit, zB = z0 + h1 * mUnit
+            let rA = r0 * mUnit, rB = r1 * mUnit
+            let slope = normalize(SIMD2<Float>(h1 - h0, -(r1 - r0)))
+            for k in 0..<seg {
+                let a0 = Float(k) / Float(seg) * 2 * .pi, a1 = Float(k + 1) / Float(seg) * 2 * .pi
+                let (c0, s0) = (cos(a0), sin(a0)), (c1, s1) = (cos(a1), sin(a1))
+                let n0 = SIMD3<Float>(c0 * slope.x, s0 * slope.x, slope.y)
+                let n1 = SIMD3<Float>(c1 * slope.x, s1 * slope.x, slope.y)
+                let base = UInt32(verts.count)
+                verts.append(contentsOf: [
+                    MazeVertexSwift(position: SIMD3(c0 * rA, s0 * rA, zA), normal: n0, texCoord: SIMD2(0, h0 / hMax), aoFactor: 1),
+                    MazeVertexSwift(position: SIMD3(c1 * rA, s1 * rA, zA), normal: n1, texCoord: SIMD2(0, h0 / hMax), aoFactor: 1),
+                    MazeVertexSwift(position: SIMD3(c1 * rB, s1 * rB, zB), normal: n1, texCoord: SIMD2(0, h1 / hMax), aoFactor: 1),
+                    MazeVertexSwift(position: SIMD3(c0 * rB, s0 * rB, zB), normal: n0, texCoord: SIMD2(0, h1 / hMax), aoFactor: 1),
+                ])
+                indices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
+            }
+        }
+    }
+
+    /// Scene 5C — the SOURCE: "a low circular basin set into the ground, surrounded by three nested
+    /// rings of translucent mineral." The basin dishes inward; each ring is a thin free-standing
+    /// wall. ~4.5 m across — wide enough to be the origin of a world's circuit, low enough to look
+    /// down into.
+    private static func addChannelBasin(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        // The dish: rim down into a shallow inner floor, back up a centre boss the light rises from.
+        latheProfile([(1.05, 0.16), (0.95, 0.18), (0.55, 0.05), (0.18, 0.08), (0.10, 0.22), (0.0, 0.24)],
+                     seg: 28, ws: ws, verts: &verts, indices: &indices)
+        // Three nested rings, each a thin wall: out-up-in-down.
+        for (radius, height) in [(Float(1.35), Float(0.26)), (1.75, 0.20), (2.15, 0.14)] {
+            latheProfile([(radius - 0.05, 0.0), (radius - 0.05, height), (radius + 0.05, height), (radius + 0.05, 0.0)],
+                         seg: 28, ws: ws, verts: &verts, indices: &indices)
+        }
+    }
+
+    /// Scene 5D — a RECEIVER: "a raised crescent or bowl-like structure embedded into a channel
+    /// junction." A pedestal opening into a wide bowl, ~2 m tall — recognisable from distance,
+    /// related to the basin without repeating it.
+    private static func addChannelBowl(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        latheProfile([(0.55, 0.0), (0.30, 0.10), (0.22, 0.75), (0.80, 1.55), (0.95, 1.95),
+                      (0.85, 2.00), (0.55, 1.70), (0.30, 1.62), (0.12, 1.66)],
+                     seg: 24, ws: ws, verts: &verts, indices: &indices)
+    }
+
     private static func addLayeredVessel(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let mUnit: Float = ws.eyeHeight / 1.7
         let z0 = ws.floorY

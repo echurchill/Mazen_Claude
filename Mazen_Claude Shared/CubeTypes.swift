@@ -380,7 +380,9 @@ enum PropKind: UInt8 {
                          // 12) — the light pooling under an energy veil / the lit floor of the elevator.
     case signpost        // M20 (Eddie): a wooden post + board naming the portal it stands beside
                          // (material 24). `state` = the label-array slice (a hub destination index).
-    case dustMote        // Scene 2: a mote shaken loose from a wall joint by a twist. `anim` = life left,
+    case dustMote
+    case channelBasin    // Scene 5C: the SOURCE — a low basin in three nested mineral rings. F fires the diagnostic pulse.
+    case channelBowl     // Scene 5D: a RECEIVER — a raised bowl embedded in its junction; anim = fed 0.55 / locked 1.0        // Scene 2: a mote shaken loose from a wall joint by a twist. `anim` = life left,
                          // 1 → 0, which both LOWERS it (heightScale about the floor) and fades it out.
                          // Non-solid and short-lived; the world's only particle so far.
     case layeredVessel   // Scene 4: the vessel from Scene 1, now READING the lock — three major rings, each

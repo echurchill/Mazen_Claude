@@ -88,6 +88,10 @@ typedef struct
     /// back to distance along the light ray, so a caster on the far side of the WORLD can be told
     /// apart from a wall two tiles away.
     float shadowDepthRange;
+    /// Scene 5: 1 while the diagnostic pulse is in flight (the front draws brighter), and the 5J
+    /// bloom 0→1→0.3 — the whole circuit lighting when it locks, then settling to a resting glow.
+    float channelPulseBright;
+    float worldBloom;
     vector_float3 portalLightPosition;   // world space; unused when the radius is 0
     float portalLightRadius;             // 0 = no portal light this frame
     vector_float3 portalLightColor;

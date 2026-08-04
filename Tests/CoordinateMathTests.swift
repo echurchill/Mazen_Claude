@@ -2115,8 +2115,8 @@ struct CoordinateMathTests {
                     guard f.props.contains(where: { $0.kind == .alignmentCylinder }) else { continue }
                     perFace[face, default: 0] += 1
                     check(f.mazeTile.channels.isEmpty, "a rotator stands on a channel at \(face) r\(r) c\(c)")
-                    check(!f.props.contains { $0.kind == .obelisk || $0.kind == .layeredVessel },
-                          "a rotator shares a tile with a receiver or vessel at \(face)")
+                    check(!f.props.contains { $0.kind == .channelBowl || $0.kind == .layeredVessel || $0.kind == .channelBasin },
+                          "a rotator shares a tile with a fixture at \(face)")
                 }
             }
         }
@@ -2213,6 +2213,103 @@ struct CoordinateMathTests {
             for _ in 0..<300 { one.update(deltaTime: 1.0 / 60.0) }
             check(!one.twistEnabled, "Scene 1 must not hand over the twist")
         }
+    }
+
+    /// The Scene 5 polish pass (2026-08-03): the source is a BASIN, the receivers are BOWLS with
+    /// three states, F at the basin fires the diagnostic pulse, a live circuit runs seamlessly, and
+    /// completion blooms the world. Played, not inspected — each behaviour through the same calls
+    /// the player's inputs make.
+    static func testSceneFiveFixturesAndCompletion() {
+        let gs = prologueWorld("scene-5")
+        let m = gs.cubeModel
+
+        // The fixtures exist and are the scripted kinds.
+        var basins = 0, bowls = 0
+        for face in CubeFace.allCases {
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    for p in m.cubies[ci].facelets[fi].props {
+                        if p.kind == .channelBasin { basins += 1 }
+                        if p.kind == .channelBowl { bowls += 1 }
+                    }
+                }
+            }
+        }
+        check(basins == 1, "one source basin, found \(basins)")
+        check(bowls == 3, "three receiver bowls, found \(bowls)")
+
+        // 5C — the DIAGNOSTIC PULSE: F at the basin releases a bright front immediately.
+        guard let src = m.channelSource else { check(false, "no source"); return }
+        for _ in 0..<40 { gs.update(deltaTime: 1.0 / 60.0) }   // natural cycle underway
+        gs.pendingAudioCues.removeAll()
+        stand(gs, src.face, src.row, src.col)
+        check(gs.hasInteractableHere, "the basin should answer a tap")
+        gs.interact()
+        check(gs.pulseFront == 0, "the diagnostic pulse should start from the source at once")
+        check(gs.pulseBright == 1, "the diagnostic pulse is the bright one")
+        check(gs.pendingAudioCues.contains { if case .channelPulse = $0 { return true }; return false },
+              "the release should be heard")
+
+        // 5D — THREE STATES. Find a single rotator turn that feeds at least one receiver without
+        // completing the circuit (5E promises the first fix is available and plainly correct).
+        var fedTurn: (axis: Int, index: Int)? = nil
+        outer: for face in CubeFace.allCases {
+            let (axis, index) = m.sliceAxisAndIndex(for: face)
+            m.applySliceRotation(axis: axis, index: index, angle: .pi / 2)
+            let reach = gs.channelDepths
+            let feeds = m.channelReceivers.contains { reach[$0] != nil }
+            if feeds && !gs.liveCircuit { fedTurn = (axis, index); break outer }
+            m.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)   // undo and try the next
+        }
+        check(fedTurn != nil, "5E: some single turn should feed a receiver while the circuit stays broken")
+        if fedTurn != nil {
+            for _ in 0..<300 { gs.update(deltaTime: 1.0 / 60.0) }
+            var filling = 0, locked = 0
+            for cu in m.cubies { for f in cu.facelets {
+                for p in f.props where p.kind == .channelBowl {
+                    if abs(p.anim - 0.55) < 0.05 { filling += 1 }
+                    if p.anim > 0.9 { locked += 1 }
+                }
+            } }
+            check(filling >= 1, "a fed-but-not-locked receiver should sit at the FILLING level")
+            check(locked == 0, "no receiver may read LOCKED while the circuit is broken")
+        }
+
+        // Solve it (fresh world so the state is known).
+        let gs2 = prologueWorld("scene-5")
+        let m2 = gs2.cubeModel
+        for (axis, index) in [(2, 0), (0, 0), (0, 0)] {
+            m2.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)
+        }
+        check(gs2.liveCircuit, "the known solution should complete the circuit")
+
+        // 5I — SEAMLESS: no incomplete tone ever again, the front keeps cycling, and the fixtures
+        // lock full. 5J — the bloom fires, peaks, and settles to a resting glow.
+        var releases = 0, breaks = 0
+        var peak: Float = 0
+        // 22 s: the route is ~7 steps deep and the pulse walks at ~0.83 tiles/s, so a lap is
+        // ~8.4 s — the first version of this ran 14 s, saw 2 releases, and blamed the rhythm.
+        for _ in 0..<(60 * 22) {
+            gs2.update(deltaTime: 1.0 / 60.0)
+            peak = max(peak, gs2.worldBloom)
+            for cue in gs2.pendingAudioCues {
+                if case .channelPulse = cue { releases += 1 }
+                if case .channelIncomplete = cue { breaks += 1 }
+            }
+            gs2.pendingAudioCues.removeAll()
+        }
+        check(breaks == 0, "a live circuit must never sound its incomplete tone, heard \(breaks)")
+        check(releases >= 3, "the live circuit should keep its rhythm, heard \(releases) releases")
+        check(gs2.pulseFront >= 0, "the live front must never go dark")
+        check(peak > 0.95, "the 5J bloom should reach full, peaked at \(peak)")
+        check(gs2.worldBloom > 0.25 && gs2.worldBloom < 0.5,
+              "the bloom should settle to a resting glow, ended at \(gs2.worldBloom)")
+        var full = 0
+        for cu in m2.cubies { for f in cu.facelets {
+            for p in f.props where (p.kind == .channelBowl || p.kind == .channelBasin) && p.anim > 0.95 { full += 1 }
+        } }
+        check(full == 4, "the basin and all three bowls should lock full, got \(full)")
     }
 
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
@@ -2735,6 +2832,7 @@ struct CoordinateMathTests {
         testTheUndersideIsDressedWithoutChangingIt()
         testAScriptedTurnWaitsRatherThanVanishing()
         testSceneFiveCanBeSolvedByItsRotatorsAlone()
+        testSceneFiveFixturesAndCompletion()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

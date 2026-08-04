@@ -1,5 +1,10 @@
 # Scenes 5 & 6 — Analysis, Answers, Build Order
 
+**Status: Scene 5 items 1–5 BUILT (2026-08-03) — diagnostic pulse, three receiver states, basin +
+bowls (material 35), seamless live circuit, and the 5J bloom (channels flood, the tile grid
+surfaces on the pale stone, then settles to a resting glow). Deferred as planned: 5K's staged
+emergence, 5H's near-miss aids. Scene 6 untouched, next.**
+
 *Written 2026-08-03, against the scripts in `Scenes/` (read-only) and the code as it stands.
 Analysis only — recommendations, not work done. Companion to the
 [Prologue Build Plan](Prologue%20Build%20Plan%20—%20Scenes%201-4.md).*

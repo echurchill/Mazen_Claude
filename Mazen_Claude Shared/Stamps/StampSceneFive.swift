@@ -90,22 +90,23 @@ extension CubeModel {
         channelReceivers = []
         for end in ends {
             guard let (ci, fi) = faceletAt(face: end.face, row: end.row, col: end.col) else { continue }
-            // A receiver reuses the obelisk: it stands off the surface and lights when fed, which is
-            // what the scene needs it to do. `anim` is its lit state, driven by the live circuit.
-            // A third the size of the stock obelisk: at full size a 1.16-unit shaft on a world of
-            // radius 3.5 reads as a girder driven through the planet rather than a marker standing
-            // on it (Eddie's screenshot).
+            // 5D — "a raised crescent or bowl-like structure embedded into a channel junction."
+            // Was a scaled obelisk while the scene was being proven; the bowl is the scripted
+            // object, and its shape is also what makes the three receiver STATES readable — an
+            // empty bowl, a bowl filling while the pulse feeds it, a bowl locked full.
             cubies[ci].facelets[fi].props.append(
-                Prop(kind: .obelisk, subRow: 1, subCol: 1, extraScale: 0.32))
+                Prop(kind: .channelBowl, subRow: 1, subCol: 1))
             channelReceivers.append(cubies[ci].facelets[fi].id.rawValue)
         }
 
         if let (ci, fi) = faceletAt(face: src.face, row: src.row, col: src.col) {
-            // The source: a vessel, because Scene 5F puts "the layered vessels at the junctions" and
-            // this is the junction everything begins at.
-            var v = Prop(kind: .layeredVessel, subRow: 1, subCol: 1, facing: .s, state: 5, extraScale: 1.3)
-            v.anim = 3
-            cubies[ci].facelets[fi].props.append(v)
+            // 5C — "a low circular basin set into the ground, surrounded by three nested rings of
+            // translucent mineral. At its center, liquid light gathers and releases a slow pulse."
+            // It was a layered vessel while the scene was being proven, and that actively muddied
+            // 5F: the scene argues vessels OBSERVE the circuit, and the source IS the circuit — the
+            // one thing here that must not be a vessel. F on the basin fires the diagnostic pulse.
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .channelBasin, subRow: 1, subCol: 1))
         }
 
         // 5F — VESSELS AT THE JUNCTIONS. "Their bases touch the luminous grooves. Their rings contain

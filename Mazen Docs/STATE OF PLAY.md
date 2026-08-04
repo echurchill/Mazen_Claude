@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,927 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,994 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -502,6 +502,22 @@ The prologue chain is complete and every scene is playable end to end. In order:
 Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
+
+### Scene 5 polish pass (2026-08-03)
+The five items from the analysis doc, all played by tests and mutation-checked:
+- **5C diagnostic pulse** — F (or tap) at the basin fires a brighter front immediately.
+- **5D three receiver states** — dark / filling 0.55 / locked 1.0; a fed-but-broken bowl holds
+  light only while the pulse feeds it, and only a LOCKED one hums. "Temporary success is
+  deliberately different from lasting success" is now visible and audible.
+- **The scripted fixtures** — the source is a basin in three nested mineral rings, the receivers
+  are raised bowls (new lathes, new material 35: translucent mineral that fills bottom-up via a
+  uv fill coordinate). The source is no longer a vessel, which was muddying 5F's "vessels observe
+  the circuit" argument.
+- **5I seamless** — a live circuit never withdraws or sounds the incomplete tone; the front wraps
+  source→receivers→source as a rhythm.
+- **5J the bloom** — on lock: every circuit channel floods, the tile grid surfaces across the pale
+  stone, fixtures breathe in rhythm, the three receiver tones align; then it settles to a resting
+  glow ~0.3. The world stays brighter than it began.
 
 ### Render plan executed: Tier 1 + 2 (2026-08-03)
 B4 (WorldCatalog is the one name), B1 (Renderer split into frame loop / world stack / asset
