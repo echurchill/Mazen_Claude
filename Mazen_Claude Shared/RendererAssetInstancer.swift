@@ -402,7 +402,11 @@ extension Renderer {
         let lodMaxSize: Float = 0.16
         let lodDropRatio: Float = 110    // a 2 m plant drops beyond ~13 units (~250 m)
         let lodShowRatio: Float = 90     // and returns nearer, so the boundary cannot shimmer
-        let subsetOn = !ablate.contains("shadowsubset")
+        // ORBIT-ONLY: at ground level the small contact shadows are visual texture worth their
+        // cost (Eddie: "the shadow makes things look less interesting"), and first person sat at
+        // the vsync floor before the subset existed — it never paid there. In orbit a 2 m shadow
+        // is sub-texel in the map and the ~2.6 ms is real.
+        let subsetOn = !ablate.contains("shadowsubset") && gameState.camera.mode == .orbit
         let lodOn = !ablate.contains("lod")
 
         var inst = 0

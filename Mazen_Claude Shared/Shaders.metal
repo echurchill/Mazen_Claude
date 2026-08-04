@@ -455,7 +455,16 @@ fragment float4 fragmentShader(
                 for (int y = -1; y <= 1; y++) {
                     float2 offset = float2(float(x), float(y)) * texelSize;
                     float closestDepth = shadowMap.sample(texSampler, shadowUV + offset);
-                    shadow += (currentDepth - bias > closestDepth) ? 1.0 : 0.0;
+                    // A shadow is only believed if its caster is NEAR — within a few tiles along
+                    // the light ray. The single ortho map covers the whole cube, so without this a
+                    // wall on +Z casts onto −Z straight through the world (Eddie: "shadows caused
+                    // by the other faces should never show up given the nature of the worlds" —
+                    // each face is its own land, and the fiction beats the optics). 3.5 units
+                    // admits every same-face shadow (the tallest caster at a grazing sun) and
+                    // rejects cross-face ones, whose gap is at least the world's diameter.
+                    float gapWorld = (currentDepth - closestDepth) * frame.shadowDepthRange;
+                    bool occluded = (currentDepth - bias > closestDepth) && gapWorld < 3.5;
+                    shadow += occluded ? 1.0 : 0.0;
                 }
             }
             shadow /= 9.0;

@@ -84,6 +84,10 @@ typedef struct
     /// while nothing is travelling. The groove shader lights the tiles the front is passing; the
     /// audio emitter follows the same number, so what you hear and what you see are one fact.
     float channelPulse;
+    /// The shadow ortho's (farZ − nearZ) in world units — converts an occluder↔receiver depth gap
+    /// back to distance along the light ray, so a caster on the far side of the WORLD can be told
+    /// apart from a wall two tiles away.
+    float shadowDepthRange;
     vector_float3 portalLightPosition;   // world space; unused when the radius is 0
     float portalLightRadius;             // 0 = no portal light this frame
     vector_float3 portalLightColor;
