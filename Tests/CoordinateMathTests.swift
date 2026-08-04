@@ -422,30 +422,74 @@ struct CoordinateMathTests {
             let gaps = (1..<xs.count).map { xs[$0] - xs[$0 - 1] }
             check(Set(gaps.map { Int($0 * 1000) }).count > 1, "props along a wall are still evenly spaced")
         }
-        // Twist-rigidity: a tile's own OVERGROWTH follows the tile, not its position on the face.
-        // (Structural wall pieces are excluded — a shared wall is drawn by one of the two tiles that
-        // meet at it, and which one legitimately changes when a twist changes who is adjacent.)
-        func overgrowth(_ ci: Int, _ fi: Int, _ r: Int, _ c: Int) -> [Int] {
-            m.dressedWallProps(m.cubies[ci].facelets[fi], face: .positiveZ, row: r, col: c,
-                               walls: [], rocks: pools, bushes: pools,
-                               wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: false)
-                .map(\.state).sorted()   // as a MULTISET: the edges are visited in N/E/S/W order of
-        }                                 // the CURRENT rotation, so the sequence turns with the tile
-        let (axis, index) = m.sliceAxisAndIndex(for: .positiveZ)
-        let before = idOf.mapValues { overgrowth($0.0, $0.1, 0, 0) }
-        m.applySliceRotation(axis: axis, index: index, angle: .pi / 2)
-        var checkedTiles = 0
+        // The dressing is a pure function of (tile identity, PASSABLE edge state) — it reads the
+        // seam's truth, not the tile's own half, because drawing from one half while movement asks
+        // both is exactly what an invisible wall is (Scene 4 by the portal, three recurrences).
+        // The invariants that follow from that:
+        //
+        //   DETERMINISM — an identical world dresses identically.
+        let m2 = GameState(size: m.size, name: "again", stamp: .gardenMaze).cubeModel
+        var sameEverywhere = true
         for r in 0..<m.size {
             for c in 0..<m.size {
-                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
-                let id = m.cubies[ci].facelets[fi].id.rawValue
-                guard let was = before[id] else { continue }
-                check(overgrowth(ci, fi, r, c) == was,
-                      "tile \(id) regrew its overgrowth differently after a twist")
-                checkedTiles += 1
+                guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c),
+                      let (ci2, fi2) = m2.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                let a = m.dressedWallProps(m.cubies[ci].facelets[fi], face: .positiveZ, row: r, col: c,
+                                           walls: pools, rocks: pools, bushes: pools,
+                                           wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: false)
+                let b = m2.dressedWallProps(m2.cubies[ci2].facelets[fi2], face: .positiveZ, row: r, col: c,
+                                            walls: pools, rocks: pools, bushes: pools,
+                                            wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: false)
+                if a.map(\.state) != b.map(\.state) || a.map(\.offsetX) != b.map(\.offsetX) { sameEverywhere = false }
             }
         }
-        check(checkedTiles > 0, "the twist should have left tiles on this face to re-check")
+        check(sameEverywhere, "two identical worlds dressed differently")
+
+        //   REVERSIBILITY — a twist and its inverse restore the dressing bit-for-bit, because the
+        //   routing model conserves openings.
+        let (axis, index) = m.sliceAxisAndIndex(for: .positiveZ)
+        func snapshotDressing() -> [[Int]] {
+            var out: [[Int]] = []
+            for r in 0..<m.size {
+                for c in 0..<m.size {
+                    guard let (ci, fi) = m.faceletAt(face: .positiveZ, row: r, col: c) else { continue }
+                    out.append(m.dressedWallProps(m.cubies[ci].facelets[fi], face: .positiveZ, row: r, col: c,
+                                                  walls: pools, rocks: pools, bushes: pools,
+                                                  wallScale: 1, rockScale: 1, bushScale: 1,
+                                                  skipOvergrowth: false).map(\.state))
+                }
+            }
+            return out
+        }
+        let beforeTwist = snapshotDressing()
+        m.applySliceRotation(axis: axis, index: index, angle: .pi / 2)
+        m.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)
+        check(snapshotDressing() == beforeTwist, "twist + untwist did not restore the dressing")
+
+        //   THE CLASS-KILLER — every edge that refuses PASSAGE draws a wall, on the refused side,
+        //   whoever owns the closure. Constructed directly: open mine, close theirs.
+        if let (ci, fi) = m.faceletAt(face: .positiveZ, row: 2, col: 2),
+           let (nci, nfi) = m.faceletAt(face: .positiveZ, row: 2, col: 3) {
+            // Isolate the seam: MY tile fully open on every edge, so any wall it draws can only be
+            // the disagreement. (The first version left the tile's other walls standing, and
+            // `!mine.isEmpty` passed even with the fix reverted — a check that cannot fail is not
+            // a check, third time this month.)
+            m.cubies[ci].facelets[fi].mazeTile.openings = [.north, .east, .south, .west]
+            // AGREEMENT first — the garden maze may already close the far side, and "closing" an
+            // already-closed edge proves nothing (the first draft of this failed in both directions
+            // for exactly that reason). Open theirs, measure, close theirs, measure.
+            m.cubies[nci].facelets[nfi].mazeTile.openings.insert(.west)
+            let agreed = m.dressedWallProps(m.cubies[ci].facelets[fi], face: .positiveZ, row: 2, col: 2,
+                                            walls: pools, rocks: [], bushes: [],
+                                            wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: true).count
+            m.cubies[nci].facelets[nfi].mazeTile.openings.remove(.west)    // theirs: closed
+            let broken = m.dressedWallProps(m.cubies[ci].facelets[fi], face: .positiveZ, row: 2, col: 2,
+                                            walls: pools, rocks: [], bushes: [],
+                                            wallScale: 1, rockScale: 1, bushScale: 1, skipOvergrowth: true).count
+            check(broken > agreed,
+                  "closing the FAR side of a seam added no wall on my side — "
+                  + "that is the invisible wall, back again (agreed \(agreed), broken \(broken))")
+        }
     }
 
     /// The vessel is meant to be READ up close — three seams and a glyph on its cap. It inherited the

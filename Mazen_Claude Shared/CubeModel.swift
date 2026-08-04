@@ -1146,7 +1146,13 @@ class CubeModel {
                           wallScale: Float, rockScale: Float, bushScale: Float,
                           skipOvergrowth: Bool) -> [Prop] {
         guard !walls.isEmpty || !rocks.isEmpty || !bushes.isEmpty else { return [] }
-        let op = facelet.mazeTile.openings
+        // THE PASSABLE mask, not the tile's own half of the edge. This was the invisible wall's
+        // last hiding place (Eddie, Scene 4 by the portal, 2026-08-03 — the third recurrence):
+        // movement asks BOTH sides of a seam since the seam-ownership change, but this drew from
+        // one, so a "mine open / theirs closed" seam refused passage while drawing nothing on the
+        // side the player approaches from. Every consumer of edge state now reads the same answer,
+        // and a refused seam carries a wall on BOTH its sides — whichever face you meet it from.
+        let op = passableOpenings(face: face, row: row, col: col)
         let type = min(3, Int(facelet.mazeTile.wallType))
         let seed = UInt32(truncatingIfNeeded: facelet.mazeTile.styleSeed)
         let uvTurns = Int(facelet.mazeTile.uvTurns)
