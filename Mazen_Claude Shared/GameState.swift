@@ -274,6 +274,7 @@ class GameState {
         tickChannelPulse(deltaTime)
         tickRouteKeyedArrival(deltaTime)
         tickMetalVessel()
+        tickSurveyor(deltaTime)
         tickLayeredVessel(deltaTime)
         tickVesselDemo(deltaTime)
         tickAnchorFlash(deltaTime)
@@ -891,6 +892,9 @@ class GameState {
                     // occluded like anything else, so it is something you notice you have been
                     // hearing rather than something you hear.
                     else if facelet.props.contains(where: { $0.kind == .layeredVessel && $0.state == 1 }) { kind = .vessel }
+                    // The surveyor hums while it works — the vessel's soft voice, reused: kin
+                    // machinery, and no new registration. Silent when stalled, which IS the signal.
+                    else if facelet.props.contains(where: { $0.kind == .surveyor }) && !surveyorIdle { kind = .vessel }
                     // An OPEN portal holds the "low, stable tone" the scripts describe. A sealed one
                     // is inert and says nothing — which is the difference the player is listening for.
                     else if facelet.props.contains(where: { $0.kind == .portal })
@@ -1387,6 +1391,154 @@ class GameState {
         pulseFront = 0
         pulseBright = 1
         pendingAudioCues.append(.channelPulse(at: faceletPosition(of: cubeModel.channelSource)))
+    }
+
+    // MARK: - Scene 5 — THE SURVEYOR (Eddie's mobile-builder)
+
+    /// A Builder machine caught mid-work: it walks the LIVE channel runs and grows fractal
+    /// filigree onto the bare tiles beside them — "the world assembly line", the engineered truth
+    /// being engineered. Its behaviour is diegetic feedback: it can only extend from current that
+    /// actually flows, so it works busily along what the player has repaired and stands idle at
+    /// the frontier of what they have not. It does not notice the player, and F does nothing to
+    /// it: Builders' machinery is indifferent, which says more than any interaction could.
+    private(set) var surveyorTile: (face: CubeFace, row: Int, col: Int)? = nil
+    private(set) var surveyorFrom: (face: CubeFace, row: Int, col: Int)? = nil
+    private(set) var surveyorMove: Float = 1     // 0→1 between tiles; 1 = standing
+    private var surveyorWork: Float = 0
+    private(set) var surveyorIdle = false
+
+    private func tickSurveyor(_ dt: Float) {
+        guard !cubeModel.channelReceivers.isEmpty, cubeModel.channelSource != nil else { return }
+        let reach = channelDepths
+
+        // Spawn on first tick: the live channel tile deepest from the source — far from the
+        // arrival, so the machine is met as distant industry, not a greeter.
+        if surveyorTile == nil {
+            var best: (face: CubeFace, row: Int, col: Int, d: Int)? = nil
+            for face in CubeFace.allCases {
+                for r in 0..<cubeModel.size {
+                    for c in 0..<cubeModel.size {
+                        guard let (ci, fi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
+                        let f = cubeModel.cubies[ci].facelets[fi]
+                        guard !f.mazeTile.channels.isEmpty, let d = reach[f.id.rawValue] else { continue }
+                        if best == nil || d > best!.d { best = (face, r, c, d) }
+                    }
+                }
+            }
+            guard let b = best else { return }
+            surveyorTile = (b.face, b.row, b.col)
+            placeSurveyorProp(at: (b.face, b.row, b.col))
+            return
+        }
+        guard let here = surveyorTile,
+              let (ci, fi) = cubeModel.faceletAt(face: here.face, row: here.row, col: here.col) else { return }
+
+        // Mid-step: slide the body from the previous tile's centre to this one's. Offsets are in
+        // the tile-local frame the prop path already understands; cross-face steps skip the slide
+        // (the frames differ) and simply arrive. The mast bobs while it works via the same prop.
+        if surveyorMove < 1 {
+            surveyorMove = min(1, surveyorMove + dt * 0.9)
+            if let from = surveyorFrom, from.face == here.face,
+               let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .surveyor }) {
+                let span = 3 * cubeModel.worldScale.subCellStep
+                let back = 1 - surveyorMove
+                cubeModel.cubies[ci].facelets[fi].props[pi].offsetX = Float(from.col - here.col) * span * back
+                cubeModel.cubies[ci].facelets[fi].props[pi].offsetY = Float(from.row - here.row) * span * back
+                cubeModel.markTopologyChanged()
+            }
+            if surveyorMove >= 1 {
+                surveyorFrom = nil
+                if let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .surveyor }) {
+                    cubeModel.cubies[ci].facelets[fi].props[pi].offsetX = 0
+                    cubeModel.cubies[ci].facelets[fi].props[pi].offsetY = 0
+                }
+            }
+            return
+        }
+
+        // STALLED — its trunk has gone dead. It waits; the current coming back is the player's
+        // doing, and the machine resuming is theirs to notice.
+        let hereID = cubeModel.cubies[ci].facelets[fi].id.rawValue
+        guard reach[hereID] != nil else { surveyorIdle = true; return }
+        surveyorIdle = false
+
+        // WORK: grow filigree on one bare neighbour of this live tile.
+        if let target = filigreeTarget(of: here) {
+            surveyorWork += dt
+            let rate = dt / 16.0                          // ~16 s per branch: industry, not spectacle
+            if let (nci, nfi) = cubeModel.faceletAt(face: target.loc.face, row: target.loc.row, col: target.loc.col) {
+                if cubeModel.cubies[nci].facelets[nfi].filigreeGrowth == 0 {
+                    cubeModel.cubies[nci].facelets[nfi].filigreeEntry = target.entry
+                    cubeModel.cubies[nci].facelets[nfi].filigreeSeed =
+                        UInt8(truncatingIfNeeded: cubeModel.cubies[nci].facelets[nfi].id.rawValue &* 31 &+ 7)
+                }
+                cubeModel.cubies[nci].facelets[nfi].filigreeGrowth =
+                    min(1, cubeModel.cubies[nci].facelets[nfi].filigreeGrowth + rate)
+                cubeModel.markTopologyChanged()
+            }
+            return
+        }
+
+        // MOVE: this tile's neighbours are all grown (or ungrowable) — walk to the next live
+        // channel tile that still has work, nearest by depth difference; deterministic ties.
+        var next: (face: CubeFace, row: Int, col: Int)? = nil
+        var bestKey: (Int, Int, Int, Int)? = nil
+        for face in CubeFace.allCases {
+            for r in 0..<cubeModel.size {
+                for c in 0..<cubeModel.size {
+                    guard let (qci, qfi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
+                    let f = cubeModel.cubies[qci].facelets[qfi]
+                    guard !f.mazeTile.channels.isEmpty, reach[f.id.rawValue] != nil,
+                          !(face == here.face && r == here.row && c == here.col),
+                          filigreeTarget(of: (face, r, c)) != nil else { continue }
+                    let key = (abs((reach[f.id.rawValue] ?? 0) - (reach[hereID] ?? 0)), face.rawValue, r, c)
+                    if bestKey == nil || key < bestKey! { bestKey = key; next = (face, r, c) }
+                }
+            }
+        }
+        guard let n = next else { surveyorIdle = true; return }   // everything reachable is grown
+        moveSurveyorProp(from: here, to: n)
+        surveyorFrom = here
+        surveyorTile = n
+        surveyorMove = 0
+    }
+
+    /// A growable neighbour of a channel tile: bare pale stone, no channels of its own, no props,
+    /// not already grown. `entry` is the edge of the TARGET that faces back at the channel tile.
+    private func filigreeTarget(of loc: (face: CubeFace, row: Int, col: Int))
+        -> (loc: (face: CubeFace, row: Int, col: Int), entry: DirectionMask)? {
+        let n = cubeModel.size
+        for (sdir, dr, dc) in [(SurfaceDirection.north, -1, 0), (.east, 0, 1), (.south, 1, 0), (.west, 0, -1)] {
+            let nr = loc.row + dr, nc = loc.col + dc
+            let far: (face: CubeFace, row: Int, col: Int, back: SurfaceDirection)
+            if nr >= 0, nr < n, nc >= 0, nc < n {
+                far = (loc.face, nr, nc, sdir.opposite)
+            } else {
+                let cr = cubeModel.edgeCrossing(face: loc.face, direction: sdir, row: loc.row, col: loc.col)
+                far = (cr.face, cr.row, cr.col, cr.facing.opposite)
+            }
+            guard let (nci, nfi) = cubeModel.faceletAt(face: far.face, row: far.row, col: far.col) else { continue }
+            let f = cubeModel.cubies[nci].facelets[nfi]
+            guard f.mazeTile.channels.isEmpty, f.props.isEmpty, f.filigreeGrowth < 1 else { continue }
+            let entry: DirectionMask = far.back == .north ? .north : far.back == .south ? .south
+                                     : far.back == .west ? .west : .east
+            return ((far.face, far.row, far.col), entry)
+        }
+        return nil
+    }
+
+    private func placeSurveyorProp(at loc: (face: CubeFace, row: Int, col: Int)) {
+        guard let (ci, fi) = cubeModel.faceletAt(face: loc.face, row: loc.row, col: loc.col) else { return }
+        cubeModel.cubies[ci].facelets[fi].props.append(Prop(kind: .surveyor, subRow: 1, subCol: 1, facing: .n))
+        cubeModel.markTopologyChanged()
+    }
+
+    private func moveSurveyorProp(from: (face: CubeFace, row: Int, col: Int),
+                                  to: (face: CubeFace, row: Int, col: Int)) {
+        if let (ci, fi) = cubeModel.faceletAt(face: from.face, row: from.row, col: from.col) {
+            cubeModel.cubies[ci].facelets[fi].props.removeAll { $0.kind == .surveyor }
+        }
+        placeSurveyorProp(at: to)
     }
 
     /// 5J — "for several seconds after completion, the entire planetoid illuminates… then secondary

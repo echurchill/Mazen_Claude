@@ -248,6 +248,10 @@ class TileMeshLibrary {
         Self.addChannelBasin(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.channelBasin.rawValue] = TileMesh(vertexOffset: 0, indexOffset: basinStart, indexCount: allIndices.count - basinStart)
 
+        let surveyorStart = allIndices.count
+        Self.addSurveyor(to: &allVerts, indices: &allIndices, ws: ws)
+        propMeshes[PropKind.surveyor.rawValue] = TileMesh(vertexOffset: 0, indexOffset: surveyorStart, indexCount: allIndices.count - surveyorStart)
+
         let bowlStart = allIndices.count
         Self.addChannelBowl(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.channelBowl.rawValue] = TileMesh(vertexOffset: 0, indexOffset: bowlStart, indexCount: allIndices.count - bowlStart)
@@ -1474,6 +1478,38 @@ class TileMeshLibrary {
                 indices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
             }
         }
+    }
+
+    /// Scene 5 — the SURVEYOR's body: a squat working machine, deliberately kin to the Cyberpunk
+    /// kit's boxes rather than to the mineral fixtures — it is a TOOL among monuments. A broad base
+    /// unit, a smaller housing on top, and a thin sensor mast.
+    private static func addSurveyor(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let mUnit: Float = ws.eyeHeight / 1.7
+        let z0 = ws.floorY
+        func box(_ hw: Float, _ hd: Float, _ zA: Float, _ zB: Float) {
+            let corners: [(Float, Float)] = [(-hw, -hd), (hw, -hd), (hw, hd), (-hw, hd)]
+            for i in 0..<4 {
+                let (x0, y0) = corners[i], (x1, y1) = corners[(i + 1) % 4]
+                let n = normalize(SIMD3<Float>(x0 + x1, y0 + y1, 0))
+                let base = UInt32(verts.count)
+                verts.append(contentsOf: [
+                    MazeVertexSwift(position: SIMD3(x0, y0, zA), normal: n, texCoord: SIMD2(0, 0), aoFactor: 0.85),
+                    MazeVertexSwift(position: SIMD3(x1, y1, zA), normal: n, texCoord: SIMD2(1, 0), aoFactor: 0.85),
+                    MazeVertexSwift(position: SIMD3(x1, y1, zB), normal: n, texCoord: SIMD2(1, 1), aoFactor: 1),
+                    MazeVertexSwift(position: SIMD3(x0, y0, zB), normal: n, texCoord: SIMD2(0, 1), aoFactor: 1),
+                ])
+                indices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
+            }
+            let up = SIMD3<Float>(0, 0, 1)
+            let base = UInt32(verts.count)
+            for (x, y) in corners {
+                verts.append(MazeVertexSwift(position: SIMD3(x, y, zB), normal: up, texCoord: SIMD2(x / hw * 0.5 + 0.5, y / hd * 0.5 + 0.5), aoFactor: 1))
+            }
+            indices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
+        }
+        box(0.42 * mUnit, 0.34 * mUnit, z0, z0 + 0.36 * mUnit)                 // base unit
+        box(0.24 * mUnit, 0.20 * mUnit, z0 + 0.36 * mUnit, z0 + 0.58 * mUnit) // housing
+        box(0.02 * mUnit, 0.02 * mUnit, z0 + 0.58 * mUnit, z0 + 1.05 * mUnit) // mast
     }
 
     /// Scene 5C — the SOURCE: "a low circular basin set into the ground, surrounded by three nested

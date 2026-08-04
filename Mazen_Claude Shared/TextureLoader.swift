@@ -508,6 +508,80 @@ enum TextureLoader {
         }
     }
 
+    /// Scene 5 — the surveyor's DENDRITES: 6 slices of stepped, right-angled branching (Eddie's
+    /// reference image is Manhattan filigree, not smooth tendrils), grown from the WEST edge.
+    /// RG8: r = line intensity (core 1.0, 1-px soft skirt 0.35), g = normalised DISTANCE ALONG THE
+    /// GROWTH from the entry — so revealing `g <= growth` grows the branch outward from its parent
+    /// channel, tip first, exactly like a thing being built. Prototyped offline, rendered, and
+    /// looked at before this port; the algorithm here matches that prototype constant-for-constant.
+    static func makeDendriteArray(device: MTLDevice, size: Int = 128, slices: Int = 6) -> MTLTexture? {
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type2DArray
+        desc.pixelFormat = .rg8Unorm
+        desc.width = size; desc.height = size
+        desc.arrayLength = slices
+        desc.storageMode = .shared; desc.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        texture.label = "SurveyorDendrites"
+
+        let seeds: [UInt32] = [11, 23, 37, 53, 71, 89]
+        for (slice, seed) in seeds.prefix(slices).enumerated() {
+            var rng: UInt32 = seed &* 2654435761
+            if rng == 0 { rng = 1 }
+            func nxt() -> UInt32 { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng }
+            var inten = [Float](repeating: 0, count: size * size)
+            var dist = [Float](repeating: 0, count: size * size)
+            var maxd: Float = 0
+            func plot(_ x: Int, _ y: Int, _ d: Float) {
+                guard x >= 2, x < size - 2, y >= 2, y < size - 2 else { return }
+                inten[y * size + x] = 1
+                let i = y * size + x
+                if dist[i] == 0 || dist[i] > d { dist[i] = d }
+                maxd = max(maxd, d)
+            }
+            func walk(_ x0: Int, _ y0: Int, _ dx0: Int, _ dy0: Int, _ budget0: Int,
+                      _ d0: Float, _ depth: Int, _ bias: (Int, Int)) {
+                var x = x0, y = y0, dx = dx0, dy = dy0, budget = budget0, d = d0
+                while budget > 0 {
+                    let seg = 5 + Int(nxt() % 5)
+                    for _ in 0..<seg {
+                        if budget <= 0 { break }
+                        x += dx; y += dy; d += 1
+                        plot(x, y, d); budget -= 1
+                    }
+                    let r = nxt() % 100
+                    if depth < 3, r < 38, budget > 12 {
+                        let (bx, by) = nxt() % 2 == 0 ? (dy, dx) : (-dy, -dx)
+                        walk(x, y, bx, by, 14 + budget / 3, d, depth + 1, (bx, by))
+                    }
+                    let cand = [bias, bias, (0, 1), (0, -1), (1, 0)]
+                    (dx, dy) = cand[Int(nxt() % UInt32(cand.count))]
+                }
+            }
+            walk(4, size / 2, 1, 0, 300, 0, 0, (1, 0))
+
+            var pixels = [UInt8](repeating: 0, count: size * size * 2)
+            for y in 1..<(size - 1) {
+                for x in 1..<(size - 1) {
+                    let i = y * size + x
+                    var r = inten[i]
+                    if r == 0 {
+                        let n = max(max(inten[i - size], inten[i + size]), max(inten[i - 1], inten[i + 1]))
+                        if n > 0 { r = 0.35 }
+                    }
+                    let g = (dist[i] > 0 && maxd > 0) ? dist[i] / maxd : 0
+                    pixels[i * 2] = UInt8(255 * min(1, r))
+                    pixels[i * 2 + 1] = UInt8(255 * min(1, g))
+                }
+            }
+            texture.replace(region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                              size: MTLSize(width: size, height: size, depth: 1)),
+                            mipmapLevel: 0, slice: slice,
+                            withBytes: pixels, bytesPerRow: size * 2, bytesPerImage: size * size * 2)
+        }
+        return texture
+    }
+
     /// Build the caustic symbol array — one slice per `CausticSymbol`, `Prop.state` selects it.
     ///
     /// This is the forge's poor-man's transport MINUS the inverse solve: the tutorial symbols are

@@ -396,6 +396,7 @@ fragment float4 fragmentShader(
     texture2d_array<float> greeneryTex [[texture(TextureIndexGreenery)]],
     texture2d_array<float> treeTex [[texture(TextureIndexTreeSprite)]],
     texture2d_array<float> causticTex [[texture(TextureIndexCaustic)]],
+    texture2d_array<float> dendriteTex [[texture(TextureIndexDendrite)]],
     texture2d_array<float> labelTex [[texture(TextureIndexLabel)]],
     sampler texSampler [[sampler(0)]]
 ) {
@@ -818,6 +819,28 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 36) {
+        // THE SURVEYOR'S FILIGREE — fractal channel-light grown onto bare stone. styleSeed packs
+        // (slice | quarter-turns << 8): the dendrite is authored entering from WEST, and the turns
+        // point its entry at the parent channel tile. discoveryAmount is GROWTH: revealing
+        // g <= growth grows the branch outward tip-first, with a bright working edge just behind
+        // the front. color.r carries the parent trunk's liveness — dead trunk, dark filigree
+        // ("thin dark cracks"), and deliberately SUBORDINATE to the channels at all times: this is
+        // the machine's handwriting, not the puzzle.
+        float2 uv = in.texCoord;
+        uint turns = (in.styleSeed >> 8) & 3u;
+        for (uint t = 0; t < turns; t++) { uv = float2(uv.y, 1.0 - uv.x); }
+        float2 den = dendriteTex.sample(texSampler, uv, in.styleSeed & 0xFFu).rg;
+        if (den.r < 0.05) discard_fragment();
+        float growth = clamp(in.discoveryAmount, 0.0, 1.0);
+        if (den.g > growth) discard_fragment();
+        float tip = smoothstep(growth - 0.10, growth - 0.02, den.g);   // the edge being built now
+        float live = in.color.r;
+        float3 dry = float3(0.20, 0.21, 0.24);
+        float3 lit = float3(0.55, 0.86, 1.00);
+        float glow = clamp(live * 0.4 + frame.worldBloom * 0.5, 0.0, 1.0);
+        color = mix(dry, lit, glow) * den.r + lit * tip * 0.5 * den.r;
+        lighting = skyAmbient * 0.35 + sunColor * 0.3 * halfLambert * shadowFactor + glow * 0.4 + tip * 0.3;
     } else if (in.materialID == 35) {
         // SCENE 5's CIRCUIT FIXTURES — the source basin and the receiver bowls. Pale translucent
         // mineral that FILLS with the channels' own light from the bottom up: `discoveryAmount` is

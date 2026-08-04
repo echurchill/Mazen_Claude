@@ -153,6 +153,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var placeholderArray: MTLTexture!
     /// M16.6: Builder-glyph caustic symbols (r8 intensity array); slice = Prop.state. Generated, not loaded.
     var causticArray: MTLTexture!
+    var dendriteArray: MTLTexture?
     /// M20 (Eddie): rendered text sign-boards (RGBA array); slice = a portal-hub destination. `nil` ⇒
     /// signposts fall back to plain wood. Order matches `Renderer.portalDestinations` (+0 = "Home").
     var labelArray: MTLTexture?
@@ -385,6 +386,7 @@ class Renderer: NSObject, MTKViewDelegate {
         self.greeneryArray = nil
         self.treeSpriteArray = nil   // M20: WenrexaTrees billboards removed (Eddie) — folder no longer used
         self.causticArray = TextureLoader.makeCausticArray(device: device)
+        self.dendriteArray = TextureLoader.makeDendriteArray(device: device)
         self.labelArray = TextureLoader.makeLabelArray(device: device, labels: WorldCatalog.labels)
         self.texSampler = PipelineFactory.makeSampler(device: device)
         // A 1×1 array-texture placeholder for the unconditionally-declared foliage slots (see the
@@ -456,6 +458,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if let t = self.treeSpriteArray { rs.addAllocation(t) }
         rs.addAllocation(self.placeholderArray)
         if let c = self.causticArray { rs.addAllocation(c) }
+        if let d = self.dendriteArray { rs.addAllocation(d) }
         if let l = self.labelArray { rs.addAllocation(l) }
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
@@ -1034,6 +1037,7 @@ class Renderer: NSObject, MTKViewDelegate {
         fragmentArgTable.setTexture((treeSpriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.treeSprite.rawValue)
         fragmentArgTable.setTexture((causticArray ?? placeholderArray).gpuResourceID, index: TextureIndex.caustic.rawValue)
         fragmentArgTable.setTexture((labelArray ?? placeholderArray).gpuResourceID, index: TextureIndex.label.rawValue)
+        fragmentArgTable.setTexture((dendriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.dendrite.rawValue)
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
         // Keep the asset-diffuse slot bound to a valid texture for the maze draws (they don't
         // sample it, but the shader declares it); the prop loop rebinds it per-prop below.

@@ -442,6 +442,12 @@ final class SceneBuilder {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }
+                            if prop.kind == .surveyor {
+                                // The machine itself: chamber plating, with a slow working bob so it
+                                // reads as running even when the player only glances.
+                                materialID = 25
+                                color = SIMD4(0.9, 0.92, 1.0, 1.0)
+                            }
                             if prop.kind == .latch {
                                 // 6D — Scene 2's switch dialect: material 22, `state` = the ordinal
                                 // dot glyph (one/two/three), engaged = the cap rising, exactly the
@@ -751,6 +757,52 @@ final class SceneBuilder {
                     invHalfExtent: 1.0 / model.worldScale.faceDistance,
                     reliefAmplitude: model.reliefAmplitude)
                 bondBandTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.bandFloor))
+            }
+        }
+
+        // THE SURVEYOR'S FILIGREE — grown per facelet, revealed by growth, oriented by entry.
+        if !model.channelReceivers.isEmpty {
+            let depthsF = gameState.channelDepths
+            for face in CubeFace.allCases {
+                for r in 0..<model.size {
+                    for c in 0..<model.size {
+                        guard let (ci, fi) = model.faceletAt(face: face, row: r, col: c) else { continue }
+                        let facelet = model.cubies[ci].facelets[fi]
+                        guard facelet.filigreeGrowth > 0.001 else { continue }
+                        var restM = model.restMatrix(face: face, row: r, col: c)
+                        if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) { restM = animMat * restM }
+                        // Entry mask → quarter-turns from the WEST-authored texture.
+                        let e = facelet.filigreeEntry
+                        let turns: UInt32 = e.contains(.west) ? 0 : e.contains(.north) ? 1
+                                          : e.contains(.east) ? 2 : 3
+                        // The parent trunk: the tile the entry points at; its liveness lights us.
+                        var live: Float = 0.25
+                        let n = model.size
+                        let (sdir, dr, dc): (SurfaceDirection, Int, Int) =
+                            e.contains(.north) ? (.north, -1, 0) : e.contains(.south) ? (.south, 1, 0)
+                            : e.contains(.west) ? (.west, 0, -1) : (.east, 0, 1)
+                        var ploc: (face: CubeFace, row: Int, col: Int)
+                        if r + dr >= 0, r + dr < n, c + dc >= 0, c + dc < n {
+                            ploc = (face, r + dr, c + dc)
+                        } else {
+                            let cr = model.edgeCrossing(face: face, direction: sdir, row: r, col: c)
+                            ploc = (cr.face, cr.row, cr.col)
+                        }
+                        if let (pci, pfi) = model.faceletAt(face: ploc.face, row: ploc.row, col: ploc.col),
+                           depthsF[model.cubies[pci].facelets[pfi].id.rawValue] != nil { live = 1 }
+                        let inst = InstanceDataSwift(
+                            modelMatrix: restM,
+                            baseColor: SIMD4(live, 1, 1, 1),
+                            materialID: 36,
+                            tileID: UInt32(facelet.id.rawValue),
+                            discoveryAmount: facelet.filigreeGrowth,
+                            styleSeed: UInt32(facelet.filigreeSeed % 6) | (turns << 8),
+                            spinMatrix: spin, roundness: model.roundness,
+                            invHalfExtent: 1.0 / model.worldScale.faceDistance,
+                            reliefAmplitude: model.reliefAmplitude)
+                        channelTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.channelFloor))
+                    }
+                }
             }
         }
 

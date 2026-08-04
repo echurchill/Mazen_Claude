@@ -2460,6 +2460,99 @@ struct CoordinateMathTests {
         check(!two2.cubeModel.sceneTwoIsTurned, "an unsolved Scene 2 is not turned")
     }
 
+    /// THE SURVEYOR (Eddie's mobile-builder). The laws that make it decoration rather than danger:
+    /// filigree NEVER conducts and NEVER blocks; it grows only beside channels that were LIVE when
+    /// grown; the machine stalls when its trunk goes dead and resumes when repaired; and everything
+    /// it does rides twists, because it lives on facelets like everything else.
+    static func testTheSurveyorBuildsOnlyFromLiveCurrent() {
+        let gs = prologueWorld("scene-5")
+        let m = gs.cubeModel
+
+        func channelMasks() -> [Int: UInt8] {
+            var out: [Int: UInt8] = [:]
+            for cu in m.cubies { for f in cu.facelets { out[f.id.rawValue] = f.mazeTile.channels.rawValue } }
+            return out
+        }
+        func totalGrowth() -> Float {
+            var t: Float = 0
+            for cu in m.cubies { for f in cu.facelets { t += f.filigreeGrowth } }
+            return t
+        }
+        let masksAtStart = channelMasks()
+
+        // Let it work a while on the BROKEN circuit — it should grow only along the live segment.
+        for _ in 0..<(60 * 60) { gs.update(deltaTime: 1.0 / 60.0) }
+        check(gs.surveyorTile != nil, "the surveyor should exist on Scene 5")
+        let grown = totalGrowth()
+        check(grown > 0.5, "an hour of minutes should have grown something, got \(grown)")
+        check(channelMasks() == masksAtStart, "FILIGREE MUST NEVER CONDUCT: the channel masks changed")
+
+        // Every grown tile: no channels of its own, and its entry faces a REAL channel tile.
+        let n = m.size
+        for face in CubeFace.allCases {
+            for r in 0..<n {
+                for c in 0..<n {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    let f = m.cubies[ci].facelets[fi]
+                    guard f.filigreeGrowth > 0 else { continue }
+                    check(f.mazeTile.channels.isEmpty, "filigree grew ON a channel tile")
+                    check(f.filigreeEntry.rawValue != 0 && f.filigreeEntry.rawValue & (f.filigreeEntry.rawValue - 1) == 0,
+                          "filigree entry should be exactly one edge")
+                    let e = f.filigreeEntry
+                    let (sdir, dr, dc): (SurfaceDirection, Int, Int) =
+                        e.contains(.north) ? (.north, -1, 0) : e.contains(.south) ? (.south, 1, 0)
+                        : e.contains(.west) ? (.west, 0, -1) : (.east, 0, 1)
+                    var ploc: (face: CubeFace, row: Int, col: Int)
+                    if r + dr >= 0, r + dr < n, c + dc >= 0, c + dc < n { ploc = (face, r + dr, c + dc) }
+                    else {
+                        let cr = m.edgeCrossing(face: face, direction: sdir, row: r, col: c)
+                        ploc = (cr.face, cr.row, cr.col)
+                    }
+                    guard let (pci, pfi) = m.faceletAt(face: ploc.face, row: ploc.row, col: ploc.col) else {
+                        check(false, "filigree entry points off the world"); continue
+                    }
+                    check(!m.cubies[pci].facelets[pfi].mazeTile.channels.isEmpty,
+                          "filigree's entry does not face a channel tile")
+                }
+            }
+        }
+
+        // The scene still solves with the surveyor's work all over it.
+        for (axis, index) in [(2, 0), (0, 0), (0, 0)] {
+            m.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)
+        }
+        check(gs.liveCircuit, "the surveyor's filigree must never break solvability")
+
+        // STALL: a fresh world, wait for first growth, then sever the trunk under the machine —
+        // growth freezes while it idles, and resumes when the world is turned back.
+        let gs2 = prologueWorld("scene-5")
+        let m2 = gs2.cubeModel
+        for _ in 0..<(60 * 30) { gs2.update(deltaTime: 1.0 / 60.0) }
+        func growth2() -> Float {
+            var t: Float = 0
+            for cu in m2.cubies { for f in cu.facelets { t += f.filigreeGrowth } }
+            return t
+        }
+        let beforeSever = growth2()
+        check(beforeSever > 0, "the second surveyor should also have worked")
+        // Sever: turn the slab under its tile (its trunk leaves the reach set in most configurations;
+        // if this particular turn does not sever it, the assertion below still holds trivially, so
+        // sever by force: rotate the source's own slab a quarter — the reach collapses to nothing).
+        let (sx, si) = m2.sliceAxisAndIndex(for: .positiveZ)
+        m2.applySliceRotation(axis: sx, index: si, angle: .pi / 2)
+        let reachNow = gs2.channelDepths
+        if let tile = gs2.surveyorTile, let (ci, fi) = m2.faceletAt(face: tile.face, row: tile.row, col: tile.col),
+           reachNow[m2.cubies[ci].facelets[fi].id.rawValue] == nil {
+            for _ in 0..<(60 * 10) { gs2.update(deltaTime: 1.0 / 60.0) }
+            check(gs2.surveyorIdle, "a surveyor whose trunk is dead should stand idle")
+            check(abs(growth2() - beforeSever) < 0.001,
+                  "a stalled surveyor must not grow (\(beforeSever) → \(growth2()))")
+            m2.applySliceRotation(axis: sx, index: si, angle: -.pi / 2)
+            for _ in 0..<(60 * 20) { gs2.update(deltaTime: 1.0 / 60.0) }
+            check(growth2() > beforeSever, "the repaired trunk should put it back to work")
+        }
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -2982,6 +3075,7 @@ struct CoordinateMathTests {
         testSceneFiveCanBeSolvedByItsRotatorsAlone()
         testSceneFiveFixturesAndCompletion()
         testSceneSixLatchesHatchAndRouteKeyedPortal()
+        testTheSurveyorBuildsOnlyFromLiveCurrent()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

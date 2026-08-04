@@ -2678,6 +2678,10 @@ class CubeModel {
                     cubies[i].facelets[fi].mazeTile.openEdges = cubies[i].facelets[fi].mazeTile.openEdges.rotated(quarterTurns: quarterTurns)
                     // Scene 5's channels ride the tile too — that IS the scene's mechanic.
                     cubies[i].facelets[fi].mazeTile.channels = cubies[i].facelets[fi].mazeTile.channels.rotated(quarterTurns: quarterTurns)
+                    // The surveyor's filigree rides with them: its entry edge keeps pointing at the
+                    // same neighbouring tile, and a branch whose parent is twisted away goes dark
+                    // rather than wrong — "thin dark cracks", already the scene's language.
+                    cubies[i].facelets[fi].filigreeEntry = cubies[i].facelets[fi].filigreeEntry.rotated(quarterTurns: quarterTurns)
                     // Keep the floor texture glued to the tile through finalization.
                     cubies[i].facelets[fi].mazeTile.uvTurns = (cubies[i].facelets[fi].mazeTile.uvTurns + quarterTurns) % 4
                     // Carry any props around with the tile.

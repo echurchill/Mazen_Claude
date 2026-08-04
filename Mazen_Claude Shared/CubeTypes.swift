@@ -383,7 +383,8 @@ enum PropKind: UInt8 {
     case dustMote
     case channelBasin    // Scene 5C: the SOURCE — a low basin in three nested mineral rings. F fires the diagnostic pulse.
     case channelBowl     // Scene 5D: a RECEIVER — a raised bowl embedded in its junction; anim = fed 0.55 / locked 1.0
-    case latch           // Scene 6D: an under-platform latch; `state` = its ordinal in the physical order, anim = engaged        // Scene 2: a mote shaken loose from a wall joint by a twist. `anim` = life left,
+    case latch           // Scene 6D: an under-platform latch; `state` = its ordinal in the physical order, anim = engaged
+    case surveyor        // Scene 5: the roaming Builder machine — walks live channel runs, grows filigree. Inert to F.        // Scene 2: a mote shaken loose from a wall joint by a twist. `anim` = life left,
                          // 1 → 0, which both LOWERS it (heightScale about the floor) and fades it out.
                          // Non-solid and short-lived; the world's only particle so far.
     case layeredVessel   // Scene 4: the vessel from Scene 1, now READING the lock — three major rings, each
@@ -397,7 +398,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .portalRing, .signpost, .dustMote: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .portalRing, .signpost, .dustMote, .surveyor: return false
         default: return true
         }
     }
@@ -556,6 +557,14 @@ struct MazeFacelet {
     /// M19 — the tile's ground register. `.maze` (default) keeps the pastoral hedge floor;
     /// natural worlds set `.grass`/`.water`. Water tiles are not walkable.
     var terrain: TerrainKind = .maze
+    /// Scene 5 — the SURVEYOR's work: fractal filigree grown onto this tile from a neighbouring
+    /// channel (Eddie's mobile-builder). `filigreeEntry` is the edge the growth enters by — it
+    /// points AT the parent channel tile and rotates with the tile under a twist, exactly as the
+    /// channel mask does. `filigreeGrowth` 0→1 reveals the dendrite outward from that edge.
+    /// DECORATION BY LAW: filigree never conducts and never blocks; it is light, not topology.
+    var filigreeEntry: DirectionMask = []
+    var filigreeSeed: UInt8 = 0
+    var filigreeGrowth: Float = 0
 }
 
 struct Cubie {

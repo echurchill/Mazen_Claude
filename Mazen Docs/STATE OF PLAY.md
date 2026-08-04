@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **250,018 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,920 checks** (the dressed-wall test was rewritten smaller in the wall fix) incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -502,6 +502,28 @@ The prologue chain is complete and every scene is playable end to end. In order:
 Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
+
+### The surveyor (2026-08-04, overnight) — Eddie's mobile-builder, BUILT
+A Builder machine walks Scene 5's LIVE channel runs and grows stepped fractal filigree onto the
+bare tiles beside them — the reference image's Manhattan dendrites, generated as a 6-slice RG
+texture (r = line, g = distance-from-entry, so branches grow OUTWARD tip-first) that was prototyped
+offline and looked at before the Swift port. Its behaviour is diegetic feedback: it can only extend
+from flowing current, works busily along what the player repaired, and STANDS IDLE at the frontier
+of what they have not — silent when stalled, humming when working.
+
+The laws, all tested and the liveness one mutation-checked: filigree never conducts (channel masks
+bit-identical after an hour of growth) and never blocks; it grows only beside channels live at
+grow-time, entry edges always face a real channel tile; it rides twists (entry rotates with the
+tile; an orphaned branch goes dark — "thin dark cracks"); the scene still solves under it; a
+severed trunk freezes growth and a repaired one resumes it. 5J's bloom lifts all filigree with the
+world. The machine itself: a squat plated box with a sensor mast, sliding smoothly between tiles,
+inert to F — Builders' machinery does not notice you.
+
+**Frame-verification pending:** the display session locked when Eddie logged off, and a CLI-launched
+app gets no drawables from a locked session — diagnosed by control (a commit that drew at 100 fps
+in the morning hangs identically at night). Suite, mutations and both platform builds are green;
+the bench and validation boot run when the machine wakes. NOTHING here invalidates the wall fix —
+it was gated while the display was live.
 
 ### Scene 6 critical path (2026-08-03)
 The dead end is open. Built and play-tested end to end:
