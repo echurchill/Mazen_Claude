@@ -483,18 +483,33 @@ wrong. From a screenshot those look identical, which is why the first two took s
 
 ## Next
 
-The prologue chain is complete, so there is no longer one blocking scene. In order:
+The prologue chain is complete and every scene is playable end to end. In order:
 
-1. **Scene 6 — "The World Remembered"**, the only scene never started, and the one that finishes
-   the prologue. It is also the payoff for something already built: Phase 0 records
-   `lastArrivalOrigin` on every world specifically for Scene 6, and nothing has ever read it.
-2. **Scene 5's 5J**, the world-becoming-a-diagram — the one piece of that scene still unbuilt.
-3. **More GPU on Scene 2 if wanted**: 11.4 ms in Release after culling, still ~19,900 imported
-   instances drawn in two passes. LOD, or a reduced shadow-caster set, is the next lever.
+1. **Scene 6 — "The World Remembered."** Arrival, persistence and the `-X` region are built and
+   tested; **it is still a dead end**, because 6D is what opens that region to the rest of the world.
+   Then 6E/6F (the second entrance into Scene 3's interior), 6G (the orb reading which face you came
+   in by), 6H (the metal vessel — cheapest item in the scene), and 6I/6J (the route-keyed portal,
+   whose audio is already four registered tones waiting to be played together).
+2. **Scene 5's remaining beats**: the source is a vessel where 5C asks for a basin in nested rings;
+   the receivers are obelisks where 5D asks for crescents or bowls; 5C's diagnostic pulse is unbuilt
+   (cheap now the pulse is a real simulated front); and 5J, the world-becoming-a-diagram.
+3. **Touch beyond `interact`.** Tap now presses things, but Q/E map to a two-finger swipe, which is
+   undiscoverable in a game with no UI. Scene 5 answered this with rotators you walk up to; Scene 4
+   has the same problem and no answer, and it is the scene that TEACHES the verb.
+4. **More GPU on Scene 2 if wanted**: ~13 ms in Release, still ~19,900 imported instances drawn in
+   two passes. LOD, or a reduced shadow-caster set, is the next lever.
 
 Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
+
+### Waiting on Eddie's eyes
+- Scene 6's `-X` machinery: does it read as the back of a stage, or as clutter?
+- The vessel glyph on a waiting anchor — and whether borrowing the switch-cap's resin material for it
+  looks wrong beside the brass an anchor wears once live.
+- Scene 5's rotators: one per face, and whether a control that rides its own turn reads as intended.
+- **Everything since the routing change**, which is the big one: walls now APPEAR where two tiles
+  disagree after a turn. That is correct, and it is new.
 
 ## Immediate next actions on resume
 

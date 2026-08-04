@@ -170,32 +170,18 @@ class CubeModel {
         reconcileSharedEdges()
     }
 
-    /// An edge is one thing, but it is STORED twice — once in each tile that meets at it. Nothing
-    /// enforced that the two halves agree, and several stamps carve a passage by opening one side
-    /// only (`openings.insert(.east)` and friends, never a matching insert on the neighbour). The
-    /// halves then disagreed, with two consequences that look unrelated:
+    /// Make every authored edge agree with itself, at STAMP TIME only.
     ///
-    ///   • Movement is checked on the DEPARTING tile, so the edge was passable one way and solid the
-    ///     other. Walk east freely, then find you cannot walk back west.
-    ///   • The dressed wall is drawn once, by whichever of the two tiles owns it. If the owner is the
-    ///     side that thinks the edge is OPEN, nothing is drawn at all — an invisible wall. That is
-    ///     what Eddie hit beside Scene 2's control plinth (18 disagreeing halves there, 38 in the hub).
+    /// An edge is one thing stored twice, and several stamps carve a passage by opening one side.
+    /// Open wins, because a stamp that opened a side meant it: the other half simply had not been
+    /// told. Run once when a world is built, so the world the player arrives in is symmetric.
     ///
-    /// OPEN wins, and that is not arbitrary: every one-sided edit in this file is an `insert` — there
-    /// is no one-sided `remove` anywhere — so a disagreement always means "someone carved a passage
-    /// and did not tell the far side". Opening both halves is what they meant. It also cannot seal a
-    /// route, so it can only ever fix reachability, never break it.
-    /// `preferOpen` decides who wins a disagreement, and the right answer differs by WHEN.
-    ///
-    /// At stamp time, open: a disagreement there means an author carved a passage and did not tell
-    /// the far side, since every one-sided edit in this file is an insert.
-    ///
-    /// After a TWIST, closed: two real tiles have just been brought together, each carrying its own
-    /// walls, and if either has a wall on that edge then there is a wall. Opening it would invent a
-    /// passage the turn did not make. This is also what the scenes want — "every turn rewrites the
-    /// world around it… one turn may connect the current to a receiver while disconnecting an
-    /// earlier path" — a twist is supposed to be able to seal a route.
-    func reconcileSharedEdges(preferOpen: Bool = true) {
+    /// There used to be a closed-wins mode, run over the whole cube after EVERY twist, to settle the
+    /// disagreements a turn creates. It was a ratchet — openings only ever decreased, and Scene 4
+    /// walled its own portal in after a few minutes of play. Turns settle nothing now: passage asks
+    /// both sides (`passableOpenings`) and nothing is rewritten, so the mode has no callers and is
+    /// gone rather than left lying around for someone to reach for again.
+    func reconcileSharedEdges() {
         let dirs: [(SurfaceDirection, DirectionMask, Int, Int)] = [
             (.north, .north, -1, 0), (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)
         ]
@@ -203,10 +189,8 @@ class CubeModel {
             for r in 0..<size {
                 for c in 0..<size {
                     guard let (ci, fi) = faceletAt(face: face, row: r, col: c) else { continue }
-                    for (sdir, mask, dr, dc) in dirs {
-                        // Open-wins propagates from the OPEN side; closed-wins from the CLOSED one.
-                        let hasIt = cubies[ci].facelets[fi].mazeTile.openings.contains(mask)
-                        guard hasIt == preferOpen else { continue }
+                    for (sdir, mask, dr, dc) in dirs
+                    where cubies[ci].facelets[fi].mazeTile.openings.contains(mask) {
                         let nr = r + dr, nc = c + dc
                         let far: (face: CubeFace, row: Int, col: Int, back: SurfaceDirection)
                         if nr >= 0, nr < size, nc >= 0, nc < size {
@@ -220,12 +204,7 @@ class CubeModel {
                         guard let (nci, nfi) = faceletAt(face: far.face, row: far.row, col: far.col) else { continue }
                         let backMask: DirectionMask = far.back == .north ? .north : far.back == .south ? .south
                                                     : far.back == .west ? .west : .east
-                        if preferOpen {
-                            cubies[nci].facelets[nfi].mazeTile.openings.insert(backMask)
-                        } else {
-                            cubies[nci].facelets[nfi].mazeTile.openings.remove(backMask)
-                            cubies[nci].facelets[nfi].mazeTile.openEdges.remove(backMask)
-                        }
+                        cubies[nci].facelets[nfi].mazeTile.openings.insert(backMask)
                     }
                 }
             }
