@@ -1255,34 +1255,96 @@ struct CoordinateMathTests {
                             ("garden", GameState(size: 11, name: "g", stamp: .gardenMaze)),
                             ("scene-4", GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour))] {
             let m = gs.cubeModel
-            func disagreeing() -> Int {
-                var bad = 0
+            /// Every tile's opening mask, as the world would be walked and drawn.
+            func snapshot() -> [Int: UInt8] {
+                var out: [Int: UInt8] = [:]
                 for face in CubeFace.allCases {
                     for r in 0..<m.size {
                         for c in 0..<m.size {
                             guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
-                            let op = m.cubies[ci].facelets[fi].mazeTile.openings
-                            for (dir, dr, dc, opp) in [(DirectionMask.north, -1, 0, DirectionMask.south),
-                                                       (.south, 1, 0, .north), (.west, 0, -1, .east),
-                                                       (.east, 0, 1, .west)] {
+                            out[m.cubies[ci].facelets[fi].id.rawValue] =
+                                m.cubies[ci].facelets[fi].mazeTile.openings.rawValue
+                        }
+                    }
+                }
+                return out
+            }
+            func totalOpenings() -> Int {
+                var n = 0
+                for (_, v) in snapshot() {
+                    for bit in [1, 2, 4, 8] where v & UInt8(bit) != 0 { n += 1 }
+                }
+                return n
+            }
+            /// PASSAGE must be symmetric, however the tiles came to be neighbours: if this tile can
+            /// leave east, the tile east of it can come back west. This is the invariant that
+            /// matters, and it holds by construction because both sides read the same seam.
+            func asymmetricPassages() -> Int {
+                var bad = 0
+                for face in CubeFace.allCases {
+                    for r in 0..<m.size {
+                        for c in 0..<m.size {
+                            let mine = m.passableOpenings(face: face, row: r, col: c)
+                            for (sdir, mask, dr, dc, opp) in [(SurfaceDirection.north, DirectionMask.north, -1, 0, DirectionMask.south),
+                                                              (.south, .south, 1, 0, .north),
+                                                              (.west, .west, 0, -1, .east),
+                                                              (.east, .east, 0, 1, .west)] {
                                 let nr = r + dr, nc = c + dc
-                                guard nr >= 0, nr < m.size, nc >= 0, nc < m.size,
-                                      let (nci, nfi) = m.faceletAt(face: face, row: nr, col: nc) else { continue }
-                                if op.contains(dir) != m.cubies[nci].facelets[nfi].mazeTile.openings.contains(opp) {
-                                    bad += 1
+                                let far: (face: CubeFace, row: Int, col: Int, back: DirectionMask)
+                                if nr >= 0, nr < m.size, nc >= 0, nc < m.size {
+                                    far = (face, nr, nc, opp)
+                                } else {
+                                    let cr = m.edgeCrossing(face: face, direction: sdir, row: r, col: c)
+                                    let b = cr.facing.opposite
+                                    far = (cr.face, cr.row, cr.col,
+                                           b == .north ? .north : b == .south ? .south : b == .west ? .west : .east)
                                 }
+                                let theirs = m.passableOpenings(face: far.face, row: far.row, col: far.col)
+                                if mine.contains(mask) != theirs.contains(far.back) { bad += 1 }
                             }
                         }
                     }
                 }
                 return bad
             }
-            check(disagreeing() == 0, "\(label): inconsistent before any twist")
-            // Several turns, on different axes and both ends — the accumulating case.
+
+            check(asymmetricPassages() == 0, "\(label): passage is one-way somewhere before any twist")
+            let atStart = totalOpenings(), startState = snapshot()
+
+            // NOTHING IS DESTROYED BY TURNING. The old rule swept the whole cube after every twist
+            // and closed any opening whose partner was shut, which fixed one-way passages by
+            // demolishing them: Scene 4 ran 322 → 32 open edges over forty turns and walled its own
+            // portal in on all four sides (Eddie, 2026-08-03, stuck and unable to finish). Walls now
+            // stay where they were authored and passage asks both sides, so a turn can SEVER a route
+            // without deleting anything.
             for turn in 1...6 {
                 m.applySliceRotation(axis: turn % 3, index: (turn % 2 == 0) ? 0 : m.size - 1, angle: .pi / 2)
-                check(disagreeing() == 0, "\(label): \(disagreeing()) disagreeing halves after \(turn) twist(s)")
+                check(totalOpenings() == atStart,
+                      "\(label): \(atStart) → \(totalOpenings()) openings after \(turn) twist(s) — the world is decaying")
+                check(asymmetricPassages() == 0,
+                      "\(label): \(asymmetricPassages()) one-way passages after \(turn) twist(s)")
             }
+
+            // AND TURNING BACK RESTORES IT, exactly. A configuration puzzle whose moves are not
+            // reversible is a trap, and this is the cheapest possible proof that they are.
+            let m2 = GameState(size: m.size, name: "again", stamp: label == "bare" ? .bare
+                                                          : label == "garden" ? .gardenMaze : .sceneFour).cubeModel
+            for _ in 0..<4 { m2.applySliceRotation(axis: 1, index: 0, angle: .pi / 2) }
+            var same = true
+            let fresh = GameState(size: m.size, name: "fresh", stamp: label == "bare" ? .bare
+                                                             : label == "garden" ? .gardenMaze : .sceneFour).cubeModel
+            for face in CubeFace.allCases {
+                for r in 0..<m2.size {
+                    for c in 0..<m2.size {
+                        guard let (a, b) = m2.faceletAt(face: face, row: r, col: c),
+                              let (x, y) = fresh.faceletAt(face: face, row: r, col: c) else { continue }
+                        if m2.cubies[a].facelets[b].mazeTile.openings
+                            != fresh.cubies[x].facelets[y].mazeTile.openings { same = false }
+                    }
+                }
+            }
+            check(same, "\(label): four quarter-turns of one slab did not return the world to where it started")
+            _ = startState
         }
     }
 

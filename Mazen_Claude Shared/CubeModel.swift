@@ -3867,12 +3867,61 @@ class CubeModel {
 
         rebuildProjection()
         markTopologyChanged()   // PERF: a twist relocated tiles/props — derived caches must re-derive
+        // NOTHING IS RECONCILED HERE ANY MORE, and that is the point.
+        //
         // A twist moves the slab's facelets and rotates their openings; the tiles they now meet did
-        // not move. So the two halves of every edge along the slab boundary can disagree — and they
-        // accumulate: a bare 7³ went 0 → 16 → 48 → 72 → 96 → 112 disagreeing halves over six turns.
-        // That is one-way passages and walls that block without being drawn (Eddie: "invisible walls
-        // occur after a few turns"). Closed wins here: two real walls have been brought together.
-        reconcileSharedEdges(preferOpen: false)
+        // not move, so the two halves of an edge can disagree. This used to be resolved by sweeping
+        // the WHOLE CUBE and closing every opening whose partner was shut — which fixed the visible
+        // symptom by demolishing the thing that disagreed. It was a ratchet: openings only ever
+        // decreased, turning a slab back did not restore them, and a Scene 4 played for a few
+        // minutes ran 322 → 32 open edges and walled the portal in on all four sides (Eddie).
+        //
+        // An edge belongs to the SEAM, not to either tile. Each tile keeps the wall it was authored
+        // with; passage asks BOTH sides (`passableOpenings`), and a wall is drawn wherever either
+        // side refuses. A turn can therefore sever a route and turning back restores it, because
+        // nothing was destroyed to express it — the same rule Scene 5's channels already use.
+    }
+
+    /// The openings of a tile that ACTUALLY PASS — its own, minus any the tile across the seam
+    /// refuses. One answer, used by both movement and wall drawing, so what blocks you and what you
+    /// can see can never disagree. (That gap is what "invisible walls" always were.)
+    ///
+    /// This replaces mutating the world after every twist. Disagreement is a STATE, not damage:
+    /// it lasts exactly as long as the two tiles are neighbours.
+    func passableOpenings(face: CubeFace, row: Int, col: Int) -> DirectionMask {
+        guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { return [] }
+        let mine = cubies[ci].facelets[fi].mazeTile.openings
+        var out = mine
+        for (sdir, mask, dr, dc) in [(SurfaceDirection.north, DirectionMask.north, -1, 0),
+                                     (.south, .south, 1, 0), (.west, .west, 0, -1), (.east, .east, 0, 1)]
+        where mine.contains(mask) {
+            let nr = row + dr, nc = col + dc
+            let far: (face: CubeFace, row: Int, col: Int, back: SurfaceDirection)
+            if nr >= 0, nr < size, nc >= 0, nc < size {
+                far = (face, nr, nc, sdir.opposite)
+            } else {
+                let cr = edgeCrossing(face: face, direction: sdir, row: row, col: col)
+                far = (cr.face, cr.row, cr.col, cr.facing.opposite)
+            }
+            guard let (nci, nfi) = faceletAt(face: far.face, row: far.row, col: far.col) else {
+                out.remove(mask); continue
+            }
+            let backMask: DirectionMask = far.back == .north ? .north : far.back == .south ? .south
+                                        : far.back == .west ? .west : .east
+            if !cubies[nci].facelets[nfi].mazeTile.openings.contains(backMask) { out.remove(mask) }
+        }
+        return out
+    }
+
+    /// The same tile with its refused openings removed — for anything that reads a tile's geometry
+    /// (wall meshes, floor cuts, gateway laterals) rather than just asking "can I pass".
+    func passableTile(face: CubeFace, row: Int, col: Int) -> MazeTile {
+        guard let (ci, fi) = faceletAt(face: face, row: row, col: col) else { return MazeTile(openings: [], styleSeed: 0) }
+        var t = cubies[ci].facelets[fi].mazeTile
+        let passable = passableOpenings(face: face, row: row, col: col)
+        t.openings = passable
+        t.openEdges = t.openEdges.intersection(passable)
+        return t
     }
 
     func sliceAxisAndIndex(for face: CubeFace) -> (axis: Int, index: Int) {

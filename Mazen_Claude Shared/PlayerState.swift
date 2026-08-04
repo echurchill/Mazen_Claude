@@ -121,7 +121,11 @@ struct PlayerState {
     private mutating func startMove(travel: Heading8, arrivalFacing: (Heading8) -> Heading8, cubeModel: CubeModel) {
         guard !isMoving && !isTurning else { return }
         guard let (ci, fi) = cubeModel.faceletAt(face: face, row: row, col: col) else { return }
-        let tile = cubeModel.cubies[ci].facelets[fi].mazeTile
+        // The tile as it PASSES, not as it was authored: an opening whose far side refuses is not a
+        // way out. Asking here means a twist can sever a route without anything being rewritten, and
+        // turning back restores it. Within-tile hops read the same tile, so a wall that appears
+        // because a slab moved also takes its stand cells with it.
+        let tile = cubeModel.passableTile(face: face, row: row, col: col)
         let props = cubeModel.cubies[ci].facelets[fi].props
 
         let d = standGrid

@@ -233,7 +233,8 @@ final class SceneBuilder {
                         emitMazeTile(facelet, restM: restM, spin: spin,
                                      roundness: roundness, invHalf: invHalf, relief: relief,
                                      naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed,
-                                     metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib)
+                                     metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib,
+                                     passable: model.passableOpenings(face: face, row: row, col: col))
                         let fogInst = InstanceDataSwift(
                             modelMatrix: matrix,
                             baseColor: faceColor * 0.9,
@@ -252,7 +253,8 @@ final class SceneBuilder {
                             emitMazeTile(facelet, restM: restM, spin: spin,
                                          roundness: roundness, invHalf: invHalf, relief: relief,
                                          naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed,
-                                     metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib)
+                                     metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib,
+                                     passable: model.passableOpenings(face: face, row: row, col: col))
                         case .grass, .water, .regolith, .plating, .paleStone:
                             // M19: a full-tile ground quad, no walls. Grass (14) / water (15) /
                             // regolith (16) share the fieldFloor mesh, so they batch into one draw.
@@ -1103,8 +1105,13 @@ final class SceneBuilder {
     /// (R2.2: previously two hand-maintained copies that had to be edited in lockstep).
     private func emitMazeTile(_ facelet: MazeFacelet, restM: float4x4, spin: float4x4,
                               roundness: Float, invHalf: Float, relief: Float, naturalDressing: Bool,
-                              suppressHedge: Bool, metal: Bool = false, tileMeshLib: TileMeshLibrary) {
-        let openings = facelet.mazeTile.openings
+                              suppressHedge: Bool, metal: Bool = false, tileMeshLib: TileMeshLibrary,
+                              passable: DirectionMask? = nil) {
+        // A wall is drawn wherever EITHER side of the seam refuses, so what stops you is what you
+        // can see. Passing the resolved mask in (rather than reading the tile's own openings) is
+        // what keeps drawing and walking from ever disagreeing — which is all an "invisible wall"
+        // has ever been.
+        let openings = passable ?? facelet.mazeTile.openings
         let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
         let uvT = facelet.mazeTile.uvTurns
         let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)

@@ -21,7 +21,7 @@ One deep verb (the twist), no grind (every action reveals something new), no han
 - **M12** — imported 3D models (ModelIO), the modular house that **splits Rubik's-style**, decorations that ride slices.
 - **M11 (core done)** — world stack, **TARDIS walk-through portals** + fade, a persistent moon world, and **the killer visual**: the real other world hangs in the sky (moon from earth & vice-versa), turning, with your twists baked in.
 - **M13 (foundation done)** — bandaging legality rule + unit tests + enforcement wired, **inert until something's bonded**.
-- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,854 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
+- **Tooling** — debug HUD (`H`, names the prop under you), twist pacing (`G`/`[`/`]`), the **`` ` `` portal hub** (single key → a labeled plaza of TARDIS portals to every world; replaced the per-world `O/I/B/V/Y/1-4` jumps), `U` (make the door lock ready, bypassing the switches — for testing the turn), headless tests (`Tests/run-tests.sh`, **249,875 checks** incl. portal gating + topology-cache invariants). All debug toggles default OFF.
 
 ## Live design questions (the next real work is here, not code)
 
@@ -160,6 +160,35 @@ with the region staying unreachable from Scene 2's own spawn, and the dressing b
 
 **`gallery-cyberpunk` (destination 16)** joins the hub, whose grid went to 3 rows × 6 columns; the
 plaza already reached that far, so nothing had to move.
+
+### THE WORLD USED TO BRICK ITSELF (2026-08-03) — the routing model changed
+Eddie, playing Scene 4 with the twist in hand: *"I have traveled around and rotated numerous slices,
+I find myself stuck. Every time the tile the portal is on seems to always have 4 walls."*
+
+Measured, and it was not him:
+
+| twists | 0 | 5 | 10 | 20 | 30 | 40 |
+|---|---|---|---|---|---|---|
+| open edges | 322 | 244 | 172 | 104 | 58 | **32** |
+
+Every twist ran `reconcileSharedEdges(preferOpen: false)` over the **whole cube**, closing any
+opening whose partner was shut. Openings only ever decreased and turning a slab back never restored
+them, so a few minutes of play walled the portal in on all four sides. Worse, this was **my July fix
+for the invisible walls**: it made the symptom go away by demolishing whatever disagreed.
+
+**An edge belongs to the SEAM, not to either tile.** Walls now stay exactly as authored; passage
+asks BOTH sides (`CubeModel.passableOpenings`), and a wall is DRAWN wherever either side refuses —
+one answer feeding movement and rendering, which is all an "invisible wall" has ever been. A turn
+can sever a route without deleting anything, and turning back restores it. This is the rule Scene 5's
+channels already used ("both ends must have a groove"); the maze now uses it too.
+
+`testTwistsLeaveTheTopologyConsistent` asserted the OLD rule (no disagreeing halves) and rightly
+failed. It now asserts what actually matters: **openings are conserved** across twists, passage is
+never one-way, and four quarter-turns of a slab return the world bit-for-bit to where it started.
+Disagreement is a STATE, not damage — it lasts exactly as long as two tiles are neighbours.
+
+Cost of asking both sides every frame, Release: Scene 2 **77 fps**, Scene 4 at the **100 fps** vsync
+floor.
 
 ### Scene 4 could be stranded, and the fix is a picture (2026-08-03)
 Eddie released all three anchors, then pressed the vessel, and the scene was over: no twist, Q/E
