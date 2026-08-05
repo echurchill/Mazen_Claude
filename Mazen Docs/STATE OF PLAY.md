@@ -149,7 +149,8 @@ needed no pipeline work. **Structural half only** — 35 models: platforms, supp
 cables, AC units, antennae, lights. Left behind: the character, the enemies and turrets, the pickups
 (no combat, no inventory), and deliberately the neon signage and screens — meaning in this game is
 read off the world's own geometry and never written down, so legible signs and displays argue with
-the premise. The full pack sits in `Mazen_Models/Cyberpunk Pack/` (gitignored like the others);
+the premise. The full pack sits in `Mazen_Models/Cyberpunk Pack/` (its `OBJ/` + `Textures/` now tracked, the
+rest ignored — see the asset-slice note below);
 `OBJ/` is the curated subset the game loads. **No emissive materials in the pack** — every `Ke` is
 zero, so any neon must come from our own shaders.
 
@@ -502,6 +503,25 @@ The prologue chain is complete and every scene is playable end to end. In order:
 Small and unblocking, good filler while something compiles: Scene 1's wall-absorbs-sound cue (1C)
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
+
+### The asset packs join the repo — the slice that loads, not the ballast (2026-08-05)
+Six packs, 515 MB, lived outside git pending an LFS decision, which meant a fresh clone compiled,
+passed all 249,949 checks, and then came up with no galleries, an unplanted garden and a bare
+underside. The fix needed no LFS and no loader change: `AssetRegistry` reads exactly `OBJ/` and the
+pack's texture folder, and everything else in those directories — .blend sources, FBX/glTF
+duplicates, engine-project .zips, preview renders — is what the weight actually was. Tracking only
+what is read costs **91 MB for 1,031 files**, and every gallery stays whole.
+
+Two things the sizing exercise turned up. The MegaKit's `Blends/textures` holds 26 MB of
+`*_Normal.png` that no code path reads — ignored, to be un-ignored the day a normal-map path
+exists. And `TextureLoader`'s own `.rgba-cache/` decode dirs (165 MB under the MegaKit alone, ~2×
+each PNG, regenerated on demand) were being staged as if they were source: they nearly tripled the
+slice before the ignore rule landed. A generated cache sitting next to its input looks exactly like
+an asset when you are matching on directory names.
+
+The Blocks pack was the one held back — it shipped with no license file, and committing an asset
+is redistributing it. Eddie identified it as Quaternius' Cube World Kit, CC0 like every other pack
+here; `Mazen_Models/Blocks Pack/PROVENANCE.md` records that, since the download carries nothing.
 
 ### The "hung benches" were App Nap all along (2026-08-05) — diagnosis corrected
 Three wrong theories, each retracted here: it was not the locked display as such, not

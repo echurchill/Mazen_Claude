@@ -93,7 +93,11 @@ Parallel tracks when desired:
 - **Cubie frame** (from M8.6) — the 3D dark rails between cube segments were deferred.
 - **Per-vertex tangents** — for cleaner normal-mapped tiling (heuristic TBN today).
 - **Shipping hygiene** — bundle `Mazen_Models` as a resource + re-enable `ENABLE_APP_SANDBOX` (both disabled for dev via absolute paths).
-- **Large-asset strategy** — git-LFS (or exclude) for `modular_fort_01_2k` (164M) and future heavy PBR kits.
+- **Large-asset strategy** — SETTLED for the six in-use packs (2026-08-05): track the slice the
+  loader actually reads (`OBJ/` + the pack's texture folder), ignore the .blend/FBX/glTF/zip
+  source material around it. 515 MB on disk becomes 91 MB in git, no LFS, and a fresh clone runs
+  with every gallery whole. Still open for `modular_fort_01_2k` (164 MB of PBR maps, not currently
+  on disk) and future heavy PBR kits, where the *textures themselves* are the weight.
 
 ---
 
@@ -102,7 +106,8 @@ Parallel tracks when desired:
 1. **Moon transition feel** — instant portal vs. a travel/launch sequence (M11).
 2. **House ambition** — keep the simple clean house, or invest in tile-many-modules detail (likely mooted by moving interiors into portal-worlds).
 3. **Twist scope** — commit to bandaging (twist deliberate/level-scoped) as the default (M13)?
-4. **Large binaries** — git-LFS vs. exclude for heavy model kits.
+4. **Large binaries** — settled for the current packs (track the loaded slice, see above); revisit
+   if a kit arrives whose own textures exceed what plain git should carry.
 
 ---
 

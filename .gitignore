@@ -10,6 +10,11 @@ xcuserdata/
 # macOS metadata
 .DS_Store
 
+# TextureLoader's decoded-texture cache (see TextureLoader.swift): raw RGBA next to each source
+# image, regenerated on demand and invalidated by mtime. It is ~2x the PNG it came from and the
+# MegaKit's alone is 165 MB — it nearly tripled the asset slice below before this line existed.
+.rgba-cache/
+
 # Large unused model kit (~164 MB of PBR textures) — held out of plain git pending a
 # git-LFS decision. Only needed when the fort multi-texture feature is built (M12); it is
 # loaded from this local path at runtime in the meantime.
@@ -19,14 +24,49 @@ Mazen_Models/modular_fort_01_2k/
 # duplicates we don't use). Loaded locally from OBJ/ + Textures/ at runtime, like WenrexaTrees.
 Mazen_Models/Quaternius Ultimate Stylized Nature Pack/
 
-# In-use imported asset packs (gallery + garden dressing), held out of plain git like the packs
-# above — loaded locally at runtime. Together ~1.3 GB; MegaKit alone is 1 GB and ships engine-
-# project .zips over GitHub's 100 MB per-file limit, so these cannot live in plain git (a git-LFS
-# decision is pending). Keep local copies; do not delete.
-Mazen_Models/Dungeons Pack/
-Mazen_Models/Nature Pack/
-Mazen_Models/Ruins Pack/
-Mazen_Models/Stylized Nature MegaKit/
-Mazen_Models/Cyberpunk Pack/
-Mazen_Models/Blocks Pack/
-Mazen_Models/Source_Textures/
+# In-use imported asset packs — the LOADED SLICE IS TRACKED, the rest is not.
+#
+# AssetRegistry reads exactly two things from each pack: `OBJ/` and (for the textured ones) the
+# pack's texture folder. Everything else in these directories is source material we never open —
+# .blend files, FBX/glTF duplicates, engine-project .zips, preview renders — and that, not the
+# models, is what made them 515 MB. Tracking only what the loader reads costs ~85 MB and means a
+# fresh clone RUNS: the galleries are whole, the garden is planted, Scene 6's underside is dressed.
+#
+# The paths are unchanged, so no loader change was needed — git simply stops carrying the ballast.
+# Adding a pack? Follow the same shape, and check `AssetRegistry.loadAll` for which folders it
+# actually reads before deciding what to un-ignore.
+Mazen_Models/Dungeons Pack/*
+!Mazen_Models/Dungeons Pack/OBJ/
+!Mazen_Models/Dungeons Pack/License.txt
+Mazen_Models/Nature Pack/*
+!Mazen_Models/Nature Pack/OBJ/
+!Mazen_Models/Nature Pack/License.txt
+Mazen_Models/Ruins Pack/*
+!Mazen_Models/Ruins Pack/OBJ/
+!Mazen_Models/Ruins Pack/Textures/
+!Mazen_Models/Ruins Pack/License.txt
+Mazen_Models/Cyberpunk Pack/*
+!Mazen_Models/Cyberpunk Pack/OBJ/
+!Mazen_Models/Cyberpunk Pack/Textures/
+!Mazen_Models/Cyberpunk Pack/License.txt
+
+# MegaKit, same rule with one extra cut: the loader resolves 18 diffuse maps out of
+# `Blends/textures`, and never a normal map. The `*_Normal.png` files are 26 MB of the folder's
+# 53 MB and nothing reads them — if a normal-map path is ever built, un-ignore them then.
+Mazen_Models/Stylized Nature MegaKit/*
+!Mazen_Models/Stylized Nature MegaKit/OBJ/
+!Mazen_Models/Stylized Nature MegaKit/License_Source.txt
+!Mazen_Models/Stylized Nature MegaKit/Blends/
+Mazen_Models/Stylized Nature MegaKit/Blends/*
+!Mazen_Models/Stylized Nature MegaKit/Blends/textures/
+Mazen_Models/Stylized Nature MegaKit/Blends/textures/*_Normal.png
+
+# Blocks Pack (Quaternius CubeWorldKit) — same rule. It shipped with NO license file, unlike the
+# five packs above, which held up committing it: an asset in git is an asset REDISTRIBUTED, and
+# history is permanent. Eddie identified the source — quaternius.com/packs/cubeworldkit.html —
+# putting it with the same author as every other pack here; provenance is recorded in
+# `Blocks Pack/PROVENANCE.md` since the download itself carries nothing.
+Mazen_Models/Blocks Pack/*
+!Mazen_Models/Blocks Pack/OBJ/
+!Mazen_Models/Blocks Pack/Textures/
+!Mazen_Models/Blocks Pack/PROVENANCE.md

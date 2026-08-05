@@ -1,0 +1,23 @@
+# Blender 4.0.2 MTL File: 'GiantPine_3.blend'
+# www.blender.org
+
+newmtl Bark_Pine
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/Bark_PineTree.png
+map_Bump -bm 1.000000 C:/Bark_PineTree_Normal.png
+
+newmtl Leaves_GiantPine
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd C:/Leaves_GiantPine_C.png
+map_d C:/Leaves_GiantPine_C.png
