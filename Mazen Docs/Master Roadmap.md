@@ -116,11 +116,22 @@ So the question is no longer "which milestone next" but **what the prologue expo
    second vessel marking, Scene 5's staged 5K emergence and near-miss aids, Scene 6's portal image
    and sweeping view. Good filler; none blocks anything.
 5. **Perf, when it gets real** — R2.6 → R2.7 (per-world uniforms, then dirty-flagged rebuilds) plus
-   the counterpart-world rebuild are one pass, not three. **Newly relevant:** the route-keyed sky
-   (2026-08-05) means Scene 6 now hangs Scene 4 overhead, and a visible counterpart is a full second
-   `SceneBuilder.build` every frame — on the heaviest world in the game. Scene 4 is small (5³) so the
-   cost should be modest, but it is **unmeasured**, and that measurement should come before any
-   optimisation work is planned around it.
+   the counterpart-world rebuild are one pass, not three. A visible sky counterpart is a **full
+   second `SceneBuilder.build` every frame**, whether or not the player is looking up.
+   **Now measured** (Debug, `MAZEN_BENCH`, so ~10x a Release figure):
+
+   | standing in | hangs overhead | counterpart build | frame |
+   |---|---|---|---|
+   | scene-4 (5³) | scene-2 (11³) | **1.62 ms** | 10.68 ms |
+   | scene-5 (7³) | scene-4 (5³) | 0.40 ms | 10.33 ms |
+   | scene-2 (11³) | nothing | 0.00 ms | 26.18 ms |
+
+   The expensive direction is a SMALL world hanging a BIG one, and Scene 4 has done exactly that
+   since long before the sky decision — 1.62 ms, ~21% of its build. The route-keyed sky adds Scene 4
+   (5³) over Scene 6, which by the scene-5 row costs about 0.4 ms on a 26 ms frame: real, small, and
+   not the reason Scene 2 is slow — its own 24.56 ms build is. *Caveat:* the harness cannot enter the
+   Scene 6 route, so that 0.4 ms is inferred from scene-5 building the same counterpart, not measured
+   on Scene 6 itself.
 
 Parallel tracks when desired:
 - **M14b polish** — sunrise/sunset terminator tuning (per-world authored roundness is done).
