@@ -149,6 +149,14 @@ enum AssetRegistry {
         // geometry and never written down. Same OBJ + flat-Kd shape as the other three packs, so it
         // needs no pipeline work.
         let cyber    = loadFlatPack("Cyberpunk Pack", "Cyberpunk")
+        // The Blocks pack (2026-08-05) is TEXTURED — every mesh shares one Atlas.png, referenced by
+        // material name — so it rides the texBind path; a flat-Kd load would render it uniformly
+        // grey (Kd 0.8 across the board). Curated to Blocks + Environment: both crystal candidates
+        // Eddie wants to compare live there. Characters, enemies, animals and tools stay on disk,
+        // unloaded — no creatures, no combat, no inventory. NOTE: the pack shipped with NO license
+        // file; flagged to Eddie before anything ships beyond prototyping.
+        let blocks   = loadFlatPack("Blocks Pack", "Blocks",
+                                    texBind: ["Atlas": "Atlas.png", "Atlas.001": "Atlas.png"])
         let ruins    = loadFlatPack("Ruins Pack",    "Ruins",
                                     texBind: ["Leaf_Texture": "Leaf_Texture.png"])   // leaf-shaped mesh → cutout leaves; "Green" left flat (solid mesh would go holey)
 
@@ -218,7 +226,7 @@ enum AssetRegistry {
         } else {
             print("[AssetRegistry] house kit FAILED to load")
         }
-        return (props + dungeons + naturePk + ruins + megakit + cyber, house, houseDoor)
+        return (props + dungeons + naturePk + ruins + megakit + cyber + blocks, house, houseDoor)
     }
 
     // (The old `stamp(_:into:)` demo-decoration pass was retired with the demo overworld — the home

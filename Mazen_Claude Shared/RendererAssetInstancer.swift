@@ -301,6 +301,35 @@ extension Renderer {
                 let tz = ws.floorY - restOn * fs - prop.sink * heightU
                 let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
                 emit(p.mesh, m, diffuse: p.diffuse, submeshMaterials: p.submeshMaterials)
+            case .surveyor:
+                // THE FRACTAL MACHINE IS A CRYSTAL (Eddie: "Likely Crystal_Big… use it for the
+                // fractal generator machine in scene 5"). Fitted to 0.17 world units (~3.2 m) —
+                // deliberately ABOVE the LOD small-size threshold, or the A2 cull would delete the
+                // machine from orbit, which is precisely where Eddie went looking for it last time.
+                // Working: emissive in the channels' light — a lit crystal, findable at any
+                // distance. Idle: the atlas texture, a dark mineral standing still.
+                guard let idx = namedProp("Blocks Crystal_Big") else { return }
+                let cp = importedProps[idx]
+                let dim = cp.mesh.size
+                let maxD = max(dim.x, max(dim.y, dim.z))
+                let cfs: Float = (maxD > 0 ? 0.17 / maxD : 1)
+                let cc = cp.mesh.center
+                let corient = float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0))
+                let cty = cc.z * cfs
+                let ctz = ws.floorY - cp.mesh.boundsMin.y * cfs
+                let cm = tileM * float4x4.translation(-cc.x * cfs, cty, ctz) * float4x4.scale(cfs) * corient
+                if gameState.surveyorIdle {
+                    emit(cp.mesh, cm, diffuse: cp.diffuse, submeshMaterials: cp.submeshMaterials)
+                } else {
+                    for sm in cp.mesh.submeshes {
+                        bucketAppend(cp.mesh, indexOffset: sm.indexOffset, indexCount: sm.indexCount,
+                                     diffuse: nil, cutout: false,
+                                     InstanceDataSwift(modelMatrix: cm,
+                                                       baseColor: SIMD4(0.50, 0.75, 0.90, 1.0),
+                                                       materialID: 12,
+                                                       tileID: 0, discoveryAmount: 1.0, styleSeed: 0))
+                    }
+                }
             case .houseCorner:
                 let assembly = prop.facing == .s ? houseAssemblyDoor : houseAssembly
                 for piece in assembly { emit(piece.mesh, tileM * piece.local, diffuse: nil) }

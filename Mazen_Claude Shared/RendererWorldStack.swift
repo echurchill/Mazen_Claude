@@ -94,6 +94,10 @@ extension Renderer {
             w = GameState(size: 25, name: dest, stamp: .bare)
             w.cubeModel.stampPackGallery(packIndices("MegaKit "))
             w.cubeModel.noFog = true
+        case "gallery-blocks":
+            w = GameState(size: 25, name: dest, stamp: .bare)
+            w.cubeModel.stampPackGallery(packIndices("Blocks "))
+            w.cubeModel.noFog = true
         case "gallery-cyberpunk":
             // The Cyberpunk kit's structural half — the machinery Scene 6's underside is dressed
             // with. Same aisled gallery as the other packs, so a new pack is looked at the same way

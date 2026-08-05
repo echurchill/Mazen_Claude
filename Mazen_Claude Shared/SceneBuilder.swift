@@ -442,19 +442,6 @@ final class SceneBuilder {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }
-                            if prop.kind == .surveyor {
-                                // WORKING: it carries the channels' own light, softly emissive, so
-                                // from orbit it reads as a moving glint among the filigree — the
-                                // thing building them, findable. IDLE: dull plating; the machine
-                                // going dark is the stall made visible at any distance.
-                                if gameState.surveyorIdle {
-                                    materialID = 25
-                                    color = SIMD4(0.55, 0.57, 0.62, 1.0)
-                                } else {
-                                    materialID = 12
-                                    color = SIMD4(0.45, 0.68, 0.80, 1.0)
-                                }
-                            }
                             if prop.kind == .latch {
                                 // 6D — Scene 2's switch dialect: material 22, `state` = the ordinal
                                 // dot glyph (one/two/three), engaged = the cap rising, exactly the

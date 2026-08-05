@@ -94,8 +94,10 @@ enum WorldCatalog {
                                "scene-5",      // index 14 — prologue Scene 5, the pale world
                                "scene-6",      // index 15 — NOT a world of its own: Scene 2 returned
                                                // to from Scene 5, resolved to that instance.
-                               "gallery-cyberpunk"]   // index 16 — the Cyberpunk kit, laid out to be
+                               "gallery-cyberpunk",   // index 16 — the Cyberpunk kit, laid out to be
                                                       // looked at (Eddie asks for a gallery per pack)
+                               "gallery-blocks"]      // index 17 — the Blocks pack: the crystal
+                                                      // candidates for the surveyor live here
 
     /// Sign text, index-aligned with `destinations`. Index 9 is the hub itself, which never signposts
     /// itself — the blank keeps the two lists in step.
@@ -103,7 +105,7 @@ enum WorldCatalog {
                          "Dungeons Gallery", "Nature Gallery", "Ruins Gallery", "MegaKit Gallery",
                          "", "Scene 2 Four Corners", "Scene 4 First Turn", "Scene 1 First Clearing",
                          "Scene 3 Heart of the World", "Scene 5 Broken Meridian",
-                         "Scene 6 World Remembered", "Cyberpunk Gallery"]
+                         "Scene 6 World Remembered", "Cyberpunk Gallery", "Blocks Gallery"]
 
     /// The prologue's scenes, whose hub doors wear DARSIT red rather than TARDIS blue, and which are
     /// single-instance: one Scene 2, however it is reached.
