@@ -2759,6 +2759,50 @@ class CubeModel {
         return t
     }
 
+    // MARK: - Refactor #5 — the kind-indexed prop cache
+
+    /// Where the props of each kind stand, one sweep per TOPOLOGY state. Five ticks used to walk
+    /// every facelet every frame hunting for a handful of objects whose positions almost never
+    /// change (~3,600 facelet visits a frame on an 11³ to find ~30 things). The invalidation
+    /// contract is the one refactor #3 just pinned down: `topologyVersion` bumps on prop existence
+    /// and twists, never on animation — and note that (ci, fi) pairs are TWIST-INVARIANT (props
+    /// ride their facelets; the indices do not move), so a stale index is only possible when a
+    /// prop is created or removed, which is exactly what bumps the version.
+    private var propIndexCache: (version: UInt64, byKind: [UInt8: [(ci: Int, fi: Int)]])? = nil
+    /// Channel tiles get the same treatment: the masks are mazeTile data, but they too change only
+    /// with topology (stamps and twists).
+    private var channelTileCache: (version: UInt64, tiles: [(ci: Int, fi: Int)])? = nil
+
+    func propIndex(of kind: PropKind) -> [(ci: Int, fi: Int)] {
+        if propIndexCache?.version != topologyVersion {
+            var byKind: [UInt8: [(ci: Int, fi: Int)]] = [:]
+            for ci in cubies.indices {
+                for fi in cubies[ci].facelets.indices {
+                    var seen = Set<UInt8>()
+                    for p in cubies[ci].facelets[fi].props where seen.insert(p.kind.rawValue).inserted {
+                        byKind[p.kind.rawValue, default: []].append((ci, fi))
+                    }
+                }
+            }
+            propIndexCache = (topologyVersion, byKind)
+        }
+        return propIndexCache!.byKind[kind.rawValue] ?? []
+    }
+
+    func channelTiles() -> [(ci: Int, fi: Int)] {
+        if channelTileCache?.version != topologyVersion {
+            var out: [(ci: Int, fi: Int)] = []
+            for ci in cubies.indices {
+                for fi in cubies[ci].facelets.indices
+                where !cubies[ci].facelets[fi].mazeTile.channels.isEmpty {
+                    out.append((ci, fi))
+                }
+            }
+            channelTileCache = (topologyVersion, out)
+        }
+        return channelTileCache!.tiles
+    }
+
     func sliceAxisAndIndex(for face: CubeFace) -> (axis: Int, index: Int) {
         switch face {
         case .positiveX: return (0, size - 1)

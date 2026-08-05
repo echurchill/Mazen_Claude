@@ -21,8 +21,7 @@ extension GameState {
         //                 light while the pulse feeds it and loses it when the pulse withdraws
         //   locked 1.0    part of the live circuit; full, steady, and it hums
         let locked = liveCircuit
-        for cu in cubeModel.cubies.indices {
-            for f in cubeModel.cubies[cu].facelets.indices {
+        for (cu, f) in cubeModel.propIndex(of: .channelBowl) + cubeModel.propIndex(of: .channelBasin) {
                 let id = cubeModel.cubies[cu].facelets[f].id.rawValue
                 for pi in cubeModel.cubies[cu].facelets[f].props.indices {
                     let kind = cubeModel.cubies[cu].facelets[f].props[pi].kind
@@ -42,16 +41,13 @@ extension GameState {
                         changed = true
                     }
                 }
-            }
         }
         // 5F — the junction vessels mirror LOCAL truth: how many of this tile's channel arms are
         // actually carrying current. Not a hint and not a count of the puzzle's progress — just what
         // is true here, which is why a vessel can read three while the circuit is still broken.
-        for cu in cubeModel.cubies.indices {
-            for f in cubeModel.cubies[cu].facelets.indices {
+        for (cu, f) in cubeModel.propIndex(of: .layeredVessel) {
                 let facelet = cubeModel.cubies[cu].facelets[f]
-                guard facelet.props.contains(where: { $0.kind == .layeredVessel }),
-                      !facelet.mazeTile.channels.isEmpty else { continue }
+                guard !facelet.mazeTile.channels.isEmpty else { continue }
                 let live = fed.contains(facelet.id.rawValue)
                 var arms = 0
                 for d in [DirectionMask.north, .east, .south, .west]
@@ -68,7 +64,6 @@ extension GameState {
                         changed = true
                     }
                 }
-            }
         }
         _ = changed   // animation, not topology: the maze path reads anim live every frame
         // 5K — the way out, created when the circuit goes live. → Scene 6 does not exist yet, so it
@@ -217,15 +212,11 @@ extension GameState {
         // arrival, so the machine is met as distant industry, not a greeter.
         if surveyorTile == nil {
             var best: (face: CubeFace, row: Int, col: Int, d: Int)? = nil
-            for face in CubeFace.allCases {
-                for r in 0..<cubeModel.size {
-                    for c in 0..<cubeModel.size {
-                        guard let (ci, fi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
-                        let f = cubeModel.cubies[ci].facelets[fi]
-                        guard !f.mazeTile.channels.isEmpty, let d = reach[f.id.rawValue] else { continue }
-                        if best == nil || d > best!.d { best = (face, r, c, d) }
-                    }
-                }
+            for (ci, fi) in cubeModel.channelTiles() {
+                let f = cubeModel.cubies[ci].facelets[fi]
+                guard let d = reach[f.id.rawValue],
+                      let loc = cubeModel.locate(cubie: ci, facelet: fi) else { continue }
+                if best == nil || d > best!.d { best = (loc.face, loc.row, loc.col, d) }
             }
             guard let b = best else { return }
             surveyorTile = (b.face, b.row, b.col)
@@ -270,8 +261,11 @@ extension GameState {
                     cubeModel.cubies[nci].facelets[nfi].filigreeSeed =
                         UInt8(truncatingIfNeeded: cubeModel.cubies[nci].facelets[nfi].id.rawValue &* 31 &+ 7)
                 }
-                cubeModel.cubies[nci].facelets[nfi].filigreeGrowth =
-                    min(1, cubeModel.cubies[nci].facelets[nfi].filigreeGrowth + rate)
+                let before = cubeModel.cubies[nci].facelets[nfi].filigreeGrowth
+                cubeModel.cubies[nci].facelets[nfi].filigreeGrowth = min(1, before + rate)
+                if before < 1, cubeModel.cubies[nci].facelets[nfi].filigreeGrowth >= 1 {
+                    grownFiligreeTiles.append((nci, nfi))
+                }
             }
             return
         }
@@ -280,23 +274,22 @@ extension GameState {
         // channel tile that still has work, nearest by depth difference; deterministic ties.
         var next: (face: CubeFace, row: Int, col: Int)? = nil
         var bestKey: (Int, Int, Int, Int)? = nil
-        for face in CubeFace.allCases {
-            for r in 0..<cubeModel.size {
-                for c in 0..<cubeModel.size {
-                    guard let (qci, qfi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
-                    let f = cubeModel.cubies[qci].facelets[qfi]
-                    // Work stands: live channel tiles, or finished filigree of its own network.
-                    let isTrunk = !f.mazeTile.channels.isEmpty && reach[f.id.rawValue] != nil
-                    let isOwnWork = f.mazeTile.channels.isEmpty && f.filigreeGrowth >= 1
-                    guard isTrunk || isOwnWork,
-                          !(face == here.face && r == here.row && c == here.col),
-                          filigreeTarget(of: (face, r, c)) != nil else { continue }
-                    // Trunk first, then outward rings — the machine finishes near the current
-                    // before wandering, which is also what keeps it findable.
-                    let key = (isTrunk ? 0 : Int(f.filigreeRing), face.rawValue, r, c)
-                    if bestKey == nil || key < bestKey! { bestKey = key; next = (face, r, c) }
-                }
-            }
+        // Work stands: live channel tiles (the index), plus finished filigree of its own network
+        // (an EVENT-DRIVEN list — growth completes without a topology bump, so no version-keyed
+        // cache can hold it; the tick that finishes a branch appends it, exactly once).
+        var stands: [(ci: Int, fi: Int, trunk: Bool)] = cubeModel.channelTiles().map { ($0.ci, $0.fi, true) }
+        stands += grownFiligreeTiles.map { ($0.ci, $0.fi, false) }
+        for (qci, qfi, isTrunkTile) in stands {
+            let f = cubeModel.cubies[qci].facelets[qfi]
+            let isTrunk = isTrunkTile && reach[f.id.rawValue] != nil
+            guard isTrunk || !isTrunkTile,
+                  let loc = cubeModel.locate(cubie: qci, facelet: qfi),
+                  !(loc.face == here.face && loc.row == here.row && loc.col == here.col),
+                  filigreeTarget(of: (loc.face, loc.row, loc.col)) != nil else { continue }
+            // Trunk first, then outward rings — the machine finishes near the current before
+            // wandering, which is also what keeps it findable.
+            let key = (isTrunk ? 0 : Int(f.filigreeRing), loc.face.rawValue, loc.row, loc.col)
+            if bestKey == nil || key < bestKey! { bestKey = key; next = (loc.face, loc.row, loc.col) }
         }
         guard let n = next else { surveyorIdle = true; return }   // everything reachable is grown
         moveSurveyorProp(from: here, to: n)

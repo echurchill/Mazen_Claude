@@ -34,14 +34,12 @@ extension GameState {
     func tickMetalVessel() {
         guard cubeModel.symbolPairedPlinths else { return }
         let step = Float(Int((time - 0.4) / 3.2) % 4)
-        for cu in cubeModel.cubies.indices {
-            for f in cubeModel.cubies[cu].facelets.indices {
-                for pi in cubeModel.cubies[cu].facelets[f].props.indices
-                where cubeModel.cubies[cu].facelets[f].props[pi].kind == .layeredVessel
-                    && cubeModel.cubies[cu].facelets[f].props[pi].state == 6 {
-                    if cubeModel.cubies[cu].facelets[f].props[pi].anim != step {
-                        cubeModel.cubies[cu].facelets[f].props[pi].anim = step
-                    }
+        for (cu, f) in cubeModel.propIndex(of: .layeredVessel) {
+            for pi in cubeModel.cubies[cu].facelets[f].props.indices
+            where cubeModel.cubies[cu].facelets[f].props[pi].kind == .layeredVessel
+                && cubeModel.cubies[cu].facelets[f].props[pi].state == 6 {
+                if cubeModel.cubies[cu].facelets[f].props[pi].anim != step {
+                    cubeModel.cubies[cu].facelets[f].props[pi].anim = step
                 }
             }
         }

@@ -2608,6 +2608,62 @@ struct CoordinateMathTests {
               "interact()'s precedence changed: \(GameState.interactionOrder)")
     }
 
+    /// Refactor #5 — the kind-indexed prop cache. The five per-frame ticks that used to sweep the
+    /// whole cube now read this; if it ever disagrees with a full sweep, props silently stop
+    /// ticking (a bowl that never fills, a vessel that never drifts, an emitter that never hums).
+    /// Equivalence is asserted against a fresh sweep at every state that matters: stamp, after a
+    /// twist, and after a prop is CREATED — the one event that must invalidate.
+    static func testThePropIndexMatchesAFullSweep() {
+        let gs = prologueWorld("scene-2")
+        let m = gs.cubeModel
+        var kit = CubeModel.UndersideMachinery()
+        kit.uprights = [0]; kit.runs = [1]; kit.boxes = [2]; kit.rails = [3]; kit.plates = [4]; kit.lamps = [5]
+        m.stampSceneSixUnderside(kit)
+
+        func sweep(_ kind: PropKind) -> Set<Int> {
+            var out = Set<Int>()
+            for ci in m.cubies.indices {
+                for fi in m.cubies[ci].facelets.indices
+                where m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == kind }) {
+                    out.insert(ci << 8 | fi)
+                }
+            }
+            return out
+        }
+        func indexed(_ kind: PropKind) -> Set<Int> {
+            Set(m.propIndex(of: kind).map { $0.ci << 8 | $0.fi })
+        }
+        let kinds: [PropKind] = [.obelisk, .layeredVessel, .portal, .switchCap, .plinth, .latch, .anchor]
+        for k in kinds {
+            check(indexed(k) == sweep(k), "index ≠ sweep for \(k) at stamp")
+        }
+
+        // After a twist: (ci, fi) pairs are twist-invariant, so the sets must be identical too.
+        m.applySliceRotation(axis: 0, index: 0, angle: .pi / 2)
+        for k in kinds {
+            check(indexed(k) == sweep(k), "index ≠ sweep for \(k) after a twist")
+        }
+
+        // After prop CREATION — the invalidation that must not be missed. Engage the latches so
+        // the hatch portal appears, then ask the index for portals.
+        let latches = tiles(gs, with: .latch).sorted {
+            (m.faceletAt(face: $0.face, row: $0.r, col: $0.c).flatMap { m.cubies[$0.0].facelets[$0.1].props.first { $0.kind == .latch }?.state } ?? 0)
+            < (m.faceletAt(face: $1.face, row: $1.r, col: $1.c).flatMap { m.cubies[$0.0].facelets[$0.1].props.first { $0.kind == .latch }?.state } ?? 0)
+        }
+        _ = latches
+        for ordinal in 1...3 {
+            for t in tiles(gs, with: .latch) {
+                guard let (ci, fi) = m.faceletAt(face: t.face, row: t.r, col: t.c),
+                      m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .latch && $0.state == ordinal })
+                else { continue }
+                stand(gs, t.face, t.r, t.c); gs.interact()
+            }
+        }
+        check(m.undersideHatch != nil, "the hatch should exist for this check")
+        check(indexed(.portal) == sweep(.portal),
+              "the index missed a CREATED portal — stale cache, the one failure mode that matters")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -3132,6 +3188,7 @@ struct CoordinateMathTests {
         testSceneSixLatchesHatchAndRouteKeyedPortal()
         testTheSurveyorBuildsOnlyFromLiveCurrent()
         testInteractionOrderIsTheContract()
+        testThePropIndexMatchesAFullSweep()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

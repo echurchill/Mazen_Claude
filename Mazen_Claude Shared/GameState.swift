@@ -804,15 +804,10 @@ class GameState {
     var viewOrigin = SIMD3<Float>(0, 0, 0)
 
     private func tickVesselDrift(_ dt: Float) {
-        guard !cubeModel.styledPortals.isEmpty || !vesselDrift.isEmpty || true else { return }
         let spin = worldSpinMatrix()
-        for face in CubeFace.allCases {
-            for r in 0..<cubeModel.size {
-                for c in 0..<cubeModel.size {
-                    guard let (ci, fi) = cubeModel.faceletAt(face: face, row: r, col: c),
-                          cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .layeredVessel })
-                    else { continue }
-                    let m = spin * cubeModel.restMatrix(face: face, row: r, col: c)
+        for (ci, fi) in cubeModel.propIndex(of: .layeredVessel) {
+                    guard let loc = cubeModel.locate(cubie: ci, facelet: fi) else { continue }
+                    let m = spin * cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
                     let p = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
                     let toIt = p - viewOrigin
                     let len = simd_length(toIt)
@@ -848,8 +843,6 @@ class GameState {
                     while delta > .pi { delta -= 2 * .pi }
                     while delta < -.pi { delta += 2 * .pi }
                     vesselWatch[id] = cur + max(-dt * 0.16, min(dt * 0.16, delta))
-                }
-            }
         }
     }
 
@@ -875,10 +868,18 @@ class GameState {
     private func updateAudioEmitters() {
         activeEmitters.removeAll(keepingCapacity: true)
         let listenerFace = player.face, lr = player.row, lc = player.col
-        for face in CubeFace.allCases {
-            for r in 0..<cubeModel.size {
-                for c in 0..<cubeModel.size {
-                    guard let (ci, fi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
+        // The union of every hummable kind's index, per-facelet deduped — the same facelets the
+        // full sweep used to find, with the SAME one-kind-per-facelet priority chain below.
+        var seenFacelets = Set<Int>()
+        var candidates: [(ci: Int, fi: Int)] = []
+        for kind in [PropKind.obelisk, .layeredVessel, .portal, .channelBowl, .surveyor] {
+            for e in cubeModel.propIndex(of: kind) where seenFacelets.insert(e.ci << 8 | e.fi).inserted {
+                candidates.append(e)
+            }
+        }
+        for (ci, fi) in candidates {
+                    guard let loc = cubeModel.locate(cubie: ci, facelet: fi) else { continue }
+                    let (face, r, c) = (loc.face, loc.row, loc.col)
                     let facelet = cubeModel.cubies[ci].facelets[fi]
                     var kind: AudioEmitter.Kind? = nil
                     // An AWAKENED obelisk hums; a dormant one is silent. Scene 2 lights them one at
@@ -917,8 +918,6 @@ class GameState {
                         id: facelet.id.rawValue, kind: k,
                         position: SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z),
                         occlusion: min(1, Float(walls) * 0.34), voice: voice))
-                }
-            }
         }
         // Scene 5 — the pulse, which is a single moving source rather than a thing standing on a
         // tile, so it is appended once here rather than found in the sweep above.
@@ -1194,6 +1193,10 @@ class GameState {
     var surveyorFrom: (face: CubeFace, row: Int, col: Int)? = nil
     var surveyorMove: Float = 1     // 0→1 between tiles; 1 = standing
     var surveyorWork: Float = 0
+    /// Tiles whose filigree has COMPLETED — the surveyor's own walkable network. Event-driven
+    /// (appended when a branch finishes), because growth completes without a topology bump and so
+    /// no version-keyed cache can hold it. (ci, fi) pairs are twist-invariant.
+    var grownFiligreeTiles: [(ci: Int, fi: Int)] = []
     var surveyorIdle = false
 
 
