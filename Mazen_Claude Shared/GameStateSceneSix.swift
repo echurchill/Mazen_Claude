@@ -17,7 +17,7 @@ extension GameState {
            sceneThreeAllObelisksAwake {
             if let at = cubeModel.createRouteKeyedExit(destinationID: 9) {
                 let mtx = cubeModel.restMatrix(face: at.face, row: at.row, col: at.col)
-                let p = SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)
+                let p = mtx.position
                 // 6J — "the portal sound includes familiar fragments… they align into one new tone":
                 // the four remembered voices, played together.
                 pendingAudioCues.append(.portalOpened(at: p))

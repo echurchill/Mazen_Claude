@@ -448,7 +448,7 @@ class CubeModel {
     /// of the catalog grid, connected to the spawn by a short corridor so the player can walk down to
     /// them. `states` are registry indices into `Renderer.importedProps`; the Renderer owns those
     /// indices, so it calls this after the gallery world is built.
-    func stampGalleryImports(_ states: [Int]) {
+    private func stampGalleryImports(_ states: [Int]) {
         guard !states.isEmpty else { return }
         let n = size, c = n / 2
         // Lay the models on a grid with an EMPTY COLUMN between neighbours, forming north–south
@@ -1427,7 +1427,7 @@ class CubeModel {
     /// M19 — the outward unit direction of a tile centre (pre-inflation), for scatter fields.
     private func tileDirection(face: CubeFace, row: Int, col: Int) -> SIMD3<Float> {
         let m = restMatrix(face: face, row: row, col: col)
-        let c = SIMD3<Float>(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+        let c = m.position
         let len = (c.x*c.x + c.y*c.y + c.z*c.z).squareRoot()
         return len > 1e-5 ? c / len : SIMD3(0, 0, 1)
     }
@@ -1615,7 +1615,7 @@ class CubeModel {
     /// same-face neighbours are opened too, so the player can walk in from the surrounding plaza.
     /// Edges that fall off the face (the cube-edge sides where a slice splits the house) simply
     /// find no neighbour and are skipped.
-    func stampOpenPlaza(face: CubeFace, top: Int, left: Int, height: Int, width: Int) {
+    private func stampOpenPlaza(face: CubeFace, top: Int, left: Int, height: Int, width: Int) {
         let n = size
         func open(_ r: Int, _ c: Int, _ dir: SurfaceDirection) {
             guard (0..<n).contains(r), (0..<n).contains(c),
@@ -2019,7 +2019,7 @@ class CubeModel {
 
     // MARK: - Projection
 
-    func rebuildProjection() {
+    private func rebuildProjection() {
         let n = size
         cachedProjection = [:]
         for face in CubeFace.allCases {
@@ -2313,7 +2313,7 @@ class CubeModel {
         // `float4x4.translation` extension so this stays compilable in the test target).
         let baseRight = SIMD3<Float>(base.columns.0.x, base.columns.0.y, base.columns.0.z)
         let baseUp    = SIMD3<Float>(base.columns.1.x, base.columns.1.y, base.columns.1.z)
-        let basePos   = SIMD3<Float>(base.columns.3.x, base.columns.3.y, base.columns.3.z)
+        let basePos   = base.position
         guard roundness > 0 else {
             var m = base
             let p = basePos + baseRight * localX + baseUp * localY

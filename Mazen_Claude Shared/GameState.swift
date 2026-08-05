@@ -814,7 +814,7 @@ class GameState {
         for (ci, fi) in cubeModel.propIndex(of: .layeredVessel) {
                     guard let loc = cubeModel.locate(cubie: ci, facelet: fi) else { continue }
                     let m = spin * cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                    let p = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                    let p = m.position
                     let toIt = p - viewOrigin
                     let len = simd_length(toIt)
                     guard len > 1e-4 else { continue }
@@ -860,11 +860,11 @@ class GameState {
         // however close Eddie stood to the light.
         var best: Float? = nil
         let here = cubeModel.restMatrix(face: player.face, row: player.row, col: player.col)
-        let hp = SIMD3(here.columns.3.x, here.columns.3.y, here.columns.3.z)
+        let hp = here.position
         for sp in cubeModel.styledPortals where !cubeModel.sealedPortalCubies.contains(sp.ci) {
             guard let loc = cubeModel.locate(cubie: sp.ci, facelet: sp.fi) else { continue }
             let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-            let d = simd_distance(hp, SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z))
+            let d = simd_distance(hp, m.position)
                 / cubeModel.worldScale.cellSpacing
             if best == nil || d < best! { best = d }
         }
@@ -922,7 +922,7 @@ class GameState {
                     }
                     activeEmitters.append(AudioEmitter(
                         id: facelet.id.rawValue, kind: k,
-                        position: SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z),
+                        position: m.position,
                         occlusion: min(1, Float(walls) * 0.34), voice: voice))
         }
         // Scene 5 — the pulse, which is a single moving source rather than a thing standing on a
@@ -1056,7 +1056,7 @@ class GameState {
                 guard p.anim > 0 else { continue }
                 lit += 1
                 let m = cubeModel.restMatrix(face: face, row: cc, col: cc)
-                let from = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                let from = m.position
                 let toC = centre - from
                 let dist = simd_length(toC)
                 guard dist > 1e-4 else { continue }
@@ -1084,7 +1084,7 @@ class GameState {
         // it touches what it points at, because its whole job is to say "there".
         if let exit = cubeModel.chosenExit {
             let m = cubeModel.restMatrix(face: exit.face, row: exit.row, col: exit.col)
-            let target = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+            let target = m.position
             let dir = simd_normalize(target - centre)
             out.append(ChamberEmitter(a: centre + dir * (orbR * 1.05), b: target,
                                       radius: reach * 0.004, glow: 1, isOrb: false))
@@ -1232,7 +1232,7 @@ class GameState {
     func faceletPosition(of loc: (face: CubeFace, row: Int, col: Int)?) -> SIMD3<Float>? {
         guard let loc else { return nil }
         let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-        return SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+        return m.position
     }
 
 
@@ -1602,7 +1602,7 @@ class GameState {
                     where cubeModel.cubies[cu].facelets[f].props.contains(where: { $0.kind == .layeredVessel }) {
                         if let loc = cubeModel.locate(cubie: cu, facelet: f) {
                             let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                            vesselAt = SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)
+                            vesselAt = mtx.position
                         }
                     }
                 }
@@ -1641,7 +1641,7 @@ class GameState {
                     }) {
                         if let loc = cubeModel.locate(cubie: cu, facelet: f) {
                             let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                            answerAt = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                            answerAt = m.position
                         }
                     }
                 }
@@ -1671,7 +1671,7 @@ class GameState {
                         cubeModel.cubies[cu].facelets[f].props[pi].anim = 0.001   // begins to climb
                         if let loc = cubeModel.locate(cubie: cu, facelet: f) {
                             let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                            wokeAt = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                            wokeAt = m.position
                         }
                     }
                 }
@@ -1732,7 +1732,7 @@ class GameState {
                 if let (aci, afi) = cubeModel.faceletAt(face: .positiveZ, row: cubeModel.size / 2, col: 0),
                    let loc = cubeModel.locate(cubie: aci, facelet: afi) {
                     let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                    pendingAudioCues.append(.twistLocked(at: SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)))
+                    pendingAudioCues.append(.twistLocked(at: mtx.position))
                 }
                 if cubeModel.latchesEngaged == 3 {
                     cubeModel.createUndersideHatch()
@@ -1748,7 +1748,7 @@ class GameState {
                         where p.kind == .latch && p.state == cubeModel.latchesEngaged + 1 {
                             if let loc = cubeModel.locate(cubie: cu, facelet: f) {
                                 let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                                answerAt = SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)
+                                answerAt = mtx.position
                             }
                         }
                     }
@@ -1822,7 +1822,7 @@ class GameState {
                     where cubeModel.cubies[cu].facelets[f].props.contains(where: { $0.kind == .layeredVessel }) {
                         if let loc = cubeModel.locate(cubie: cu, facelet: f) {
                             let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                            vesselAt = SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)
+                            vesselAt = mtx.position
                         }
                     }
                 }
@@ -1866,7 +1866,7 @@ class GameState {
                     }) {
                         if let loc = cubeModel.locate(cubie: cu, facelet: f) {
                             let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                            answerAt = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                            answerAt = m.position
                         }
                     }
                 }
@@ -1901,7 +1901,7 @@ class GameState {
                         cubeModel.cubies[cu].facelets[f].props[pi].anim = 0.001   // begins to climb
                         if let loc = cubeModel.locate(cubie: cu, facelet: f) {
                             let m = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                            wokeAt = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+                            wokeAt = m.position
                         }
                     }
                 }
@@ -1950,7 +1950,7 @@ class GameState {
                 if let (aci, afi) = cubeModel.faceletAt(face: .positiveZ, row: cubeModel.size / 2, col: 0),
                    let loc = cubeModel.locate(cubie: aci, facelet: afi) {
                     let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                    pendingAudioCues.append(.twistLocked(at: SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)))
+                    pendingAudioCues.append(.twistLocked(at: mtx.position))
                 }
                 if cubeModel.latchesEngaged == 3 {
                     cubeModel.createUndersideHatch()
@@ -1966,7 +1966,7 @@ class GameState {
                         where p.kind == .latch && p.state == cubeModel.latchesEngaged + 1 {
                             if let loc = cubeModel.locate(cubie: cu, facelet: f) {
                                 let mtx = cubeModel.restMatrix(face: loc.face, row: loc.row, col: loc.col)
-                                answerAt = SIMD3(mtx.columns.3.x, mtx.columns.3.y, mtx.columns.3.z)
+                                answerAt = mtx.position
                             }
                         }
                     }
@@ -2112,6 +2112,12 @@ class GameState {
 // MARK: - float4x4 helpers
 
 extension float4x4 {
+    /// The translation column as a point — `m.position`
+    /// written twenty times across five files, which is twenty chances to reach for `.columns.2`
+    /// at four in the afternoon. Named, because "where is this thing" is a question worth being
+    /// able to read.
+    var position: SIMD3<Float> { SIMD3(columns.3.x, columns.3.y, columns.3.z) }
+
     static func perspective(fovYRadians fovy: Float, aspect: Float, nearZ: Float, farZ: Float) -> float4x4 {
         let ys = 1.0 / tanf(fovy * 0.5)
         let xs = ys / aspect

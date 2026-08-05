@@ -806,7 +806,7 @@ class Renderer: NSObject, MTKViewDelegate {
             // Lift it to about the middle of the arch rather than the floor, so the spill falls
             // DOWN onto the ground and outward onto the walls the way a doorway's light does.
             let up = SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z)
-            let p = SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z) + up * (0.06 * gameState.worldScale.eyeHeight / 1.7)
+            let p = m.position + up * (0.06 * gameState.worldScale.eyeHeight / 1.7)
             let d = simd_length(p - eye)
             if best == nil || d < best!.d { best = (p, d) }
         }

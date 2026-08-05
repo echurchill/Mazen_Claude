@@ -498,7 +498,7 @@ extension CoordinateMathTests {
         }
         guard let v = at else { check(false, "Scene 1 should have vessels"); return }
         let mm = m.restMatrix(face: .positiveZ, row: v.r, col: v.c)
-        let p = SIMD3(mm.columns.3.x, mm.columns.3.y, mm.columns.3.z)
+        let p = mm.position
         let eye = p + SIMD3(0, 0, 3)
         gs.spinEnabled = false                       // isolate the camera from the world's idle spin
 

@@ -95,7 +95,7 @@ struct CameraState {
             let p = cubeModel.inflatedPlacement(face: f, row: r, col: c,
                                                 localX: Float(sc - center) * step, localY: Float(sr - center) * step)
             let normal = SIMD3<Float>(p.columns.2.x, p.columns.2.y, p.columns.2.z)
-            let pos = SIMD3<Float>(p.columns.3.x, p.columns.3.y, p.columns.3.z)
+            let pos = p.position
             return (pos + normal * eyeHeight, normal)
         }
 
