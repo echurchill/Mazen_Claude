@@ -2597,6 +2597,17 @@ struct CoordinateMathTests {
         }
     }
 
+    /// Refactor #1 — interact()'s precedence is DATA now, and this pins it. The old if-chain's
+    /// order was invisible and load-bearing (the metal vessel swallowing a plinth press was a
+    /// precedence bug); any reorder must now be a deliberate edit HERE and in the handler array,
+    /// or this fails by name.
+    static func testInteractionOrderIsTheContract() {
+        check(GameState.interactionOrder == ["latch", "basin", "faceRotator", "vessel", "anchor",
+                                            "obeliskRebuff", "scene3Plinth", "cornerSwitch",
+                                            "doorPlinth", "chest"],
+              "interact()'s precedence changed: \(GameState.interactionOrder)")
+    }
+
     static func testSceneFivePulseStopsWhereTheRouteDoes() {
         let gs = GameState(size: PrologueSize.sceneFive, name: "s5", stamp: .sceneFive)
         let depths = gs.channelDepths
@@ -3120,6 +3131,7 @@ struct CoordinateMathTests {
         testSceneFiveFixturesAndCompletion()
         testSceneSixLatchesHatchAndRouteKeyedPortal()
         testTheSurveyorBuildsOnlyFromLiveCurrent()
+        testInteractionOrderIsTheContract()
         testSceneFivePulseStopsWhereTheRouteDoes()
         testSceneFiveExitStandsAtTheEndOfTheCurrent()
         testTwistsLeaveTheTopologyConsistent()

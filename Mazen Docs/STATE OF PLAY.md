@@ -503,6 +503,24 @@ Small and unblocking, good filler while something compiles: Scene 1's wall-absor
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
 
+### Refactor pass 3→2→4→1 (2026-08-05) — the approved four, done
+- **#3 Animation is not topology.** The surveyor is a per-frame DYNAMIC asset instance outside the
+  bucket cache (never culled, always a caster); the six animation-only `markTopologyChanged` sites
+  are gone, with the rule stated at the call sites.
+- **#2 `channelDepths` memoized** on `topologyVersion` — one reach walk per world state instead of
+  seven call sites re-walking, several per frame. (Correction to the previous commit's message:
+  the measured update win was 1.12 → 0.94 ms, not the 0.65 claimed there.)
+- **#4 GameState split**: core 2,338 → 1,900 lines; `GameStateSceneFive.swift` (circuit, pulse,
+  bloom, surveyor — 25 regions moved verbatim) and `GameStateSceneSix.swift` (route-keyed arrival,
+  metal vessel). `run-tests.sh` updated in the same commit, per the B2 trap.
+- **#1 `interact()` is an explicit dispatch**: ten named handlers, one array that IS the precedence,
+  mirrored as `interactionOrder` data and PINNED by a test — a reorder now fails by name instead of
+  silently swallowing someone's press (how the metal-vessel/plinth bug happened). The whole
+  puzzle-integrity suite passed through the new dispatch unchanged before the pin went in.
+
+Deferred from the analysis, still open: the full-cube prop-sweep consolidation (#5), the test-file
+split (#6), and the small position-helper cleanups (#7).
+
 ### The surveyor (2026-08-04, overnight) — Eddie's mobile-builder, BUILT
 A Builder machine walks Scene 5's LIVE channel runs and grows stepped fractal filigree onto the
 bare tiles beside them — the reference image's Manhattan dendrites, generated as a 6-slice RG
