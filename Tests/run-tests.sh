@@ -27,6 +27,10 @@ swiftc -O \
     "$SHARED/GameStateSceneSix.swift" \
     "$SHARED/WorldGraph.swift" \
     "Tests/CoordinateMathTests.swift" \
+    "Tests/TestsCubeMath.swift" \
+    "Tests/TestsScenes.swift" \
+    "Tests/TestsRouting.swift" \
+    "Tests/TestsWorldDressing.swift" \
     -o "$OUT"
 
 "$OUT"

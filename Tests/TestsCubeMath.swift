@@ -1,0 +1,926 @@
+import Foundation
+import simd
+
+// The cube as PURE GEOMETRY — projection, edge crossings, slice rotation, the stand grid, prop
+// placement. These are the invariants the M8 rotation bug violated, and they are size-swept
+// (3/5/7/9/11/25), which is why they dominate the check count: most of the ~250,000 checks in a run
+// are made here, by loops, not by hand.
+//
+// Part of `CoordinateMathTests` (split out 2026-08-05 — one 4,158-line file was hard to navigate
+// and worse to review). Everything here is an extension on the same type, so the shared helpers and
+// `check()` are available exactly as before, and `main()` in CoordinateMathTests.swift still names
+// every test it runs. ADDING A FILE HERE MEANS ADDING IT TO `Tests/run-tests.sh` in the same
+// commit — the runner lists its sources explicitly and will not find a new one on its own.
+
+extension CoordinateMathTests {
+    /// Invisible walls returning, after twists this time. A twist moves the slab's facelets and
+    /// rotates their openings; the tiles they now meet did not move — so the two halves of every
+    /// edge along the slab boundary can disagree, and the disagreements ACCUMULATE. A bare 7³ went
+    /// 0 → 16 → 48 → 72 → 96 → 112 over six turns, which is one-way passages and walls that block
+    /// without being drawn (Eddie: "invisible walls occur after a few turns").
+    ///
+    /// Closed wins after a twist, unlike at stamp time: two real walls have just been brought
+    /// together, and inventing a passage between them would be the twist undoing itself.
+    static func testTwistsLeaveTheTopologyConsistent() {
+        for (label, gs) in [("bare", GameState(size: 7, name: "b", stamp: .bare)),
+                            ("garden", GameState(size: 11, name: "g", stamp: .gardenMaze)),
+                            ("scene-4", GameState(size: PrologueSize.sceneFour, name: "s4", stamp: .sceneFour))] {
+            let m = gs.cubeModel
+            /// Every tile's opening mask, as the world would be walked and drawn.
+            func snapshot() -> [Int: UInt8] {
+                var out: [Int: UInt8] = [:]
+                for face in CubeFace.allCases {
+                    for r in 0..<m.size {
+                        for c in 0..<m.size {
+                            guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                            out[m.cubies[ci].facelets[fi].id.rawValue] =
+                                m.cubies[ci].facelets[fi].mazeTile.openings.rawValue
+                        }
+                    }
+                }
+                return out
+            }
+            func totalOpenings() -> Int {
+                var n = 0
+                for (_, v) in snapshot() {
+                    for bit in [1, 2, 4, 8] where v & UInt8(bit) != 0 { n += 1 }
+                }
+                return n
+            }
+            /// PASSAGE must be symmetric, however the tiles came to be neighbours: if this tile can
+            /// leave east, the tile east of it can come back west. This is the invariant that
+            /// matters, and it holds by construction because both sides read the same seam.
+            func asymmetricPassages() -> Int {
+                var bad = 0
+                for face in CubeFace.allCases {
+                    for r in 0..<m.size {
+                        for c in 0..<m.size {
+                            let mine = m.passableOpenings(face: face, row: r, col: c)
+                            for (sdir, mask, dr, dc, opp) in [(SurfaceDirection.north, DirectionMask.north, -1, 0, DirectionMask.south),
+                                                              (.south, .south, 1, 0, .north),
+                                                              (.west, .west, 0, -1, .east),
+                                                              (.east, .east, 0, 1, .west)] {
+                                let nr = r + dr, nc = c + dc
+                                let far: (face: CubeFace, row: Int, col: Int, back: DirectionMask)
+                                if nr >= 0, nr < m.size, nc >= 0, nc < m.size {
+                                    far = (face, nr, nc, opp)
+                                } else {
+                                    let cr = m.edgeCrossing(face: face, direction: sdir, row: r, col: c)
+                                    let b = cr.facing.opposite
+                                    far = (cr.face, cr.row, cr.col,
+                                           b == .north ? .north : b == .south ? .south : b == .west ? .west : .east)
+                                }
+                                let theirs = m.passableOpenings(face: far.face, row: far.row, col: far.col)
+                                if mine.contains(mask) != theirs.contains(far.back) { bad += 1 }
+                            }
+                        }
+                    }
+                }
+                return bad
+            }
+
+            check(asymmetricPassages() == 0, "\(label): passage is one-way somewhere before any twist")
+            let atStart = totalOpenings(), startState = snapshot()
+
+            // NOTHING IS DESTROYED BY TURNING. The old rule swept the whole cube after every twist
+            // and closed any opening whose partner was shut, which fixed one-way passages by
+            // demolishing them: Scene 4 ran 322 → 32 open edges over forty turns and walled its own
+            // portal in on all four sides (Eddie, 2026-08-03, stuck and unable to finish). Walls now
+            // stay where they were authored and passage asks both sides, so a turn can SEVER a route
+            // without deleting anything.
+            for turn in 1...6 {
+                m.applySliceRotation(axis: turn % 3, index: (turn % 2 == 0) ? 0 : m.size - 1, angle: .pi / 2)
+                check(totalOpenings() == atStart,
+                      "\(label): \(atStart) → \(totalOpenings()) openings after \(turn) twist(s) — the world is decaying")
+                check(asymmetricPassages() == 0,
+                      "\(label): \(asymmetricPassages()) one-way passages after \(turn) twist(s)")
+            }
+
+            // AND TURNING BACK RESTORES IT, exactly. A configuration puzzle whose moves are not
+            // reversible is a trap, and this is the cheapest possible proof that they are.
+            let m2 = GameState(size: m.size, name: "again", stamp: label == "bare" ? .bare
+                                                          : label == "garden" ? .gardenMaze : .sceneFour).cubeModel
+            for _ in 0..<4 { m2.applySliceRotation(axis: 1, index: 0, angle: .pi / 2) }
+            var same = true
+            let fresh = GameState(size: m.size, name: "fresh", stamp: label == "bare" ? .bare
+                                                             : label == "garden" ? .gardenMaze : .sceneFour).cubeModel
+            for face in CubeFace.allCases {
+                for r in 0..<m2.size {
+                    for c in 0..<m2.size {
+                        guard let (a, b) = m2.faceletAt(face: face, row: r, col: c),
+                              let (x, y) = fresh.faceletAt(face: face, row: r, col: c) else { continue }
+                        if m2.cubies[a].facelets[b].mazeTile.openings
+                            != fresh.cubies[x].facelets[y].mazeTile.openings { same = false }
+                    }
+                }
+            }
+            check(same, "\(label): four quarter-turns of one slab did not return the world to where it started")
+            _ = startState
+        }
+    }
+
+    /// Put the player on a tile, at its centre stand-cell — where F is pressed from.
+    static func stand(_ gs: GameState, _ face: CubeFace, _ r: Int, _ c: Int) {
+        gs.player.face = face; gs.player.row = r; gs.player.col = c
+        gs.player.subRow = gs.player.standCenter; gs.player.subCol = gs.player.standCenter
+        gs.player.isMoving = false; gs.player.isTurning = false
+    }
+
+    /// Regression (Eddie, size-11 garden): a maze that fills the WHOLE face makes dressedWallProps'
+    /// `neighbor()` ask faceletAt for out-of-face (row±1/col±1) tiles. faceletAt must return nil there,
+    /// not crash "Index out of range" on the `cachedProjection[face]![row][col]` subscript. This never
+    /// fired while the garden was an interior region of a size-25 face.
+    static func testFaceletAtBoundsFullFace() {
+        let m = GameState(size: 11, name: "garden", stamp: .gardenMaze).cubeModel
+        check(m.faceletAt(face: .positiveZ, row: -1, col: 0) == nil, "faceletAt row -1 must be nil")
+        check(m.faceletAt(face: .positiveZ, row: 11, col: 0) == nil, "faceletAt row=size must be nil")
+        check(m.faceletAt(face: .positiveZ, row: 0, col: -1) == nil, "faceletAt col -1 must be nil")
+        check(m.faceletAt(face: .positiveZ, row: 0, col: 11) == nil, "faceletAt col=size must be nil")
+        check(m.faceletAt(face: .positiveZ, row: 5, col: 5) != nil, "faceletAt in-range must resolve")
+        // The render-time dressed-wall pass drives faceletAt at the face boundary — must not crash.
+        let e = m.dressedWallEntries(walls: [8, 9], rocks: [7], bushes: [3, 4],
+                                     wallScale: 1, rockScale: 1, bushScale: 1)
+        check(e.count > 0, "full-face garden should emit dressed-wall entries")
+    }
+
+    /// M17 Phase 0 — the player-global knowledge container: memories, glyphs, and the attunement
+    /// gradient with its never-fully-clear ceiling.
+    static func testPlayerKnowledge() {
+        let k = PlayerKnowledge()
+        check(k.isEmpty, "fresh knowledge is empty")
+        check(!k.hasMemory("temple") && !k.knows(glyph: "mark") && k.attunement(family: "cube") == 0,
+              "fresh knowledge queries are all negative/zero")
+
+        // Memories: receive returns true only the first time; then hasMemory holds.
+        check(k.receive(memory: "temple"), "first receive is new")
+        check(!k.receive(memory: "temple"), "second receive is not new (idempotent)")
+        check(k.hasMemory("temple") && !k.hasMemory("moon"), "hasMemory tracks exactly what was received")
+        check(!k.isEmpty, "knowledge is no longer empty after a receive")
+
+        // Glyphs: learn is idempotent; queries are exact.
+        k.learn(glyph: "temple-mark"); k.learn(glyph: "temple-mark")
+        check(k.knows(glyph: "temple-mark") && !k.knows(glyph: "unknown"), "knows tracks learned glyphs")
+
+        // Attunement: rises with learning, monotone, clamped to [0, ceiling], never reaching 1.
+        let fam = "hypercube"
+        var last = k.attunement(family: fam)
+        check(last == 0, "attunement starts at 0")
+        for _ in 0..<50 {
+            k.attune(family: fam, by: 0.1)
+            let now = k.attunement(family: fam)
+            check(now >= last, "attunement is monotone non-decreasing")
+            check(now <= PlayerKnowledge.attunementCeiling + 1e-6, "attunement never exceeds the ceiling")
+            last = now
+        }
+        check(abs(last - PlayerKnowledge.attunementCeiling) < 1e-6, "attunement saturates AT the ceiling")
+        check(PlayerKnowledge.attunementCeiling < 1.0, "the ceiling is below full clarity (never fully understand)")
+        // A negative nudge floors at 0, doesn't go negative.
+        let fam2 = "twospots"
+        k.attune(family: fam2, by: -5)
+        check(k.attunement(family: fam2) == 0, "attunement floors at 0")
+        // Families are independent.
+        check(k.attunement(family: fam) > 0 && k.attunement(family: "untouched") == 0, "per-family attunement is independent")
+    }
+
+    /// M19 relief (CPU half) — pins the height field and the displacement so the GPU (Metal) side
+    /// can be transcribed to match, and proves amplitude 0 is a strict no-op.
+    static func testReliefField() {
+        // Bounds: the field is a mean of three sinusoids ⇒ within [−1, 1].
+        // Continuity: Lipschitz — a small direction step gives a small height step.
+        var prev = CubeModel.reliefHeight(SIMD3(1, 0, 0))
+        for i in 0...200 {
+            let a = Float(i) / 200.0 * 6.2831853
+            let dir = normalize(SIMD3(cosf(a), sinf(a) * 0.6, sinf(a * 0.5)))
+            let h = CubeModel.reliefHeight(dir)
+            check(h >= -1.0001 && h <= 1.0001, "relief height in range: \(h)")
+            // Continuous (no jumps): a ~1.8° direction step gives a bounded height step. Crater
+            // rims are legitimately steeper than the open sinusoids, hence the 0.45 bound.
+            check(abs(h - prev) < 0.45, "relief height continuous step: \(abs(h - prev))")
+            prev = h
+        }
+
+        // amplitude 0 ⇒ inflatedUnitPoint is byte-identical to the plain inflation.
+        for n in [5, 7] {
+            let flat = CubeModel(size: n); flat.roundness = 1.0; flat.reliefAmplitude = 0
+            let bumpy = CubeModel(size: n); bumpy.roundness = 1.0; bumpy.reliefAmplitude = 0.05
+            let samples: [(Float, Float, Float)] = [(0.3, 0.2, 1.0), (-0.5, 0.9, 0.1), (1.0, -0.4, 0.6)]
+            for (px, py, pz) in samples {
+                let p = SIMD3<Float>(px, py, pz)
+                let base = flat.inflatedUnitPoint(p)
+                let bumped = bumpy.inflatedUnitPoint(p)
+                // No-op at amplitude 0: bumpy must equal a hand-applied radial push of base.
+                let lensq: Float = base.x*base.x + base.y*base.y + base.z*base.z
+                let len = lensq.squareRoot()
+                let dir = base / len
+                let scale: Float = 1 + 0.05 * CubeModel.reliefHeight(dir)
+                let expected = base * scale
+                check(approx(bumped, expected, 1e-5), "relief displacement matches formula (size \(n))")
+                // And amplitude 0 leaves it exactly at base.
+                let noop = CubeModel(size: n); noop.roundness = 1.0
+                check(approx(noop.inflatedUnitPoint(p), base, 1e-6), "relief amplitude 0 is a no-op")
+            }
+        }
+    }
+
+    /// M18 Phase 2 — a solid prop removes exactly the k×k stand block of its author sub-cell;
+    /// a walk-through prop removes nothing.
+    static func testPropFootprint() {
+        for d in [3, 9, 15] {
+            let k = d / 3
+            for ar in 0..<3 { for ac in 0..<3 {
+                let solid = Prop(kind: .topiary, subRow: ar, subCol: ac)   // a DEFAULT-footprint solid prop
+                let walkThrough = Prop(kind: .portal, subRow: ar, subCol: ac)
+                for sr in 0..<d { for sc in 0..<d {
+                    let inBlock = sr >= ar * k && sr < ar * k + k && sc >= ac * k && sc < ac * k + k
+                    check(solid.blocks(sr, sc, grid: d) == inBlock,
+                          "footprint d=\(d) topiary@(\(ar),\(ac)): cell (\(sr),\(sc)) expected \(inBlock)")
+                    check(!walkThrough.blocks(sr, sc, grid: d),
+                          "footprint d=\(d) portal@(\(ar),\(ac)): cell (\(sr),\(sc)) must be walk-through")
+                } }
+            } }
+            // The three author cells tile the axis with no overlap and no gap. Probe along
+            // author row 0 (stand row 0 sits inside author row 0's block).
+            var covered = Array(repeating: 0, count: d)
+            for ac in 0..<3 {
+                // Use a DEFAULT-footprint prop. This used to be a dial, which now blocks only its own
+                // cell — small flat things set into the ground had inherited a 6.3 m footprint and
+                // were fencing off the middle of their own tiles invisibly.
+                let p = Prop(kind: .topiary, subRow: 0, subCol: ac)
+                for sc in 0..<d where p.blocks(0, sc, grid: d) { covered[sc] += 1 }
+            }
+            check(covered.allSatisfy { $0 == 1 }, "footprint d=\(d): author thirds tile the stand grid exactly")
+        }
+    }
+
+    /// M18 Phase 2 — the connectivity guard: in every authored world, no prop footprint may
+    /// sever a tile — whichever gateway you enter by, you can reach every other gateway of
+    /// that tile. BFS (8-connected, matching movement) over walkable stand cells; assert all
+    /// walkable border cells land in one component. This is what turns an authoring mistake
+    /// (a prop dropped across the only route) into a red test instead of an unwinnable maze.
+    static func testPropConnectivity() {
+        let cases: [(String, WorldStamp, Int, Bool)] = [
+            ("overworld", .overworldDemo, 9, false),
+            ("overworld", .overworldDemo, 5, false),
+            ("moon",      .moonDemo,      5, false),
+            ("temple",    .templeInterior, 5, true),
+            ("natural",   .natural,       7, false),
+            ("natural",   .natural,       3, false),
+            ("lunar",     .lunar,         3, false),
+            ("lunar",     .lunar,         5, false),
+        ]
+        for (label, stamp, n, interior) in cases {
+            let m = CubeModel(worldScale: WorldScale(cubeSize: n, interior: interior), stamp: stamp)
+            let d = m.worldScale.standGrid
+            for face in CubeFace.allCases {
+                for r in 0..<n { for c in 0..<n {
+                    guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
+                    let tile = m.cubies[ci].facelets[fi].mazeTile
+                    let props = m.cubies[ci].facelets[fi].props
+                    func walk(_ sr: Int, _ sc: Int) -> Bool {
+                        tile.isStandable(sr, sc, grid: d) && !props.contains { $0.blocks(sr, sc, grid: d) }
+                    }
+                    var border: [(Int, Int)] = []
+                    for i in 0..<d {
+                        if walk(0, i)     { border.append((0, i)) }
+                        if walk(d - 1, i) { border.append((d - 1, i)) }
+                        if walk(i, 0)     { border.append((i, 0)) }
+                        if walk(i, d - 1) { border.append((i, d - 1)) }
+                    }
+                    guard let start = border.first else { continue }
+                    var seen = Set<Int>([start.0 * d + start.1])
+                    var stack = [start]
+                    while let (sr, sc) = stack.popLast() {
+                        for ddr in -1...1 { for ddc in -1...1 where !(ddr == 0 && ddc == 0) {
+                            let nr = sr + ddr, nc = sc + ddc
+                            guard (0..<d).contains(nr), (0..<d).contains(nc), walk(nr, nc) else { continue }
+                            if seen.insert(nr * d + nc).inserted { stack.append((nr, nc)) }
+                        } }
+                    }
+                    for (br, bc) in border {
+                        check(seen.contains(br * d + bc),
+                              "\(label) n=\(n) \(face)(\(r),\(c)): gateway cell (\(br),\(bc)) severed by a prop footprint")
+                    }
+                } }
+            }
+        }
+    }
+
+    /// M18 Phase 1 — hand-derived walkability truths (non-circular: expectations written out
+    /// case by case, not recomputed from the same formula).
+    static func testStandableRules() {
+        let d = 9, c = 4
+        // A north-gateway corridor tile: gap cells on the north border only, everything
+        // interior walkable (grass), all other borders wall-claimed.
+        let gate = MazeTile(openings: [.north], styleSeed: 0)
+        check(gate.isStandable(0, c, grid: d), "gateway: north gap centre standable")
+        check(gate.isStandable(0, 3, grid: d) && gate.isStandable(0, 5, grid: d), "gateway: full gap third standable")
+        check(!gate.isStandable(0, 2, grid: d) && !gate.isStandable(0, 6, grid: d), "gateway: jamb cells blocked")
+        check(!gate.isStandable(0, 0, grid: d) && !gate.isStandable(0, d - 1, grid: d), "gateway: north corners blocked")
+        check(!gate.isStandable(d - 1, c, grid: d), "gateway: closed south border blocked")
+        check(!gate.isStandable(c, 0, grid: d) && !gate.isStandable(c, d - 1, grid: d), "gateway: closed west/east borders blocked")
+        check(gate.isStandable(1, 1, grid: d) && gate.isStandable(c, c, grid: d) && gate.isStandable(d - 2, d - 2, grid: d),
+              "gateway: interior grass standable everywhere")
+        // A room-interior tile (north fully open): whole north border standable except the
+        // corners its closed side edges claim.
+        let room = MazeTile(openings: [.north], styleSeed: 0, openEdges: [.north])
+        check(room.isStandable(0, 1, grid: d) && room.isStandable(0, c, grid: d) && room.isStandable(0, d - 2, grid: d),
+              "open edge: border standable")
+        check(!room.isStandable(0, 0, grid: d) && !room.isStandable(0, d - 1, grid: d),
+              "open edge: corners still claimed by the closed side edges")
+        // The natural world: everything open ⇒ every cell standable, corners included.
+        let all: DirectionMask = [.north, .east, .south, .west]
+        let field = MazeTile(openings: all, styleSeed: 0, openEdges: all)
+        for r in 0..<d { for cl in 0..<d {
+            check(field.isStandable(r, cl, grid: d), "natural: (\(r),\(cl)) standable")
+        } }
+    }
+
+    /// M18 Phase 1 — world-position-pinned crossing continuity on the stand grid (the M15
+    /// technique): walk over every tile seam and cube edge, exterior and interior, cardinal
+    /// AND diagonal, from every lateral cell — and pin the world geometry:
+    ///   • same-face: the arrival cell's world position must equal the departure tile's
+    ///     linear extrapolation (seam invisible by construction);
+    ///   • cube-edge: the lateral coordinate along the shared edge axis must be preserved
+    ///     (cardinal) or shifted by exactly one stand step (diagonal) — a straight or
+    ///     diagonal walk never skips sideways at a fold.
+    static func testStandGridCrossing(size n: Int, interior: Bool) {
+        let model = CubeModel(worldScale: WorldScale(cubeSize: n, interior: interior), stamp: .natural)
+        model.roundness = 0
+        // This test isolates crossing GEOMETRY continuity; strip the natural world's water
+        // (which correctly refuses entry) and props so every seam is genuinely open — the
+        // water-blocks-entry rule is exercised separately in the app, not here.
+        for ci in model.cubies.indices {
+            for fi in model.cubies[ci].facelets.indices {
+                model.cubies[ci].facelets[fi].terrain = .grass
+                model.cubies[ci].facelets[fi].props.removeAll()
+            }
+        }
+        let ws = model.worldScale
+        let d = ws.standGrid, c = d / 2
+        let step = ws.standStep * ws.cellSpacing
+        let tag = interior ? "int" : "ext"
+
+        func pos(_ f: CubeFace, _ r: Int, _ cl: Int, _ sr: Int, _ sc: Int) -> SIMD3<Float> {
+            col3(model.inflatedPlacement(face: f, row: r, col: cl,
+                                         localX: Float(sc - c) * ws.standStep,
+                                         localY: Float(sr - c) * ws.standStep), 3)
+        }
+        // Border cell of edge `dir` at lateral index `lat`.
+        func borderCell(_ dir: SurfaceDirection, _ lat: Int) -> (Int, Int) {
+            switch dir {
+            case .north: return (0, lat)
+            case .south: return (d - 1, lat)
+            case .west:  return (lat, 0)
+            case .east:  return (lat, d - 1)
+            }
+        }
+        // Travel headings that exit through `dir`: the cardinal and its two diagonals.
+        func travels(_ dir: SurfaceDirection) -> [Heading8] {
+            let card = Heading8.from(surfaceDirection: dir)
+            let left = Heading8(rawValue: (card.rawValue + 1) % 8)!
+            let right = Heading8(rawValue: (card.rawValue + 7) % 8)!
+            return [card, left, right]
+        }
+
+        for face in CubeFace.allCases {
+            for dir in [SurfaceDirection.north, .south, .east, .west] {
+                // One tile mid-face (same-face seam) and one on the cube edge (fold).
+                let mid = n / 2
+                let edgeTile: (Int, Int)
+                let midTile: (Int, Int)
+                switch dir {
+                case .north: edgeTile = (0, mid); midTile = (mid, mid)
+                case .south: edgeTile = (n - 1, mid); midTile = (mid == 0 ? 0 : mid - 1, mid)
+                case .west:  edgeTile = (mid, 0); midTile = (mid, mid)
+                case .east:  edgeTile = (mid, n - 1); midTile = (mid, mid == 0 ? 0 : mid - 1)
+                }
+                for (row, col) in [edgeTile, midTile] {
+                    for lat in 0..<d {
+                        for travel in travels(dir) {
+                            let (sr, sc) = borderCell(dir, lat)
+                            var p = PlayerState(size: n, standGrid: d)
+                            p.face = face; p.row = row; p.col = col
+                            p.subRow = sr; p.subCol = sc
+                            p.facing = travel
+                            p.tryMoveForward(cubeModel: model)
+
+                            // Does this hop exit at all? The lateral shift must stay on the edge;
+                            // a shifted-out diagonal is a legal *within-tile*… no — from a border
+                            // cell every travel through `dir` leaves the grid. Shift out of range ⇒
+                            // refused (corner-to-corner), which is the spec.
+                            let (dr, dc) = travel.subDelta
+                            let shifted = (dir == .north || dir == .south) ? sc + dc : sr + dr
+                            guard (0..<d).contains(shifted) else {
+                                check(!p.isMoving, "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): corner exit must refuse")
+                                continue
+                            }
+                            check(p.isMoving, "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): crossing must start")
+                            guard p.isMoving else { continue }
+                            _ = p.updateMovement(deltaTime: 10)
+
+                            let dep = pos(face, row, col, sr, sc)
+                            let arr = pos(p.face, p.row, p.col, p.subRow, p.subCol)
+                            let lateralShift = Float(abs(travel.rawValue % 2 == 0 ? 0 : 1)) * step
+
+                            if p.face == face {
+                                // Same-face: exact — the neighbor's cell IS the linear extrapolation.
+                                let expected = pos(face, row, col, sr + dr, sc + dc)
+                                check(approx(arr, expected, 2e-4),
+                                      "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): same-face seam exact")
+                            } else {
+                                // Cube edge: lateral position along the shared edge axis is pinned.
+                                let axis = normalize(cross(face.normal, p.face.normal))
+                                let latErr = abs(abs(dot(arr - dep, axis)) - lateralShift)
+                                check(latErr < 2e-4,
+                                      "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): edge lateral drift \(latErr)")
+                                check(length(arr - dep) < 1.6 * step,
+                                      "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): fold distance \(length(arr - dep))")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// M18 Phase 0 — the generalized stand-grid path cross must agree with the legacy 3×3
+    /// rule at every density: cross cells walkable exactly per openings, everything off the
+    /// centre row/column never walkable, and the d-grid cross a strict scale-up of the 3×3.
+    static func testStandGridPathCross() {
+        let combos: [DirectionMask] = {
+            var out: [DirectionMask] = []
+            for bits in 0..<16 {
+                var m = DirectionMask()
+                if bits & 1 != 0 { m.insert(.north) }
+                if bits & 2 != 0 { m.insert(.east) }
+                if bits & 4 != 0 { m.insert(.south) }
+                if bits & 8 != 0 { m.insert(.west) }
+                out.append(m)
+            }
+            return out
+        }()
+        for openings in combos {
+            let tile = MazeTile(openings: openings, styleSeed: 0)
+            for d in [3, 9, 15] {
+                let c = d / 2
+                for r in 0..<d {
+                    for cl in 0..<d {
+                        let walkable = tile.isPathCell(r, cl, grid: d)
+                        let expected: Bool
+                        if cl == c && r == c { expected = true }
+                        else if cl == c { expected = openings.contains(r < c ? .north : .south) }
+                        else if r == c { expected = openings.contains(cl < c ? .west : .east) }
+                        else { expected = false }
+                        check(walkable == expected,
+                              "standGrid d=\(d) openings=\(openings.rawValue): cell (\(r),\(cl)) expected \(expected)")
+                    }
+                }
+                // The centre cell is always standable; the four edge-middles gate on openings.
+                check(tile.isPathCell(c, c, grid: d), "standGrid d=\(d): centre must be path")
+                check(tile.isPathCell(0, c, grid: d) == openings.contains(.north), "standGrid d=\(d): north edge-middle")
+                check(tile.isPathCell(d - 1, c, grid: d) == openings.contains(.south), "standGrid d=\(d): south edge-middle")
+                check(tile.isPathCell(c, 0, grid: d) == openings.contains(.west), "standGrid d=\(d): west edge-middle")
+                check(tile.isPathCell(c, d - 1, grid: d) == openings.contains(.east), "standGrid d=\(d): east edge-middle")
+            }
+            // Legacy agreement: the default grid is the old 3×3 rule verbatim.
+            for r in 0...2 {
+                for cl in 0...2 {
+                    check(tile.isPathCell(r, cl) == tile.isPathCell(r, cl, grid: 3),
+                          "legacy 3×3 default disagrees at (\(r),\(cl))")
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    static func delta(_ a: SIMD3<Int32>, _ b: SIMD3<Int32>) -> SIMD3<Int32> {
+        SIMD3(b.x - a.x, b.y - a.y, b.z - a.z)
+    }
+
+    static func intStep(_ v: SIMD3<Float>) -> SIMD3<Int32> {
+        SIMD3(Int32(v.x.rounded()), Int32(v.y.rounded()), Int32(v.z.rounded()))
+    }
+
+    static func borderCell(dir: SurfaceDirection, i: Int, n: Int) -> (row: Int, col: Int) {
+        switch dir {
+        case .north: return (0, i)
+        case .south: return (n - 1, i)
+        case .east:  return (i, n - 1)
+        case .west:  return (i, 0)
+        }
+    }
+
+    static func checkBijection(_ model: CubeModel, size n: Int, label: String) {
+        var seen = Set<Int>()
+        for face in CubeFace.allCases {
+            for row in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = model.faceletAt(face: face, row: row, col: col) else {
+                        check(false, "size \(n) \(label): faceletAt(\(face),\(row),\(col)) is nil")
+                        continue
+                    }
+                    let id = model.cubies[ci].facelets[fi].id.rawValue
+                    check(!seen.contains(id), "size \(n) \(label): duplicate facelet \(id) at (\(face),\(row),\(col))")
+                    seen.insert(id)
+                }
+            }
+        }
+        check(seen.count == 6 * n * n, "size \(n) \(label): expected \(6 * n * n) unique facelets, got \(seen.count)")
+    }
+
+    // MARK: - Tests
+
+    static func testProjectionBijection(size n: Int) {
+        checkBijection(CubeModel(size: n), size: n, label: "initial")
+    }
+
+    static func testGridWorldConsistency(size n: Int) {
+        let model = CubeModel(size: n)
+        for face in CubeFace.allCases {
+            let tan = intStep(face.tangent)
+            let bit = intStep(face.bitangent)
+            for row in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, _) = model.faceletAt(face: face, row: row, col: col) else { continue }
+                    let p = model.cubies[ci].position
+                    if col + 1 < n, let (ci2, _) = model.faceletAt(face: face, row: row, col: col + 1) {
+                        let d = delta(p, model.cubies[ci2].position)
+                        check(d == tan, "size \(n) \(face): col step (\(row),\(col))→(\(row),\(col + 1)) expected \(tan) got \(d)")
+                    }
+                    if row + 1 < n, let (ci2, _) = model.faceletAt(face: face, row: row + 1, col: col) {
+                        let d = delta(p, model.cubies[ci2].position)
+                        check(d == bit, "size \(n) \(face): row step (\(row),\(col))→(\(row + 1),\(col)) expected \(bit) got \(d)")
+                    }
+                }
+            }
+        }
+    }
+
+    static func testEdgeCrossingRoundTrip(size n: Int) {
+        for face in CubeFace.allCases {
+            for dir in SurfaceDirection.allCases {
+                for i in 0..<n {
+                    let (r, c) = borderCell(dir: dir, i: i, n: n)
+                    let out = EdgeCrossing.cross(face: face, direction: dir, row: r, col: c, cubeSize: n)
+                    let back = EdgeCrossing.cross(face: out.face, direction: out.facing.opposite, row: out.row, col: out.col, cubeSize: n)
+                    check(back.face == face && back.row == r && back.col == c,
+                          "size \(n): roundtrip \(face) \(dir) (\(r),\(c)) → \(out.face)(\(out.row),\(out.col)) f=\(out.facing) → back \(back.face)(\(back.row),\(back.col))")
+                    check(back.facing == dir.opposite,
+                          "size \(n): roundtrip facing \(face) \(dir): back facing \(back.facing) expected \(dir.opposite)")
+                }
+            }
+        }
+    }
+
+    static func testSliceRotation(size n: Int) {
+        let model = CubeModel(size: n)
+        let orig = model.cubies.map { $0.position }
+        let axis = 2, index = n - 1
+        let angle: Float = -.pi / 2
+
+        // Stamp a prop on a facelet of a cubie in this slice, to verify props ride the rotation
+        // end-to-end (applySliceRotation → Prop.rotate) and a full 4-turn cycle restores them —
+        // the M12-E house-split invariant, exercised through the real machinery, not in isolation.
+        let sliceCubies = model.cubieIndicesInSlice(axis: axis, index: index)
+        var propCubie = -1
+        if let ci = sliceCubies.first(where: { !model.cubies[$0].facelets.isEmpty }) {
+            propCubie = ci
+            model.cubies[ci].facelets[0].props.append(Prop(kind: .topiary, subRow: 0, subCol: 1, facing: .n))
+        }
+
+        model.applySliceRotation(axis: axis, index: index, angle: angle)
+        checkBijection(model, size: n, label: "after 1 z-rotation")
+
+        model.applySliceRotation(axis: axis, index: index, angle: angle)
+        model.applySliceRotation(axis: axis, index: index, angle: angle)
+        model.applySliceRotation(axis: axis, index: index, angle: angle)
+        for i in model.cubies.indices {
+            check(model.cubies[i].position == orig[i],
+                  "size \(n): cubie \(i) pos after 4 z-turns \(model.cubies[i].position) != orig \(orig[i])")
+        }
+        checkBijection(model, size: n, label: "after 4 z-rotations")
+
+        // The stamped prop rode all four turns and returned to its original sub-cell + facing.
+        if propCubie >= 0, let p = model.cubies[propCubie].facelets[0].props.first {
+            check(p.subRow == 0 && p.subCol == 1 && p.facing == .n,
+                  "size \(n): prop after 4 z-turns (\(p.subRow),\(p.subCol),\(p.facing)) != (0,1,n)")
+        }
+    }
+
+    static func testDirectionMaskRotation() {
+        for raw in 0..<16 {
+            let m = DirectionMask(rawValue: UInt8(raw))
+            let masked = m.rawValue & 0x0F
+            check(m.rotated(quarterTurns: 4).rawValue == masked, "mask \(raw): 4-turn identity")
+            check(m.rotated(quarterTurns: 0).rawValue == masked, "mask \(raw): 0-turn identity")
+            var r = m
+            for _ in 0..<4 { r = r.rotated(quarterTurns: 1) }
+            check(r.rawValue == masked, "mask \(raw): 1×4 identity")
+            check(m.rotated(quarterTurns: -1).rawValue == m.rotated(quarterTurns: 3).rawValue, "mask \(raw): -1 == 3")
+        }
+        // Bit layout N=1<<0, E=1<<1, S=1<<2, W=1<<3 → +1 turn shifts N→E→S→W.
+        check(DirectionMask.north.rotated(quarterTurns: 1).rawValue == DirectionMask.east.rawValue, "north→east on +1 turn")
+        check(DirectionMask.east.rotated(quarterTurns: 1).rawValue == DirectionMask.south.rawValue, "east→south on +1 turn")
+        check(DirectionMask.south.rotated(quarterTurns: 1).rawValue == DirectionMask.west.rawValue, "south→west on +1 turn")
+        check(DirectionMask.west.rotated(quarterTurns: 1).rawValue == DirectionMask.north.rawValue, "west→north on +1 turn")
+    }
+
+    /// Find the cubie whose integer position matches (x,y,z), if it exists.
+    static func cubieIndex(_ m: CubeModel, _ x: Int, _ y: Int, _ z: Int) -> Int? {
+        m.cubies.firstIndex { $0.position == SIMD3<Int32>(Int32(x), Int32(y), Int32(z)) }
+    }
+
+    /// Bandaging (M13): a slice twist is legal iff every bonded group is entirely inside or entirely
+    /// outside the rotating slice. A group that straddles the slice would be torn → refused.
+    static func testBandagedLegality(size n: Int) {
+        // A bare world: the overworld stamp now ships with the M16.1 temple bond built in,
+        // so bandaging invariants are tested on an unstamped model.
+        let m = CubeModel(worldScale: WorldScale(cubeSize: n), stamp: .bare)
+        // No bonds → every slice is legal.
+        for axis in 0..<3 {
+            for index in 0..<n {
+                check(m.canRotateSlice(axis: axis, index: index), "size \(n): no bonds → (\(axis),\(index)) legal")
+            }
+        }
+        // Bond two cubies that share the z=n-1 and y=0 slices but differ in x — a straddle across x.
+        guard let a = cubieIndex(m, 0, 0, n - 1), let b = cubieIndex(m, n - 1, 0, n - 1) else {
+            check(false, "size \(n): bond cubies not found"); return
+        }
+        m.addBond([a, b])
+        // Slices holding BOTH bonded cubies → legal (the whole bond moves together).
+        check(m.canRotateSlice(axis: 2, index: n - 1), "size \(n): z=n-1 holds both → legal")
+        check(m.canRotateSlice(axis: 1, index: 0),     "size \(n): y=0 holds both → legal")
+        // Slices holding exactly ONE → illegal (would tear the bond).
+        check(!m.canRotateSlice(axis: 0, index: 0),     "size \(n): x=0 holds only a → illegal")
+        check(!m.canRotateSlice(axis: 0, index: n - 1), "size \(n): x=n-1 holds only b → illegal")
+        // Slices holding NEITHER → legal.
+        check(m.canRotateSlice(axis: 2, index: 0), "size \(n): z=0 holds neither → legal")
+        // The bond survives a full 4-turn cycle of a legal (fully-in) slice: indices stay valid,
+        // positions restore, and the same straddle is illegal again.
+        for _ in 0..<4 { m.applySliceRotation(axis: 2, index: n - 1, angle: -.pi / 2) }
+        check(!m.canRotateSlice(axis: 0, index: 0),    "size \(n): after 4 turns, x=0 straddle still illegal")
+        check(m.canRotateSlice(axis: 2, index: n - 1), "size \(n): after 4 turns, z=n-1 still legal")
+
+        // M16.1 groundwork — removeBond (understanding undoes a lock). Both bonds straddle the
+        // x=0 slice, so it only becomes legal when BOTH are gone: removing one leaves the other
+        // enforcing (bonds are independent), removing the second restores legality, and a repeat
+        // remove is a no-op.
+        guard let c = cubieIndex(m, 0, n - 1, 0), let d = cubieIndex(m, n - 1, n - 1, 0) else {
+            check(false, "size \(n): second-bond cubies not found"); return
+        }
+        m.addBond([c, d])   // second, independent bond — also straddles x (c at x=0, d at x=n-1)
+        check(m.removeBond(containing: a), "size \(n): removeBond finds bond 1 via a member")
+        check(!m.canRotateSlice(axis: 0, index: 0), "size \(n): x=0 still illegal — bond 2 untouched")
+        check(m.removeBond(containing: c), "size \(n): removeBond finds bond 2 via a member")
+        check(m.canRotateSlice(axis: 0, index: 0), "size \(n): x=0 legal once fully unbonded")
+        check(!m.removeBond(containing: a), "size \(n): repeat remove is a no-op")
+    }
+
+    static func testPropRotation() {
+        // A placed prop must stay glued to its tile through a slice rotation: `Prop.rotate`
+        // rotates the sub-cell offset and facing in the DirectionMask.rotated sense (N→E).
+        // Exhaustively check the round-trip / identity laws over every sub-cell and facing.
+        for subRow in 0...2 {
+            for subCol in 0...2 {
+                for facing in Heading8.allCases {
+                    let base = Prop(kind: .topiary, subRow: subRow, subCol: subCol, facing: facing)
+                    let tag = "(\(subRow),\(subCol),\(facing))"
+
+                    // 0-turn is a no-op.
+                    var p0 = base; p0.rotate(quarterTurns: 0)
+                    check(p0.subRow == subRow && p0.subCol == subCol && p0.facing == facing,
+                          "prop 0-turn identity \(tag)")
+
+                    // Four single quarter-turns restore the prop exactly.
+                    var pFour = base; for _ in 0..<4 { pFour.rotate(quarterTurns: 1) }
+                    check(pFour.subRow == subRow && pFour.subCol == subCol && pFour.facing == facing,
+                          "prop 1×4 identity \(tag) → (\(pFour.subRow),\(pFour.subCol),\(pFour.facing))")
+
+                    // A single call of 4 is the same identity.
+                    var pQuad = base; pQuad.rotate(quarterTurns: 4)
+                    check(pQuad.subRow == subRow && pQuad.subCol == subCol && pQuad.facing == facing,
+                          "prop 4-in-one identity \(tag)")
+
+                    // −1 turn equals +3 turns (and neither escapes the 3×3 grid).
+                    var pNeg = base; pNeg.rotate(quarterTurns: -1)
+                    var pPos = base; pPos.rotate(quarterTurns: 3)
+                    check(pNeg.subRow == pPos.subRow && pNeg.subCol == pPos.subCol && pNeg.facing == pPos.facing,
+                          "prop −1 == 3 \(tag)")
+                    check((0...2).contains(pNeg.subRow) && (0...2).contains(pNeg.subCol),
+                          "prop stays in 3×3 grid \(tag) → (\(pNeg.subRow),\(pNeg.subCol))")
+                }
+            }
+        }
+
+        // Rotation sense: the centre sub-cell is fixed; +1 quarter-turn carries the north
+        // sub-cell (0,1) to the east (1,2) and advances facing N→E — matching DirectionMask.
+        var centre = Prop(kind: .chest, subRow: 1, subCol: 1, facing: .n); centre.rotate(quarterTurns: 1)
+        check(centre.subRow == 1 && centre.subCol == 1, "prop centre fixed under rotation")
+        check(centre.facing == .e, "prop centre facing N→E on +1 turn")
+
+        var north = Prop(kind: .chest, subRow: 0, subCol: 1, facing: .n); north.rotate(quarterTurns: 1)
+        check(north.subRow == 1 && north.subCol == 2, "prop north sub-cell → east (got \(north.subRow),\(north.subCol))")
+        check(north.facing == .e, "prop north facing N→E on +1 turn")
+    }
+
+    // MARK: - M14b placement invariants (R2.5)
+
+    static func col3(_ m: float4x4, _ i: Int) -> SIMD3<Float> {
+        let c = i == 0 ? m.columns.0 : i == 1 ? m.columns.1 : i == 2 ? m.columns.2 : m.columns.3
+        return SIMD3(c.x, c.y, c.z)
+    }
+
+    static func approx(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ eps: Float) -> Bool {
+        abs(a.x - b.x) < eps && abs(a.y - b.y) < eps && abs(a.z - b.z) < eps
+    }
+
+    /// R2.5a — the rest placement is the flat cube placement, independently re-derived:
+    /// basis = (tangent, bitangent, normal), center = normal·halfN + tangent·colF + bitangent·rowF.
+    /// Also: `inflatedPlacement` at roundness 0 == rest basis with the origin offset in-plane,
+    /// and the rest frame must NOT change with roundness (it is the pre-inflation frame).
+    static func testRestPlacement(size n: Int) {
+        let m = CubeModel(size: n)
+        let halfN = Float(n) / 2.0
+        let spacing = m.worldScale.cellSpacing
+        for face in CubeFace.allCases {
+            for row in 0..<n {
+                for col in 0..<n {
+                    let colF = (Float(col) + 0.5 - halfN) * spacing
+                    let rowF = (Float(row) + 0.5 - halfN) * spacing
+                    let center = face.normal * halfN + face.tangent * colF + face.bitangent * rowF
+
+                    m.roundness = 0
+                    let rest = m.restMatrix(face: face, row: row, col: col)
+                    check(approx(col3(rest, 0), face.tangent, 1e-6) &&
+                          approx(col3(rest, 1), face.bitangent, 1e-6) &&
+                          approx(col3(rest, 2), face.normal, 1e-6),
+                          "size \(n): rest basis (\(face),\(row),\(col))")
+                    check(approx(col3(rest, 3), center, 1e-5), "size \(n): rest center (\(face),\(row),\(col))")
+
+                    // roundness must not leak into the rest frame
+                    m.roundness = 0.7
+                    let restR = m.restMatrix(face: face, row: row, col: col)
+                    check(approx(col3(restR, 3), center, 1e-5) && approx(col3(restR, 2), face.normal, 1e-6),
+                          "size \(n): rest is roundness-independent (\(face),\(row),\(col))")
+
+                    // flat inflatedPlacement == rest basis + in-plane offset origin
+                    m.roundness = 0
+                    let off = m.inflatedPlacement(face: face, row: row, col: col, localX: 0.25, localY: -0.4)
+                    let expected = center + face.tangent * 0.25 + face.bitangent * (-0.4)
+                    check(approx(col3(off, 0), face.tangent, 1e-6) && approx(col3(off, 2), face.normal, 1e-6),
+                          "size \(n): flat placement basis (\(face),\(row),\(col))")
+                    check(approx(col3(off, 3), expected, 1e-5), "size \(n): flat placement origin (\(face),\(row),\(col))")
+                }
+            }
+        }
+    }
+
+    /// R2.5b — footprint continuity: adjacent tiles' shared-edge placements coincide (position AND
+    /// frame) at several roundness values. This is the property that makes the curved surface
+    /// seamless — tile A's east edge and its east neighbour's west edge are the SAME cube point,
+    /// so they must inflate to the same place with the same local frame.
+    static func testFootprintContinuity(size n: Int) {
+        let m = CubeModel(size: n)
+        let h = m.worldScale.cellSpacing / 2
+        for r: Float in [0.0, 0.3, 1.0] {
+            m.roundness = r
+            for face in CubeFace.allCases {
+                for row in 0..<n {
+                    for col in 0..<(n - 1) {   // col-adjacent pair, shared edge at +localX / −localX
+                        let a = m.inflatedPlacement(face: face, row: row, col: col, localX: h, localY: 0.2)
+                        let b = m.inflatedPlacement(face: face, row: row, col: col + 1, localX: -h, localY: 0.2)
+                        check(approx(col3(a, 3), col3(b, 3), 1e-4), "size \(n) r=\(r): col-seam pos (\(face),\(row),\(col))")
+                        check(approx(col3(a, 0), col3(b, 0), 1e-4) && approx(col3(a, 2), col3(b, 2), 1e-4),
+                              "size \(n) r=\(r): col-seam frame (\(face),\(row),\(col))")
+                    }
+                }
+                for row in 0..<(n - 1) {
+                    for col in 0..<n {         // row-adjacent pair, shared edge at +localY / −localY
+                        let a = m.inflatedPlacement(face: face, row: row, col: col, localX: -0.3, localY: h)
+                        let b = m.inflatedPlacement(face: face, row: row + 1, col: col, localX: -0.3, localY: -h)
+                        check(approx(col3(a, 3), col3(b, 3), 1e-4), "size \(n) r=\(r): row-seam pos (\(face),\(row),\(col))")
+                        check(approx(col3(a, 2), col3(b, 2), 1e-4), "size \(n) r=\(r): row-seam normal (\(face),\(row),\(col))")
+                    }
+                }
+            }
+            // Cross-face: +Z's east edge meets +X's west edge at the same cube point — positions
+            // must coincide there too (frames legitimately differ; each face has its own basis).
+            for row in 0..<n {
+                let a = m.inflatedPlacement(face: .positiveZ, row: row, col: n - 1, localX: h, localY: 0)
+                let b = m.inflatedPlacement(face: .positiveX, row: row, col: 0, localX: -h, localY: 0)
+                check(approx(col3(a, 3), col3(b, 3), 1e-4), "size \(n) r=\(r): cross-face edge pos row \(row)")
+            }
+        }
+    }
+
+    /// R2.5d — golden values for the Cobb cube→sphere map. These constants were computed
+    /// independently (double-precision, outside this codebase) and double as the spec that BOTH
+    /// twin implementations must match: `CubeModel.inflatedUnitPoint` (tested here) and
+    /// `m14bInflate` in Shaders.metal (same math on the GPU; guarded by review + this spec).
+    static func testInflateGoldens() {
+        let m = CubeModel(size: 3)
+        let cases: [(p: SIMD3<Float>, r: Float, want: SIMD3<Float>)] = [
+            (SIMD3( 1.0, 0.5, -0.25), 0.5, SIMD3( 0.9606947,  0.4249256, -0.2096254)),
+            (SIMD3( 1.0, 0.5, -0.25), 1.0, SIMD3( 0.9213893,  0.3498512, -0.1692508)),
+            (SIMD3( 0.2, -0.8,  0.6), 0.5, SIMD3( 0.1759474, -0.7588426,  0.5452917)),
+            (SIMD3( 0.2, -0.8,  0.6), 1.0, SIMD3( 0.1518947, -0.7176852,  0.4905833)),
+            (SIMD3( 1.0,  1.0,  1.0), 1.0, SIMD3( 0.5773503,  0.5773503,  0.5773503)),  // corner → 1/√3
+            (SIMD3( 1.0,  1.0,  1.0), 0.5, SIMD3( 0.7886751,  0.7886751,  0.7886751)),
+            (SIMD3( 0.0,  0.0,  1.0), 1.0, SIMD3( 0.0,        0.0,        1.0)),        // face centre fixed
+            (SIMD3(-0.7,  0.3,  1.0), 0.5, SIMD3(-0.5937468,  0.2470180,  0.9256466)),
+            (SIMD3(-0.7,  0.3,  1.0), 1.0, SIMD3(-0.4874936,  0.1940361,  0.8512931)),
+        ]
+        for c in cases {
+            m.roundness = c.r
+            let got = m.inflatedUnitPoint(c.p)
+            check(approx(got, c.want, 5e-6), "inflate golden p=\(c.p) r=\(c.r): got \(got), want \(c.want)")
+        }
+        // r == 0 is the exact identity (the guard path).
+        m.roundness = 0
+        let p = SIMD3<Float>(0.37, -0.91, 1.0)
+        check(m.inflatedUnitPoint(p) == p, "inflate r=0 identity")
+    }
+
+    // MARK: - M15.1 interior-world invariants
+
+    /// Interior placement: the tile sits on the same face plane but is seen from inside — basis
+    /// (tangent, −bitangent, −normal), right-handed, with the row *placement* mirrored to match,
+    /// so tile-local geometry stays aligned with grid logic.
+    static func testInteriorPlacement(size n: Int) {
+        let m = CubeModel(worldScale: WorldScale(cubeSize: n, interior: true))
+        let halfN = Float(n) / 2.0
+        let spacing = m.worldScale.cellSpacing
+        for face in CubeFace.allCases {
+            for row in [0, n / 2, n - 1] {
+                for col in [0, n / 2, n - 1] {
+                    let colF = (Float(col) + 0.5 - halfN) * spacing
+                    let rowF = (Float(row) + 0.5 - halfN) * spacing
+                    let center = face.normal * halfN + face.tangent * colF - face.bitangent * rowF
+                    let rest = m.restMatrix(face: face, row: row, col: col)
+                    check(approx(col3(rest, 0), face.tangent, 1e-6) &&
+                          approx(col3(rest, 1), -face.bitangent, 1e-6) &&
+                          approx(col3(rest, 2), -face.normal, 1e-6),
+                          "size \(n): interior basis (\(face),\(row),\(col))")
+                    check(approx(col3(rest, 3), center, 1e-5), "size \(n): interior center (\(face),\(row),\(col))")
+                    // Right-handed: cross(right, up) == forward (det +1 — winding/culling safe).
+                    let cr = cross(col3(rest, 0), col3(rest, 1))
+                    check(approx(cr, col3(rest, 2), 1e-6), "size \(n): interior handedness (\(face),\(row),\(col))")
+                }
+            }
+        }
+    }
+
+    /// Edge-crossing continuity, pinned to WORLD positions: walking off a border cell arrives at a
+    /// cell whose shared-edge midpoint is the SAME world point. Run on the exterior first (which
+    /// validates the test against the proven table), then on the interior (which validates the
+    /// M15.1 conjugated crossing). Also: interior crossings round-trip home.
+    static func testEdgeContinuity(size n: Int, interior: Bool) {
+        let m = CubeModel(worldScale: WorldScale(cubeSize: n, interior: interior))
+        let half = m.worldScale.cellSpacing / 2
+        let tag = interior ? "interior" : "exterior"
+
+        // World direction of a grid heading on a face = ± the placement basis columns
+        // (grid north = tile-local −y = −up; east = +right) — orientation handled by restMatrix.
+        func gridDirWorld(_ rest: float4x4, _ d: SurfaceDirection) -> SIMD3<Float> {
+            switch d {
+            case .north: return -col3(rest, 1)
+            case .south: return  col3(rest, 1)
+            case .east:  return  col3(rest, 0)
+            case .west:  return -col3(rest, 0)
+            }
+        }
+
+        for face in CubeFace.allCases {
+            for dir in SurfaceDirection.allCases {
+                for i in [0, n / 2, n - 1] {
+                    let (row, col) = borderCell(dir: dir, i: i, n: n)
+                    let rest1 = m.restMatrix(face: face, row: row, col: col)
+                    let edge1 = col3(rest1, 3) + gridDirWorld(rest1, dir) * half
+
+                    let x = m.edgeCrossing(face: face, direction: dir, row: row, col: col)
+                    let rest2 = m.restMatrix(face: x.face, row: x.row, col: x.col)
+                    let edge2 = col3(rest2, 3) + gridDirWorld(rest2, x.facing.opposite) * half
+                    check(approx(edge1, edge2, 1e-4),
+                          "size \(n) \(tag): edge continuity (\(face),\(dir),\(row),\(col)) → (\(x.face),\(x.row),\(x.col))")
+
+                    // Round-trip: cross back through the edge you came in by.
+                    let back = m.edgeCrossing(face: x.face, direction: x.facing.opposite, row: x.row, col: x.col)
+                    check(back.face == face && back.row == row && back.col == col,
+                          "size \(n) \(tag): round-trip (\(face),\(dir),\(row),\(col))")
+                }
+            }
+        }
+    }
+
+    /// R2.16 — the hard size cap: WorldScale clamps cubeSize to maxSupportedSize (25), so a world
+    /// bigger than the renderer's instance buffers can hold is impossible to construct.
+    static func testSizeCap() {
+        check(WorldScale(cubeSize: 99).cubeSize == WorldScale.maxSupportedSize, "size 99 clamps to cap")
+        check(WorldScale(cubeSize: 25).cubeSize == 25, "cap itself passes through")
+        check(WorldScale(cubeSize: 7).cubeSize == 7, "normal sizes untouched")
+        check(WorldScale(cubeSize: 1).cubeSize == 2, "floor clamps to 2")
+        check(CubeModel(size: 99).size == WorldScale.maxSupportedSize, "CubeModel inherits the cap")
+    }
+
+}

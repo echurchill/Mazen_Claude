@@ -16,7 +16,7 @@ extension Renderer {
             let drawn = self.benchHeartbeatFrames
             self.benchHeartbeatFrames = 0
             if drawn < 100 {   // < 20 fps over the window
-                NSLog("BENCH heartbeat: %d frames in 5 s — window OCCLUDED or hidden; macOS pauses hidden views. Results unusable until it is visible.", drawn)
+                NSLog("BENCH heartbeat: %d frames in 5 s (<20 fps) — SOMETHING is throttling this run and the sample line will be late or wrong. Usual suspects, in order: MTL_DEBUG_LAYER/MTL_SHADER_VALIDATION (costs ~10x), an occluded or hidden window, or a genuine stall. Name it before trusting any number from this run.", drawn)
             }
         }
     }
