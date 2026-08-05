@@ -302,7 +302,11 @@ class Renderer: NSObject, MTKViewDelegate {
         let argDesc = MTL4ArgumentTableDescriptor()
         argDesc.maxBufferBindCount = 4
         self.vertexArgTable = try! device.makeArgumentTable(descriptor: argDesc)
-        argDesc.maxTextureBindCount = 10   // …+8 caustic symbols (M16.6), +9 portal-sign labels (M20)
+        // COUNT, not highest index: binding index N needs maxTextureBindCount ≥ N+1. The dendrite
+        // array at index 10 asserted against the old value of 10 the moment a frame was encoded —
+        // on Eddie's machine, because the overnight validation boot could not run against a locked
+        // display. 12 leaves one spare slot before the next of these.
+        argDesc.maxTextureBindCount = 12   // …+8 caustics, +9 labels, +10 dendrites (surveyor)
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
