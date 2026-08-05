@@ -301,35 +301,6 @@ extension Renderer {
                 let tz = ws.floorY - restOn * fs - prop.sink * heightU
                 let m = tileM * float4x4.translation(-c.x * fs, ty, tz) * float4x4.scale(fs) * orient
                 emit(p.mesh, m, diffuse: p.diffuse, submeshMaterials: p.submeshMaterials)
-            case .surveyor:
-                // THE FRACTAL MACHINE IS A CRYSTAL (Eddie: "Likely Crystal_Big… use it for the
-                // fractal generator machine in scene 5"). Fitted to 0.17 world units (~3.2 m) —
-                // deliberately ABOVE the LOD small-size threshold, or the A2 cull would delete the
-                // machine from orbit, which is precisely where Eddie went looking for it last time.
-                // Working: emissive in the channels' light — a lit crystal, findable at any
-                // distance. Idle: the atlas texture, a dark mineral standing still.
-                guard let idx = namedProp("Blocks Crystal_Big") else { return }
-                let cp = importedProps[idx]
-                let dim = cp.mesh.size
-                let maxD = max(dim.x, max(dim.y, dim.z))
-                let cfs: Float = (maxD > 0 ? 0.17 / maxD : 1)
-                let cc = cp.mesh.center
-                let corient = float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0))
-                let cty = cc.z * cfs
-                let ctz = ws.floorY - cp.mesh.boundsMin.y * cfs
-                let cm = tileM * float4x4.translation(-cc.x * cfs, cty, ctz) * float4x4.scale(cfs) * corient
-                if gameState.surveyorIdle {
-                    emit(cp.mesh, cm, diffuse: cp.diffuse, submeshMaterials: cp.submeshMaterials)
-                } else {
-                    for sm in cp.mesh.submeshes {
-                        bucketAppend(cp.mesh, indexOffset: sm.indexOffset, indexCount: sm.indexCount,
-                                     diffuse: nil, cutout: false,
-                                     InstanceDataSwift(modelMatrix: cm,
-                                                       baseColor: SIMD4(0.50, 0.75, 0.90, 1.0),
-                                                       materialID: 12,
-                                                       tileID: 0, discoveryAmount: 1.0, styleSeed: 0))
-                    }
-                }
             case .houseCorner:
                 let assembly = prop.facing == .s ? houseAssemblyDoor : houseAssembly
                 for piece in assembly { emit(piece.mesh, tileM * piece.local, diffuse: nil) }
@@ -526,6 +497,61 @@ extension Renderer {
                                               cutout: bucket.cutout, instanceCount: drawn,
                                               casterCount: casters))
         }
+        // DYNAMIC PROPS — the surveyor, drawn OUTSIDE the bucket cache. It is the one prop that
+        // moves and changes state every frame; inside the cache it either froze (no rebuilds) or
+        // forced a full rebuild per frame (the mark-spam this pass removed). One machine, appended
+        // fresh each frame after the cached pack: never culled — a 3.2 m crystal that IS the point
+        // does not belong to the scatter class — and always a shadow caster.
+        if let tile = gameState.surveyorTile, let crystal = namedProp("Blocks Crystal_Big"),
+           inst < cap {
+            let cp = importedProps[crystal]
+            var base = model.restMatrix(face: tile.face, row: tile.row, col: tile.col)
+            // The slide: between the previous tile's centre and this one's, in the tile-local frame
+            // (same-face steps only, exactly the semantics the prop offsets used to carry).
+            var localX: Float = 0, localY: Float = 0
+            if let from = gameState.surveyorFrom, from.face == tile.face, gameState.surveyorMove < 1 {
+                let span = 3 * ws.subCellStep, back = 1 - gameState.surveyorMove
+                localX = Float(from.col - tile.col) * span * back
+                localY = Float(from.row - tile.row) * span * back
+            }
+            base = model.inflatedPlacement(base: base, localX: localX, localY: localY)
+            if gameState.sliceRotation.isActive,
+               let (ci, _) = model.faceletAt(face: tile.face, row: tile.row, col: tile.col),
+               gameState.sliceRotation.affectedCubies.contains(ci) {
+                base = gameState.sliceRotation.currentMatrix * base
+            }
+            let dim = cp.mesh.size
+            let maxD = max(dim.x, max(dim.y, dim.z))
+            let cfs: Float = (maxD > 0 ? 0.17 / maxD : 1)
+            let cc = cp.mesh.center
+            let cm = spin * base
+                * float4x4.translation(-cc.x * cfs, cc.z * cfs, ws.floorY - cp.mesh.boundsMin.y * cfs)
+                * float4x4.scale(cfs)
+                * float4x4.rotation(radians: .pi / 2, axis: SIMD3(1, 0, 0))
+            for (si, sm) in cp.mesh.submeshes.enumerated() {
+                guard inst < cap else { break }
+                let mat = si < cp.submeshMaterials.count ? cp.submeshMaterials[si] : nil
+                let d: InstanceDataSwift
+                var diffuse: MTLTexture? = nil
+                if gameState.surveyorIdle {
+                    diffuse = mat?.diffuse
+                    d = InstanceDataSwift(modelMatrix: cm,
+                                          baseColor: diffuse != nil ? SIMD4(1, 1, 1, 1) : sm.color,
+                                          materialID: diffuse != nil ? 11 : 10,
+                                          tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                } else {
+                    d = InstanceDataSwift(modelMatrix: cm, baseColor: SIMD4(0.50, 0.75, 0.90, 1.0),
+                                          materialID: 12, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                }
+                ptr[inst] = d
+                assetDrawCmds.append(AssetDrawCmd(vertexBuffer: cp.mesh.vertexBuffer, indexBuffer: cp.mesh.indexBuffer,
+                                                  indexOffset: sm.indexOffset, indexCount: sm.indexCount,
+                                                  instanceIndex: inst, diffuse: diffuse,
+                                                  cutout: false, instanceCount: 1, casterCount: 1))
+                inst += 1
+            }
+        }
+
         // NO SILENT CAPS. A clamp here deletes scenery, which looks like a level-design decision.
         if dropped > 0, !reportedAssetOverflow {
             reportedAssetOverflow = true

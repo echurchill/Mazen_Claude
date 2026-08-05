@@ -1157,7 +1157,7 @@ class GameState {
                 }
             }
         }
-        if changed { cubeModel.markTopologyChanged() }
+        _ = changed   // animation, not topology: the maze path reads anim live every frame
         // 5K — the way out, created when the circuit goes live. → Scene 6 does not exist yet, so it
         // returns to the hub's Scene 4 for now.
         // 5K — placed by Scene 5's own rule (the far end of the live current), not Scene 3's
@@ -1205,7 +1205,6 @@ class GameState {
                     && cubeModel.cubies[cu].facelets[f].props[pi].state == 6 {
                     if cubeModel.cubies[cu].facelets[f].props[pi].anim != step {
                         cubeModel.cubies[cu].facelets[f].props[pi].anim = step
-                        cubeModel.markTopologyChanged()
                     }
                 }
             }
@@ -1264,10 +1263,22 @@ class GameState {
     /// the player is changing.
     var channelReach: Set<Int> { Set(channelDepths.keys) }
 
+    /// MEMOIZED on `topologyVersion`: the reach is a pure function of the channel masks, which only
+    /// change when something turns or stamps — yet seven call sites were re-walking it, several of
+    /// them every frame (the circuit tick, the pulse, liveCircuit, the surveyor, and SceneBuilder
+    /// twice). One walk per world state, and every consumer reads the same answer within a frame.
+    private var depthsMemo: (version: UInt64, depths: [Int: Int])? = nil
+    var channelDepths: [Int: Int] {
+        if let memo = depthsMemo, memo.version == cubeModel.topologyVersion { return memo.depths }
+        let fresh = computeChannelDepths()
+        depthsMemo = (cubeModel.topologyVersion, fresh)
+        return fresh
+    }
+
     /// The same walk, keeping HOW FAR each tile is from the source in channel-steps. The set alone
     /// answers "is this lit"; the pulse needs "when does the current get here", which is the same
     /// question the BFS was already answering and throwing away.
-    var channelDepths: [Int: Int] {
+    private func computeChannelDepths() -> [Int: Int] {
         guard let src = cubeModel.channelSource,
               let (sci, sfi) = cubeModel.faceletAt(face: src.face, row: src.row, col: src.col) else { return [:] }
         struct T: Hashable { let f: Int; let r: Int; let c: Int }
@@ -1436,23 +1447,12 @@ class GameState {
         // Mid-step: slide the body from the previous tile's centre to this one's. Offsets are in
         // the tile-local frame the prop path already understands; cross-face steps skip the slide
         // (the frames differ) and simply arrive. The mast bobs while it works via the same prop.
+        // The slide lives in (surveyorFrom, surveyorMove); the renderer's dynamic pass reads it
+        // directly. No prop mutation, no topology mark — this used to invalidate the asset-bucket
+        // cache every frame the machine walked.
         if surveyorMove < 1 {
             surveyorMove = min(1, surveyorMove + dt * 0.9)
-            if let from = surveyorFrom, from.face == here.face,
-               let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .surveyor }) {
-                let span = 3 * cubeModel.worldScale.subCellStep
-                let back = 1 - surveyorMove
-                cubeModel.cubies[ci].facelets[fi].props[pi].offsetX = Float(from.col - here.col) * span * back
-                cubeModel.cubies[ci].facelets[fi].props[pi].offsetY = Float(from.row - here.row) * span * back
-                cubeModel.markTopologyChanged()
-            }
-            if surveyorMove >= 1 {
-                surveyorFrom = nil
-                if let pi = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .surveyor }) {
-                    cubeModel.cubies[ci].facelets[fi].props[pi].offsetX = 0
-                    cubeModel.cubies[ci].facelets[fi].props[pi].offsetY = 0
-                }
-            }
+            if surveyorMove >= 1 { surveyorFrom = nil }
             return
         }
 
@@ -1481,7 +1481,6 @@ class GameState {
                 }
                 cubeModel.cubies[nci].facelets[nfi].filigreeGrowth =
                     min(1, cubeModel.cubies[nci].facelets[nfi].filigreeGrowth + rate)
-                cubeModel.markTopologyChanged()
             }
             return
         }
@@ -1555,8 +1554,9 @@ class GameState {
 
     private func placeSurveyorProp(at loc: (face: CubeFace, row: Int, col: Int)) {
         guard let (ci, fi) = cubeModel.faceletAt(face: loc.face, row: loc.row, col: loc.col) else { return }
+        // The prop is a MARKER (audio sweep, tests); rendering is the dynamic pass, which reads
+        // surveyorTile/Move directly — so placing or moving it is not a topology event.
         cubeModel.cubies[ci].facelets[fi].props.append(Prop(kind: .surveyor, subRow: 1, subCol: 1, facing: .n))
-        cubeModel.markTopologyChanged()
     }
 
     private func moveSurveyorProp(from: (face: CubeFace, row: Int, col: Int),
