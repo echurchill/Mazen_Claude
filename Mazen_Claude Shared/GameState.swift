@@ -1456,10 +1456,16 @@ class GameState {
             return
         }
 
-        // STALLED — its trunk has gone dead. It waits; the current coming back is the player's
-        // doing, and the machine resuming is theirs to notice.
-        let hereID = cubeModel.cubies[ci].facelets[fi].id.rawValue
-        guard reach[hereID] != nil else { surveyorIdle = true; return }
+        // STALLED — no current, no work. On a channel tile the rule is exact: dead tile, idle
+        // machine. On its own filigree (v2 walks the network it built) it works while ANY current
+        // flows somewhere — its network drinks from the trunk as a whole.
+        let hereF = cubeModel.cubies[ci].facelets[fi]
+        let hereID = hereF.id.rawValue
+        if hereF.mazeTile.channels.isEmpty {
+            guard reach.count > 1 else { surveyorIdle = true; return }
+        } else {
+            guard reach[hereID] != nil else { surveyorIdle = true; return }
+        }
         surveyorIdle = false
 
         // WORK: grow filigree on one bare neighbour of this live tile.
@@ -1469,6 +1475,7 @@ class GameState {
             if let (nci, nfi) = cubeModel.faceletAt(face: target.loc.face, row: target.loc.row, col: target.loc.col) {
                 if cubeModel.cubies[nci].facelets[nfi].filigreeGrowth == 0 {
                     cubeModel.cubies[nci].facelets[nfi].filigreeEntry = target.entry
+                    cubeModel.cubies[nci].facelets[nfi].filigreeRing = target.ring
                     cubeModel.cubies[nci].facelets[nfi].filigreeSeed =
                         UInt8(truncatingIfNeeded: cubeModel.cubies[nci].facelets[nfi].id.rawValue &* 31 &+ 7)
                 }
@@ -1488,10 +1495,15 @@ class GameState {
                 for c in 0..<cubeModel.size {
                     guard let (qci, qfi) = cubeModel.faceletAt(face: face, row: r, col: c) else { continue }
                     let f = cubeModel.cubies[qci].facelets[qfi]
-                    guard !f.mazeTile.channels.isEmpty, reach[f.id.rawValue] != nil,
+                    // Work stands: live channel tiles, or finished filigree of its own network.
+                    let isTrunk = !f.mazeTile.channels.isEmpty && reach[f.id.rawValue] != nil
+                    let isOwnWork = f.mazeTile.channels.isEmpty && f.filigreeGrowth >= 1
+                    guard isTrunk || isOwnWork,
                           !(face == here.face && r == here.row && c == here.col),
                           filigreeTarget(of: (face, r, c)) != nil else { continue }
-                    let key = (abs((reach[f.id.rawValue] ?? 0) - (reach[hereID] ?? 0)), face.rawValue, r, c)
+                    // Trunk first, then outward rings — the machine finishes near the current
+                    // before wandering, which is also what keeps it findable.
+                    let key = (isTrunk ? 0 : Int(f.filigreeRing), face.rawValue, r, c)
                     if bestKey == nil || key < bestKey! { bestKey = key; next = (face, r, c) }
                 }
             }
@@ -1503,11 +1515,25 @@ class GameState {
         surveyorMove = 0
     }
 
-    /// A growable neighbour of a channel tile: bare pale stone, no channels of its own, no props,
-    /// not already grown. `entry` is the edge of the TARGET that faces back at the channel tile.
-    private func filigreeTarget(of loc: (face: CubeFace, row: Int, col: Int))
-        -> (loc: (face: CubeFace, row: Int, col: Int), entry: DirectionMask)? {
+    /// The deepest ring the filigree may reach. 3 gives the reference image's spread — patches
+    /// blooming well away from the trunk — without the machine eventually tiling the whole world.
+    static let filigreeMaxRing: UInt8 = 3
+
+    /// A growable neighbour of a WORK tile — which is a channel tile, or (the fractal part, Eddie's
+    /// v2) a tile the surveyor has already finished: the filigree extends from its own filigree,
+    /// ring by ring, so the machine never runs out of work at one ring and parks. The target is
+    /// bare pale stone, no channels, no props, not grown; `entry` faces back at the parent; the
+    /// ring is the parent's plus one, capped.
+    // Internal, not private: the ring CAP is enforced by one guard here, and the play-through test
+    // cannot catch its removal — growth is ~16 s a branch, so ring 4 never appears inside a test
+    // window. The law gets a direct test instead of a pretend one.
+    func filigreeTarget(of loc: (face: CubeFace, row: Int, col: Int))
+        -> (loc: (face: CubeFace, row: Int, col: Int), entry: DirectionMask, ring: UInt8)? {
         let n = cubeModel.size
+        guard let (pci, pfi) = cubeModel.faceletAt(face: loc.face, row: loc.row, col: loc.col) else { return nil }
+        let parent = cubeModel.cubies[pci].facelets[pfi]
+        let parentRing: UInt8 = parent.mazeTile.channels.isEmpty ? parent.filigreeRing : 0
+        guard parentRing < GameState.filigreeMaxRing else { return nil }
         for (sdir, dr, dc) in [(SurfaceDirection.north, -1, 0), (.east, 0, 1), (.south, 1, 0), (.west, 0, -1)] {
             let nr = loc.row + dr, nc = loc.col + dc
             let far: (face: CubeFace, row: Int, col: Int, back: SurfaceDirection)
@@ -1522,7 +1548,7 @@ class GameState {
             guard f.mazeTile.channels.isEmpty, f.props.isEmpty, f.filigreeGrowth < 1 else { continue }
             let entry: DirectionMask = far.back == .north ? .north : far.back == .south ? .south
                                      : far.back == .west ? .west : .east
-            return ((far.face, far.row, far.col), entry)
+            return ((far.face, far.row, far.col), entry, parentRing + 1)
         }
         return nil
     }

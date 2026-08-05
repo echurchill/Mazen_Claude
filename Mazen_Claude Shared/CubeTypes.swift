@@ -565,6 +565,10 @@ struct MazeFacelet {
     var filigreeEntry: DirectionMask = []
     var filigreeSeed: UInt8 = 0
     var filigreeGrowth: Float = 0
+    /// How many steps from the trunk this branch is: 1 = beside a channel, 2 = grown off a ring-1
+    /// branch, … capped so the filigree spreads like the reference image without swallowing the
+    /// world. 0 = no filigree.
+    var filigreeRing: UInt8 = 0
 }
 
 struct Cubie {

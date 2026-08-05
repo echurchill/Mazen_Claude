@@ -1507,9 +1507,12 @@ class TileMeshLibrary {
             }
             indices.append(contentsOf: [base, base + 1, base + 2, base, base + 2, base + 3])
         }
-        box(0.42 * mUnit, 0.34 * mUnit, z0, z0 + 0.36 * mUnit)                 // base unit
-        box(0.24 * mUnit, 0.20 * mUnit, z0 + 0.36 * mUnit, z0 + 0.58 * mUnit) // housing
-        box(0.02 * mUnit, 0.02 * mUnit, z0 + 0.58 * mUnit, z0 + 1.05 * mUnit) // mast
+        // ~2.4 m tall: the first build was ~1 m and read as a speck even on foot (Eddie: "nothing
+        // that is building them") — a working machine has to be visible ACROSS a face, or the
+        // "caught mid-work" fiction never fires.
+        box(0.95 * mUnit, 0.78 * mUnit, z0, z0 + 0.85 * mUnit)                 // base unit
+        box(0.55 * mUnit, 0.45 * mUnit, z0 + 0.85 * mUnit, z0 + 1.40 * mUnit) // housing
+        box(0.05 * mUnit, 0.05 * mUnit, z0 + 1.40 * mUnit, z0 + 2.40 * mUnit) // mast
     }
 
     /// Scene 5C — the SOURCE: "a low circular basin set into the ground, surrounded by three nested

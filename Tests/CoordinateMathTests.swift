@@ -2511,8 +2511,14 @@ struct CoordinateMathTests {
                     guard let (pci, pfi) = m.faceletAt(face: ploc.face, row: ploc.row, col: ploc.col) else {
                         check(false, "filigree entry points off the world"); continue
                     }
-                    check(!m.cubies[pci].facelets[pfi].mazeTile.channels.isEmpty,
-                          "filigree's entry does not face a channel tile")
+                    let parent = m.cubies[pci].facelets[pfi]
+                    check(!parent.mazeTile.channels.isEmpty || parent.filigreeGrowth > 0,
+                          "filigree's entry faces neither a channel nor grown filigree")
+                    check(f.filigreeRing >= 1 && f.filigreeRing <= GameState.filigreeMaxRing,
+                          "filigree ring \(f.filigreeRing) out of bounds")
+                    if !parent.mazeTile.channels.isEmpty {
+                        check(f.filigreeRing == 1, "a branch beside the trunk must be ring 1")
+                    }
                 }
             }
         }
@@ -2522,6 +2528,43 @@ struct CoordinateMathTests {
             m.applySliceRotation(axis: axis, index: index, angle: -.pi / 2)
         }
         check(gs.liveCircuit, "the surveyor's filigree must never break solvability")
+
+        // THE RING CAP, directly: a play-through cannot reach ring 4 in any affordable window, so
+        // the guard is tested at the seam it lives on. A finished branch at the cap must offer no
+        // further target; one ring below it must.
+        do {
+            let g3 = prologueWorld("scene-5")
+            let m3 = g3.cubeModel
+            var spot: (CubeFace, Int, Int)? = nil
+            var bare: [(CubeFace, Int, Int)] = []
+            for face in CubeFace.allCases {
+                for r in 1..<(m3.size - 1) {
+                    for c in 1..<(m3.size - 1) {
+                        guard let (ci, fi) = m3.faceletAt(face: face, row: r, col: c) else { continue }
+                        let f = m3.cubies[ci].facelets[fi]
+                        if f.mazeTile.channels.isEmpty, f.props.isEmpty { bare.append((face, r, c)) }
+                    }
+                }
+            }
+            // A bare tile whose neighbours are also bare, so the only thing that could stop growth
+            // is the ring rule itself.
+            spot = bare.first { t in
+                bare.contains { $0.0 == t.0 && $0.1 == t.1 - 1 && $0.2 == t.2 }
+                    && bare.contains { $0.0 == t.0 && $0.1 == t.1 + 1 && $0.2 == t.2 }
+            }
+            if let (sf, sr2, sc2) = spot, let (ci, fi) = m3.faceletAt(face: sf, row: sr2, col: sc2) {
+                m3.cubies[ci].facelets[fi].filigreeGrowth = 1
+                m3.cubies[ci].facelets[fi].filigreeEntry = .west
+                m3.cubies[ci].facelets[fi].filigreeRing = GameState.filigreeMaxRing - 1
+                check(g3.filigreeTarget(of: (sf, sr2, sc2)) != nil,
+                      "one ring below the cap should still offer work")
+                m3.cubies[ci].facelets[fi].filigreeRing = GameState.filigreeMaxRing
+                check(g3.filigreeTarget(of: (sf, sr2, sc2)) == nil,
+                      "a branch AT the ring cap must offer no further target — the filigree would tile the world")
+            } else {
+                check(false, "no isolated bare tile found to test the ring cap on")
+            }
+        }
 
         // STALL: a fresh world, wait for first growth, then sever the trunk under the machine —
         // growth freezes while it idles, and resumes when the world is turned back.
@@ -2542,7 +2585,8 @@ struct CoordinateMathTests {
         m2.applySliceRotation(axis: sx, index: si, angle: .pi / 2)
         let reachNow = gs2.channelDepths
         if let tile = gs2.surveyorTile, let (ci, fi) = m2.faceletAt(face: tile.face, row: tile.row, col: tile.col),
-           reachNow[m2.cubies[ci].facelets[fi].id.rawValue] == nil {
+           !m2.cubies[ci].facelets[fi].mazeTile.channels.isEmpty,   // v2 walks its own filigree too;
+           reachNow[m2.cubies[ci].facelets[fi].id.rawValue] == nil {   // the exact stall law is channel-tile
             for _ in 0..<(60 * 10) { gs2.update(deltaTime: 1.0 / 60.0) }
             check(gs2.surveyorIdle, "a surveyor whose trunk is dead should stand idle")
             check(abs(growth2() - beforeSever) < 0.001,

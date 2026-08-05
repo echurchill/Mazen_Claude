@@ -443,10 +443,17 @@ final class SceneBuilder {
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .surveyor {
-                                // The machine itself: chamber plating, with a slow working bob so it
-                                // reads as running even when the player only glances.
-                                materialID = 25
-                                color = SIMD4(0.9, 0.92, 1.0, 1.0)
+                                // WORKING: it carries the channels' own light, softly emissive, so
+                                // from orbit it reads as a moving glint among the filigree — the
+                                // thing building them, findable. IDLE: dull plating; the machine
+                                // going dark is the stall made visible at any distance.
+                                if gameState.surveyorIdle {
+                                    materialID = 25
+                                    color = SIMD4(0.55, 0.57, 0.62, 1.0)
+                                } else {
+                                    materialID = 12
+                                    color = SIMD4(0.45, 0.68, 0.80, 1.0)
+                                }
                             }
                             if prop.kind == .latch {
                                 // 6D — Scene 2's switch dialect: material 22, `state` = the ordinal
@@ -788,8 +795,14 @@ final class SceneBuilder {
                             let cr = model.edgeCrossing(face: face, direction: sdir, row: r, col: c)
                             ploc = (cr.face, cr.row, cr.col)
                         }
-                        if let (pci, pfi) = model.faceletAt(face: ploc.face, row: ploc.row, col: ploc.col),
-                           depthsF[model.cubies[pci].facelets[pfi].id.rawValue] != nil { live = 1 }
+                        if let (pci, pfi) = model.faceletAt(face: ploc.face, row: ploc.row, col: ploc.col) {
+                            let parent = model.cubies[pci].facelets[pfi]
+                            if depthsF[parent.id.rawValue] != nil { live = 1 }
+                            // A deep ring hangs off filigree, not trunk: it inherits a softer glow
+                            // so the pattern fades outward — the image's falloff, and the trunk
+                            // stays the brightest thing.
+                            else if parent.filigreeGrowth > 0 { live = 0.7 }
+                        }
                         let inst = InstanceDataSwift(
                             modelMatrix: restM,
                             baseColor: SIMD4(live, 1, 1, 1),
