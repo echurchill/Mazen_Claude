@@ -488,6 +488,10 @@ class Renderer: NSObject, MTKViewDelegate {
             ablate = Set((ProcessInfo.processInfo.environment["MAZEN_BENCH_ABLATE"] ?? "")
                 .split(separator: ",").map(String.init))
             if !ablate.isEmpty { NSLog("BENCH ablating: %@", ablate.sorted().joined(separator: ",")) }
+            benchActivityToken = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiated, .latencyCritical],
+                reason: "MAZEN_BENCH frame measurement")
+            startBenchHeartbeat()
             // The bench booted in orbit, which is the whole reason a cull test that only worked in
             // orbit shipped. First person is a different camera in a different place and has to be
             // measured as one.
@@ -848,6 +852,15 @@ class Renderer: NSObject, MTKViewDelegate {
     var benchAssetInstances = 0
     var benchAssetDemand = 0
     var reportedAssetOverflow = false
+    /// Held for the life of a bench run: without it App Nap SUSPENDS the whole process when the
+    /// window is occluded — draws, timers, everything — which is what every "hung bench" this week
+    /// actually was. Not throttling, not the locked display as such, not a code hang: the OS
+    /// putting a hidden app to sleep. The diagnosis took three wrong theories because each
+    /// produced silence, and silence supports any theory; the heartbeat exists so the next
+    /// condition NAMES itself.
+    var benchActivityToken: NSObjectProtocol?
+    var benchLastHeartbeat: CFTimeInterval = 0
+    var benchHeartbeatFrames = 0
     var benchClearMs: Float = 0
     var benchNonCasters = 0
     static var benchSizeSamples: [Float] = []
@@ -883,6 +896,7 @@ class Renderer: NSObject, MTKViewDelegate {
             frameTimeSamples.removeAll()
         }
 
+        benchHeartbeatFrames += 1
         let tUpdate0 = CACurrentMediaTime()
         gameState.update(deltaTime: dt)
         let tUpdate1 = CACurrentMediaTime()

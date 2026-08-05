@@ -503,6 +503,19 @@ Small and unblocking, good filler while something compiles: Scene 1's wall-absor
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
 
+### The "hung benches" were App Nap all along (2026-08-05) — diagnosis corrected
+Three wrong theories, each retracted here: it was not the locked display as such, not
+window-occlusion throttling, not a code hang. **macOS App Nap suspends the entire process of an
+occluded app** — draws, run-loop timers, everything — so a CLI-launched bench behind any window
+went silent mid-run. Each wrong theory survived because suspension produces *silence, and silence
+supports any theory*. Proven by elimination: a run-loop-timer heartbeat also went silent (killing
+the throttle theory), and `ProcessInfo.beginActivity(.latencyCritical)` fixed it outright —
+scene-2 now runs a full bench to "BENCH done" while occluded.
+
+Benches now: hold an App Nap exemption for the run, order their window front politely (no focus
+steal), and a 5-second heartbeat names the condition if frames ever stall again. Refactor #5's
+deferred scene-2 gate ran clean under the fix.
+
 ### Refactor pass 3→2→4→1 (2026-08-05) — the approved four, done
 - **#3 Animation is not topology.** The surveyor is a per-frame DYNAMIC asset instance outside the
   bucket cache (never culled, always a caster); the six animation-only `markTopologyChanged` sites

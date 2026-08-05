@@ -5,6 +5,22 @@ import simd
 /// B1 — the MAZEN_BENCH reporting path, out of the frame code's way. The counters themselves are
 /// stored properties and stay declared on the class; this is the logging and the cadence.
 extension Renderer {
+    /// Wall-clock heartbeat, on a RUN-LOOP TIMER — not the draw loop, which is the whole point:
+    /// macOS doesn't merely throttle an occluded MTKView, it can PAUSE its draws entirely, so a
+    /// draw-based heartbeat is silent in exactly the condition it exists to report. Occluded
+    /// benches read as hangs and cost a night to a wrong "locked display" diagnosis, then an
+    /// evening to a wrong "code hang" scare; a paused run now says so every five seconds.
+    func startBenchHeartbeat() {
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            guard let self, self.benchFramesRemaining > 0 else { return }
+            let drawn = self.benchHeartbeatFrames
+            self.benchHeartbeatFrames = 0
+            if drawn < 100 {   // < 20 fps over the window
+                NSLog("BENCH heartbeat: %d frames in 5 s — window OCCLUDED or hidden; macOS pauses hidden views. Results unusable until it is visible.", drawn)
+            }
+        }
+    }
+
     func logBenchSample() {
         let p = gameState.perf
         NSLog("BENCH   cull kills/frame: horizon %d, frustum %d  |  KILLED WHILE PLAINLY IN VIEW: %d",

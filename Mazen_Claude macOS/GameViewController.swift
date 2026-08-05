@@ -160,6 +160,19 @@ class GameViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        // MAZEN_BENCH: keep the window FRONT and unthrottled. macOS throttles an occluded MTKView's
+        // draw callbacks toward ~1 fps, so a CLI-launched bench that spawns behind the user's
+        // windows (or a locked screen) crawls through its 120-frame windows and reads as hung —
+        // which cost a night to a wrong "locked display" diagnosis and then a wrong "code hang"
+        // scare. A bench exists to be measured, so it claims the foreground for its few seconds.
+        if ProcessInfo.processInfo.environment["MAZEN_BENCH"] != nil {
+            // Best-effort visibility only — no NSApp.activate: a bench must never steal focus from
+            // whoever is actually using the machine. If the desktop keeps it occluded anyway, the
+            // heartbeat in draw() names the condition instead of leaving silence.
+            view.window?.level = .statusBar
+            view.window?.collectionBehavior.insert(.canJoinAllSpaces)
+            view.window?.orderFrontRegardless()
+        }
         view.window?.makeFirstResponder(self)
         view.window?.acceptsMouseMovedEvents = true
     }
