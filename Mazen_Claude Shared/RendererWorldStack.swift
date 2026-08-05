@@ -267,6 +267,22 @@ extension Renderer {
         // lets the second descent land differently from the first (WorldCatalog.routeName).
         arriving.lastArrivalOrigin = sceneSixReturn ? "scene-5"
             : WorldCatalog.routeName(departingWorld: departingName, itsOrigin: departingOrigin)
+        // 6A — THE SKY IS ROUTE-KEYED TOO (Eddie's call). Scene 2 reached from Scene 5 is Scene 6,
+        // and Scene 6 wants the small dark Scene 4 world overhead "in the persistent configuration
+        // in which the player left it" — which it is, because the registry hands back the same
+        // instance, twists and all. Arriving by any other route restores the world's authored sky,
+        // so this is a genuine edge and not a one-way switch flipped on the world forever.
+        arriving.skyCounterpart = WorldCatalog.skyCounterpart(world: arriving.name,
+                                                             arrivedFrom: arriving.lastArrivalOrigin,
+                                                             authored: arriving.authoredSky)
+        // Bind the edge NOW, while a world can still be built if the player has somehow never been
+        // there: the sky lookup runs mid-frame and must never conjure a world (same rule as the
+        // authored binding in `buildWorld`).
+        if let sky = arriving.skyCounterpart,
+           worldRegistry.existing(WorldKey(destination: sky, origin: arriving.name)) == nil {
+            worldRegistry.bind(WorldKey(destination: sky, origin: arriving.name),
+                               to: worldRegistry.anyNamed(sky) ?? buildWorld(named: sky))
+        }
         // 6I — the route-keyed portal opens only when three facts hold at once, one of which
         // belongs to ANOTHER WORLD. The model layer cannot reach the registry, so the fact is
         // carried across at the swap: queried here, where the registry lives, and stamped onto the

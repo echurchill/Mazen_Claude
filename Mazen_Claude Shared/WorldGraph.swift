@@ -131,6 +131,21 @@ enum WorldCatalog {
     /// "route of arrival can change what a familiar world makes available" — depends on the
     /// difference. A Scene 2 that was itself entered from Scene 5 IS Scene 6, so departures from it
     /// count as the scene-6 route.
+    /// What hangs over `world`, given the route just taken — *the sky is an edge, not a fact.*
+    ///
+    /// Scene 6A asks for "the small dark Scene 4 world" overhead, but Scene 6 IS the Scene 2
+    /// instance, and Scene 2 authors no sky (so: the moon). Hanging Scene 4 there permanently was
+    /// the tempting fix and the wrong one — on the FIRST visit to Scene 2 the player has not
+    /// reached Scene 4 yet, and putting it overhead spoils a world they have not seen. Keying it to
+    /// the arrival route gives both readings of the same place: moon on the way out, Scene 4
+    /// overhead on the way back, which is precisely 6B's recognition beat.
+    ///
+    /// Pure, and here rather than at the swap site, for the reason `singleInstanceNames` moved:
+    /// policy that lives in the Renderer cannot be tested at all.
+    static func skyCounterpart(world: String, arrivedFrom origin: String?, authored: String?) -> String? {
+        (world == "scene-2" && origin == "scene-5") ? "scene-4" : authored
+    }
+
     static func routeName(departingWorld name: String, itsOrigin: String?) -> String {
         (name == "scene-2" && itsOrigin == "scene-5") ? "scene-6" : name
     }

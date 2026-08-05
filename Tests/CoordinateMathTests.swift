@@ -258,6 +258,21 @@ struct CoordinateMathTests {
     /// sight that stays put when the player's whole face rotates. Authored on the stamp, so the
     /// fact travels with the scene rather than living at the Renderer's build site.
     static func testSceneFourHangsSceneTwoOverhead() {
+        // 6A — the sky as an EDGE. Scene 2 is one instance reached two ways, and only the way in
+        // from Scene 5 (i.e. as Scene 6) hangs Scene 4 overhead. Every other case must fall through
+        // to what the stamp authored, or the first return trip would permanently rewrite the sky of
+        // a world the player can still reach by its own front door.
+        check(WorldCatalog.skyCounterpart(world: "scene-2", arrivedFrom: "scene-5", authored: nil)
+              == "scene-4", "Scene 2 entered from Scene 5 IS Scene 6: the dark world overhead")
+        check(WorldCatalog.skyCounterpart(world: "scene-2", arrivedFrom: "scene-1", authored: nil)
+              == nil, "Scene 2 by its own route keeps its authored sky — Scene 4 is not spoiled early")
+        check(WorldCatalog.skyCounterpart(world: "scene-2", arrivedFrom: nil, authored: nil)
+              == nil, "a first visit, with no route at all, is not the Scene 6 case")
+        check(WorldCatalog.skyCounterpart(world: "scene-4", arrivedFrom: "scene-5", authored: "scene-2")
+              == "scene-2", "another world's authored sky survives the same origin string")
+        check(WorldCatalog.skyCounterpart(world: "scene-5", arrivedFrom: "scene-4", authored: "scene-4")
+              == "scene-4", "the rule is keyed to Scene 2, not to any world arriving from Scene 5")
+
         check(WorldStamp.sceneFour.skyCounterpart == "scene-2", "Scene 4 authors Scene 2 as its sky")
         check(GameState(size: PrologueSize.sceneFour, name: "scene-4", stamp: .sceneFour)
                 .skyCounterpart == "scene-2", "the built world carries the authored sky")

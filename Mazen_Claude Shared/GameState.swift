@@ -26,6 +26,11 @@ class GameState {
     /// realise it is *you* that moved. Resolved through the registry as an edge (see `WorldGraph`),
     /// so the world you see is the same instance you could walk into, twists and all.
     var skyCounterpart: String? = nil
+    /// What the STAMP authored, kept apart from `skyCounterpart` because the live value is now
+    /// route-keyed and overwritten on arrival (see `WorldCatalog.skyCounterpart`). Without a
+    /// separate record of the authored answer, the first route that changes the sky destroys the
+    /// world's own default and nothing can put it back.
+    private(set) var authoredSky: String? = nil
 
     /// Phase 0 — whether the player may twist a slice here (Q/E). The prologue withholds the verb:
     /// Scenes 1-3 disable it and Scene 4 grants it, which is the moment the game hands the player its
@@ -181,6 +186,7 @@ class GameState {
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws, stamp: stamp)
         skyCounterpart = stamp.skyCounterpart
+        authoredSky = stamp.skyCounterpart
         player = PlayerState(size: size, standGrid: ws.standGrid)
         // Stand where the world SAYS you stand. `spawnLocation` was only ever applied on arrival
         // through a portal, so a world entered any other way — the boot world above all — put the

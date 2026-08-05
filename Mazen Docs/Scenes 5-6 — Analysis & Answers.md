@@ -6,7 +6,8 @@ surfaces on the pale stone, then settles to a resting glow). Deferred as planned
 emergence, 5H's near-miss aids. Scene 6 critical path BUILT same day: 6D latches + hatch,
 route naming (`WorldCatalog.routeName`), 6E/6F second descent onto `-Z`, 6G arrival
 acknowledgement, 6H metal vessel, 6I/6J three-fact route-keyed portal. Deferred: 6J's portal
-image, 6K, the 6A afterimage, and the sky decision (Eddie's).**
+image, 6K, the 6A afterimage, and 6K. The SKY DECISION IS MADE (Eddie,
+2026-08-05): option (b), route-keyed — see below.**
 
 *Written 2026-08-03, against the scripts in `Scenes/` (read-only) and the code as it stands.
 Analysis only — recommendations, not work done. Companion to the
@@ -118,7 +119,7 @@ end by design** — 6D is the thing that opens it.
    this), and the sky question below.
 7. **6K** — the sweeping view; camera beat, judge it last.
 
-### The one real design decision Eddie should make
+### The one real design decision Eddie should make — DECIDED (2026-08-05): (b)
 
 **The sky.** Script 6A: "the small dark Scene 4 world remains visible overhead." But Scene 6 *is*
 the Scene 2 instance, and Scene 2's stamp declares no sky counterpart (default = moon). Options:
@@ -131,6 +132,13 @@ the Scene 2 instance, and Scene 2's stamp declares no sky counterpart (default =
   stated philosophy.
 - (c) Ignore the script line — defensible, but the overhead reference is one of 6B's strongest
   recognition cues.
+
+**Eddie chose (b), and it is built.** `WorldCatalog.skyCounterpart(world:arrivedFrom:authored:)` is
+a pure function (testable — the reason `singleInstanceNames` moved off the Renderer), applied at the
+swap: Scene 2 reached from Scene 5 hangs Scene 4 overhead, any other route restores the authored
+sky. It is a real edge, not a switch flipped forever — the world keeps its own default, held
+separately as `GameState.authoredSky`, so the first return trip cannot destroy it. Five checks pin
+the rule, and breaking it (dropping the origin test) fails two of them.
 
 ### Suggested build order (Scene 6 first — it is the blocker)
 
