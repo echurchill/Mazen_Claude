@@ -133,7 +133,15 @@ Parallel tracks when desired:
 ## 6. Future milestones (design captured)
 
 - **M11 — Worlds & Portals** — [doc](Worlds%20and%20Portals%20Plan.md) *(reframes the [M11 Lunar Excursion Seed](Milestones/M11%20Lunar%20Excursion%20Seed.md))*. "Bigger on the inside": structures are portals to separate worlds; one transition system for houses, the moon, dungeons. **🔨 Core built & verified (2026-07-06):** world-stack spine, TARDIS walk-through portals + fade, different-size worlds, and **the killer visual** — the real counterpart world (the moon from earth, and vice-versa) hangs in the sky, turning, with every twist baked in; it persists so tears stay. **Remaining:** Phase 3 (persist camera/time across worlds), a real **house interior** destination, moon styling/rules, and multiple portal destinations.
-- **M13 — Bandaged Cube Mechanic** — [doc](Bandaged%20Cube%20Mechanic.md). Bond structures so a twist that would tear them is *refused*; twisting becomes a rare, deliberate, readable puzzle action. The house is the first candidate bonded structure.
+- ~~**M13 — Bandaged Cube Mechanic**~~ — **CLOSED 2026-08-05.** [doc](Bandaged%20Cube%20Mechanic.md).
+  Delivered as designed and no longer a future milestone: `bondedGroups` + `canRotateSlice` are the
+  general gate (any world can bond anything), `bondsBlocking` reports *how many* things refuse so a
+  lock can weaken legibly, and **Scene 4 is the mechanic played straight** — read the bond, release
+  the anchors, and only then will the world turn. Scene 2 bonds too.
+  *One design note for the record:* the original plan named the modular house as the first bonded
+  structure. That never happened and is now moot — interiors moved inside portal worlds (M15), so
+  the house has no slice to be torn by. The mechanic found a better first subject in a scene whose
+  whole lesson is "the world refuses, and you must understand why."
 - **M14 — Superellipsoid Cube** — [doc](Superellipsoid%20Cube.md). **Superseded by M14b** (the per-tile first pass tilted tiles rigidly, so hedge walls levered and crossed; its keepers — the `roundness` dial, `M` matte toggle, sun-softening — live on inside M14b).
 - **M14b — Curved Geometry (per-vertex tessellated inflation)** — [doc](Milestones/M14b%20Curved%20Geometry%20Plan.md). **✅ COMPLETE & verified (2026-07-09, committed).** Floors/walls/posts/frame/props tessellate and inflate per-vertex (footprint-project + extrude along the curved normal); rigid assets + the FP camera seat on the curve via `inflatedPlacement`; **sky-worlds inflate with their own roundness** (verified standing on the round 3³ moon); 9³ at 100fps; `roundness == 0` byte-neutral (`-`/`=` dial, default 0). **Remaining = polish/authoring only:** per-world *authored* roundness (natural≈0.5 / mech≈0 — where the sky-foreshadowing pays off) + sunrise/sunset terminator tuning.
 
