@@ -533,15 +533,22 @@ extension Renderer {
                 let mat = si < cp.submeshMaterials.count ? cp.submeshMaterials[si] : nil
                 let d: InstanceDataSwift
                 var diffuse: MTLTexture? = nil
-                if gameState.surveyorIdle {
-                    diffuse = mat?.diffuse
-                    d = InstanceDataSwift(modelMatrix: cm,
-                                          baseColor: diffuse != nil ? SIMD4(1, 1, 1, 1) : sm.color,
-                                          materialID: diffuse != nil ? 11 : 10,
-                                          tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                // Working or idle, the crystal is always a LIT solid — the difference is a glow
+                // added on top (material 37), not a swap to the sun's unlit material, which flattened
+                // every facet into one pale silhouette. `surveyorWork` accumulates only while
+                // filigree is actually growing and freezes while the machine walks, so beating on it
+                // makes the pulse mean something: the light is on when the work is.
+                diffuse = mat?.diffuse
+                let pulse = gameState.surveyorIdle ? 0
+                          : 0.55 + 0.45 * sin(gameState.surveyorWork * 2.2)
+                if let _ = diffuse {
+                    d = InstanceDataSwift(modelMatrix: cm, baseColor: SIMD4(0.82, 0.92, 1.0, 1.0),
+                                          materialID: 37, tileID: 0, discoveryAmount: pulse, styleSeed: 0)
                 } else {
-                    d = InstanceDataSwift(modelMatrix: cm, baseColor: SIMD4(0.50, 0.75, 0.90, 1.0),
-                                          materialID: 12, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
+                    // No atlas bound for this sub-mesh: fall back to the flat-lit prop path rather
+                    // than sample whatever texture happens to still be bound.
+                    d = InstanceDataSwift(modelMatrix: cm, baseColor: sm.color,
+                                          materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
                 }
                 ptr[inst] = d
                 assetDrawCmds.append(AssetDrawCmd(vertexBuffer: cp.mesh.vertexBuffer, indexBuffer: cp.mesh.indexBuffer,

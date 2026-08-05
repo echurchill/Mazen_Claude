@@ -819,6 +819,24 @@ fragment float4 fragmentShader(
         float shade = clamp(0.30 + 0.24 * coarse + 0.12 * fine + 0.06 * micro + 0.08 * tileHue + pebble + grit, 0.12, 0.92);
         color = float3(shade, shade, shade * 1.02);
         lighting = skyAmbient * 0.30 + sunColor * 0.72 * halfLambert * shadowFactor;
+    } else if (in.materialID == 37) {
+        // THE SURVEYOR'S CRYSTAL BODY (Scene 5). It used to borrow the SUN's material (12), which
+        // is UNLIT — `lighting = 1.0` — so every facet of a faceted crystal received exactly the
+        // same value and the model collapsed into one flat pale silhouette (Eddie: "kind of washed
+        // out"). Emissive was the right INTENT and the wrong implementation: a working machine
+        // should glow, not stop being a solid.
+        //
+        // So it is lit like any prop FIRST — the facets earn their shading and the crystal reads as
+        // a crystal — and the glow is ADDED on top, weighted toward the surface that faces AWAY
+        // from the sun. That fills the shadowed side, which is the half that actually looked dead,
+        // instead of blowing out the half the sun already handles. discoveryAmount carries the
+        // glow (0 = idle machine, 1 = mid-pulse); it beats only while filigree is being grown.
+        float4 texel = assetDiffuse.sample(texSampler, in.texCoord);
+        color = texel.rgb * in.color.rgb;
+        float glow = clamp(in.discoveryAmount, 0.0, 1.0);
+        float away = 1.0 - max(dot(normal, lightDir), 0.0);
+        lighting = skyAmbient * 0.30 + sunColor * 0.70 * halfLambert * shadowFactor
+                 + float3(0.42, 0.66, 0.92) * glow * (0.30 + 0.70 * away);
     } else if (in.materialID == 36) {
         // THE SURVEYOR'S FILIGREE — fractal channel-light grown onto bare stone. styleSeed packs
         // (slice | quarter-turns << 8): the dendrite is authored entering from WEST, and the turns
