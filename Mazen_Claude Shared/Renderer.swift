@@ -217,7 +217,17 @@ class Renderer: NSObject, MTKViewDelegate {
     var assetDrawCmds: [AssetDrawCmd] = []
     /// PERF — persistent instancing buckets for the imported-asset pass (cleared per frame with
     /// capacity kept; entries persist so per-frame allocation is ~zero once warmed up).
-    var assetBuckets: [AssetBucketKey: AssetBucket] = [:]
+    /// PER WORLD. These were single-instance, which was correct while only the active world ever
+    /// ran the asset pass. The moment the sky world runs it too, one shared cache means each world
+    /// invalidates the other's token every frame and BOTH rebuild — the 18-of-28 ms regression this
+    /// cache exists to prevent, doubled. Keyed by world identity; pruned in `pruneAssetCaches`.
+    var assetCaches: [ObjectIdentifier: WorldAssetCache] = [:]
+
+    final class WorldAssetCache {
+        var buckets: [AssetBucketKey: AssetBucket] = [:]
+        var lodShown: [AssetBucketKey: [Bool]] = [:]
+        var token: AssetCacheToken? = nil
+    }
     var opaqueDrawCalls: [DrawCall] = []
     var wallDrawCallRange: Range<Int> = 0..<0
     var translucentDrawCalls: [DrawCall] = []
@@ -225,6 +235,16 @@ class Renderer: NSObject, MTKViewDelegate {
     // own instance buffers with an orbital offset, when you're standing in a sub-world.
     var counterpartInstanceBuffers: [MTLBuffer] = []
     var counterpartOpaqueDrawCalls: [DrawCall] = []
+    /// The sky world's IMPORTED props. Until 2026-08-06 no counterpart had ever shown one: the asset
+    /// pass read `gameState` and nothing else, so everything imported — portal frames, dressed walls,
+    /// vegetation, machinery — was missing from every world overhead. A `.dressed` world hung there
+    /// with no walls at all, because there the walls ARE the imported props. See
+    /// `Mazen Docs/Sky Worlds — Dressing the Counterpart.md`.
+    var counterpartAssetDrawCmds: [AssetDrawCmd] = []
+    var counterpartAssetInstanceBuffers: [MTLBuffer] = []
+    /// Resolved ONCE per frame, before the asset pass, because the asset pass and the maze build both
+    /// need the same answer and the asset pass runs first.
+    var frameCounterpart: (world: GameState, offset: float4x4)? = nil
 
     var currentBufferIndex = 0
     var aspect: Float = 1.0
@@ -446,9 +466,20 @@ class Renderer: NSObject, MTKViewDelegate {
         }
         self.assetInstanceBuffers = assetBufs
 
+        // The sky world's props. Sized to match the active world's, and NOT the 8,192 I first
+        // guessed: a dressed 11³ overhead asks for ~19,000 instances even after the scatter is
+        // filtered out, because its walls are all imported and walls are exactly what must survive.
+        // Guessing small here would have clamped the sky silently — the failure this whole change
+        // exists to undo.
+        var cpAssetBufs: [MTLBuffer] = []
+        for _ in 0..<maxBuffersInFlight {
+            cpAssetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 32768, options: .storageModeShared)!)
+        }
+        self.counterpartAssetInstanceBuffers = cpAssetBufs
+
         // Residency set
         let resDesc = MTLResidencySetDescriptor()
-        resDesc.initialCapacity = 9 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count
+        resDesc.initialCapacity = 9 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count + cpAssetBufs.count
             + loadedProps.count * 3 + loadedProps.reduce(0) { $0 + $1.submeshMaterials.count }
         let rs = try! device.makeResidencySet(descriptor: resDesc)
         rs.addAllocation(tileMeshLib.vertexBuffer)
@@ -468,6 +499,7 @@ class Renderer: NSObject, MTKViewDelegate {
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
         for buf in counterpartBufs { rs.addAllocation(buf) }
+        for buf in cpAssetBufs { rs.addAllocation(buf) }
         for p in loadedProps {
             rs.addAllocation(p.mesh.vertexBuffer); rs.addAllocation(p.mesh.indexBuffer)
             if let d = p.diffuse { rs.addAllocation(d) }
@@ -567,13 +599,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // An authored sky (`GameState.skyCounterpart`) outranks both: a world that says what hangs
         // above it means it however the player arrived — Scene 4 reached by the dev hub must still
         // show Scene 2 overhead, not the hub it was pushed from.
-        let authoredSky = gameState.skyCounterpart.flatMap {
-            worldRegistry.existing(WorldKey(destination: $0, origin: gameState.name))
-        }
-        let counterpart: GameState? = (debugSingleTile || interior) ? nil
-            : (authoredSky
-               ?? (worldStack.count > 1 ? worldStack[worldStack.count - 2]
-                                        : worldRegistry.existing(WorldKey(destination: "moon", origin: gameState.name))))
+        let counterpart: GameState? = frameCounterpart?.world
         let result = debugSingleTile
             ? sceneBuilder.buildSingleTile(tileMeshLib: tileMeshLib, instanceBuffer: buffer)
             : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer,
@@ -587,11 +613,11 @@ class Renderer: NSObject, MTKViewDelegate {
         // Render the counterpart's real current state (every twist baked in) into its own instance
         // buffer, pushed out by the orbital offset. No celestials (it shouldn't carry its own sky).
         counterpartOpaqueDrawCalls = []
-        if let cp = counterpart {
+        if let cp = frameCounterpart {
             let cbuf = counterpartInstanceBuffers[currentBufferIndex]
-            let offset = Self.skyWorldOffset(cs: gameState.celestialSystem, time: gameState.time)
+            let offset = cp.offset
             let tcp = CACurrentMediaTime()
-            let cresult = sceneBuilder.build(gameState: cp, tileMeshLib: tileMeshLib,
+            let cresult = sceneBuilder.build(gameState: cp.world, tileMeshLib: tileMeshLib,
                                              instanceBuffer: cbuf, worldOffset: offset, includeCelestials: false)
             counterpartBuildMs += Float(CACurrentMediaTime() - tcp) * 1000
             counterpartOpaqueDrawCalls = cresult.opaque
@@ -604,6 +630,23 @@ class Renderer: NSObject, MTKViewDelegate {
     /// (earth, seen from the moon) reads proportionally bigger. A gentle spin turns it so every side
     /// comes into view; the world's *state* stays frozen. (Earlier this used an artificially-close
     /// distance to make the maze / torn house legible while verifying — now reset to natural.)
+    /// WHAT HANGS OVERHEAD, and where. Extracted so the asset pass and the maze build cannot
+    /// disagree: the asset pass runs first, so it can no longer re-derive this for itself.
+    /// Interior worlds (M15.1) are enclosed — no sky, no counterpart.
+    /// An authored sky (`GameState.skyCounterpart`, now route-keyed) outranks the stack: a world
+    /// that says what hangs above it means it however the player arrived.
+    func resolveCounterpart() -> (world: GameState, offset: float4x4)? {
+        guard !debugSingleTile, !gameState.worldScale.interior else { return nil }
+        let authoredSky = gameState.skyCounterpart.flatMap {
+            worldRegistry.existing(WorldKey(destination: $0, origin: gameState.name))
+        }
+        let world = authoredSky
+            ?? (worldStack.count > 1 ? worldStack[worldStack.count - 2]
+                                     : worldRegistry.existing(WorldKey(destination: "moon", origin: gameState.name)))
+        guard let world else { return nil }
+        return (world, Self.skyWorldOffset(cs: gameState.celestialSystem, time: gameState.time))
+    }
+
     private static func skyWorldOffset(cs: CelestialSystem, time: Float) -> float4x4 {
         let pos = cs.moonPosition(time: time)                  // the moon's real orbital position
         let scale = cs.moonSize / (Float(moonWorldSize) / 2)   // 3³ moon → the M9 moon's apparent size
@@ -850,6 +893,8 @@ class Renderer: NSObject, MTKViewDelegate {
     var benchPropTileCount = 0
     var benchPropCount = 0
     var benchAssetInstances = 0
+    var benchCounterpartAssetMs: Float = 0
+    var benchCounterpartAssetInstances = 0
     var benchAssetDemand = 0
     var reportedAssetOverflow = false
     /// Held for the life of a bench run: without it App Nap SUSPENDS the whole process when the
@@ -869,9 +914,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var packScratch: [InstanceDataSwift] = []
     /// A2 — per-bucket hysteresis state, aligned to each bucket's instances array; rebuilt with the
     /// cache. `true` = currently shown.
-    var lodShown: [AssetBucketKey: [Bool]] = [:]
     var benchDressedMs: Float = 0
-    var assetCacheToken: AssetCacheToken? = nil
     static var benchHorizonKills = 0
     static var benchFrustumKills = 0
     var cullPlanes: [SIMD4<Float>] = []
@@ -932,6 +975,7 @@ class Renderer: NSObject, MTKViewDelegate {
         commandBuffer.beginCommandBuffer(allocator: allocator)
 
         let tBuild0 = CACurrentMediaTime()
+        frameCounterpart = resolveCounterpart()
         updateFrameUniforms()
         let tUni = CACurrentMediaTime()
         updateAssetInstances()
@@ -1135,6 +1179,23 @@ class Renderer: NSObject, MTKViewDelegate {
                     baseVertex: 0,
                     baseInstance: dc.instanceOffset
                 )
+            }
+            // The sky world's imported props: same asset draws, its own instance buffer, and NEVER
+            // in the shadow pass above — a world hanging in the sky does not cast into the world you
+            // are standing in.
+            if !counterpartAssetDrawCmds.isEmpty, !ablate.contains("assets") {
+                vertexArgTable.setAddress(counterpartAssetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+                fragmentArgTable.setAddress(counterpartAssetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+                for cmd in counterpartAssetDrawCmds {
+                    vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+                    if let d = cmd.diffuse { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
+                    encoder.drawIndexedPrimitives(
+                        primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
+                        indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
+                        indexBufferLength: cmd.indexBuffer.length - cmd.indexOffset * MemoryLayout<UInt32>.stride,
+                        instanceCount: cmd.instanceCount, baseVertex: 0, baseInstance: cmd.instanceIndex)
+                }
+                vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
             }
             vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             fragmentArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)

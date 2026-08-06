@@ -1,4 +1,7 @@
-# Sky Worlds — Dressing the Counterpart (scope)
+# Sky Worlds — Dressing the Counterpart
+
+**BUILT 2026-08-06.** Results at the bottom; two of the five predictions below were wrong in ways
+only measuring caught.
 
 *Scoped 2026-08-06, from Eddie's observation: "the worlds in the sky have been becoming
 increasingly LESS detailed. Which really kind of takes away from the story you described." He is
@@ -136,3 +139,66 @@ About one session for items 1–4 and 6–7 with the usual gates (build both pla
 boot), plus a measurement pass for item 5. It touches no model code and no gameplay, so the risk is
 concentrated in the renderer's hottest function and in cache lifetime — not in anything the puzzle
 suite protects.
+
+
+---
+
+## Built — what actually happened (2026-08-06)
+
+All seven items landed. Two predictions in the scope above were **wrong**, both about LOD, and both
+would have shipped a feature that quietly did nothing.
+
+### 1. "LOD is an asset here, not a hazard" — wrong, it dropped every single prop
+
+First measurement after the plumbing worked: `counterpart: build 1.81 ms + props 4.23 ms,
+**0 prop instances overhead**`. The pass ran, built its buckets, spent the time — and packed
+nothing.
+
+The distance-ratio LOD test (`distance ÷ worldSize` vs 110) is the wrong instrument for a sky
+world. The counterpart is drawn *scaled down to the moon's apparent size* and tens of units away, so
+every prop on it is "sub-pixel" by that measure. Individually true; collectively nonsense, because a
+maze's walls **are** its silhouette. The test was dropping exactly the thing the feature exists to
+show, and it would have looked like success — a green build, no errors, no props.
+
+Fixed by filtering the sky world on **intrinsic** size instead: divide the orbital scale back out
+and keep anything above the same 0.16 threshold. Structure stays (walls, trees, platforms, arches),
+scatter goes (grass, flowers, pebbles, cables). No hysteresis — there is no boundary to shimmer
+across when the test no longer depends on distance.
+
+### 2. "The counterpart's buffer can be far smaller" — wrong, and dangerous
+
+Sized at 8,192 on that reasoning. Measured demand for a dressed 11³ overhead: **12,262 instances
+after the scatter is filtered out**, because its walls are all imported and walls are precisely what
+must survive. Raised to 32,768, matching the active world. Guessing small would have clamped the sky
+silently — the same failure this whole change exists to undo.
+
+### 3. A free win the scope missed: the sky world is usually off-screen
+
+With the counterpart out of frame, the props pass still cost **4.2 ms a frame** testing ~19,000
+instances against the frustum one at a time, for a world nobody could see. One bounding-sphere test
+against the frustum now answers for all of them, and that case costs **0.00 ms**. The sphere is the
+world's corner radius (`faceDistance·√3`) times the orbital scale, deliberately generous — culling a
+sky world that *is* visible would reproduce the exact bug being fixed.
+
+### Measured cost (Debug, ~10x Release)
+
+| case | counterpart build | counterpart props | frame |
+|---|---|---|---|
+| scene-4, sky off-screen | 1.66 ms | **0.00 ms** | 10.49 ms |
+| scene-4, sky fully in frame (`ABLATE=cull`) | 1.67 ms | 8.63 ms | — |
+
+The second row is a deliberate worst case: an 11³ dressed world overhead, entirely in frame, with
+frustum culling disabled outright. Real viewing sits between the two. If it ever bites, R2.6 → R2.7
+is the answer, and a sky world is the ideal cache candidate because it only changes when somebody
+twists it.
+
+### Verification
+
+- Both platforms build; suite green at 249,954 checks (it exercises none of this — `Renderer` is not
+  in the harness, as ever).
+- `MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1` boot with the sky props forced through: clean, runs to
+  `BENCH done`.
+- **`MAZEN_BENCH_ABLATE=cull` deliberately reaches the off-screen early-out**, because that lever is
+  the only way to force the sky world's props through the whole pipeline headlessly — the bench
+  camera never happens to face the moon. Without that, the feature is unverifiable without eyes.
+- **Not verified: how it looks.** That is Eddie's, and it is the entire point.

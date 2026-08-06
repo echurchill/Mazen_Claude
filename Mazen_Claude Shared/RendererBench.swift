@@ -43,7 +43,8 @@ extension Renderer {
               benchNonCasters / 120, benchLODDropped / 120)
         benchNonCasters = 0; benchLODDropped = 0
         NSLog("BENCH   assets: clearBuckets %.2f  dressedWalls %.2f  (buckets %d, dressed rebuilds %d/120 frames, style %@)",
-              benchClearMs / 120, benchDressedMs / 120, assetBuckets.count,
+              benchClearMs / 120, benchDressedMs / 120,
+              assetCaches[ObjectIdentifier(gameState)]?.buckets.count ?? 0,
               CubeModel.benchDressedRebuilds, String(describing: gameState.cubeModel.wallStyle))
         benchDressedMs = 0; CubeModel.benchDressedRebuilds = 0
         benchClearMs = 0
@@ -56,9 +57,11 @@ extension Renderer {
         NSLog("BENCH   build split: frameUniforms %.2f  assetInstances %.2f  buildDrawCalls %.2f",
               subUniformsMs / 120, subAssetsMs / 120, subDrawCallsMs / 120)
         subUniformsMs = 0; subAssetsMs = 0; subDrawCallsMs = 0
-        NSLog("BENCH   phases/frame: tileLoop %.2f ms  rest %.2f ms  (counterpart build %.2f ms)",
-              SceneBuilder.phaseTileLoopMs / 120, SceneBuilder.phaseRestMs / 120, counterpartBuildMs / 120)
+        NSLog("BENCH   phases/frame: tileLoop %.2f ms  rest %.2f ms  (counterpart: build %.2f ms + props %.2f ms, %d prop instances overhead)",
+              SceneBuilder.phaseTileLoopMs / 120, SceneBuilder.phaseRestMs / 120, counterpartBuildMs / 120,
+              benchCounterpartAssetMs / 120, benchCounterpartAssetInstances)
         SceneBuilder.phaseTileLoopMs = 0; SceneBuilder.phaseRestMs = 0; counterpartBuildMs = 0
+        benchCounterpartAssetMs = 0
         NSLog("BENCH %@ size=%d  frame %.2f ms (%.0f fps)  cpu %.2f = update %.2f + build %.2f + encode %.2f  |  wait-on-gpu %.2f  |  draws %d  instances %d",
               gameState.name, gameState.cubeModel.size, gameState.avgFrameTimeMs,
               gameState.avgFrameTimeMs > 0 ? 1000 / gameState.avgFrameTimeMs : 0,

@@ -159,6 +159,14 @@ extension Renderer {
     /// this is roughly two tiles of slack for shadows cast in from off-screen.
     private static let cullMargin: Float = 2.0
 
+    /// The ACTIVE world's imported props — and, since 2026-08-06, the SKY world's as well.
+    ///
+    /// See `Mazen Docs/Sky Worlds — Dressing the Counterpart.md`. The counterpart is "the real world
+    /// hanging overhead, with every twist baked in", but only its `SceneBuilder` geometry was ever
+    /// drawn; everything imported lives on this path, which read `gameState` and nothing else. So the
+    /// sky showed no portal frames, no dressed walls, no vegetation, no machinery — and a `.dressed`
+    /// world, whose hedge mesh is suppressed *because* its walls are imported props, hung up there as
+    /// a bare plate. It got worse with every world we dressed, which is what Eddie noticed.
     func updateAssetInstances() {
         assetDrawCmds.removeAll(keepingCapacity: true)
         // M20 (Eddie) — the first world (natural home clearing) is built in init, before the registry
@@ -171,12 +179,68 @@ extension Renderer {
             needsDecorativeStamp = false
         }
         guard !importedProps.isEmpty || !houseAssembly.isEmpty else { return }
-        let cap = assetInstanceBuffers[currentBufferIndex].length / MemoryLayout<InstanceDataSwift>.stride
-        let ptr = assetInstanceBuffers[currentBufferIndex].contents().bindMemory(to: InstanceDataSwift.self, capacity: cap)
-        let ws = gameState.worldScale
-        let spin = gameState.worldSpinMatrix()
-        let model = gameState.cubeModel
-        let sr = gameState.sliceRotation
+        assetDrawCmds = buildAssetInstances(for: gameState, offset: matrix_identity_float4x4,
+                                            buffer: assetInstanceBuffers[currentBufferIndex],
+                                            isCounterpart: false)
+        counterpartAssetDrawCmds = []
+        if let cp = frameCounterpart, skyWorldIsOnScreen(cp) {
+            let t0 = CACurrentMediaTime()
+            counterpartAssetDrawCmds = buildAssetInstances(
+                for: cp.world, offset: cp.offset,
+                buffer: counterpartAssetInstanceBuffers[currentBufferIndex], isCounterpart: true)
+            benchCounterpartAssetMs += Float(CACurrentMediaTime() - t0) * 1000
+        }
+        pruneAssetCaches()
+    }
+
+    /// Is the sky world anywhere on screen? Measured: with it off-screen the props pass still cost
+    /// 4.2 ms a frame (Debug) testing ~19,000 instances against the frustum one at a time, for a
+    /// world nobody could see. One sphere test answers for all of them.
+    ///
+    /// The sphere is the world's CORNER radius (`faceDistance·√3`, the same bound the horizon cull
+    /// uses) times the orbital scale, centred on the offset's translation. Deliberately generous:
+    /// culling a sky world that is actually visible would reproduce the exact bug this change fixes.
+    private func skyWorldIsOnScreen(_ cp: (world: GameState, offset: float4x4)) -> Bool {
+        // `MAZEN_BENCH_ABLATE=cull` must reach this too, or the one lever that can force the sky
+        // world's props through the whole pipeline stops working — which is exactly how I verified
+        // this feature in the first place, the bench camera never happening to face the moon.
+        guard cullPlanes.count == 6, !ablate.contains("cull") else { return true }
+        let c = cp.offset.position
+        let scale = simd_length(SIMD3(cp.offset.columns.0.x, cp.offset.columns.0.y, cp.offset.columns.0.z))
+        let r = cp.world.worldScale.faceDistance * 1.732 * scale + Renderer.cullMargin
+        for plane in cullPlanes where simd_dot(SIMD3(plane.x, plane.y, plane.z), c) + plane.w < -r {
+            return false
+        }
+        return true
+    }
+
+    /// Drop the bucket cache of any world that is neither underfoot nor overhead. Without this every
+    /// world the player has ever visited keeps a full set of instance arrays alive for the life of
+    /// the app — and the garden's is 1,500+ props.
+    private func pruneAssetCaches() {
+        guard assetCaches.count > worldStack.count + 1 else { return }
+        var live = Set(worldStack.map(ObjectIdentifier.init))
+        if let cp = frameCounterpart { live.insert(ObjectIdentifier(cp.world)) }
+        assetCaches = assetCaches.filter { live.contains($0.key) }
+    }
+
+    /// Build one world's props into `buffer`. `offset` pushes the whole world out to its orbital
+    /// position (identity for the world you are standing in).
+    private func buildAssetInstances(for world: GameState, offset: float4x4, buffer: MTLBuffer,
+                                     isCounterpart: Bool) -> [AssetDrawCmd] {
+        var cmds: [AssetDrawCmd] = []
+        let cache = assetCaches[ObjectIdentifier(world)] ?? {
+            let c = WorldAssetCache(); assetCaches[ObjectIdentifier(world)] = c; return c
+        }()
+        let cap = buffer.length / MemoryLayout<InstanceDataSwift>.stride
+        let ptr = buffer.contents().bindMemory(to: InstanceDataSwift.self, capacity: cap)
+        let ws = world.worldScale
+        // The offset is folded into the spin — the SAME single injection point `SceneBuilder.build`
+        // uses for the counterpart's maze, and for the same reason: every prop matrix is built as
+        // `spin * …`, so one multiply moves the whole world into the sky.
+        let spin = offset * world.worldSpinMatrix()
+        let model = world.cubeModel
+        let sr = world.sliceRotation
         let sliceMat = sr.currentMatrix   // single source: SliceRotation (R2.3)
         let step = ws.subCellStep
         // PERF — clear the persistent buckets, keeping their capacity (entries persist across frames).
@@ -184,8 +248,8 @@ extension Renderer {
         // (measured: `MAZEN_BENCH=scene-2`), and almost none of it was ever different from the frame
         // before. A twist rebuilds every frame while it is in flight, because the slice matrix moves
         // the props it carries; everything else waits for the world to actually change.
-        let token = AssetCacheToken(world: ObjectIdentifier(gameState),
-                                    worldName: gameState.name,
+        let token = AssetCacheToken(world: ObjectIdentifier(world),
+                                    worldName: world.name,
                                     topology: model.topologyVersion,
                                     twisting: sr.isActive,
                                     twistFrame: sr.isActive ? frameIndex : 0,
@@ -194,14 +258,14 @@ extension Renderer {
                                     paletteSize: wallDressingPalette.walls.count
                                         + wallDressingPalette.rocks.count + wallDressingPalette.bushes.count,
                                     assetsLoaded: importedProps.count + houseAssembly.count)
-        let rebuild = token != assetCacheToken || ablate.contains("assetcache")
-        assetCacheToken = token
+        let rebuild = token != cache.token || ablate.contains("assetcache")
+        cache.token = token
         let tClear0 = CACurrentMediaTime()
         if rebuild {
             // `Array(keys)` deliberately: iterating the dictionary's own keys view while mutating it
             // through the subscript keeps a second reference to the storage alive, which turns every
             // in-place mutation into a full copy of the dictionary.
-            for key in Array(assetBuckets.keys) { assetBuckets[key]?.instances.removeAll(keepingCapacity: true) }
+            for key in Array(cache.buckets.keys) { cache.buckets[key]?.instances.removeAll(keepingCapacity: true) }
         }
         benchClearMs += Float(CACurrentMediaTime() - tClear0) * 1000
 
@@ -211,13 +275,13 @@ extension Renderer {
             let key = AssetBucketKey(indexBuffer: ObjectIdentifier(mesh.indexBuffer),
                                      indexOffset: indexOffset,
                                      diffuse: diffuse.map(ObjectIdentifier.init))
-            if assetBuckets[key] == nil {
+            if cache.buckets[key] == nil {
                 let dim = max(mesh.size.x, max(mesh.size.y, mesh.size.z))
-                assetBuckets[key] = AssetBucket(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer,
+                cache.buckets[key] = AssetBucket(vertexBuffer: mesh.vertexBuffer, indexBuffer: mesh.indexBuffer,
                                                 indexOffset: indexOffset, indexCount: indexCount,
                                                 diffuse: diffuse, cutout: cutout, meshMaxDim: dim)
             }
-            assetBuckets[key]?.instances.append(data)
+            cache.buckets[key]?.instances.append(data)
         }
 
         // Emit one flat-colour sub-mesh or a whole textured mesh at `m`.
@@ -368,6 +432,11 @@ extension Renderer {
                                    // the world's own frame once per frame rather than every prop
                                    // being spun out of it. `spin` is a pure rotation, so transposing
                                    // inverts it.
+                                   // `spin.transpose` inverts a pure ROTATION. The counterpart's
+                                   // spin carries the orbital translation and scale as well, so the
+                                   // transpose is meaningless there — and it is only read by the
+                                   // horizon test, which is off for the sky world anyway.
+                                   guard !isCounterpart else { return .zero }
                                    let inv = spin.transpose
                                    let e = inv * SIMD4<Float>(cullEye, 1)
                                    return SIMD3(e.x, e.y, e.z)
@@ -378,7 +447,14 @@ extension Renderer {
                                // faceDistance. The camera mode is the real gate; the radius is the
                                // belt to its braces. Anything softer is a threshold a walking player
                                // can cross, which is exactly what happened.
-                               horizon: !ws.interior
+                               // NOT for the counterpart: this test inverts the world's own spin and
+                               // compares against ITS faceDistance, both of which describe a world
+                               // centred on the origin. The sky world is neither centred nor
+                               // unscaled. Applying a cull gate across a boundary it was not built
+                               // for is exactly what emptied the first-person view and made the
+                               // corner walls vanish — twice. Frustum culling still applies, and is
+                               // correct here because it works in world space after the offset.
+                               horizon: !isCounterpart && !ws.interior
                                    && gameState.camera.mode == .orbit
                                    && simd_length(cullEye) > ws.faceDistance * 1.732 * 1.2,
                                roundness: model.roundness,
@@ -408,16 +484,21 @@ extension Renderer {
         // is sub-texel in the map and the ~2.6 ms is real.
         let subsetOn = !ablate.contains("shadowsubset") && gameState.camera.mode == .orbit
         let lodOn = !ablate.contains("lod")
+        // The orbital offset carries a SCALE (a 3³ moon is drawn at the M9 moon's apparent size), so
+        // a prop's world-space size in the sky is its real size times that factor. Divide it back out
+        // to judge props by what they are rather than by how small the sky happens to be.
+        let orbitalScale = simd_length(SIMD3(offset.columns.0.x, offset.columns.0.y, offset.columns.0.z))
+        let invOrbitalScale: Float = orbitalScale > 1e-6 ? 1 / orbitalScale : 1
 
         var inst = 0
         var dropped = 0
-        for (key, bucket) in assetBuckets {
+        for (key, bucket) in cache.buckets {
             let count = min(bucket.instances.count, cap - inst)
             dropped += bucket.instances.count - count
             guard count > 0 else { continue }
             // A2 hysteresis state, aligned to this bucket's (cached, stable) instance order.
-            if lodShown[key]?.count != bucket.instances.count {
-                lodShown[key] = [Bool](repeating: true, count: bucket.instances.count)
+            if cache.lodShown[key]?.count != bucket.instances.count {
+                cache.lodShown[key] = [Bool](repeating: true, count: bucket.instances.count)
             }
             let base = inst
             // A1 — casters first: write casting instances straight to the buffer, hold the rest in
@@ -433,7 +514,7 @@ extension Renderer {
                     benchCulled += 1
                     // Diagnostic: anything WELL inside the view cone and close by must never be
                     // culled. This is the check the first cull test would have failed instantly.
-                    if benchFramesRemaining > 0 {
+                    if benchFramesRemaining > 0, !isCounterpart {
                         // "Plainly in view" has to mean something from BOTH cameras: near the middle
                         // of the screen, and on a surface comfortably turned toward the eye. The
                         // earlier version required the prop to be within 6 units, which never fires
@@ -468,15 +549,28 @@ extension Renderer {
                 let worldSize = bucket.meshMaxDim * sc
                 if benchFramesRemaining > 0 { Renderer.benchSizeSamples.append(worldSize) }
                 // A2 — small scatter beyond its distance goes, with hysteresis.
-                if lodOn, worldSize < lodMaxSize, worldSize > 1e-6 {
+                if isCounterpart {
+                    // A DISTANCE ratio is the wrong instrument for the sky world, and measurably so:
+                    // with it, scene-2 overhead packed exactly ZERO props. The counterpart is drawn
+                    // scaled down to the moon's apparent size and tens of units away, so every prop
+                    // is "sub-pixel" by the ratio test — individually true, collectively nonsense,
+                    // because a maze's walls ARE its silhouette. Dropping them all is precisely the
+                    // bare plate Eddie was complaining about.
+                    //
+                    // So the sky world filters on INTRINSIC size instead: keep structure (walls,
+                    // trees, platforms, arches), drop scatter (grass, flowers, pebbles, cables).
+                    // Same threshold, measured in the world's own units by dividing out the orbital
+                    // scale. No hysteresis: there is no boundary here to shimmer across.
+                    if lodOn, worldSize * invOrbitalScale < lodMaxSize { benchLODDropped += 1; continue }
+                } else if lodOn, worldSize < lodMaxSize, worldSize > 1e-6 {
                     let ratio = simd_length(p - cullEye) / worldSize
-                    let wasShown = lodShown[key]![k]
+                    let wasShown = cache.lodShown[key]![k]
                     let show = ratio < (wasShown ? lodDropRatio : lodShowRatio)
-                    lodShown[key]![k] = show
+                    cache.lodShown[key]![k] = show
                     if !show { benchLODDropped += 1; continue }
                 }
                 // A1 — casters go to the buffer now; the rest wait so casters pack first.
-                if subsetOn, worldSize < casterMinSize {
+                if subsetOn, !isCounterpart, worldSize < casterMinSize {
                     benchNonCasters += 1
                     packScratch.append(d)
                     continue
@@ -491,34 +585,36 @@ extension Renderer {
             }
             let drawn = inst - base
             guard drawn > 0 else { continue }
-            assetDrawCmds.append(AssetDrawCmd(vertexBuffer: bucket.vertexBuffer, indexBuffer: bucket.indexBuffer,
+            cmds.append(AssetDrawCmd(vertexBuffer: bucket.vertexBuffer, indexBuffer: bucket.indexBuffer,
                                               indexOffset: bucket.indexOffset, indexCount: bucket.indexCount,
                                               instanceIndex: base, diffuse: bucket.diffuse,
                                               cutout: bucket.cutout, instanceCount: drawn,
-                                              casterCount: casters))
+                                              casterCount: isCounterpart ? 0 : casters))
         }
         // DYNAMIC PROPS — the surveyor, drawn OUTSIDE the bucket cache. It is the one prop that
         // moves and changes state every frame; inside the cache it either froze (no rebuilds) or
         // forced a full rebuild per frame (the mark-spam this pass removed). One machine, appended
         // fresh each frame after the cached pack: never culled — a 3.2 m crystal that IS the point
         // does not belong to the scatter class — and always a shadow caster.
-        if let tile = gameState.surveyorTile, let crystal = namedProp("Blocks Crystal_Big"),
+        // Skipped for the sky world: one machine on a world hundreds of metres overhead is invisible,
+        // and it is the one prop that would force a rebuild every frame.
+        if !isCounterpart, let tile = world.surveyorTile, let crystal = namedProp("Blocks Crystal_Big"),
            inst < cap {
             let cp = importedProps[crystal]
             var base = model.restMatrix(face: tile.face, row: tile.row, col: tile.col)
             // The slide: between the previous tile's centre and this one's, in the tile-local frame
             // (same-face steps only, exactly the semantics the prop offsets used to carry).
             var localX: Float = 0, localY: Float = 0
-            if let from = gameState.surveyorFrom, from.face == tile.face, gameState.surveyorMove < 1 {
-                let span = 3 * ws.subCellStep, back = 1 - gameState.surveyorMove
+            if let from = world.surveyorFrom, from.face == tile.face, world.surveyorMove < 1 {
+                let span = 3 * ws.subCellStep, back = 1 - world.surveyorMove
                 localX = Float(from.col - tile.col) * span * back
                 localY = Float(from.row - tile.row) * span * back
             }
             base = model.inflatedPlacement(base: base, localX: localX, localY: localY)
-            if gameState.sliceRotation.isActive,
+            if world.sliceRotation.isActive,
                let (ci, _) = model.faceletAt(face: tile.face, row: tile.row, col: tile.col),
-               gameState.sliceRotation.affectedCubies.contains(ci) {
-                base = gameState.sliceRotation.currentMatrix * base
+               world.sliceRotation.affectedCubies.contains(ci) {
+                base = world.sliceRotation.currentMatrix * base
             }
             let dim = cp.mesh.size
             let maxD = max(dim.x, max(dim.y, dim.z))
@@ -539,8 +635,8 @@ extension Renderer {
                 // filigree is actually growing and freezes while the machine walks, so beating on it
                 // makes the pulse mean something: the light is on when the work is.
                 diffuse = mat?.diffuse
-                let pulse = gameState.surveyorIdle ? 0
-                          : 0.55 + 0.45 * sin(gameState.surveyorWork * 2.2)
+                let pulse = world.surveyorIdle ? 0
+                          : 0.55 + 0.45 * sin(world.surveyorWork * 2.2)
                 if let _ = diffuse {
                     d = InstanceDataSwift(modelMatrix: cm, baseColor: SIMD4(0.82, 0.92, 1.0, 1.0),
                                           materialID: 37, tileID: 0, discoveryAmount: pulse, styleSeed: 0)
@@ -551,7 +647,7 @@ extension Renderer {
                                           materialID: 10, tileID: 0, discoveryAmount: 1.0, styleSeed: 0)
                 }
                 ptr[inst] = d
-                assetDrawCmds.append(AssetDrawCmd(vertexBuffer: cp.mesh.vertexBuffer, indexBuffer: cp.mesh.indexBuffer,
+                cmds.append(AssetDrawCmd(vertexBuffer: cp.mesh.vertexBuffer, indexBuffer: cp.mesh.indexBuffer,
                                                   indexOffset: sm.indexOffset, indexCount: sm.indexCount,
                                                   instanceIndex: inst, diffuse: diffuse,
                                                   cutout: false, instanceCount: 1, casterCount: 1))
@@ -562,12 +658,17 @@ extension Renderer {
         // NO SILENT CAPS. A clamp here deletes scenery, which looks like a level-design decision.
         if dropped > 0, !reportedAssetOverflow {
             reportedAssetOverflow = true
-            NSLog("asset instance buffer full: %d of %d dropped in '%@' — raise the buffer",
-                  dropped, inst + dropped, gameState.name)
+            NSLog("asset instance buffer full: %d of %d dropped in '%@'%@ — raise the buffer",
+                  dropped, inst + dropped, world.name, isCounterpart ? " (as a SKY world)" : "")
         }
         benchPackMs += Float(CACurrentMediaTime() - tPack0) * 1000
-        benchAssetInstances = inst
-        benchAssetDemand = assetBuckets.values.reduce(0) { $0 + $1.instances.count }
+        if isCounterpart {
+            benchCounterpartAssetInstances = inst
+        } else {
+            benchAssetInstances = inst
+            benchAssetDemand = cache.buckets.values.reduce(0) { $0 + $1.instances.count }
+        }
+        return cmds
     }
 
     static func frustumPlanes(from vp: float4x4) -> [SIMD4<Float>] {

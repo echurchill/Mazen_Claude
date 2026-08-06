@@ -136,8 +136,9 @@ So the question is no longer "which milestone next" but **what the prologue expo
 **Newly on the list (2026-08-06):** [**Sky Worlds — Dressing the Counterpart**](Sky%20Worlds%20—%20Dressing%20the%20Counterpart.md).
 Eddie noticed sky worlds getting less detailed over time; the cause is structural — `updateAssetInstances`
 reads only the active world, so **no counterpart has ever shown a single imported prop**, and a
-`.dressed` world overhead has no walls at all. Scoped, ~one session. Slots naturally beside the
-counterpart half of item 5.
+`.dressed` world overhead has no walls at all. **BUILT 2026-08-06** — the asset pass is
+parameterised per world, its bucket cache is per world, and the sky world now carries its structural
+props. Two scoping predictions about LOD were wrong and are corrected in the doc.
 
 Parallel tracks when desired:
 - **M14b polish** — sunrise/sunset terminator tuning (per-world authored roundness is done).
