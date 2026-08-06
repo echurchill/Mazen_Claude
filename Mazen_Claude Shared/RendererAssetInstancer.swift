@@ -200,7 +200,7 @@ extension Renderer {
     /// The sphere is the world's CORNER radius (`faceDistance·√3`, the same bound the horizon cull
     /// uses) times the orbital scale, centred on the offset's translation. Deliberately generous:
     /// culling a sky world that is actually visible would reproduce the exact bug this change fixes.
-    private func skyWorldIsOnScreen(_ cp: (world: GameState, offset: float4x4)) -> Bool {
+    func skyWorldIsOnScreen(_ cp: (world: GameState, offset: float4x4)) -> Bool {
         // `MAZEN_BENCH_ABLATE=cull` must reach this too, or the one lever that can force the sky
         // world's props through the whole pipeline stops working — which is exactly how I verified
         // this feature in the first place, the bench camera never happening to face the moon.
@@ -441,7 +441,11 @@ extension Renderer {
                                    let e = inv * SIMD4<Float>(cullEye, 1)
                                    return SIMD3(e.x, e.y, e.z)
                                }(),
-                               enabled: cullPlanes.count == 6 && !ablate.contains("cull"),
+                               // Not per-instance for the sky world: one bounding-sphere test has
+                               // already decided the whole world is on screen, and at that size the
+                               // per-prop test rejects almost nothing while costing a pass over
+                               // every instance (8.6 ms of it, measured, on an 11³ overhead).
+                               enabled: !isCounterpart && cullPlanes.count == 6 && !ablate.contains("cull"),
                                // ORBIT ONLY, and only from outside the world's bounding sphere —
                                // whose radius is the CORNER distance on a cube, faceDistance·√3, not
                                // faceDistance. The camera mode is the real gate; the radius is the

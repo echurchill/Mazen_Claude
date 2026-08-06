@@ -202,3 +202,35 @@ twists it.
   the only way to force the sky world's props through the whole pipeline headlessly — the bench
   camera never happens to face the moon. Without that, the feature is unverifiable without eyes.
 - **Not verified: how it looks.** That is Eddie's, and it is the entire point.
+
+
+---
+
+## Caching pass (2026-08-06) — half of it landed, and the other half is R2.6
+
+**Landed, and it is the bigger half in practice: an off-screen sky world now costs nothing.** Both
+the counterpart's maze build (1.70 ms) and its props pass (4.2 ms) ran *unconditionally*, every
+frame, for a world that is behind the player most of the time. One bounding-sphere test against the
+frustum now gates both: **0.00 ms + 0.00 ms** when the sky world is out of frame. `includeMoon` was
+re-keyed to whether a counterpart is actually DRAWN rather than merely resolved, so an off-screen
+sky world cannot silently delete the M9 moon as well.
+
+Per-instance frustum culling is also off for the counterpart — one sphere test has already decided
+the whole world is visible, and at that size the per-prop test rejects almost nothing while costing
+a pass over every instance.
+
+**Not landed: making a VISIBLE sky world free.** Fully in frame it still costs 1.70 ms + 8.94 ms
+(Debug) because its instance matrices are rebuilt every frame, and they must be — the orbital offset
+is baked into each one on the CPU, and that offset moves continuously.
+
+Fixing it properly means moving the offset out of the baked matrices and into a **per-draw
+uniform** (`worldTransform`, applied after inflation, with the matching normal rotation), after
+which the counterpart's instances depend only on its own topology and can be packed once and reused
+until somebody twists it. That is not a small change: it touches the vertex path of *every* draw in
+the game, including normals and therefore lighting.
+
+**It is also exactly R2.6** ("per-world uniforms instead of per-instance `spinMatrix`"), which is
+already on the books and wants the same mechanism for the same reason. Doing a counterpart-only
+version now would mean building half of R2.6 twice. Recommendation: leave it, and when R2.6 comes
+up, do it once with the sky world as its first beneficiary — the ideal case, since a sky world only
+changes when somebody twists it.

@@ -4,15 +4,21 @@
 features — that's the roadmap. This is "things that are wrong and we've decided to live with,
 for now, and why."*
 
-## Imported models load from absolute dev paths (M20)
-**Symptom:** none today — everything works on the dev machine. **Cause:** `AssetRegistry.loadAll`
-(and the MegaKit texture resolution) read `Mazen_Models` from the absolute path
-`/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models` — the models are NOT in the app bundle.
-On any other machine (or a notarized build) every imported prop silently fails to load: portal
-frames, dressed walls, garden vegetation all vanish (the app still boots — loaders degrade to
-empty). **Status:** flagged (Fable, 2026-07-19) — fine for the prototype, a hard blocker for
-shipping/sharing builds. **Fix when it matters:** copy the used subset of `Mazen_Models` into the
-bundle (a build phase) and point `modelsRoot` at `Bundle.main`, keeping the dev-path fallback.
+## ~~Imported models load from absolute dev paths (M20)~~ — FIXED 2026-08-06
+**Was:** `AssetRegistry` and the skybox loader read `/Volumes/Code Work/…` absolutes, so the game
+ran on exactly one computer; anywhere else every imported prop silently failed to load and the app
+booted into an undressed world (the loaders degrade to empty, so it looked authored).
+
+**Now:** `ResourcePaths` resolves the bundle first, then the source tree derived from `#filePath` at
+compile time — no volume name, no user name. A fresh clone therefore runs in Xcode **on any machine
+at any path**, and a built app is self-contained. A build phase copies exactly what `git ls-files`
+tracks under `Mazen_Models` and `Skyboxes` into `Resources/`, so "works from a clone" and "works as
+a built app" cannot drift apart. `ENABLE_APP_SANDBOX` is back ON for both targets.
+
+*Consequence recorded:* `ENABLE_USER_SCRIPT_SANDBOXING` had to go OFF. Declaring the two folders as
+`inputPaths` grants the script the top-level directories only — every subdirectory still came back
+"Operation not permitted" — and the manifest step needs to read `.git` as well. That is a
+build-time setting; the runtime one that matters (`ENABLE_APP_SANDBOX`) moved the other way.
 
 ## Cube-corner traversal glitchiness (M18)
 **Symptom:** walking across one of the cube's 8 triple-corner points (where three faces meet)

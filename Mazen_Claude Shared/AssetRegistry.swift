@@ -69,7 +69,8 @@ enum AssetRegistry {
     /// Load the whole registry: decoration props + the two house-quarter assemblies.
     /// (Dev absolute path — these get bundled for shipping later; see roadmap "shipping hygiene".)
     static func loadAll(device: MTLDevice) -> (props: [ImportedProp], house: [HouseKitPiece], houseDoor: [HouseKitPiece]) {
-        let modelsRoot = "/Volumes/Code Work/xCode work/Mazen_Claude/Mazen_Models"
+        // Bundled first, source tree second — never a hardcoded volume. See `ResourcePaths`.
+        let modelsRoot = ResourcePaths.models
         // Textured USD prop (one diffuse map, Z-up).
         func loadProp(_ dir: String, _ diffuse: String, _ off: (Int, Int), _ target: Float) -> ImportedProp? {
             guard let mesh = AssetMesh(url: URL(fileURLWithPath: "\(modelsRoot)/\(dir)/\(dir).usdc"), device: device) else {

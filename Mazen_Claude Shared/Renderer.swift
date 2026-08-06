@@ -391,10 +391,11 @@ class Renderer: NSObject, MTKViewDelegate {
             names: ["hedge_diff", "gravel_diff", "stone_diff", "palestone_diff"], srgb: true)
         self.normalArray = TextureLoader.loadTextureArray(device: device,
             names: ["hedge_nor", "gravel_nor", "stone_nor", "palestone_nor"], srgb: false)
+        ResourcePaths.log()
         self.skyboxTexture = TextureLoader.loadTexture2D(device: device, name: "skybox", srgb: true)
         // DEBUG (Eddie): preload the composite skyboxes so 'L' can cycle them in place. Dev-only path.
         if let sb = self.skyboxTexture { self.debugSkyboxes = [sb]; self.debugSkyboxNames = ["default"] }
-        let skyDir = "/Volumes/Code Work/xCode work/Mazen_Claude/Skyboxes"
+        let skyDir = ResourcePaths.skyboxes
         for f in (((try? FileManager.default.contentsOfDirectory(atPath: skyDir)) ?? [])
                     .filter { $0.hasSuffix("Composite.png") }.sorted()) {
             if let t = TextureLoader.loadTextureFromFile(url: URL(fileURLWithPath: "\(skyDir)/\(f)"), device: device, srgb: true) {
@@ -599,7 +600,9 @@ class Renderer: NSObject, MTKViewDelegate {
         // An authored sky (`GameState.skyCounterpart`) outranks both: a world that says what hangs
         // above it means it however the player arrived — Scene 4 reached by the dev hub must still
         // show Scene 2 overhead, not the hub it was pushed from.
-        let counterpart: GameState? = frameCounterpart?.world
+        // `includeMoon` keys off whether a counterpart will be DRAWN, not merely resolved: an
+        // off-screen sky world must not silently delete the M9 moon from the sky as well.
+        let counterpart: GameState? = frameCounterpart.flatMap { skyWorldIsOnScreen($0) ? $0.world : nil }
         let result = debugSingleTile
             ? sceneBuilder.buildSingleTile(tileMeshLib: tileMeshLib, instanceBuffer: buffer)
             : sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib, instanceBuffer: buffer,
@@ -613,7 +616,10 @@ class Renderer: NSObject, MTKViewDelegate {
         // Render the counterpart's real current state (every twist baked in) into its own instance
         // buffer, pushed out by the orbital offset. No celestials (it shouldn't carry its own sky).
         counterpartOpaqueDrawCalls = []
-        if let cp = frameCounterpart {
+        // Off-screen sky worlds cost NOTHING. This build ran unconditionally — 1.66 ms a frame
+        // (Debug) rebuilding a world nobody could see, because the sky is behind you most of the
+        // time. Same bounding-sphere test the props pass uses.
+        if let cp = frameCounterpart, skyWorldIsOnScreen(cp) {
             let cbuf = counterpartInstanceBuffers[currentBufferIndex]
             let offset = cp.offset
             let tcp = CACurrentMediaTime()

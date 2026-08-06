@@ -102,10 +102,10 @@ So the question is no longer "which milestone next" but **what the prologue expo
    the player stands on. **Scene 4 has the same problem and no answer — and Scene 4 is the scene
    that TEACHES the twist.** On iOS the prologue currently contains a scene that cannot teach its
    own verb. Generalising Scene 5's rotators is the obvious candidate.
-2. **Shipping hygiene** — bundle `Mazen_Models` as a build phase and re-enable `ENABLE_APP_SANDBOX`.
-   Much closer than it was: the loaded slice of every pack is now IN git (2026-08-05), so bundling is
-   a build phase plus one `modelsRoot` change with a dev-path fallback. Until then the game runs on
-   exactly one machine.
+2. ~~**Shipping hygiene**~~ — **DONE 2026-08-06.** `ResourcePaths` (bundle → source tree via
+   `#filePath`), a `git ls-files`-driven copy phase, and `ENABLE_APP_SANDBOX` back on. The repo is
+   self-contained: clone it anywhere and it runs. What remains for an actual *release* is signing,
+   notarisation and an icon — not paths.
 3. **M17 for real** — the pedestal and its plaque already stand in the temple hall, and
    `PlayerKnowledge` already exists and is tested. Phases 1+ (receive a mote, carry it across a
    portal, have it open a dark arch) are the next *new* verb, and the prologue has been quietly
@@ -174,7 +174,7 @@ Parallel tracks when desired:
 - **Frame-rate** — measurable now: `MAZEN_BENCH=<world>` prints per-phase CPU/GPU timings. Settled 2026-08-01: the renderer was never fill-bound, and **Debug (-Onone) inflates CPU ~10x** — every perf claim must name its configuration. The 50 fps lock is long gone.
 - **Cubie frame** (from M8.6) — the 3D dark rails between cube segments were deferred.
 - **Per-vertex tangents** — for cleaner normal-mapped tiling (heuristic TBN today).
-- **Shipping hygiene** — bundle `Mazen_Models` as a resource + re-enable `ENABLE_APP_SANDBOX` (both disabled for dev via absolute paths). **Promoted to §5 item 2**: this is now the hard blocker on anyone else ever running the game.
+- ~~**Shipping hygiene**~~ — done 2026-08-06; see §5 item 2.
 - **iOS touch** — see §5 item 1. Tap/double-tap/two-finger-swipe exist; discoverability does not.
 - **Large-asset strategy** — SETTLED for the six in-use packs (2026-08-05): track the slice the
   loader actually reads (`OBJ/` + the pack's texture folder), ignore the .blend/FBX/glTF/zip

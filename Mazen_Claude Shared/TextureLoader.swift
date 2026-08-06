@@ -196,7 +196,9 @@ enum TextureLoader {
             return (tex, cutout)
         }
         // `guard var (a, b, c)` makes ALL three mutable; only the pixels are. Split so w/h stay let.
-        guard let decoded = decodeRGBA(url) else { return nil }
+        guard let decoded = decodeRGBA(url) else {
+            NSLog("[TextureLoader] DECODE FAILED: %@", url.path); return nil
+        }
         var pixels = decoded.pixels
         let w = decoded.w, h = decoded.h
         // Same criterion the shader's discard uses: any texel below half-alpha.
@@ -219,8 +221,28 @@ enum TextureLoader {
     private static let pixelCacheMagic: Int64 = 0x4D5A_5445_5843_4831   // "MZTEXCH1"
     private static let pixelCacheVersion: Int64 = 1
 
-    private static func pixelCacheURL(_ url: URL) -> URL {
-        url.deletingLastPathComponent().appendingPathComponent(".rgba-cache/\(url.lastPathComponent).rgba")
+    /// The user's Caches directory, NOT a `.rgba-cache` beside the source image. Two reasons it
+    /// moved (2026-08-06): a bundled app's resources are read-only, so the old location silently
+    /// disabled the cache the moment the models shipped inside the app; and the sidecar dirs were
+    /// 165 MB of regenerated data sitting in the models folder, indistinguishable from source art
+    /// to anything matching on directory names (they nearly got committed).
+    ///
+    /// Keyed by the source's full path hash, so two files of the same name from different packs
+    /// cannot collide. Wiping the folder costs one slow load, never correctness.
+    private static let pixelCacheDir: URL? = {
+        guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        else { return nil }
+        let dir = base.appendingPathComponent("Mazen_Claude/rgba", isDirectory: true)
+        do { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        catch { NSLog("[TextureLoader] no decode cache (%@): %@", dir.path, error.localizedDescription); return nil }
+        return dir
+    }()
+
+    private static func pixelCacheURL(_ url: URL) -> URL? {
+        guard let dir = pixelCacheDir else { return nil }
+        var h: UInt64 = 1469598103934665603
+        for b in url.path.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
+        return dir.appendingPathComponent(String(format: "%016llx-%@.rgba", h, url.lastPathComponent))
     }
 
     private static func sourceKey(_ url: URL) -> Int64? {
@@ -232,7 +254,8 @@ enum TextureLoader {
 
     private static func readPixelCache(_ url: URL) -> (pixels: [UInt8], w: Int, h: Int, cutout: Bool)? {
         guard let key = sourceKey(url),
-              let data = try? Data(contentsOf: pixelCacheURL(url)), data.count > 48 else { return nil }
+              let cacheURL = pixelCacheURL(url),
+              let data = try? Data(contentsOf: cacheURL), data.count > 48 else { return nil }
         let header = data.prefix(48).withUnsafeBytes { $0.bindMemory(to: Int64.self) }
         let (magic, version, w64, h64, cut, srcKey) = (header[0], header[1], header[2], header[3], header[4], header[5])
         let w = Int(w64), h = Int(h64)
@@ -242,13 +265,12 @@ enum TextureLoader {
     }
 
     private static func writePixelCache(_ url: URL, pixels: [UInt8], w: Int, h: Int, cutout: Bool) {
-        guard let key = sourceKey(url) else { return }
-        let dst = pixelCacheURL(url)
-        try? FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard let key = sourceKey(url), let dst = pixelCacheURL(url) else { return }
         var header: [Int64] = [pixelCacheMagic, pixelCacheVersion, Int64(w), Int64(h), cutout ? 1 : 0, key]
         var data = Data(bytes: &header, count: 48)
         data.append(contentsOf: pixels)
-        try? data.write(to: dst)
+        do { try data.write(to: dst) }
+        catch { NSLog("[TextureLoader] decode cache write failed: %@", error.localizedDescription) }
     }
 
     /// Decode any CGImageSource-readable file to straight RGBA8 bytes.
