@@ -513,7 +513,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // Residency set
         let resDesc = MTLResidencySetDescriptor()
-        resDesc.initialCapacity = 9 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count + cpAssetBufs.count
+        resDesc.initialCapacity = 11 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count + cpAssetBufs.count
             + loadedProps.count * 3 + loadedProps.reduce(0) { $0 + $1.submeshMaterials.count }
         let rs = try! device.makeResidencySet(descriptor: resDesc)
         rs.addAllocation(tileMeshLib.vertexBuffer)
@@ -529,6 +529,13 @@ class Renderer: NSObject, MTKViewDelegate {
         if let c = self.causticArray { rs.addAllocation(c) }
         if let d = self.dendriteArray { rs.addAllocation(d) }
         if let l = self.labelArray { rs.addAllocation(l) }
+        // THE PORTAL-VIEW ARRAY MUST BE RESIDENT. Omitting it is what turned Eddie's screen
+        // fuchsia: in Metal 4 a shader read of a non-resident texture is undefined, and undefined
+        // here means garbage sampled into an emissive full-screen-ish surface — and it can fault the
+        // GPU hard enough to wedge the display. It only bit once real captures existed, because an
+        // empty PortalViews/ falls back to `placeholderArray`, which IS resident. A binding that is
+        // only exercised when data shows up is a binding whose residency nobody tested.
+        if let pv = self.portalViewArray { rs.addAllocation(pv) }
         rs.addAllocation(self.shadowMapTexture)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
@@ -1320,6 +1327,11 @@ class Renderer: NSObject, MTKViewDelegate {
                     d.storageMode = .shared
                     d.usage = [.shaderRead]
                     portalCaptureTexture = device.makeTexture(descriptor: d)
+                    // Same rule, second offender: the copy DESTINATION is touched by the GPU too.
+                    if let t = portalCaptureTexture {
+                        residencySet.addAllocation(t)
+                        residencySet.commit()
+                    }
                 }
                 // Metal 4 has no blit encoder: texture copies live on the COMPUTE encoder now.
                 if let dst = portalCaptureTexture, let copyEnc = commandBuffer.makeComputeCommandEncoder() {

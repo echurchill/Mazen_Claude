@@ -20,6 +20,23 @@ a built app" cannot drift apart. `ENABLE_APP_SANDBOX` is back ON for both target
 "Operation not permitted" — and the manifest step needs to read `.git` as well. That is a
 build-time setting; the runtime one that matters (`ENABLE_APP_SANDBOX`) moved the other way.
 
+## Metal 4: every GPU-touched resource must be in the residency set
+**Symptom (2026-08-06, Eddie):** full-screen fuchsia, then a display wedged badly enough to need a
+restart. **Cause:** the new portal-view texture array was bound to the argument table but never
+added to the residency set. In Metal 4 a shader read of a non-resident resource is undefined; here
+it sampled garbage into an emissive surface and faulted the GPU hard enough to take the compositor
+with it. **Why it hid:** with `PortalViews/` empty the binding falls back to `placeholderArray`,
+which IS resident — so every test run before real captures existed was green. *A binding only
+exercised once data shows up is a binding whose residency nobody has tested.*
+
+**Rule:** anything the GPU touches — sampled textures, instance buffers, and copy DESTINATIONS —
+goes into the residency set at creation. Textures made after init (the portal-capture target) must
+`addAllocation` + `commit` when they are created, not at startup.
+
+**The magenta family:** this is the third variant. The earlier two were attachment residency after a
+resize, and a freed world's `ObjectIdentifier` being reused as a cache key. Magenta/fuchsia in this
+engine almost always means *a resource the GPU could not legally read*, not a shader bug.
+
 ## Cube-corner traversal glitchiness (M18)
 **Symptom:** walking across one of the cube's 8 triple-corner points (where three faces meet)
 has a visible hitch/jump. **Cause:** the corner is a geometric singularity — three tangent
