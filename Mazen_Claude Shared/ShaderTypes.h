@@ -31,6 +31,7 @@ typedef NS_ENUM(EnumBackingType, TextureIndex)
     TextureIndexCaustic      = 8,   // M16.6: Builder-glyph caustic symbols (r8 intensity array)
     TextureIndexLabel        = 9,   // M20: rendered text sign-board array (RGBA) for portal signposts
     TextureIndexDendrite     = 10,  // Scene 5: the surveyor's filigree (RG: intensity + growth distance)
+    TextureIndexPortalView   = 11,  // captured "what is through this door" views, one slice per route
 };
 
 typedef struct

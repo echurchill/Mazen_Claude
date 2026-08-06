@@ -41,6 +41,12 @@ enum ResourcePaths {
     /// Composite skybox PNGs, cycled by the `L` debug key.
     static let skyboxes = resolve("Skyboxes")
 
+    /// Captured portal views (`PortalViews`). Resolved the same way, but note the asymmetry: the
+    /// in-app capture WRITES here, and only the source-tree answer is writable — a bundled app's
+    /// resources are read-only. That is deliberate: capturing is a dev act, and the Debug config is
+    /// unsandboxed so it can reach the repo.
+    static let portalViews = resolve("PortalViews")
+
     /// One line at boot saying where the art came from, because "no props" and "props from the
     /// wrong place" look identical on screen.
     static func log() {

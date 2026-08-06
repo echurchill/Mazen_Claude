@@ -244,6 +244,12 @@ class GameViewController: NSViewController {
             gs.stepSlice(0.06)
         case 33:      // [ — scrub a held twist backward
             gs.stepSlice(-0.06)
+        case 39:      // ' (quote) — ARM the portal-view capture (debug). The shot is taken by itself
+                      // on the next portal arrival, once the fade has finished: the view that belongs
+                      // in a door is the one you get standing where the door puts you.
+                      // (NOT comma — that is already M19's relief-down key, and a duplicate `case`
+                      //  silently shadows the later one rather than failing to compile.)
+            renderer.armPortalCapture(mtkView)
         case 35:      // P — toggle auto-rotation
             gs.camera.orbitAutoRotate.toggle()
         case 4:       // H — toggle debug HUD

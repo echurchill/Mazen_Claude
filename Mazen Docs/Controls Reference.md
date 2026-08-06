@@ -86,3 +86,17 @@ touches the keyboard verb.
 - Orbit auto-rotation pauses when you manually drag or pan the camera.
 - The debug HUD (macOS only) shows current face, grid position, facing direction, camera mode, cube size, frame timing, and the current twist pacing.
 - **Twist pacing (G / `[` / `]`)** is a diagnostic aid for inspecting how a slice carries geometry — e.g. watching the imported modular house split at its tile seams. In **single-step** pacing a Q/E twist starts frozen; `]` inches it forward a notch and `[` walks it back. It finalizes on reaching the end, and can be scrubbed back toward the start to re-check. Set it back to **normal** with G for regular play.
+
+## Portal-view capture (debug)
+
+| key | what it does |
+|---|---|
+| `'` | **Arms** the portal-view capture. Nothing happens yet. |
+
+The shot is taken **by itself, on the next portal arrival** — after the fade completes and the world
+has settled — and written to `PortalViews/<destination>--from--<origin>.png`. That file is then what
+that door shows, in every world that leads there by that route: doors display the view you will
+actually have when you step through, with a parallax shift so they read as windows rather than
+posters. A door with no capture keeps its procedural vortex.
+
+Captures need the **Debug** configuration (Release is sandboxed and cannot write into the repo).

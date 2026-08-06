@@ -398,6 +398,7 @@ fragment float4 fragmentShader(
     texture2d_array<float> causticTex [[texture(TextureIndexCaustic)]],
     texture2d_array<float> dendriteTex [[texture(TextureIndexDendrite)]],
     texture2d_array<float> labelTex [[texture(TextureIndexLabel)]],
+    texture2d_array<float> portalViewTex [[texture(TextureIndexPortalView)]],
     sampler texSampler [[sampler(0)]]
 ) {
     float3 lightDir = normalize(frame.lightDirection);
@@ -681,7 +682,56 @@ fragment float4 fragmentShader(
         float2 uv = in.texCoord;
         float tt = frame.time;
         float3 tint = in.color.rgb;
-        if (in.styleSeed >= 3u) {
+        if ((in.styleSeed & 0xFFu) == 5u) {
+            // A CAPTURED VIEW — what is actually on the other side of this door, photographed from
+            // the arrival point by the in-game capture (see `PortalViews`). Style 5; the array slice
+            // rides the high bits.
+            //
+            // PARALLAX is what makes it a window instead of a poster. A flat image pinned in an arch
+            // betrays itself the instant the player strafes: the scene beyond should shift against
+            // the frame, and it does not. So the sample point is pushed by the view direction in the
+            // portal's own tangent frame — look from the left and you see a little further right,
+            // exactly as a real opening behaves. It is a cheat: there is no depth here, so the whole
+            // image shifts as one plane rather than near things moving more than far ones, and
+            // pressing your face to the glass will not hold up. At approach distance it reads.
+            uint slice = (in.styleSeed >> 8) & 0xFFFFu;
+            float3 toEye = normalize(frame.cameraPosition - in.worldPosition);
+            // The veil quad's own axes, from the interpolated normal: `right` across it, `up` along
+            // it. Derived rather than passed so this needs no new vertex attribute.
+            float3 n = normalize(in.worldNormal);
+            // The quad's own tangent is already carried for the curved-world TBN; reuse it rather
+            // than inventing an axis, so the parallax shifts along the door and not across it.
+            float3 right = normalize(in.worldTangent - n * dot(n, in.worldTangent));
+            float3 up = cross(n, right);
+            // How far off-axis the eye is, in the plane of the door. Clamped so a steep glance
+            // cannot drag the image off its own edges.
+            float2 off = float2(dot(toEye, right), dot(toEye, up));
+            const float depth = 0.16;                  // apparent distance behind the plane
+            float2 puv = clamp(uv + off * depth, 0.02, 0.98);
+            // Sampled with the SAME orientation the capture was written in: v runs bottom→top here,
+            // top→bottom in the image.
+            float3 view = portalViewTex.sample(texSampler, float2(puv.x, 1.0 - puv.y), slice).rgb;
+
+            // The aperture: an arch, not a rectangle — a rounded top over straight sides, so it can
+            // sit inside the stone arch the scene already builds without a seam.
+            float2 c = float2(uv.x - 0.5, uv.y);
+            float sideMask = smoothstep(0.5, 0.44, abs(c.x));
+            float archY = 0.72;                        // where the straight sides give way to the curve
+            float shape = sideMask;
+            if (uv.y > archY) {
+                float2 d = float2(c.x / 0.46, (uv.y - archY) / (1.0 - archY));
+                shape *= smoothstep(1.0, 0.86, length(d));
+            }
+            shape *= smoothstep(0.0, 0.03, uv.y);      // hide the very bottom edge in the floor
+            if (shape < 0.02) discard_fragment();
+
+            // The surface of the threshold: a faint moving sheen so it is plainly a portal and not a
+            // hole, plus the rim the other styles already wear, so the family still reads as one.
+            float sheen = 0.04 * fbm(float2(uv.x * 3.0, uv.y * 3.0 - tt * 0.08), 3);
+            float rim = smoothstep(0.28, 0.0, shape) * shape;
+            color = view * (0.94 + sheen) + float3(0.62, 0.78, 1.0) * rim * 1.1;
+            lighting = float3(1.0);                    // emissive: a view is its own light
+        } else if (in.styleSeed >= 3u) {
             // FLAT STREAKS — the ELEVATOR portal (outer world ↔ temple): a rectangular energy curtain
             // wedged between two columns. Streaks flow DOWN (style 3, the surface world descending to
             // the temple) or UP (style 4, the temple rising back out). The TOP is a ragged, noisy edge

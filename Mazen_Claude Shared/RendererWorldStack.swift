@@ -267,6 +267,14 @@ extension Renderer {
         // lets the second descent land differently from the first (WorldCatalog.routeName).
         arriving.lastArrivalOrigin = sceneSixReturn ? "scene-5"
             : WorldCatalog.routeName(departingWorld: departingName, itsOrigin: departingOrigin)
+        // Capture armed? The name is fixed HERE, at the arrival, because this is the only moment
+        // that knows both ends of the route — where we came from and where we now are.
+        if portalCaptureArmed {
+            portalCaptureArmed = false
+            portalCaptureName = PortalViews.routeKey(destination: arriving.name,
+                                                     origin: arriving.lastArrivalOrigin)
+            portalCaptureSettle = 12
+        }
         // 6A — THE SKY IS ROUTE-KEYED TOO (Eddie's call). Scene 2 reached from Scene 5 is Scene 6,
         // and Scene 6 wants the small dark Scene 4 world overhead "in the persistent configuration
         // in which the player left it" — which it is, because the registry hands back the same

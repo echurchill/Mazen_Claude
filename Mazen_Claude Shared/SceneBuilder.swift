@@ -27,6 +27,19 @@ struct SceneDrawData {
 /// world (the M11 moon) is rendered simply by calling it with that world's state.
 final class SceneBuilder {
 
+    /// Route key → slice in the portal-view array, published by the Renderer at load. A door with a
+    /// capture for its route SHOWS IT; a door without keeps the procedural vortex. See `PortalViews`.
+    static var portalViewSlices: [String: Int] = [:]
+
+    /// The captured-view slice for a door standing in `world`, if there is one. The key is the route
+    /// the player is ABOUT to take — destination, and the world they leave from — which is exactly
+    /// how the capture was named when it was taken on the other side.
+    static func portalViewSlice(destinationID: Int, world: GameState) -> Int? {
+        guard !portalViewSlices.isEmpty else { return nil }
+        let origin = WorldCatalog.routeName(departingWorld: world.name, itsOrigin: world.lastArrivalOrigin)
+        return PortalViews.slice(destination: WorldCatalog.destination(for: destinationID), origin: origin)
+    }
+
     /// Per-face fog tint. A total switch (R2.13) — no dictionary lookup + force-unwrap in the
     /// per-tile hot loop.
     static func faceColor(_ face: CubeFace) -> SIMD4<Float> {
@@ -521,16 +534,28 @@ final class SceneBuilder {
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .portalField {
+                                // A CAPTURED VIEW beats the procedural vortex when we have one for
+                                // this door's route (style 5; the slice rides the high bits, the same
+                                // packing material 36 uses for its dendrites). The destination comes
+                                // from the `.portal` prop sharing this tile — the field is the glass,
+                                // the portal is the door that knows where it goes.
+                                let viewSlice = facelet.props.first(where: { $0.kind == .portal })
+                                    .flatMap { Self.portalViewSlice(destinationID: $0.state, world: gameState) }
                                 // M20 (Eddie) — animated energy field (material 23). `state` = style
                                 // (0 blue veil, 1 pink veil, 2 starfield); the tint per style rides
                                 // baseColor. Emissive + time-driven; the shader wisps its own edges.
                                 materialID = 23
+                                if let slice = viewSlice {
+                                    propStyleSeed = 5 | (UInt32(slice) << 8)
+                                    color = SIMD4(1, 1, 1, 1)                  // the capture carries its own colour
+                                } else {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 switch prop.state {
                                 case 1:  color = SIMD4(1.0, 0.42, 0.66, 1.0)   // pink/magenta veil
                                 case 2:  color = SIMD4(0.42, 0.34, 0.78, 1.0)  // starfield nebula (violet)
                                 case 3, 4: color = SIMD4(0.36, 0.78, 0.95, 1.0) // elevator streaks (cyan) — 3 down, 4 up
                                 default: color = SIMD4(0.40, 0.56, 1.0, 1.0)   // blue/purple veil
+                                }
                                 }
                                 // A portal field can be stretched taller than its mesh (extraScale) so
                                 // e.g. the arch fill reaches the apex; base stays pinned at the floor.

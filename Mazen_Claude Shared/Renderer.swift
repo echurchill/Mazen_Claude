@@ -153,6 +153,35 @@ class Renderer: NSObject, MTKViewDelegate {
     var placeholderArray: MTLTexture!
     /// M16.6: Builder-glyph caustic symbols (r8 intensity array); slice = Prop.state. Generated, not loaded.
     var causticArray: MTLTexture!
+    /// Captured portal views — nil when `PortalViews/` is empty, in which case every door keeps its
+    /// procedural vortex. A missing capture must never be a hole in a wall.
+    var portalViewArray: MTLTexture?
+    /// Capture state: armed by the debug key, spent on the NEXT portal arrival. Eddie's shape —
+    /// "take the picture the next time I exit a portal, magically" — because the view that belongs
+    /// in a door is the one you get standing where the door puts you, and hand-framing that from a
+    /// screenshot never quite matches.
+    var portalCaptureArmed = false
+    /// Frames to wait after arrival before grabbing: the fade must finish and the first frames of a
+    /// new world still have caches warming. Counted down only once `transitionPhase == .none`.
+    var portalCaptureSettle = 0
+    var portalCaptureName: String? = nil
+    var portalCaptureTexture: MTLTexture?
+    /// A blit is in flight; read it back once the GPU has certainly finished. Counted in frames
+    /// rather than waited on, because the frame loop already paces itself and a stall here would
+    /// show up as a hitch in the very shot being taken.
+    var pendingCapture: (name: String, w: Int, h: Int, framesLeft: Int)?
+
+    /// Arm the capture (debug key). The picture is taken on the NEXT portal arrival, once the fade
+    /// has finished and the world has settled — "take the picture the next time I exit a portal,
+    /// magically" (Eddie). Framing a door's view by hand never matches where the door actually puts
+    /// you; this way the capture IS the arrival.
+    func armPortalCapture(_ view: MTKView) {
+        portalCaptureArmed = true
+        // The drawable must be readable to be copied out of. Only from here, so the normal frame
+        // path keeps whatever fast-path framebufferOnly buys it.
+        view.framebufferOnly = false
+        NSLog("[PortalViews] capture ARMED — walk through a portal")
+    }
     var dendriteArray: MTLTexture?
     /// M20 (Eddie): rendered text sign-boards (RGBA array); slice = a portal-hub destination. `nil` ⇒
     /// signposts fall back to plain wood. Order matches `Renderer.portalDestinations` (+0 = "Home").
@@ -326,6 +355,8 @@ class Renderer: NSObject, MTKViewDelegate {
         // array at index 10 asserted against the old value of 10 the moment a frame was encoded —
         // on Eddie's machine, because the overnight validation boot could not run against a locked
         // display. 12 leaves one spare slot before the next of these.
+        // COUNT, not index (this bit has bitten once already): binding index 11 needs 12, and the
+        // portal-view array at 11 is the last one, so 12 is exactly right — no slack.
         argDesc.maxTextureBindCount = 12   // …+8 caustics, +9 labels, +10 dendrites (surveyor)
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
@@ -411,6 +442,8 @@ class Renderer: NSObject, MTKViewDelegate {
         self.greeneryArray = nil
         self.treeSpriteArray = nil   // M20: WenrexaTrees billboards removed (Eddie) — folder no longer used
         self.causticArray = TextureLoader.makeCausticArray(device: device)
+        self.portalViewArray = PortalViews.loadArray(device: device)
+        SceneBuilder.portalViewSlices = PortalViews.slices
         self.dendriteArray = TextureLoader.makeDendriteArray(device: device)
         self.labelArray = TextureLoader.makeLabelArray(device: device, labels: WorldCatalog.labels)
         self.texSampler = PipelineFactory.makeSampler(device: device)
@@ -980,6 +1013,21 @@ class Renderer: NSObject, MTKViewDelegate {
         allocator.reset()
         commandBuffer.beginCommandBuffer(allocator: allocator)
 
+        if var p = pendingCapture {
+            p.framesLeft -= 1
+            if p.framesLeft <= 0, let tex = portalCaptureTexture {
+                var bytes = [UInt8](repeating: 0, count: p.w * p.h * 4)
+                bytes.withUnsafeMutableBytes { buf in
+                    tex.getBytes(buf.baseAddress!, bytesPerRow: p.w * 4,
+                                 from: MTLRegionMake2D(0, 0, p.w, p.h), mipmapLevel: 0)
+                }
+                PortalViews.write(bgraPixels: bytes, width: p.w, height: p.h, name: p.name)
+                pendingCapture = nil
+            } else {
+                pendingCapture = p
+            }
+        }
+
         let tBuild0 = CACurrentMediaTime()
         frameCounterpart = resolveCounterpart()
         updateFrameUniforms()
@@ -1104,6 +1152,7 @@ class Renderer: NSObject, MTKViewDelegate {
         fragmentArgTable.setTexture((greeneryArray ?? placeholderArray).gpuResourceID, index: TextureIndex.greenery.rawValue)
         fragmentArgTable.setTexture((treeSpriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.treeSprite.rawValue)
         fragmentArgTable.setTexture((causticArray ?? placeholderArray).gpuResourceID, index: TextureIndex.caustic.rawValue)
+        fragmentArgTable.setTexture((portalViewArray ?? placeholderArray).gpuResourceID, index: TextureIndex.portalView.rawValue)
         fragmentArgTable.setTexture((labelArray ?? placeholderArray).gpuResourceID, index: TextureIndex.label.rawValue)
         fragmentArgTable.setTexture((dendriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.dendrite.rawValue)
         fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
@@ -1254,6 +1303,36 @@ class Renderer: NSObject, MTKViewDelegate {
                 + assetDrawCmds.reduce(0) { $0 + $1.instanceCount }
             perfSamples = (0, 0, 0, 0); perfSampleCount = 0
             if benchFramesRemaining > 0 { logBenchSample() }
+        }
+
+        // ── Portal-view capture ──────────────────────────────────────
+        // Copy the finished frame out, once the fade is done and the world has settled. The read is
+        // deferred by a few frames rather than synchronised: waiting on the GPU here would stall the
+        // very frame being photographed.
+        if portalCaptureName != nil, transitionPhase == .none {
+            portalCaptureSettle -= 1
+            if portalCaptureSettle <= 0, let name = portalCaptureName {
+                let src = drawable.texture
+                let w = src.width, h = src.height
+                if portalCaptureTexture?.width != w || portalCaptureTexture?.height != h {
+                    let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: src.pixelFormat,
+                                                                     width: w, height: h, mipmapped: false)
+                    d.storageMode = .shared
+                    d.usage = [.shaderRead]
+                    portalCaptureTexture = device.makeTexture(descriptor: d)
+                }
+                // Metal 4 has no blit encoder: texture copies live on the COMPUTE encoder now.
+                if let dst = portalCaptureTexture, let copyEnc = commandBuffer.makeComputeCommandEncoder() {
+                    copyEnc.copy(sourceTexture: src, sourceSlice: 0, sourceLevel: 0,
+                                 sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                                 sourceSize: MTLSize(width: w, height: h, depth: 1),
+                                 destinationTexture: dst, destinationSlice: 0, destinationLevel: 0,
+                                 destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
+                    copyEnc.endEncoding()
+                    pendingCapture = (name, w, h, maxBuffersInFlight + 1)
+                    portalCaptureName = nil
+                }
+            }
         }
 
         commandBuffer.useResidencySet((view.layer as! CAMetalLayer).residencySet)

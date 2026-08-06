@@ -118,39 +118,6 @@
 		};
 /* End PBXGroup section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		2CAA00012FE1C1F500059268 /* Bundle models + skyboxes */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Bundle models + skyboxes";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\n# The MANIFEST IS GIT. Whatever the repo tracks under these folders is what the app ships, so\n# \"works from a fresh clone\" and \"works as a built app\" cannot drift apart — and the curation\n# already done in .gitignore (OBJ + textures, not the .blend/FBX/zip ballast) is the single source\n# of truth. Without a git dir (a source archive), fall back to copying with the same exclusions.\nif git -C \"$SRCROOT\" rev-parse --git-dir >/dev/null 2>&1; then\n  git -C \"$SRCROOT\" ls-files -z Mazen_Models Skyboxes | rsync -a --from0 --files-from=- \"$SRCROOT/\" \"$DEST/\"\nelse\n  rsync -a --exclude=.rgba-cache/ --exclude=*_Normal.png --exclude=*.blend* --exclude=*.fbx \\\n        --exclude=*.gltf --exclude=*.glb --exclude=*.zip --exclude=.DS_Store \\\n        \"$SRCROOT/Mazen_Models\" \"$SRCROOT/Skyboxes\" \"$DEST/\"\nfi";
-		};
-		2CAA00022FE1C1F500059268 /* Bundle models + skyboxes */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Bundle models + skyboxes";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\n# The MANIFEST IS GIT. Whatever the repo tracks under these folders is what the app ships, so\n# \"works from a fresh clone\" and \"works as a built app\" cannot drift apart — and the curation\n# already done in .gitignore (OBJ + textures, not the .blend/FBX/zip ballast) is the single source\n# of truth. Without a git dir (a source archive), fall back to copying with the same exclusions.\nif git -C \"$SRCROOT\" rev-parse --git-dir >/dev/null 2>&1; then\n  git -C \"$SRCROOT\" ls-files -z Mazen_Models Skyboxes | rsync -a --from0 --files-from=- \"$SRCROOT/\" \"$DEST/\"\nelse\n  rsync -a --exclude=.rgba-cache/ --exclude=*_Normal.png --exclude=*.blend* --exclude=*.fbx \\\n        --exclude=*.gltf --exclude=*.glb --exclude=*.zip --exclude=.DS_Store \\\n        \"$SRCROOT/Mazen_Models\" \"$SRCROOT/Skyboxes\" \"$DEST/\"\nfi";
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXNativeTarget section */
 		2C9381FF2FE1C1F500059268 /* Mazen_Claude iOS */ = {
 			isa = PBXNativeTarget;
@@ -255,6 +222,39 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		2CAA00012FE1C1F500059268 /* Bundle models + skyboxes */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle models + skyboxes";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\n# The MANIFEST IS GIT. Whatever the repo tracks under these folders is what the app ships, so\n# \"works from a fresh clone\" and \"works as a built app\" cannot drift apart — and the curation\n# already done in .gitignore (OBJ + textures, not the .blend/FBX/zip ballast) is the single source\n# of truth. Without a git dir (a source archive), fall back to copying with the same exclusions.\nif git -C \"$SRCROOT\" rev-parse --git-dir >/dev/null 2>&1; then\n  git -C \"$SRCROOT\" ls-files -z Mazen_Models Skyboxes PortalViews | rsync -a --from0 --files-from=- \"$SRCROOT/\" \"$DEST/\"\nelse\n  rsync -a --exclude=.rgba-cache/ --exclude=*_Normal.png --exclude=*.blend* --exclude=*.fbx \\\n        --exclude=*.gltf --exclude=*.glb --exclude=*.zip --exclude=.DS_Store \\\n        \"$SRCROOT/Mazen_Models\" \"$SRCROOT/Skyboxes\" \"$SRCROOT/PortalViews\" \"$DEST/\"\nfi";
+		};
+		2CAA00022FE1C1F500059268 /* Bundle models + skyboxes */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle models + skyboxes";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\n# The MANIFEST IS GIT. Whatever the repo tracks under these folders is what the app ships, so\n# \"works from a fresh clone\" and \"works as a built app\" cannot drift apart — and the curation\n# already done in .gitignore (OBJ + textures, not the .blend/FBX/zip ballast) is the single source\n# of truth. Without a git dir (a source archive), fall back to copying with the same exclusions.\nif git -C \"$SRCROOT\" rev-parse --git-dir >/dev/null 2>&1; then\n  git -C \"$SRCROOT\" ls-files -z Mazen_Models Skyboxes PortalViews | rsync -a --from0 --files-from=- \"$SRCROOT/\" \"$DEST/\"\nelse\n  rsync -a --exclude=.rgba-cache/ --exclude=*_Normal.png --exclude=*.blend* --exclude=*.fbx \\\n        --exclude=*.gltf --exclude=*.glb --exclude=*.zip --exclude=.DS_Store \\\n        \"$SRCROOT/Mazen_Models\" \"$SRCROOT/Skyboxes\" \"$SRCROOT/PortalViews\" \"$DEST/\"\nfi";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		2C9381FC2FE1C1F500059268 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -356,7 +356,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = DXK68VKUGB;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
