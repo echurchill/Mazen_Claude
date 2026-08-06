@@ -47,10 +47,20 @@ enum ResourcePaths {
     /// unsandboxed so it can reach the repo.
     static let portalViews = resolve("PortalViews")
 
+    /// WHERE A CAPTURE IS WRITTEN — always the source tree, never the bundle.
+    ///
+    /// `portalViews` resolves the bundle first, which is right for READING and wrong for writing:
+    /// once the copy phase started shipping `PortalViews/` inside the app, captures went to the
+    /// bundle in DerivedData and the repo folder stayed empty. The comment above this pair said so
+    /// and the code did not do it — Eddie pressed the key twice and got nothing.
+    static let portalViewsWritable = sourceRoot.appendingPathComponent("PortalViews").path
+
     /// One line at boot saying where the art came from, because "no props" and "props from the
     /// wrong place" look identical on screen.
     static func log() {
         let bundled = Bundle.main.resourceURL.map { models.hasPrefix($0.path) } ?? false
         NSLog("[ResourcePaths] models: %@ (%@)", models, bundled ? "bundled" : "source tree")
+        NSLog("[ResourcePaths] portal views read: %@", portalViews)
+        NSLog("[ResourcePaths] portal views WRITE: %@", portalViewsWritable)
     }
 }

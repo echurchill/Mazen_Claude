@@ -170,6 +170,24 @@ class Renderer: NSObject, MTKViewDelegate {
     /// rather than waited on, because the frame loop already paces itself and a stall here would
     /// show up as a hitch in the very shot being taken.
     var pendingCapture: (name: String, w: Int, h: Int, framesLeft: Int)?
+    weak var portalCaptureView: MTKView?
+    private var portalCaptureTitleWas: String?
+
+    /// The only feedback an armed capture had was a log line, which is invisible while playing
+    /// (Eddie: "maybe the HUD should have something indicating the mode is on"). There is no HUD, so
+    /// the WINDOW TITLE carries it — unmissable, costs nothing, and needs no new rendering.
+    private func setCaptureTitle(_ text: String?) {
+#if os(macOS)
+        guard let w = portalCaptureView?.window else { return }
+        if let text {
+            if portalCaptureTitleWas == nil { portalCaptureTitleWas = w.title }
+            w.title = text
+        } else if let old = portalCaptureTitleWas {
+            w.title = old
+            portalCaptureTitleWas = nil
+        }
+#endif
+    }
 
     /// Arm the capture (debug key). The picture is taken on the NEXT portal arrival, once the fade
     /// has finished and the world has settled — "take the picture the next time I exit a portal,
@@ -177,6 +195,8 @@ class Renderer: NSObject, MTKViewDelegate {
     /// you; this way the capture IS the arrival.
     func armPortalCapture(_ view: MTKView) {
         portalCaptureArmed = true
+        portalCaptureView = view
+        setCaptureTitle("● PORTAL CAPTURE ARMED — walk through a portal")
         // The drawable must be readable to be copied out of. Only from here, so the normal frame
         // path keeps whatever fast-path framebufferOnly buys it.
         view.framebufferOnly = false
@@ -1028,7 +1048,8 @@ class Renderer: NSObject, MTKViewDelegate {
                     tex.getBytes(buf.baseAddress!, bytesPerRow: p.w * 4,
                                  from: MTLRegionMake2D(0, 0, p.w, p.h), mipmapLevel: 0)
                 }
-                PortalViews.write(bgraPixels: bytes, width: p.w, height: p.h, name: p.name)
+                let wrote = PortalViews.write(bgraPixels: bytes, width: p.w, height: p.h, name: p.name)
+                setCaptureTitle(wrote == nil ? "✕ capture FAILED — see log" : nil)
                 pendingCapture = nil
             } else {
                 pendingCapture = p

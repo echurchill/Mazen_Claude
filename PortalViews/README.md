@@ -7,9 +7,17 @@ Drop a file in, and every door leading there by that route stops showing the pro
 shows the picture instead, with a parallax shift so it reads as a window rather than a poster. No
 file means the old vortex — a missing capture is never a hole in a wall.
 
+## Where files go
+
+Captures are **read** from the app bundle when there is one, and always **written** to this folder
+in the repo. Those are different paths, and conflating them is what made the first two captures
+vanish: the copy phase had started shipping `PortalViews/` inside the app, so the writes landed in
+DerivedData and this folder stayed empty. `ResourcePaths` logs both paths at boot.
+
 ## Taking one
 
-Press `'` in a Debug build to **arm** the capture, then walk through a portal. The shot is taken by
+Press `'` in a Debug build to **arm** the capture — the window title changes to say so — then walk
+through a portal. The shot is taken by
 itself on arrival, once the fade has finished and the world has settled, and lands here already
 named for the route you just took. That is deliberate: the view that belongs in a door is the one
 you get standing where the door puts you, and hand-framing it from a screenshot never quite matches.

@@ -46,8 +46,10 @@ enum PortalViews {
         slices[routeKey(destination: destination, origin: origin)] ?? slices[destination]
     }
 
-    /// The folder captures are read from and written to.
+    /// Read from here (bundle when there is one).
     static var directory: URL { URL(fileURLWithPath: ResourcePaths.portalViews) }
+    /// …but WRITE here, always the repo. See `ResourcePaths.portalViewsWritable`.
+    static var writeDirectory: URL { URL(fileURLWithPath: ResourcePaths.portalViewsWritable) }
 
     // MARK: - Load
 
@@ -131,8 +133,8 @@ enum PortalViews {
                                   width: w * scale, height: h * scale))
         guard let out = ctx.makeImage() else { return nil }
 
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("\(name).png")
+        try? FileManager.default.createDirectory(at: writeDirectory, withIntermediateDirectories: true)
+        let url = writeDirectory.appendingPathComponent("\(name).png")
         guard let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil)
         else { return nil }
         CGImageDestinationAddImage(dest, out, nil)
