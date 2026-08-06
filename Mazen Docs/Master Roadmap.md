@@ -133,6 +133,12 @@ So the question is no longer "which milestone next" but **what the prologue expo
    Scene 6 route, so that 0.4 ms is inferred from scene-5 building the same counterpart, not measured
    on Scene 6 itself.
 
+**Newly on the list (2026-08-06):** [**Sky Worlds — Dressing the Counterpart**](Sky%20Worlds%20—%20Dressing%20the%20Counterpart.md).
+Eddie noticed sky worlds getting less detailed over time; the cause is structural — `updateAssetInstances`
+reads only the active world, so **no counterpart has ever shown a single imported prop**, and a
+`.dressed` world overhead has no walls at all. Scoped, ~one session. Slots naturally beside the
+counterpart half of item 5.
+
 Parallel tracks when desired:
 - **M14b polish** — sunrise/sunset terminator tuning (per-world authored roundness is done).
 - **M12 loose ends** — normal maps, crate states.
