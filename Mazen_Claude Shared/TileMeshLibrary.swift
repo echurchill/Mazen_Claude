@@ -897,8 +897,22 @@ class TileMeshLibrary {
     /// look (shimmer vs starfield). Double-sided so it reads from both approaches without back-face culls.
     /// The veil quad's proportions, published so the shader can cover-fit a SQUARE capture into it
     /// without guessing. Kept beside the geometry that defines them, or the two drift.
-    static let portalFieldHalfWidth: Float = 0.085
-    static let portalFieldHeight: Float = 0.212
+    ///
+    /// MEASURED FROM THE ARCH, not guessed (2026-08-06). The old 3.2 m × 4.0 m was a plausible
+    /// "grand doorway" that happened to be 14% WIDER than the hole it fills, so the view spilled
+    /// over the jambs onto the stone (Eddie's second screenshot). Rasterising
+    /// `Ruins Wall_ArchRound_Overgrown.obj` and profiling its aperture by height gives, in model
+    /// units: opening 2.90 wide, straight sides to y≈2.60, crown closing at y≈3.55. At the scale
+    /// the arch is placed (fit-to-0.85 over its 4.004 max dimension, × 0.24 extraScale = 0.05095),
+    /// that is 0.1478 × 0.1809 world units. A little under it here so the veil sits INSIDE the
+    /// stone rather than kissing its edge — the model is deliberately ragged, and the opening
+    /// wanders by a few centimetres up its own height.
+    static let portalFieldHalfWidth: Float = 0.0720   // ~2.72 m across (opening ~2.79 m)
+    static let portalFieldHeight: Float = 0.1780      // ~3.36 m tall  (crown  ~3.42 m)
+    /// Where the straight jambs give way to the round arch, as a fraction of the height — measured
+    /// at 2.60/3.55 of the model. The shader's aperture mask uses it so the veil's own silhouette
+    /// follows the stone instead of approximating it.
+    static let portalFieldSpringline: Float = 0.73
     static var portalFieldAspect: Float { (2 * portalFieldHalfWidth) / portalFieldHeight }
 
     private static func addPortalField(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {

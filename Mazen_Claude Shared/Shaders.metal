@@ -733,7 +733,10 @@ fragment float4 fragmentShader(
             // shrinking it: feather just enough to avoid a hard sawtooth edge, and no more.
             float2 c = float2(uv.x - 0.5, uv.y);
             float sideMask = smoothstep(0.5, 0.484, abs(c.x));
-            float archY = 0.66;                        // where the straight sides give way to the curve
+            // The springline of the arch we actually use, measured off the model — see
+            // `TileMeshLibrary.portalFieldSpringline`. Kept in step by hand: a shader cannot read a
+            // Swift constant, so if that number moves, this one has to move with it.
+            float archY = 0.73;                        // where the straight sides give way to the curve
             float shape = sideMask;
             if (uv.y > archY) {
                 float2 d = float2(c.x / 0.5, (uv.y - archY) / (1.0 - archY));
