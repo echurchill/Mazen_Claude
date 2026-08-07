@@ -707,20 +707,37 @@ fragment float4 fragmentShader(
             // cannot drag the image off its own edges.
             float2 off = float2(dot(toEye, right), dot(toEye, up));
             const float depth = 0.16;                  // apparent distance behind the plane
-            float2 puv = clamp(uv + off * depth, 0.02, 0.98);
+            // MINUS, not plus (Eddie: "I think the effect is backward"). He is right, and the reason
+            // is worth stating: standing to the LEFT of a real window you see more of what lies to
+            // the RIGHT inside the room, because your line of sight enters the opening and continues
+            // rightward. `toEye` points from the surface back at the camera, so from the left it
+            // points left — and adding it walked the sample the wrong way, closing off exactly the
+            // side that should have opened up.
+            float2 puv = uv - off * depth;
+            // COVER-FIT: the capture is square, the opening is not (~3.2 m × 4 m). Sampling 1:1
+            // squashed it. `discoveryAmount` carries the quad's width/height; crop the long axis
+            // rather than squeezing it, which is what a window does.
+            float a = in.discoveryAmount > 0.001 ? in.discoveryAmount : 1.0;
+            float2 fit = float2(a > 1.0 ? 1.0 / a : 1.0, a < 1.0 ? a : 1.0);
+            puv = 0.5 + (puv - 0.5) * fit;
+            puv = clamp(puv, 0.001, 0.999);
             // Sampled with the SAME orientation the capture was written in: v runs bottom→top here,
             // top→bottom in the image.
             float3 view = portalViewTex.sample(texSampler, float2(puv.x, 1.0 - puv.y), slice).rgb;
 
             // The aperture: an arch, not a rectangle — a rounded top over straight sides, so it can
             // sit inside the stone arch the scene already builds without a seam.
+            // THE APERTURE, WIDENED. It was inset 6% per side with a soft 6% feather, which left a
+            // visible gap of stone-lit background between the view and the jambs (Eddie's green
+            // arrows). The veil quad is already sized to reach the arch, so the mask has no business
+            // shrinking it: feather just enough to avoid a hard sawtooth edge, and no more.
             float2 c = float2(uv.x - 0.5, uv.y);
-            float sideMask = smoothstep(0.5, 0.44, abs(c.x));
-            float archY = 0.72;                        // where the straight sides give way to the curve
+            float sideMask = smoothstep(0.5, 0.484, abs(c.x));
+            float archY = 0.66;                        // where the straight sides give way to the curve
             float shape = sideMask;
             if (uv.y > archY) {
-                float2 d = float2(c.x / 0.46, (uv.y - archY) / (1.0 - archY));
-                shape *= smoothstep(1.0, 0.86, length(d));
+                float2 d = float2(c.x / 0.5, (uv.y - archY) / (1.0 - archY));
+                shape *= smoothstep(1.0, 0.93, length(d));
             }
             shape *= smoothstep(0.0, 0.03, uv.y);      // hide the very bottom edge in the floor
             if (shape < 0.02) discard_fragment();

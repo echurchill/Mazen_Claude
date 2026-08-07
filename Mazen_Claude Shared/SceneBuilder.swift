@@ -386,6 +386,9 @@ final class SceneBuilder {
                             // in modelMatrix corrupts the curved-world footprint/height split and floated
                             // the flush cap on the garden (Eddie).
                             var heightScale: Float = 1, heightPivot: Float = 0
+                            /// Set only by a captured portal VIEW: the veil quad's width/height, so the shader can
+                            /// cover-fit a square image into a non-square opening.
+                            var portalViewAspect: Float? = nil
                             if prop.kind == .alignmentCylinder || prop.kind == .switchCap || prop.kind == .latch {
                                 heightPivot = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
                                 if prop.kind == .alignmentCylinder {
@@ -548,6 +551,12 @@ final class SceneBuilder {
                                 if let slice = viewSlice {
                                     propStyleSeed = 5 | (UInt32(slice) << 8)
                                     color = SIMD4(1, 1, 1, 1)                  // the capture carries its own colour
+                                    // The quad is TALLER than wide (~3.2 m × 4 m) and the capture is
+                                    // square, so a straight 1:1 sample squashes it. Hand the shader
+                                    // the aspect and let it cover-fit — `discoveryAmount` is unused
+                                    // by this style, so it carries the number.
+                                    let hs = prop.extraScale != 1 ? prop.extraScale : 1
+                                    portalViewAspect = TileMeshLibrary.portalFieldAspect / hs
                                 } else {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 switch prop.state {
@@ -622,7 +631,8 @@ final class SceneBuilder {
                             // discoveryAmount doubles as the portal-field OPACITY (material 23 screen-door
                             // dither) for the translucent elevator layers; alignAnim==0 ⇒ fully opaque.
                             let discovery: Float
-                            if prop.kind == .alignmentCylinder { discovery = prop.alignAnim }
+                            if let a = portalViewAspect { discovery = a }
+                            else if prop.kind == .alignmentCylinder { discovery = prop.alignAnim }
                             else if prop.kind == .dustMote { discovery = max(0, min(1, prop.anim)) }
                             else if prop.kind == .layeredVessel { discovery = max(0, min(1, prop.anim / 3)) }
                             else if prop.kind == .obelisk && prop.anim > 0 { discovery = prop.anim }

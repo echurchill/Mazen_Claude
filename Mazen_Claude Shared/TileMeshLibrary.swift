@@ -895,12 +895,18 @@ class TileMeshLibrary {
     /// shaded by the animated portal material (23) which reads `texCoord` (u across, v bottom→top) and
     /// `frame.time`. Built facing −Y so `Prop.facing` aims it at the player; `state`/styleSeed picks the
     /// look (shimmer vs starfield). Double-sided so it reads from both approaches without back-face culls.
+    /// The veil quad's proportions, published so the shader can cover-fit a SQUARE capture into it
+    /// without guessing. Kept beside the geometry that defines them, or the two drift.
+    static let portalFieldHalfWidth: Float = 0.085
+    static let portalFieldHeight: Float = 0.212
+    static var portalFieldAspect: Float { (2 * portalFieldHalfWidth) / portalFieldHeight }
+
     private static func addPortalField(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
         // Eddie: portals are ≤ 4 m tall. 1 m ≈ 0.0529 world units (eyeHeight 0.09u ≈ 1.7 m), so 4 m ≈
         // 0.212u; width ~2.6 m for a grand-doorway proportion. (Arch fill re-shapes this via its mask.)
-        let hW: Float = 0.085         // half width (~3.2 m — wide enough to reach the arch jambs)
-        let hgt: Float = 0.212        // height (~4 m)
+        let hW = portalFieldHalfWidth  // ~3.2 m
+        let hgt = portalFieldHeight    // ~4 m
         let bl = SIMD3<Float>(-hW, 0, z0), br = SIMD3<Float>(hW, 0, z0)
         let tr = SIMD3<Float>(hW, 0, z0 + hgt), tl = SIMD3<Float>(-hW, 0, z0 + hgt)
         func v(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ u: Float, _ w: Float) -> MazeVertexSwift {

@@ -912,7 +912,12 @@ class CubeModel {
             for c in 0..<size {
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) else { continue }
                 let props = cubies[ci].facelets[fi].props
-                if props.contains(where: { puzzle.contains($0.kind) || ($0.kind == .portal && $0.state == 1) }) {
+                // ANY portal, not `state == 1`. That test named ONE destination (the temple door),
+                // so every other door in the game — Scene 1's arch above all — got no clearance and
+                // the scatter planted a bush in its mouth (Eddie: "the first portal is a little
+                // crowded"). This is the same mistake `templeDoorStillSealed` made: identifying a
+                // door by where it leads instead of by BEING a door.
+                if props.contains(where: { puzzle.contains($0.kind) || $0.kind == .portal }) {
                     for (dr, dc) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] { s.insert([r + dr, c + dc]) }
                 }
             }
