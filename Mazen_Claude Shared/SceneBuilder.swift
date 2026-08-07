@@ -379,8 +379,7 @@ final class SceneBuilder {
                             let localX = Float(prop.subCol - 1) * step + prop.offsetX
                             let localY = Float(prop.subRow - 1) * step + prop.offsetY
                             let yaw = Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180) + extraYaw
-                            // THE PORTAL DISC IS SEATED, NOT INFLATED — the third attempt at this, and
-                            // the first correct one. Inflating it (shader-side) squashes it into an
+                            // THE PORTAL DISC IS SEATED, NOT INFLATED. Inflating it (shader-side) squashes it into an
                             // OVAL and tips it back, because the inflation stretches the footprint
                             // along the curved surface while measuring height radially: a vertical
                             // circle comes out flattened, more so the rounder the world (Eddie:
@@ -666,7 +665,15 @@ final class SceneBuilder {
                             // disagree with.
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
                                 materialID: materialID, tileID: 0, discoveryAmount: discovery, styleSeed: propStyleSeed,
-                                spinMatrix: spin, roundness: isDisc ? 0 : roundness,
+                                // SPIN ONCE. At roundness 0 the shader still applies `spinMatrix`
+                                // — its contract is "rigid instances bake spin into modelMatrix and
+                                // pass IDENTITY here". The disc bakes it (above), so passing `spin`
+                                // as well turned the world twice: the portal drifted against its own
+                                // terrain, sinking where the rounded cube bulges at the corners and
+                                // surfacing at the middle of each face, which is exactly the orbit
+                                // Eddie filmed.
+                                spinMatrix: isDisc ? matrix_identity_float4x4 : spin,
+                                roundness: isDisc ? 0 : roundness,
                                 invHalfExtent: invHalf, reliefAmplitude: relief,
                                 heightScale: heightScale, heightPivot: heightPivot)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
