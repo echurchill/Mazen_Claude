@@ -1072,6 +1072,18 @@ fragment float4 fragmentShader(
         float across = abs(in.texCoord.x - 0.5) * 2.0;      // 0 centre … 1 edge
         float glow = clamp(in.discoveryAmount, 0.0, 1.0);
         float t = frame.time;
+        // A BEAM DOES NOT CROSS A PORTAL (Eddie: "the beam from the orb looks like it is poking
+        // through the portal… because it is"). Geometrically it does — the chamber's beams run from
+        // its obelisks to the orb at the centre, and a door standing in that line is simply in the
+        // way. Rather than move the door or shorten the beam by hand, the beam DIMS as it nears the
+        // opening, which reads as the portal swallowing light that reaches it: the right story for a
+        // hole in the world, and it costs one distance test against the portal light the renderer
+        // already publishes every frame.
+        if (frame.portalLightRadius > 0.0) {
+            float toPortal = distance(in.worldPosition, frame.portalLightPosition);
+            glow *= smoothstep(frame.portalLightRadius * 0.45, frame.portalLightRadius * 1.05, toPortal);
+            if (glow < 0.01) discard_fragment();
+        }
         // 3K's TARGETING beam is styleSeed 6 — the seventh, after the six obelisk beams. "Narrow,
         // continuous, sharply directional, brighter at its point of contact": no pulse at all, and
         // it brightens toward the far end instead of tapering, because that end is the message.

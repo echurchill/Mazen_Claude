@@ -376,10 +376,31 @@ final class SceneBuilder {
                                         progress: prop.alignAnim, amplitude: amp * 1.6, direction: 1)
                                 }
                             }
-                            let pm = restM
-                                * float4x4.translation(Float(prop.subCol - 1) * step + prop.offsetX, Float(prop.subRow - 1) * step + prop.offsetY, 0)
-                                * float4x4.rotation(radians: Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180) + extraYaw, axis: SIMD3(0, 0, 1))
-                                * float4x4.scale(treeScale * footprintBoost, treeScale * footprintBoost, treeScale)
+                            let localX = Float(prop.subCol - 1) * step + prop.offsetX
+                            let localY = Float(prop.subRow - 1) * step + prop.offsetY
+                            let yaw = Float(prop.facing.rawValue) * (.pi / 4) + prop.viewAngle * (.pi / 180) + extraYaw
+                            // THE PORTAL DISC IS SEATED, NOT INFLATED — the third attempt at this, and
+                            // the first correct one. Inflating it (shader-side) squashes it into an
+                            // OVAL and tips it back, because the inflation stretches the footprint
+                            // along the curved surface while measuring height radially: a vertical
+                            // circle comes out flattened, more so the rounder the world (Eddie:
+                            // Scene 1 badly, Scene 5 less, flat Scene 2 not at all). Turning
+                            // inflation off alone put it in ORBIT, because `roundness == 0` makes the
+                            // shader use this matrix as-is and this matrix is the FLAT-CUBE rest
+                            // placement.
+                            //
+                            // Both wrong for the same missing step: use `inflatedPlacement`, which is
+                            // how every rigid imported asset seats on the curve — the ANCHOR rides
+                            // the sphere, the shape stays a shape. Spin is premultiplied here because
+                            // at roundness 0 the shader ignores `spinMatrix`.
+                            let isDisc = prop.kind == .portalField
+                            let pm = isDisc
+                                ? spin * model.inflatedPlacement(base: restM, localX: localX, localY: localY)
+                                       * float4x4.rotation(radians: yaw, axis: SIMD3(0, 0, 1))
+                                : restM
+                                    * float4x4.translation(localX, localY, 0)
+                                    * float4x4.rotation(radians: yaw, axis: SIMD3(0, 0, 1))
+                                    * float4x4.scale(treeScale * footprintBoost, treeScale * footprintBoost, treeScale)
                             // M16.6/M20 — the alignment cylinder (GROW) and switch cap (flush↔out) animate
                             // their HEIGHT. Pass it as heightScale about the plinth top (applied to the
                             // vertex's local z in the shader), NOT a modelMatrix Z-scale: a non-uniform Z
@@ -645,7 +666,8 @@ final class SceneBuilder {
                             // disagree with.
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
                                 materialID: materialID, tileID: 0, discoveryAmount: discovery, styleSeed: propStyleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief,
+                                spinMatrix: spin, roundness: isDisc ? 0 : roundness,
+                                invHalfExtent: invHalf, reliefAmplitude: relief,
                                 heightScale: heightScale, heightPivot: heightPivot)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
                         }
