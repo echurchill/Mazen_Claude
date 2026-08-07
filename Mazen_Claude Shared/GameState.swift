@@ -1091,7 +1091,7 @@ class GameState {
             // pointing at. The top of the circle is the first thing it reaches and the last place it
             // can be seen touching.
             let up = SIMD3<Float>(m.columns.2.x, m.columns.2.y, m.columns.2.z)
-            let discTop = TileMeshLibrary.portalDiscTop(floorY: worldScale.floorY)
+            let discTop = PortalDisc.topAboveFloor(floorY: worldScale.floorY)
             let target = m.position + up * discTop
             let dir = simd_normalize(target - centre)
             out.append(ChamberEmitter(a: centre + dir * (orbR * 1.05), b: target,

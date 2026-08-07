@@ -125,3 +125,19 @@ struct WorldScale {
     var orbitFOVRadians: Float { orbitFOVDegrees / 180.0 * .pi }
     var firstPersonFOVRadians: Float { firstPersonFOVDegrees / 180.0 * .pi }
 }
+
+/// The portal disc's proportions. In the MODEL layer, not the mesh library, because the model needs
+/// them: Scene 3's targeting beam aims at the top of the disc, and `GameState` cannot see the
+/// renderer — the standalone test harness compiles the model without any of it. `TileMeshLibrary`
+/// builds the mesh from these same numbers, so the geometry and everything that aims at it cannot
+/// disagree.
+enum PortalDisc {
+    /// ~3.4 m across.
+    static let radius: Float = 0.09
+    /// × radius: how far below the floor the bottom sits — 10% of the diameter, so it reads planted.
+    static let sink: Float = 0.2
+    /// Centre height, in the tile's local frame.
+    static func centre(floorY: Float) -> Float { floorY - sink * radius + radius }
+    /// Highest point, measured from the floor — what a beam should aim at.
+    static func topAboveFloor(floorY: Float) -> Float { centre(floorY: floorY) + radius - floorY }
+}

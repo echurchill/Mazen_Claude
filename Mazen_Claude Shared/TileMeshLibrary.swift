@@ -959,19 +959,14 @@ class TileMeshLibrary {
     ///
     /// Sunk 10% of its diameter below the floor so it reads as planted rather than hovering: the job
     /// the glowing ground ring used to do, done by the shape itself.
-    static let portalDiscRadius: Float = 0.09        // ~3.4 m across
-    static let portalDiscSink: Float = 0.2           // × radius = 10% of the diameter, below the floor
-
-    /// Height of the disc's highest point above the tile floor. Published because Scene 3's
-    /// targeting beam aims at it, and a beam that aims at a number copied by hand is a beam that
-    /// misses the day somebody changes the radius.
-    static func portalDiscTop(floorY: Float) -> Float {
-        (floorY - portalDiscSink * portalDiscRadius + portalDiscRadius) + portalDiscRadius - floorY
-    }
+    // The numbers live in `PortalDisc` (model layer) so Scene 3's beam can aim at the top of a shape
+    // the renderer builds. See WorldScale.swift.
+    static var portalDiscRadius: Float { PortalDisc.radius }
+    static var portalDiscSink: Float { PortalDisc.sink }
 
     private static func addPortalDisc(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let r = portalDiscRadius
-        let cz = ws.floorY - portalDiscSink * r + r   // centre, so the bottom sits under the ground
+        let cz = PortalDisc.centre(floorY: ws.floorY)   // bottom sits under the ground
         let seg = 64
         // texCoord spans the disc's BOUNDING SQUARE, so the shader reads radius as
         // `length(uv - 0.5) * 2`, and a square capture maps 1:1 — a circle is the one shape whose
