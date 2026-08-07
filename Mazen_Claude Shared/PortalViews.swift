@@ -67,6 +67,7 @@ enum PortalViews {
         desc.arrayLength = files.count
         desc.usage = .shaderRead
         guard let tex = device.makeTexture(descriptor: desc) else { return nil }
+        tex.label = "PortalViews"   // so the residency guard can name it if it is ever unregistered
 
         var map: [String: Int] = [:]
         for (i, f) in files.enumerated() {

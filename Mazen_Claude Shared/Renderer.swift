@@ -93,6 +93,49 @@ class Renderer: NSObject, MTKViewDelegate {
     /// of the next frame, once the in-flight frames that may still be reading them have completed.
     private var attachmentResidencyStale = false
 
+    /// EVERY texture the GPU reads must be in the residency set. In Metal 4 a non-resident read is
+    /// undefined, and on this machine "undefined" meant garbage sampled into an emissive surface,
+    /// a fuchsia screen, and a display wedged hard enough to need a restart (2026-08-06, the portal
+    /// view array — bound, never made resident). It has now happened three times in different
+    /// clothes: attachments after a resize, a freed world's identifier reused as a cache key, and
+    /// this.
+    ///
+    /// Nothing in Metal will tell you: there is no API to ask a residency set what it holds. So we
+    /// keep our own record next to it and check bindings against it in DEBUG. The check cannot make
+    /// the GPU safe — it runs after the fact — but it turns a silent, screen-wedging fault into a
+    /// named line in the log the first time a new texture is bound without being registered.
+    private var residentTextureIDs: Set<ObjectIdentifier> = []
+    private var reportedNonResident: Set<ObjectIdentifier> = []
+
+    /// Register a texture as resident AND record it. Use in place of `rs.addAllocation(tex)` for
+    /// textures, so the record cannot drift from the set.
+    func makeResident(_ tex: MTLTexture, in set: MTLResidencySet) {
+        set.addAllocation(tex)
+        residentTextureIDs.insert(ObjectIdentifier(tex as AnyObject))
+    }
+
+    /// The init-time version. Swift forbids calling a method on `self` before `super.init`, so the
+    /// registrations there collect into a local set which is handed over once initialisation is
+    /// complete. Same guarantee, different plumbing.
+    private static func makeResident(_ tex: MTLTexture, in set: MTLResidencySet,
+                                     recording ids: inout Set<ObjectIdentifier>) {
+        set.addAllocation(tex)
+        ids.insert(ObjectIdentifier(tex as AnyObject))
+    }
+
+    /// Bind a texture, and in DEBUG shout if it was never made resident.
+    @inline(__always)
+    func bindTexture(_ tex: MTLTexture, _ table: MTL4ArgumentTable, _ index: Int) {
+#if DEBUG
+        let id = ObjectIdentifier(tex as AnyObject)
+        if !residentTextureIDs.contains(id), !residentAttachments.contains(id), reportedNonResident.insert(id).inserted {
+            NSLog("[residency] NOT RESIDENT: '%@' bound at texture index %d. In Metal 4 the GPU read is undefined — this is the fuchsia-screen bug. Add it via makeResident().",
+                  tex.label ?? "unlabelled", index)
+        }
+#endif
+        table.setTexture(tex.gpuResourceID, index: index)
+    }
+
     private func ensureAttachmentsResident(_ desc: MTL4RenderPassDescriptor) {
         var added = false
         func ensure(_ tex: MTLTexture?) {
@@ -535,40 +578,44 @@ class Renderer: NSObject, MTKViewDelegate {
         resDesc.initialCapacity = 11 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count + cpAssetBufs.count
             + loadedProps.count * 3 + loadedProps.reduce(0) { $0 + $1.submeshMaterials.count }
         let rs = try! device.makeResidencySet(descriptor: resDesc)
+        var initResident = Set<ObjectIdentifier>()
         rs.addAllocation(tileMeshLib.vertexBuffer)
         rs.addAllocation(tileMeshLib.indexBuffer)
-        if let d = self.diffuseArray { rs.addAllocation(d) }
-        if let n = self.normalArray { rs.addAllocation(n) }
-        if let s = self.skyboxTexture { rs.addAllocation(s) }
-        for t in self.debugSkyboxes { rs.addAllocation(t) }   // DEBUG: keep every cyclable skybox resident
-        if let lf = self.leafArray { rs.addAllocation(lf) }
-        if let g = self.greeneryArray { rs.addAllocation(g) }
-        if let t = self.treeSpriteArray { rs.addAllocation(t) }
-        rs.addAllocation(self.placeholderArray)
-        if let c = self.causticArray { rs.addAllocation(c) }
-        if let d = self.dendriteArray { rs.addAllocation(d) }
-        if let l = self.labelArray { rs.addAllocation(l) }
+        if let d = self.diffuseArray { Self.makeResident(d, in: rs, recording: &initResident) }
+        if let n = self.normalArray { Self.makeResident(n, in: rs, recording: &initResident) }
+        if let s = self.skyboxTexture { Self.makeResident(s, in: rs, recording: &initResident) }
+        for t in self.debugSkyboxes { Self.makeResident(t, in: rs, recording: &initResident) }   // DEBUG: keep every cyclable skybox resident
+        if let lf = self.leafArray { Self.makeResident(lf, in: rs, recording: &initResident) }
+        if let g = self.greeneryArray { Self.makeResident(g, in: rs, recording: &initResident) }
+        if let t = self.treeSpriteArray { Self.makeResident(t, in: rs, recording: &initResident) }
+        Self.makeResident(self.placeholderArray, in: rs, recording: &initResident)
+        if let c = self.causticArray { Self.makeResident(c, in: rs, recording: &initResident) }
+        if let d = self.dendriteArray { Self.makeResident(d, in: rs, recording: &initResident) }
+        if let l = self.labelArray { Self.makeResident(l, in: rs, recording: &initResident) }
         // THE PORTAL-VIEW ARRAY MUST BE RESIDENT. Omitting it is what turned Eddie's screen
         // fuchsia: in Metal 4 a shader read of a non-resident texture is undefined, and undefined
         // here means garbage sampled into an emissive full-screen-ish surface — and it can fault the
         // GPU hard enough to wedge the display. It only bit once real captures existed, because an
         // empty PortalViews/ falls back to `placeholderArray`, which IS resident. A binding that is
         // only exercised when data shows up is a binding whose residency nobody tested.
-        if let pv = self.portalViewArray { rs.addAllocation(pv) }
-        rs.addAllocation(self.shadowMapTexture)
+        if let pv = self.portalViewArray { Self.makeResident(pv, in: rs, recording: &initResident) }
+        Self.makeResident(self.shadowMapTexture, in: rs, recording: &initResident)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
         for buf in counterpartBufs { rs.addAllocation(buf) }
         for buf in cpAssetBufs { rs.addAllocation(buf) }
         for p in loadedProps {
             rs.addAllocation(p.mesh.vertexBuffer); rs.addAllocation(p.mesh.indexBuffer)
-            if let d = p.diffuse { rs.addAllocation(d) }
-            for m in p.submeshMaterials { if let t = m.diffuse { rs.addAllocation(t) } }   // per-sub-mesh maps
+            if let d = p.diffuse { Self.makeResident(d, in: rs, recording: &initResident) }
+            for m in p.submeshMaterials { if let t = m.diffuse { Self.makeResident(t, in: rs, recording: &initResident) } }   // per-sub-mesh maps
         }
         for buf in assetBufs { rs.addAllocation(buf) }
         rs.commit()
         commandQueue.addResidencySet(rs)
         self.residencySet = rs
+        // Hand the init-time registrations to the live record (see `makeResident`). Anything bound
+        // that is not in here gets named in the log rather than corrupting a frame.
+        self.residentTextureIDs = initResident
 
         super.init()
 
@@ -1133,7 +1180,7 @@ class Renderer: NSObject, MTKViewDelegate {
                         cutoutActive = needCutout
                     }
                     if needCutout, let d = cmd.diffuse {
-                        fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue)
+                        bindTexture(d, fragmentArgTable, TextureIndex.assetDiffuse.rawValue)
                     }
                     vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
                     // A1 — only the caster prefix: instances are packed casters-first, so the
@@ -1174,23 +1221,23 @@ class Renderer: NSObject, MTKViewDelegate {
             instanceBuffers[currentBufferIndex].gpuAddress,
             index: BufferIndex.instances.rawValue
         )
-        if let d = diffuseArray { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.diffuseArray.rawValue) }
-        if let n = normalArray { fragmentArgTable.setTexture(n.gpuResourceID, index: TextureIndex.normalArray.rawValue) }
-        if let sb = activeSkyboxTexture { fragmentArgTable.setTexture(sb.gpuResourceID, index: TextureIndex.skybox.rawValue) }
+        if let d = diffuseArray { bindTexture(d, fragmentArgTable, TextureIndex.diffuseArray.rawValue) }
+        if let n = normalArray { bindTexture(n, fragmentArgTable, TextureIndex.normalArray.rawValue) }
+        if let sb = activeSkyboxTexture { bindTexture(sb, fragmentArgTable, TextureIndex.skybox.rawValue) }
         // Every declared foliage slot must be bound even when its asset array is nil (the shader's
         // `*Loaded` flags gate sampling, but Metal validation still requires a bound texture) — fall
         // back to the 1×1 placeholder array so the first draw doesn't abort under Xcode's validation.
-        fragmentArgTable.setTexture((leafArray ?? placeholderArray).gpuResourceID, index: TextureIndex.leaf.rawValue)
-        fragmentArgTable.setTexture((greeneryArray ?? placeholderArray).gpuResourceID, index: TextureIndex.greenery.rawValue)
-        fragmentArgTable.setTexture((treeSpriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.treeSprite.rawValue)
-        fragmentArgTable.setTexture((causticArray ?? placeholderArray).gpuResourceID, index: TextureIndex.caustic.rawValue)
-        fragmentArgTable.setTexture((portalViewArray ?? placeholderArray).gpuResourceID, index: TextureIndex.portalView.rawValue)
-        fragmentArgTable.setTexture((labelArray ?? placeholderArray).gpuResourceID, index: TextureIndex.label.rawValue)
-        fragmentArgTable.setTexture((dendriteArray ?? placeholderArray).gpuResourceID, index: TextureIndex.dendrite.rawValue)
-        fragmentArgTable.setTexture(shadowMapTexture.gpuResourceID, index: TextureIndex.shadowMap.rawValue)
+        bindTexture(leafArray ?? placeholderArray, fragmentArgTable, TextureIndex.leaf.rawValue)
+        bindTexture(greeneryArray ?? placeholderArray, fragmentArgTable, TextureIndex.greenery.rawValue)
+        bindTexture(treeSpriteArray ?? placeholderArray, fragmentArgTable, TextureIndex.treeSprite.rawValue)
+        bindTexture(causticArray ?? placeholderArray, fragmentArgTable, TextureIndex.caustic.rawValue)
+        bindTexture(portalViewArray ?? placeholderArray, fragmentArgTable, TextureIndex.portalView.rawValue)
+        bindTexture(labelArray ?? placeholderArray, fragmentArgTable, TextureIndex.label.rawValue)
+        bindTexture(dendriteArray ?? placeholderArray, fragmentArgTable, TextureIndex.dendrite.rawValue)
+        bindTexture(shadowMapTexture, fragmentArgTable, TextureIndex.shadowMap.rawValue)
         // Keep the asset-diffuse slot bound to a valid texture for the maze draws (they don't
         // sample it, but the shader declares it); the prop loop rebinds it per-prop below.
-        if let d = importedProps.first?.diffuse { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
+        if let d = importedProps.first?.diffuse { bindTexture(d, fragmentArgTable, TextureIndex.assetDiffuse.rawValue) }
         if let s = texSampler { fragmentArgTable.setSamplerState(s.gpuResourceID, index: 0) }
 
         // Sky pass: fullscreen triangle, no depth test/write. Interior worlds (M15.1) are
@@ -1236,7 +1283,7 @@ class Renderer: NSObject, MTKViewDelegate {
             fragmentArgTable.setAddress(assetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             for cmd in assetDrawCmds {
                 vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
-                if let d = cmd.diffuse { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
+                if let d = cmd.diffuse { bindTexture(d, fragmentArgTable, TextureIndex.assetDiffuse.rawValue) }
                 encoder.drawIndexedPrimitives(
                     primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
                     indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
@@ -1275,7 +1322,7 @@ class Renderer: NSObject, MTKViewDelegate {
                 fragmentArgTable.setAddress(counterpartAssetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
                 for cmd in counterpartAssetDrawCmds {
                     vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
-                    if let d = cmd.diffuse { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
+                    if let d = cmd.diffuse { bindTexture(d, fragmentArgTable, TextureIndex.assetDiffuse.rawValue) }
                     encoder.drawIndexedPrimitives(
                         primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
                         indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
@@ -1354,7 +1401,7 @@ class Renderer: NSObject, MTKViewDelegate {
                     portalCaptureTexture = device.makeTexture(descriptor: d)
                     // Same rule, second offender: the copy DESTINATION is touched by the GPU too.
                     if let t = portalCaptureTexture {
-                        residencySet.addAllocation(t)
+                        makeResident(t, in: residencySet)
                         residencySet.commit()
                     }
                 }
