@@ -212,9 +212,6 @@ class TileMeshLibrary {
         Self.addPortalDisc(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.portalField.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalFieldStart, indexCount: allIndices.count - portalFieldStart)
 
-        let portalRingStart = allIndices.count
-        Self.addPortalRing(to: &allVerts, indices: &allIndices, ws: ws)
-        propMeshes[PropKind.portalRing.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalRingStart, indexCount: allIndices.count - portalRingStart)
 
         let signpostStart = allIndices.count
         Self.addSignpost(to: &allVerts, indices: &allIndices, ws: ws)
@@ -962,10 +959,9 @@ class TileMeshLibrary {
     // The numbers live in `PortalDisc` (model layer) so Scene 3's beam can aim at the top of a shape
     // the renderer builds. See WorldScale.swift.
     static var portalDiscRadius: Float { PortalDisc.radius }
-    static var portalDiscSink: Float { PortalDisc.sink }
 
     private static func addPortalDisc(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
-        let r = portalDiscRadius
+        let r = PortalDisc.radius
         let cz = PortalDisc.centre(floorY: ws.floorY)   // bottom sits under the ground
         let seg = 64
         // texCoord spans the disc's BOUNDING SQUARE, so the shader reads radius as
@@ -1032,24 +1028,6 @@ class TileMeshLibrary {
         indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
     }
 
-    /// M20 — a flat glowing RING on the ground at a portal's base (emissive, material 12): the light
-    /// pooling under an energy veil, or the lit floor plate of the elevator. An annulus on the floor.
-    private static func addPortalRing(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
-        let z = ws.floorY + 0.006     // just above the floor to avoid z-fighting
-        let rO: Float = 0.092, rI: Float = 0.055   // ~1.7 m / 1 m radius — a base ring under a ~4 m portal
-        let seg = 40
-        func v(_ p: SIMD3<Float>, _ u: Float) -> MazeVertexSwift {
-            MazeVertexSwift(position: p, normal: SIMD3(0, 0, 1), texCoord: SIMD2(u, 0), aoFactor: 1.0)
-        }
-        for i in 0..<seg {
-            let a0 = Float(i) / Float(seg) * 2 * .pi, a1 = Float(i + 1) / Float(seg) * 2 * .pi
-            let oi = SIMD3<Float>(cos(a0) * rO, sin(a0) * rO, z), oj = SIMD3<Float>(cos(a1) * rO, sin(a1) * rO, z)
-            let ii = SIMD3<Float>(cos(a0) * rI, sin(a0) * rI, z), ij = SIMD3<Float>(cos(a1) * rI, sin(a1) * rI, z)
-            let base = UInt32(verts.count)
-            verts.append(contentsOf: [v(ii, 0), v(oi, 1), v(oj, 1), v(ij, 0)])
-            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
-        }
-    }
 
     /// The flashing lamp atop the portal (M11.2 / TARDIS) — a tiny box sitting at the roof apex.
     /// SceneBuilder renders it emissive (materialID 12) with a blinking brightness, so it reads as a

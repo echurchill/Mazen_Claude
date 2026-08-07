@@ -66,7 +66,6 @@ final class SceneBuilder {
         .portal:      SIMD4(0.11, 0.20, 0.52, 1.0),  // TARDIS police-box blue (M11.2 world portal)
         .portalLamp:  SIMD4(1.0, 1.0, 1.0, 1.0),     // overridden per-frame by the blink (below)
         .portalField: SIMD4(0.42, 0.55, 1.0, 1.0),   // M20 — energy-veil tint (overridden per style below)
-        .portalRing:  SIMD4(0.55, 0.72, 1.0, 1.0),   // M20 — base-glow ring (emissive)
         .signpost:    SIMD4(1.0, 1.0, 1.0, 1.0),     // M20 — material 24 colours itself (wood + label)
         .dial:        SIMD4(0.52, 0.52, 0.58, 1.0),  // M16.3 — overridden by state below
         .glyph:       SIMD4(0.68, 0.65, 0.59, 1.0),  // M16.5 — carved stone (lock livery may gild it)
@@ -297,7 +296,7 @@ final class SceneBuilder {
                             // while the portal is ACTIVE (its cubie not sealed). The imported frame
                             // (columns / arch) is unaffected.
                             if prop.kind == .portal, styledPortalCubies.contains(ci) { continue }
-                            if (prop.kind == .portalField || prop.kind == .portalRing), model.sealedPortalCubies.contains(ci) { continue }
+                            if prop.kind == .portalField, model.sealedPortalCubies.contains(ci) { continue }
                             // M19: trees & boulders vary in size by `state` (0/1/2 = small/med/large)
                             // AND a per-instance jitter, so a stand / rock field reads as many
                             // distinct objects, not three repeated sizes. Trunk matches its tree.
@@ -569,9 +568,6 @@ final class SceneBuilder {
                                 }
                                 color = SIMD4(0.42, 0.55, 1.0, 1.0)   // the swirl's tint; the view carries its own
                             }
-                            // The glowing ground ring is RETIRED (Eddie): the disc sinks 10% of its
-                            // diameter into the floor, which grounds it without a second object.
-                            if prop.kind == .portalRing { continue }
                             if prop.kind == .dustMote {
                                 // Falls as it dies: heightScale about the FLOOR pivot lowers the mote
                                 // from joint height to the ground over its life, and discoveryAmount

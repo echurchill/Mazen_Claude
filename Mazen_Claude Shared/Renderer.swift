@@ -255,7 +255,6 @@ class Renderer: NSObject, MTKViewDelegate {
     /// Stamp the imported decorations into the overworld once (lazily, after the registry loads).
     /// They become `.importedAsset` Props on facelets so they ride slice rotations — and, being
     /// stamped only into the overworld, they don't appear in portal-worlds like the test interior.
-    var needsDecorativeStamp = true
     /// M20 — the palette for DYNAMIC dressed walls (Ruins wall pieces + rocks/bushes), captured when a
     /// `.dressed` world is built. `updateAssetInstances` re-emits these per closed edge every frame, so
     /// the stone walls survive slice-twists (see `CubeModel.dressedWallProps`). Empty ⇒ hedge worlds.
@@ -613,7 +612,6 @@ class Renderer: NSObject, MTKViewDelegate {
         // "earth" identity, so its sky edges (moon-earth) keep resolving; registry worlds persist.
         worldStack = [GameState(size: size, name: "earth", stamp: .homeClearing)]
         Self.setupInitialDiscovery(gameState: gameState)
-        needsDecorativeStamp = true   // re-stamp the arch portal frame into the fresh home world
     }
 
     /// M14b debug: dial shape roundness on **every** world — the active stack *and* the persistent

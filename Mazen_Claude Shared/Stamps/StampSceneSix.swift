@@ -147,7 +147,7 @@ extension CubeModel {
                 // into a dev world. A DOWNWARD elevator, which is the right shape for a descent.
                 cubies[ci].facelets[fi].props.append(
                     Prop(kind: .portal, subRow: 1, subCol: 1, facing: .e, state: 13, transition: .push))
-                styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e, fieldStyle: 3))
+                styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e))
                 cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .e, state: 3))
                 sealedPortalCubies.insert(ci)     // dark until the slab has turned
             } else {
@@ -217,7 +217,7 @@ extension CubeModel {
         cubies[ci].facelets[fi].props.removeAll()
         cubies[ci].facelets[fi].props.append(
             Prop(kind: .portal, subRow: 1, subCol: 1, facing: .e, state: 13, transition: .push))
-        styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e, fieldStyle: 3))
+        styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e))
         cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .e, state: 3))
         undersideHatch = (.negativeX, c, n - 2)
         markTopologyChanged()

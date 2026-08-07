@@ -127,7 +127,7 @@ extension CubeModel {
             // exist; now the prologue runs 1 → 2 → 3 → 4 → 5 unbroken.
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .portal, subRow: 1, subCol: 1, facing: .s, state: 14, transition: .push))
-            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .s, fieldStyle: 2))
+            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .s))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))
             // NOT sealed. "A portal is present, but the maze does not connect to it" — the obstacle
             // is the route, not a dark door, and two locks at once would blur the one idea the turn

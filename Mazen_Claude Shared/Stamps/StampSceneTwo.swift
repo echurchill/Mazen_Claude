@@ -264,7 +264,7 @@ extension CubeModel {
         // the registry with all its state, so replacing in place loses nothing and does not nest.
         cubies[pick.ci].facelets[pick.fi].props.append(
             Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: destinationID, transition: .goto))
-        styledPortals.append(StyledPortal(ci: pick.ci, fi: pick.fi, facing: .n, fieldStyle: 2))
+        styledPortals.append(StyledPortal(ci: pick.ci, fi: pick.fi, facing: .n))
         cubies[pick.ci].facelets[pick.fi].props.append(
             Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2))
         chosenExit = (pick.face, pick.r, pick.c)
@@ -315,7 +315,7 @@ extension CubeModel {
               let (ci, fi) = faceletAt(face: face, row: pick.r, col: pick.c) else { return nil }
         cubies[ci].facelets[fi].props.append(
             Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: destinationID, transition: .push))
-        styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 2))
+        styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n))
         cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2))
         chosenExit = (face, pick.r, pick.c)
         markTopologyChanged()

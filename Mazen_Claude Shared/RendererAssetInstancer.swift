@@ -169,13 +169,6 @@ extension Renderer {
     /// a bare plate. It got worse with every world we dressed, which is what Eddie noticed.
     func updateAssetInstances() {
         assetDrawCmds.removeAll(keepingCapacity: true)
-        // M20 (Eddie) — the first world (natural home clearing) is built in init, before the registry
-        // is loaded, so stamp its imported PORTAL FRAME (the stone arch to the garden) lazily here on
-        // the first frame the registry is ready. (The old demo-decoration stamp is retired with the
-        // demo overworld — the home is pastoral, not the test hub.)
-        if needsDecorativeStamp, let home = worldStack.first, !importedProps.isEmpty {
-            needsDecorativeStamp = false
-        }
         guard !importedProps.isEmpty || !houseAssembly.isEmpty else { return }
         assetDrawCmds = buildAssetInstances(for: gameState, offset: matrix_identity_float4x4,
                                             buffer: assetInstanceBuffers[currentBufferIndex],

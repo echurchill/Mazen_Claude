@@ -376,8 +376,6 @@ enum PropKind: UInt8 {
     case portalField     // M20 (Eddie): a portal's animated ENERGY surface — a vertical shimmering veil
                          // (material 23). `state` = style: 0 blue veil, 1 pink veil, 2 starfield/galaxy
                          // fill. NON-solid (you step through it). The new portal styles replacing the TARDIS.
-    case portalRing      // M20: a flat glowing ring on the ground at a portal's base (emissive, material
-                         // 12) — the light pooling under an energy veil / the lit floor of the elevator.
     case signpost        // M20 (Eddie): a wooden post + board naming the portal it stands beside
                          // (material 24). `state` = the label-array slice (a hub destination index).
     case dustMote
@@ -398,7 +396,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .portalRing, .signpost, .dustMote, .surveyor: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .signpost, .dustMote, .surveyor: return false
         default: return true
         }
     }

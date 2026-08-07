@@ -1017,7 +1017,7 @@ class GameState {
         if arrivalDoorwayClosing <= 0 {
             // Gone, not merely invisible — nothing left to walk into. Only OUR two props, only here.
             cubeModel.cubies[t.ci].facelets[t.fi].props.removeAll {
-                ($0.kind == .portalField || $0.kind == .portalRing) && $0.anim > 0.5
+                $0.kind == .portalField && $0.anim > 0.5
             }
             arrivalDoorwayTile = nil
             cubeModel.markTopologyChanged()

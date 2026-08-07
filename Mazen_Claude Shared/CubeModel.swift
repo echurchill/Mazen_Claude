@@ -408,11 +408,6 @@ class CubeModel {
         add(aCol, Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))
     }
 
-    /// M20 (Eddie) — the imported FRAME of each styled portal: a stone arch (fieldStyle 2) or two
-    /// flanking columns (streak elevators, 3/4). The Renderer owns the model indices and calls this
-    /// after the world builds (pass `nil` for any not loaded → that frame is skipped). Non-solid, so
-    /// you still walk through; always shown (the frame stays even while the energy field is sealed off).
-
     /// M20 proof — lay `.importedAsset` eval cells (3D models) in their own revealed strip just SOUTH
     /// of the catalog grid, connected to the spawn by a short corridor so the player can walk down to
     /// them. `states` are registry indices into `Renderer.importedProps`; the Renderer owns those
@@ -1545,7 +1540,7 @@ class CubeModel {
                 // (material 23), not the TARDIS; always open (never sealed). Faces the approaching
                 // player (north, toward spawn). No frame model — the disc is the whole door now.
                 cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: 3))
-                styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 2))
+                styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n))
                 cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2, extraScale: 0.9375))
             } else {
                 // The way home — a walk-through return portal one tile south of arrival.
@@ -1631,7 +1626,7 @@ class CubeModel {
         if let style = elevatorStyle {
             // M20 (Eddie) — an ELEVATOR portal, not the TARDIS: the streak field + ring (hidden while
             // sealed) and, via the Renderer, two flanking columns. No lamp.
-            styledPortals.append(StyledPortal(ci: dci, fi: dfi, facing: doorFacing, fieldStyle: style))
+            styledPortals.append(StyledPortal(ci: dci, fi: dfi, facing: doorFacing))
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: doorFacing, state: style))
         } else {
             cubies[dci].facelets[dfi].props.append(Prop(kind: .portalLamp, subRow: 1, subCol: 1))
@@ -1822,7 +1817,7 @@ class CubeModel {
             cubies[ci].facelets[fi].props.append(Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n))
             // M20 (Eddie) — an ELEVATOR portal going UP (temple → surface); always active here (never
             // sealed), so its streak field is always shown. Columns added by the Renderer.
-            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 4))
+            styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n))
             cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 4))
         }
         // M20 (Eddie) — an obelisk on each of the five OTHER interior surfaces, so the hall is marked
@@ -2339,14 +2334,12 @@ class CubeModel {
     /// them here). Cubie indices, stable across turns like bonds.
     var sealedPortalCubies: Set<Int> = []
 
-    /// M20 (Eddie) — portals shown with a STYLED visual instead of the TARDIS box. `fieldStyle` picks
-    /// the energy surface (material 23): 2 = the volumetric-cloud ARCH (level-to-level, home → garden),
-    /// 3 = elevator streaks DOWN (garden → temple), 4 = streaks UP (temple → surface). The frame is
-    /// derived from the style — a stone arch for 2, two flanking columns for 3/4 — and stamped by the
-    /// disc alone — no frame model, no ring (2026-08-06). The energy field
-    /// render only while the portal is ACTIVE (its cubie not in `sealedPortalCubies`); the frame always
-    /// shows. `fi`/`facing` locate/orient it.
-    struct StyledPortal { let ci: Int; let fi: Int; let facing: Heading8; let fieldStyle: Int }
+    /// Portals shown as the OPENING rather than as the police box — which, since 2026-08-06, is
+    /// every portal in a real world; the boxes are the dev hub's joke and nothing else. The entry
+    /// exists so `SceneBuilder` can suppress the box on those tiles, and to carry the facing the
+    /// disc is turned to. There used to be a `fieldStyle` here choosing between an arch, a starfield
+    /// and two elevator curtains: one shape now, so there is nothing left to choose.
+    struct StyledPortal { let ci: Int; let fi: Int; let facing: Heading8 }
     var styledPortals: [StyledPortal] = []
 
     // MARK: - PERF: topology version + derived caches

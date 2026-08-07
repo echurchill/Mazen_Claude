@@ -62,43 +62,6 @@ float cloudField(float3 p, float t, int oct) {
     return d;
 }
 
-float3 volumetricClouds(float2 uv, float t) {
-    float2 pp = uv - 0.5;
-    float3 ro = float3(0.0, 0.0, t * 0.4);            // drift forward through the volume
-    float3 rd = normalize(float3(pp.x * 1.4, pp.y * 1.6, 1.0));
-    float a = 0.25 * sin(t * 0.20);                   // slow view swirl
-    float ca = cos(a), sa = sin(a);
-    rd.xy = float2(rd.x * ca - rd.y * sa, rd.x * sa + rd.y * ca);
-    float3 lgt = normalize(float3(0.5, 0.7, -0.4));   // light direction for the shading step
-    float3 col = float3(0.0);
-    float trans = 1.0;                                // transmittance (front-to-back compositing)
-    float march = 0.4;
-    // Perf (Eddie): adaptive step size races through empty space and only crawls through billows, so
-    // far fewer of the expensive density taps are spent on nothing; the shadow tap uses coarse octaves.
-    for (int i = 0; i < 34; i++) {
-        float3 pos = ro + rd * march;
-        float den = saturate((cloudField(pos, t, 5) + 0.12) * 1.7);       // 5 octaves for visible detail
-        if (den > 0.01) {
-            // Density a short step toward the light: a big drop means this is a lit, sun-facing face;
-            // little drop means a shadowed crevice → strong billow contrast. Coarse (3 octaves) is enough.
-            float shd = saturate((cloudField(pos + lgt * 0.45, t, 3) + 0.12) * 1.7);
-            float lit = saturate((den - shd) * 4.0 + 0.08);
-            // Richer, saturated ramp (Eddie): cool violet shadows → warm gold body → hot gold (NOT
-            // white — a white hot-stop + additive build-up blew out to flat white), cool blue kiss.
-            float3 shade = mix(float3(0.10, 0.06, 0.24), float3(0.90, 0.48, 0.18), smoothstep(0.0, 0.55, lit));
-            shade = mix(shade, float3(1.0, 0.84, 0.52), smoothstep(0.55, 1.0, lit));
-            shade += float3(0.35, 0.55, 1.0) * pow(lit, 6.0) * 0.35;      // subtle cool hotspot
-            shade *= 0.5 + 0.5 * exp(-march * 0.22);                      // depth: nearer billows read brighter
-            float op = den * 0.40;                                        // lower opacity → slower build-up
-            col += trans * op * shade;
-            trans *= (1.0 - op);
-            if (trans < 0.02) break;
-        }
-        march += mix(0.17, 0.06, den);                                    // adaptive: fast in gaps, slow in billows
-    }
-    col = 1.0 - exp(-col * 1.4);                                          // tonemap: highlights stay coloured, not clipped to white
-    return col;
-}
 
 // ── Sky pass ───────────────────────────────────────────────────
 
