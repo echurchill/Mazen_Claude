@@ -784,8 +784,14 @@ class Renderer: NSObject, MTKViewDelegate {
         // and stays, "almost below conscious notice" until the portal's own tone joins it.
         let outdoors = !gameState.worldScale.interior && ambienceSilenceRemaining <= 0
         let nearArch = (gameState.tilesToNearestPortal ?? 99) <= 2
+        // The undertone belongs to SCENE 1 — "after the player first moves, a low tonal layer enters
+        // almost below conscious notice" is that scene's script, and its job is to introduce the
+        // Builders' voice once. The condition had no scene in it, so the layer played in every
+        // outdoor world forever after: the same 49 Hz tone under the garden, the natural world, the
+        // galleries, all six scenes. A cue that never stops is not a cue, it is a room tone.
         audio?.setAmbienceLayers(birds: outdoors && !nearArch,
-                                 underTone: outdoors && gameState.hasMoved)
+                                 underTone: outdoors && gameState.hasMoved
+                                            && gameState.name == "scene-1")
         // Phase E — the world's bed. Arrival is SILENT and the bed returns a moment later (Scene 2's
         // script is precise about this), so the delay is the point rather than a loading artefact.
         if ambienceSilenceRemaining > 0 {

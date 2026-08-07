@@ -222,8 +222,11 @@ final class AudioEngine {
             // "After the player first moves, a low tonal layer enters almost below conscious notice."
             // It is the Builders, and it is the same voice the vessels and the portal speak in — so
             // it is a held chord on the portal tone's fundamental rather than a new instrument.
+            // -20 dB: it sat at 0, the level of a CUE — a deliberate sound you are meant to notice —
+            // while its own description is "almost below conscious notice". The bed runs at -12.
             try registerTone(identifier: EventID.underTone, frequency: 49, duration: 8,
-                             harmonics: [1.0, 0.62, 0.30, 0.16, 0.09], sustain: true, looping: true)
+                             harmonics: [1.0, 0.62, 0.30, 0.16, 0.09], sustain: true, looping: true,
+                             level: -20)
 
             try engine.start()
             ready = true
@@ -437,6 +440,15 @@ final class AudioEngine {
         }
     }
 
+    /// Master mute (debug key). There was no way to silence the game short of muting the app in
+    /// System Settings, which Eddie discovered mid-demo with someone else listening.
+    private(set) var muted = false
+    func toggleMute() -> Bool {
+        muted.toggle()
+        listener.gain = muted ? 0 : 1
+        return muted
+    }
+
     /// Give each world its own bed, and let a portal land in SILENCE before it returns.
     ///
     /// Scene 2's script is precise about this: you step through and the world is quiet, then the wind
@@ -475,7 +487,7 @@ final class AudioEngine {
     private func registerTone(identifier: String, frequency: Float, duration: Float,
                               harmonics: [Float], spatial: Bool = false, rough: Float = 0,
                               sweepTo: Float? = nil, transient: Float = 0, sustain: Bool = false,
-                              looping: Bool = false) throws {
+                              looping: Bool = false, level: Double = 0) throws {
         let sampleRate = 48_000.0
         let frames = Int(Double(duration) * sampleRate)
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
@@ -507,13 +519,36 @@ final class AudioEngine {
                 s += transient * sinf(2 * .pi * 900 * t) * expf(-t * 55)
                 s += transient * 0.6 * sinf(2 * .pi * 1570 * t) * expf(-t * 80)
             }
-            let attack = min(1, t / 0.012)                      // ~12 ms, no click
-            // `sustain` holds the body up and releases at the end — for sounds that accompany a
-            // MOTION and must last as long as it does, rather than decaying away under it.
-            let decay = sustain
-                ? min(1, (1 - u) / 0.18)
-                : expf(-t * (3.2 / max(0.05, duration)))
-            samples[i] = s * attack * decay * 0.65
+            // A LOOPING tone gets NO envelope. This is the thrum (Eddie, 2026-08-06): the undertone
+            // is an 8-second looping asset, and `sustain` was ramping its last 1.4 s down to silence
+            // and then snapping back to the 12 ms attack — so it breathed, audibly, every eight
+            // seconds, forever, in every world. An envelope shapes a sound that ENDS; a loop does not
+            // end, and the shape becomes a pulse. The harmonics are integer multiples of the
+            // fundamental, so with no envelope the seam is phase-continuous and silent.
+            let env: Float
+            if looping {
+                env = 1
+            } else {
+                let attack = min(1, t / 0.012)                  // ~12 ms, no click
+                // `sustain` holds the body up and releases at the end — for sounds that accompany a
+                // MOTION and must last as long as it does, rather than decaying away under it.
+                let decay = sustain
+                    ? min(1, (1 - u) / 0.18)
+                    : expf(-t * (3.2 / max(0.05, duration)))
+                env = attack * decay
+            }
+            samples[i] = s * env * 0.65
+        }
+
+        // Belt to the braces: crossfade the tail into the head for loops, the same way the bed does.
+        // At integer cycles this changes nothing; at a frequency that does not divide evenly it is
+        // the difference between a seam and a click.
+        if looping {
+            let fade = min(frames / 8, Int(0.1 * sampleRate))
+            for i in 0..<fade {
+                let a = Float(i) / Float(fade)
+                samples[i] = samples[i] * a + samples[frames - fade + i] * (1 - a)
+            }
         }
 
         let data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
@@ -533,7 +568,7 @@ final class AudioEngine {
             soundAssetIdentifier: identifier + ".asset",
             mixerDefinition: mixer)
         sampler.playbackMode = looping ? .looping : .oneShot
-        sampler.setCalibrationMode(calibrationMode: .relativeSpl, level: 0)
+        sampler.setCalibrationMode(calibrationMode: .relativeSpl, level: level)
         try engine.assetRegistry.registerSoundEventAsset(rootNode: sampler, identifier: identifier)
     }
 

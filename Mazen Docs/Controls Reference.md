@@ -91,7 +91,8 @@ touches the keyboard verb.
 
 | key | what it does |
 |---|---|
-| `'` | **Arms** the portal-view capture. Nothing happens yet. |
+| `'` | **Arms** the portal-view capture. Nothing happens yet — the window title says it is armed. |
+| `;` | **Mute / unmute everything.** |
 
 The shot is taken **by itself, on the next portal arrival** — after the fade completes and the world
 has settled — and written to `PortalViews/<destination>--from--<origin>.png`. That file is then what

@@ -244,6 +244,10 @@ class GameViewController: NSViewController {
             gs.stepSlice(0.06)
         case 33:      // [ — scrub a held twist backward
             gs.stepSlice(-0.06)
+        case 41:      // ; — MUTE everything (debug). Showing the prototype to someone should not
+                      // require muting the whole app in System Settings.
+            let muted = renderer.audio?.toggleMute() ?? false
+            NSLog("[audio] %@", muted ? "MUTED" : "unmuted")
         case 39:      // ' (quote) — ARM the portal-view capture (debug). The shot is taken by itself
                       // on the next portal arrival, once the fade has finished: the view that belongs
                       // in a door is the one you get standing where the door puts you.

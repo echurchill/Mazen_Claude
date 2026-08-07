@@ -167,3 +167,36 @@ before Scene 3.
 - **No save system**, so nothing to persist yet. Audio state is per-session.
 - **Simulator/headless**: the test harness has no audio; keep all audio behind a protocol so the
   headless build and tests link without it.
+
+---
+
+## The thrum (2026-08-06) — three faults in one layer
+
+Eddie, demoing to someone: *"What is the thrum sound I hear everywhere… it was driving the person I
+was showing off the prototype to bonkers."* Flat regardless of position or world, an ~8 second
+cycle, half a second of quiet, then again.
+
+It was `ambience.undertone`: a 49 Hz looping tone, 8 seconds long. Every detail of the description
+matched a line of code.
+
+1. **The envelope.** `registerTone` applied `sustain`'s release ramp — the last 18% (1.4 s) fading to
+   silence — and then the loop restarted at the 12 ms attack. An envelope shapes a sound that ENDS;
+   on a loop it becomes a pulse, forever. Looping tones now get no envelope at all (the harmonics are
+   integer multiples, so the seam is phase-continuous) plus a crossfade for safety.
+2. **The scope.** Enabled by `outdoors && hasMoved`, with no scene in the condition — so Scene 1's
+   introduce-the-Builders layer played in the garden, the natural world, the galleries and all six
+   scenes, permanently. Now gated to `scene-1`, which is whose script it is.
+3. **The level.** Registered at relative SPL 0 — the level of a CUE, something you are meant to
+   notice — while its own comment says "almost below conscious notice". The bed runs at −12. It is
+   now −20.
+
+Any one of these alone would have been survivable. Together they made a 49 Hz pulse the loudest
+continuous thing in the game.
+
+**Also added: `;` mutes everything.** There was no way to silence the game short of muting the app in
+System Settings, which is a thing to discover mid-demo with an audience.
+
+**Lesson worth keeping:** the parameters that describe a one-shot (attack, sustain, decay) are
+actively wrong for a loop, and nothing in the type system says so. `registerTone(… sustain: true,
+looping: true)` compiled, sounded fine in isolation for eight seconds, and only revealed itself on
+the ninth.
