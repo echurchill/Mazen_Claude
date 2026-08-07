@@ -1079,7 +1079,10 @@ fragment float4 fragmentShader(
         // opening, which reads as the portal swallowing light that reaches it: the right story for a
         // hole in the world, and it costs one distance test against the portal light the renderer
         // already publishes every frame.
-        if (frame.portalLightRadius > 0.0) {
+        // …except the 3K TARGETING beam (styleSeed 6), whose entire job is to touch the portal and
+        // say "there". Fading that one is what made it stop short — the fix for the six broad beams
+        // crossing a door, applied to the one beam that is supposed to arrive at it.
+        if (frame.portalLightRadius > 0.0 && in.styleSeed != 6u) {
             float toPortal = distance(in.worldPosition, frame.portalLightPosition);
             glow *= smoothstep(frame.portalLightRadius * 0.45, frame.portalLightRadius * 1.05, toPortal);
             if (glow < 0.01) discard_fragment();

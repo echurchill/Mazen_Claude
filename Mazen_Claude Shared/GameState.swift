@@ -1084,7 +1084,15 @@ class GameState {
         // it touches what it points at, because its whole job is to say "there".
         if let exit = cubeModel.chosenExit {
             let m = cubeModel.restMatrix(face: exit.face, row: exit.row, col: exit.col)
-            let target = m.position
+            // Aim at the TOP of the portal disc, not at the tile underneath it (Eddie). The orb is
+            // at the chamber's centre and every surface's local up points inward, so this beam always
+            // arrives from ABOVE — ending it at the floor meant ending it at the disc's lowest point,
+            // behind the disc from the player's side, so it read as stopping short of what it was
+            // pointing at. The top of the circle is the first thing it reaches and the last place it
+            // can be seen touching.
+            let up = SIMD3<Float>(m.columns.2.x, m.columns.2.y, m.columns.2.z)
+            let discTop = TileMeshLibrary.portalDiscTop(floorY: worldScale.floorY)
+            let target = m.position + up * discTop
             let dir = simd_normalize(target - centre)
             out.append(ChamberEmitter(a: centre + dir * (orbR * 1.05), b: target,
                                       radius: reach * 0.004, glow: 1, isOrb: false))
