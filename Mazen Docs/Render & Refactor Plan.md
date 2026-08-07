@@ -159,3 +159,34 @@ lowest-priority split — do it when Scene 6's systems would otherwise pile into
 
 Rough shape: A1+A2 are the fps items and are small; B1/B2 are a day of careful moving; A3 is the
 one with real regression risk and goes behind its tests.
+
+---
+
+## Baseline before R2.6 (2026-08-06, Debug — Release is roughly 10x cheaper)
+
+Taken so tomorrow's per-world-uniform work has a "before" to be measured against, rather than a
+remembered impression. `MAZEN_BENCH=<world> MAZEN_BENCH_FRAMES=120`.
+
+| world | size | frame | cpu | of which asset pack | instances |
+|---|---|---|---|---|---|
+| scene-1 | 9³ | 19.38 ms (52 fps) | 18.96 | **12.10** | 4,008 of 10,500 |
+| scene-2 | 11³ | 25.81 ms (39 fps) | 25.48 | **22.15** | 5,994 of 19,029 |
+| scene-3 | 5³ | 10.14 ms (99 fps) | 1.14 | — | 770 |
+| scene-4 | 5³ | 10.36 ms (96 fps) | 6.42 | 5.83 | 1,951 |
+| scene-5 | 7³ | 10.10 ms (99 fps) | 3.26 | 2.22 | 343 |
+| garden | 11³ | 10.44 ms (96 fps) | 7.60 | 6.09 | 2,541 |
+| portal-hub | 15³ | 10.10 ms (99 fps) | 5.71 | 1.22 | 1,404 |
+
+**Read it this way.** Everything except scene-1 and scene-2 sits on the vsync floor with CPU to
+spare. The two that do not are dominated by ONE line — `pack`, the loop that writes every asset
+instance into the buffer: 12.1 of scene-1's 19.4 ms, and 22.2 of scene-2's 25.8 ms. Not the
+derivation (cached), not the placement (0.04 ms), not the draw calls. Just the per-frame copy of
+tens of thousands of instances, each carrying a 64-byte spin matrix identical to all the others.
+
+Which is precisely what R2.6 removes. The pack loop is the measurement to watch tomorrow, and
+scene-2 is the case to watch it on. Note also `5,994 drawn of 19,029` — two thirds culled, still
+written and re-tested every frame; R2.7's dirty-flagging is what stops that, and R2.6 is its
+prerequisite.
+
+*Debug caveat, as always: `-Onone` inflates CPU roughly 10x, so the Release equivalents are ~2 ms
+and ~2.5 ms. This is the pessimistic end, and it is the end Eddie plays in from Xcode.*
