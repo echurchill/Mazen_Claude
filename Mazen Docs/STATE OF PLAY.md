@@ -524,8 +524,17 @@ windows. Now that every other door is frameless, the hub's boxes read as a delib
 than as one door style among many. Every distinction is carried by `aoFactor`, the only shading
 channel a single-colour prop has.
 
-*Open:* the disc is 3.4 m because that matched the old arch opening; Eddie will judge the size in
-place now that it is everywhere.
+**APPROVED by Eddie (2026-08-06)**: disc size, rim thickness, sink depth and Scene 3's targeting
+beam all read right in place. The numbers that survived judgement: radius 0.09 (~3.4 m), swirl over
+the outer 10%, sunk 0.2 × radius, beam aimed at `PortalDisc.topAboveFloor`.
+
+The five wrong turns getting there are worth keeping, because four were the same misunderstanding:
+`roundness == 0` does not mean "leave this prop alone", it means "use `modelMatrix` verbatim and
+apply `spinMatrix` on top". A prop matrix is the FLAT-CUBE rest placement, so that put the portal in
+orbit; inflating instead squashed the circle into an oval; baking spin AND passing it turned the
+world twice. The right answer was `inflatedPlacement` + identity spin — the path every rigid
+imported asset already used. The contract was written in a comment directly above the code both
+times I got it wrong.
 
 ### The asset packs join the repo — the slice that loads, not the ballast (2026-08-05)
 Six packs, 515 MB, lived outside git pending an LFS decision, which meant a fresh clone compiled,
