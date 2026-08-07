@@ -673,12 +673,10 @@ fragment float4 fragmentShader(
         }
     } else if (in.materialID == 23) {
         // M20 (Eddie) — a portal's animated ENERGY field. Upgraded to a swirling VORTEX: technique
-        // ported from a BinBun Godot portal shader and reimplemented procedurally for Metal (no
-        // textures, no Godot) — a differential-rotation swirl (twisting harder toward the eye) that
-        // scrolls inward for a look-into-depth read, inside a soft ELLIPSE shape mask with a glowing
-        // rim. Tinted by baseColor, driven by frame.time, emissive; cutout edges (no alpha-blend pass).
-        // texCoord u across, v bottom→top. styleSeed: 0/1 = free-standing energy veil (an oval that
-        // cuts out cleanly), 2 = starfield/galaxy fill that seats inside a stone arch.
+        // The swirl technique came from a BinBun Godot portal shader, reimplemented procedurally for
+        // Metal (no textures, no Godot): differential rotation twisting harder toward the rim and
+        // scrolling inward, which is what makes an edge read as depth. It now rings a circular
+        // opening instead of filling an oval — see below. Emissive, cutout edges, no blend pass.
         float2 uv = in.texCoord;
         float tt = frame.time;
         float3 tint = in.color.rgb;
@@ -731,77 +729,6 @@ fragment float4 fragmentShader(
             // not a photograph hung in the air.
             color += tint * energy * 0.05 * (1.0 - rimT);
             lighting = float3(1.0);                    // emissive: an opening is its own light
-        }
-        if (false) {
-        } else if (in.styleSeed >= 3u) {
-            // FLAT STREAKS — the ELEVATOR portal (outer world ↔ temple): a rectangular energy curtain
-            // wedged between two columns. Streaks flow DOWN (style 3, the surface world descending to
-            // the temple) or UP (style 4, the temple rising back out). The TOP is a ragged, noisy edge
-            // (not rounded, not a hard line) so it reads as raw energy rather than a panel.
-            float dir = (in.styleSeed == 4u) ? -1.0 : 1.0;                 // 4 = up, 3 = down
-            // Per-layer desync (Eddie): the layer's opacity (0.55 front / 0.85 back) doubles as a phase
-            // seed, so the two layers evolve OUT of step — a flame-like interplay, not one doubled image.
-            float phase = in.discoveryAmount * 11.0;
-            float flow = fbm(float2(uv.x * 4.0, uv.y * 2.5 + dir * tt * 0.6 + phase), 3);
-            float streak = 0.5 + 0.5 * sin(uv.x * 8.0 + flow * 4.0 + dir * tt * 1.4 + phase);
-            float energy = pow(streak, 2.0) * (0.55 + 0.7 * flow);
-            float edge = smoothstep(0.0, 0.42, uv.x) * smoothstep(1.0, 0.58, uv.x);   // softer side falloff (Eddie)
-            float topN = fbm(float2(uv.x * 6.0 + phase, 11.3), 3);         // per-column top height
-            float topLimit = 0.70 + 0.22 * topN;                          // ragged top silhouette
-            if (uv.y > topLimit) discard_fragment();
-            float topFade = smoothstep(topLimit, topLimit - 0.22, uv.y);  // softer top dissolve
-            float soft = edge * topFade;                                  // 1 in the body → 0 toward every edge
-            float veil = energy * soft;
-            if (veil < 0.04) discard_fragment();                          // wispy tendrils
-            // Translucency via MOVING noise holes (a static screen-door grain read cheesy). Grade it by
-            // `soft` so the edges get MORE transparent — a gradient of translucency that dissolves the
-            // layer into its surroundings rather than a hard cut-off (Eddie).
-            float holes = valueNoise(float2(uv.x * 11.0, uv.y * 7.0 + dir * tt * 1.7) + flow);
-            if (holes > in.discoveryAmount * (0.18 + 0.82 * soft)) discard_fragment();
-            // Bright motes racing along the flow (fade at the edges with `soft`).
-            float mote = smoothstep(0.80, 0.95, valueNoise(float2(uv.x * 6.0 + phase, uv.y * 4.5 + dir * tt * 1.8)));
-            color = tint * (0.5 + 1.6 * veil) + float3(0.75, 0.88, 1.0) * mote * soft * 1.4;
-            lighting = float3(1.0);
-        } else {
-        bool arch = (in.styleSeed == 2u);
-        float2 d = uv - 0.5;
-        // Tall ellipse: `ell` is 0 at the eye, 1 on the boundary. The arch fill is fuller/softer.
-        float2 axes = arch ? float2(0.52, 0.52) : float2(0.42, 0.5);
-        float ell = length(d / axes);
-        // Seam-free swirl: rotate the sample coords by a radius-dependent angle (differential rotation
-        // = a vortex), spinning over time, then read fbm in the twisted frame. A second sine lays fine
-        // filaments over it. Scrolling the radius inward reads as depth pulling toward the centre.
-        float rot = tt * 0.5 + (1.25 - ell) * 3.6;
-        float cs = cos(rot), sn = sin(rot);
-        float2 rv = float2(d.x * cs - d.y * sn, d.x * sn + d.y * cs);
-        float swirl = fbm(rv * 7.0 + float2(0.0, -tt * 0.25), 4);
-        float filament = 0.5 + 0.5 * sin(swirl * 6.2831853 + ell * 9.0 - tt * 1.4);
-        float energy = mix(swirl, filament, 0.55);
-        float rim = smoothstep(0.80, 1.0, ell) * smoothstep(1.15, 0.98, ell);   // glowing boundary ring
-        if (arch) {
-            // Fill the WHOLE arch opening to its SHAPE (Eddie): straight jambs up to a springline, then
-            // a round arch to the apex. The field is also made taller (heightScale, set in SceneBuilder)
-            // so it reaches up into the stone arch instead of stopping short. Swirl spins from the centre.
-            // Leave the fill RECTANGULAR (Eddie: don't trim it to the arch shape), with soft gradient
-            // edges — full at the base, fading at the sides and top so it seats inside the opening.
-            float sideF = smoothstep(0.5, 0.34, abs(uv.x - 0.5));
-            float topF  = smoothstep(1.0, 0.90, uv.y);   // fade only the very top so more of it shows
-            float fill = sideF * topF;
-            float rimR = smoothstep(0.35, 0.05, fill) * smoothstep(0.0, 0.05, fill);   // glow near the border
-            // Our original volumetric clouds (above), in a soft rectangle.
-            float3 storm = volumetricClouds(uv, tt);
-            color = storm * fill + tint * rimR * 0.5;
-            lighting = float3(1.0);
-            if (fill < 0.02) discard_fragment();
-        } else {
-            if (ell > 1.02) discard_fragment();                                 // outside the oval → clear
-            float core = smoothstep(1.0, 0.12, ell);                            // bright toward the eye
-            float v = energy * core;
-            color = tint * (0.32 + 1.35 * v) + float3(0.68, 0.78, 1.0) * pow(v, 3.0) * 0.7;
-            color += tint * rim * 1.7;                                          // glowing rim
-            if (v + rim < 0.09) discard_fragment();                            // wispy filaments, not a disc
-            lighting = float3(1.0);
-        }
         }
     } else if (in.materialID == 24) {
         // M20 (Eddie) — a portal SIGNPOST. The board FACE (texCoord u >= 0) shows the rendered word(s)
