@@ -630,18 +630,22 @@ final class SceneBuilder {
                             }
                             else if prop.kind == .portalField && prop.alignAnim > 0 { discovery = prop.alignAnim }
                             else { discovery = 1.0 }
-                            // THE VEIL DOES NOT INFLATE. Every other tile-mesh prop has its vertices
-                            // pushed onto the curved shell by the shader, which is right for things
-                            // that grow out of the ground — and wrong for a flat pane standing in a
-                            // stone arch. On Scene 1 (roundness 1.0) a 3.4 m tall quad bowed backward
-                            // while the arch, a RIGID imported asset, stayed flat: the view ended up
-                            // "planted behind the arch and leaning away from it" (Eddie). Rigid, like
-                            // the frame it fills — its anchor still rides the curve, its surface does
-                            // not bend.
-                            let propRoundness: Float = prop.kind == .portalField ? 0 : roundness
+                            // THE DISC INFLATES LIKE EVERYTHING ELSE. I tried making it rigid
+                            // (roundness 0) to stop it bowing against the stone arch, and it flew
+                            // into orbit: in this engine `roundness == 0` means the shader uses
+                            // `modelMatrix` as-is, and a prop matrix is the FLAT-CUBE rest placement.
+                            // On a rounded world the flat cube stands well outside the sphere
+                            // everywhere except a face's centre, so the portal hung in the sky above
+                            // the tile it belonged to (Eddie's third screenshot, with a green line
+                            // drawn to where it should have been).
+                            //
+                            // Being rigid was only ever needed so the pane would not disagree with
+                            // the arch around it. There is no arch now. A 3.4 m disc bows by a few
+                            // centimetres across a planet this size, and nothing is left for it to
+                            // disagree with.
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
                                 materialID: materialID, tileID: 0, discoveryAmount: discovery, styleSeed: propStyleSeed,
-                                spinMatrix: spin, roundness: propRoundness, invHalfExtent: invHalf, reliefAmplitude: relief,
+                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief,
                                 heightScale: heightScale, heightPivot: heightPivot)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
                         }
