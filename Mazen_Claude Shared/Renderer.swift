@@ -505,22 +505,6 @@ class Renderer: NSObject, MTKViewDelegate {
         // M12: the imported assets — decoration props + the modular house kit (AssetRegistry, R2.8).
         let assets = AssetRegistry.loadAll(device: device)
         self.importedProps = assets.props
-        // THE ARCH, MEASURED AT RUNTIME. The veil's size was hand-derived from the .obj and did not
-        // match what shipped — so print what the arch actually becomes in world units, next to what
-        // the veil actually is. A number you can read beats a number you worked out.
-        if let ai = assets.props.firstIndex(where: { $0.name == "Ruins Wall_ArchRound_Overgrown" }) {
-            let m = assets.props[ai].mesh
-            let maxDim = max(m.size.x, max(m.size.y, m.size.z))
-            let fs = (maxDim > 0 ? assets.props[ai].target / maxDim : 1) * 0.24   // stampPortalFrames
-            let metres: Float = 1.7 / 0.09
-            // Aperture fractions measured by rasterising the model: 2.90/4.004 wide, crown 3.55/3.997.
-            let openW: Float = 2.90 * fs * metres
-            let openH: Float = 3.55 * fs * metres
-            let veilW: Float = 2 * TileMeshLibrary.portalFieldHalfWidth * metres
-            let veilH: Float = TileMeshLibrary.portalFieldHeight * metres
-            NSLog("[portal] arch mesh %.3f x %.3f, scale %.5f | opening %.2f m x %.2f m | veil %.2f m x %.2f m",
-                  m.size.x, m.size.y, fs, openW, openH, veilW, veilH)
-        }
         let loadedProps = assets.props
 
         self.houseAssembly = assets.house

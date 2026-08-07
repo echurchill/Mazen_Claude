@@ -40,7 +40,6 @@ extension Renderer {
         case "temple-interior":
             w = GameState(size: 5, name: dest, interior: true, stamp: .templeInterior)
             // M20 — the return portal is an UP elevator; add its flanking columns (imported).
-            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"), archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
         case "natural":
             // M18 Phase 1 open-field testbed (T key) — size 7 gives a real horizon walk.
             w = GameState(size: 7, name: dest, stamp: .natural)
@@ -65,7 +64,6 @@ extension Renderer {
             // M20 — a stone path marking the correct route between the puzzle elements (tapers off).
             w.cubeModel.stampGardenPath(pathStones())
             // M20 — the temple door is a DOWN elevator; add its flanking columns (imported).
-            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"), archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
         case "gallery":
             // M20 dev tool — procedural prop/glyph catalog (Y key) + the natural-wall
             // prototype east of it. Size 25 to fit the catalog. Stamp partial-reveals.
@@ -114,15 +112,11 @@ extension Renderer {
             w = GameState(size: PrologueSize.sceneFive, name: dest, stamp: .sceneFive)
             // Scene 4's world hangs overhead "in the persistent configuration in which the player
             // left it" — the same registry edge that hangs Scene 2 over Scene 4.
-            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
-                                          archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
         case "scene-3":
             // Prologue Scene 3 — the INTERIOR of Scene 2's world. No sky, no celestials, no
             // counterpart overhead; the orb at the centre is the only thing to navigate by.
             w = GameState(size: PrologueSize.sceneThree, name: dest, interior: true, stamp: .sceneThree)
             w.twistEnabled = false          // "player twist access: disabled"
-            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
-                                          archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
         case "scene-1":
             // Prologue Scene 1 — the opening. No lock, no twist: "initial twist access: disabled or
             // unexplained". The verb is not withheld as a puzzle here, it simply does not exist yet.
@@ -139,8 +133,6 @@ extension Renderer {
             w.time = w.celestialSystem.sunPeriod * 0.765
             w.cubeModel.stampGardenVegetation(gardenFlora())
             wallDressingPalette = wallFlora()
-            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
-                                          archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
         case "scene-4":
             // Prologue Scene 4 — the player is GRANTED the twist here. Not on arrival, though: the
             // script hands it over only once the VESSEL has demonstrated it ("after the vessel is
@@ -150,8 +142,6 @@ extension Renderer {
             w.twistEnabled = false
             w.cubeModel.stampGardenVegetation(gardenFlora())
             wallDressingPalette = wallFlora()
-            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
-                                          archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
         case "scene-2":
             // Prologue Scene 2 — "The Four Corners". The twist is the puzzle's reward, not a
             // tool the player owns yet, so the player's own Q/E stays withheld here.
@@ -162,8 +152,6 @@ extension Renderer {
             // assembly stands on, because that is the underside the player walks out to read.
             w.cubeModel.stampGardenVegetation(gardenFlora())
             wallDressingPalette = wallFlora()
-            w.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
-                                          archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
             // LAST: the underside clears the world's dressing off its face before laying machinery,
             // so it has to run after everything that dresses.
             w.cubeModel.stampSceneSixUnderside(undersideMachinery())

@@ -152,7 +152,6 @@ extension CubeModel {
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .portal, subRow: 1, subCol: 1, facing: .s, state: 10, transition: .push))
             styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .s, fieldStyle: 2))
-            cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .s, state: 2))
             // "This vessel is the largest encountered so far. Its uppermost layer turns slowly

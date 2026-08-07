@@ -174,8 +174,6 @@ extension Renderer {
         // the first frame the registry is ready. (The old demo-decoration stamp is retired with the
         // demo overworld — the home is pastoral, not the test hub.)
         if needsDecorativeStamp, let home = worldStack.first, !importedProps.isEmpty {
-            home.cubeModel.stampPortalFrames(column: namedProp("Dungeons Column"),
-                                             archRuins: namedProp("Ruins Wall_ArchRound_Overgrown"))
             needsDecorativeStamp = false
         }
         guard !importedProps.isEmpty || !houseAssembly.isEmpty else { return }

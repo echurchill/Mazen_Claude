@@ -386,9 +386,6 @@ final class SceneBuilder {
                             // in modelMatrix corrupts the curved-world footprint/height split and floated
                             // the flush cap on the garden (Eddie).
                             var heightScale: Float = 1, heightPivot: Float = 0
-                            /// Set only by a captured portal VIEW: the veil quad's width/height, so the shader can
-                            /// cover-fit a square image into a non-square opening.
-                            var portalViewAspect: Float? = nil
                             if prop.kind == .alignmentCylinder || prop.kind == .switchCap || prop.kind == .latch {
                                 heightPivot = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
                                 if prop.kind == .alignmentCylinder {
@@ -537,45 +534,24 @@ final class SceneBuilder {
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .portalField {
-                                // A CAPTURED VIEW beats the procedural vortex when we have one for
-                                // this door's route (style 5; the slice rides the high bits, the same
-                                // packing material 36 uses for its dendrites). The destination comes
-                                // from the `.portal` prop sharing this tile — the field is the glass,
-                                // the portal is the door that knows where it goes.
+                                // ONE PORTAL STYLE, EVERYWHERE (Eddie, 2026-08-06). The blue veil,
+                                // the pink veil, the starfield-in-an-arch and the two elevator
+                                // curtains are gone: every door is the same circular opening, and
+                                // `prop.state` no longer selects a look. What varies is only whether
+                                // we have a captured view of where it leads.
+                                materialID = 23
                                 let viewSlice = facelet.props.first(where: { $0.kind == .portal })
                                     .flatMap { Self.portalViewSlice(destinationID: $0.state, world: gameState) }
-                                // M20 (Eddie) — animated energy field (material 23). `state` = style
-                                // (0 blue veil, 1 pink veil, 2 starfield); the tint per style rides
-                                // baseColor. Emissive + time-driven; the shader wisps its own edges.
-                                materialID = 23
                                 if let slice = viewSlice {
                                     propStyleSeed = 5 | (UInt32(slice) << 8)
-                                    color = SIMD4(1, 1, 1, 1)                  // the capture carries its own colour
-                                    // The quad is TALLER than wide (~3.2 m × 4 m) and the capture is
-                                    // square, so a straight 1:1 sample squashes it. Hand the shader
-                                    // the aspect and let it cover-fit — `discoveryAmount` is unused
-                                    // by this style, so it carries the number.
-                                    let hs = prop.extraScale != 1 ? prop.extraScale : 1
-                                    portalViewAspect = TileMeshLibrary.portalFieldAspect / hs
                                 } else {
-                                propStyleSeed = UInt32(max(0, prop.state))
-                                switch prop.state {
-                                case 1:  color = SIMD4(1.0, 0.42, 0.66, 1.0)   // pink/magenta veil
-                                case 2:  color = SIMD4(0.42, 0.34, 0.78, 1.0)  // starfield nebula (violet)
-                                case 3, 4: color = SIMD4(0.36, 0.78, 0.95, 1.0) // elevator streaks (cyan) — 3 down, 4 up
-                                default: color = SIMD4(0.40, 0.56, 1.0, 1.0)   // blue/purple veil
+                                    propStyleSeed = 0            // no capture yet: swirl fills the disc
                                 }
-                                }
-                                // A portal field can be stretched taller than its mesh (extraScale) so
-                                // e.g. the arch fill reaches the apex; base stays pinned at the floor.
-                                if prop.extraScale != 1 {
-                                    heightScale = prop.extraScale
-                                    heightPivot = model.worldScale.floorY
-                                }
+                                color = SIMD4(0.42, 0.55, 1.0, 1.0)   // the swirl's tint; the view carries its own
                             }
-                            if prop.kind == .portalRing {
-                                materialID = 12                                 // emissive glow ring
-                            }
+                            // The glowing ground ring is RETIRED (Eddie): the disc sinks 10% of its
+                            // diameter into the floor, which grounds it without a second object.
+                            if prop.kind == .portalRing { continue }
                             if prop.kind == .dustMote {
                                 // Falls as it dies: heightScale about the FLOOR pivot lowers the mote
                                 // from joint height to the ground over its life, and discoveryAmount
@@ -631,8 +607,7 @@ final class SceneBuilder {
                             // discoveryAmount doubles as the portal-field OPACITY (material 23 screen-door
                             // dither) for the translucent elevator layers; alignAnim==0 ⇒ fully opaque.
                             let discovery: Float
-                            if let a = portalViewAspect { discovery = a }
-                            else if prop.kind == .alignmentCylinder { discovery = prop.alignAnim }
+                            if prop.kind == .alignmentCylinder { discovery = prop.alignAnim }
                             else if prop.kind == .dustMote { discovery = max(0, min(1, prop.anim)) }
                             else if prop.kind == .layeredVessel { discovery = max(0, min(1, prop.anim / 3)) }
                             else if prop.kind == .obelisk && prop.anim > 0 { discovery = prop.anim }

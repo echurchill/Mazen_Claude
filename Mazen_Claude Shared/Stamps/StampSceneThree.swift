@@ -207,7 +207,6 @@ extension CubeModel {
         cubies[ci].facelets[fi].props.append(
             Prop(kind: .portal, subRow: 1, subCol: 1, facing: .n, state: destinationID, transition: .push))
         styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .n, fieldStyle: 2))
-        cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
         // "Less like a doorway and more like an aperture" — the field at ~0.6 of a door.
         cubies[ci].facelets[fi].props.append(
             Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .n, state: 2, extraScale: 0.6))

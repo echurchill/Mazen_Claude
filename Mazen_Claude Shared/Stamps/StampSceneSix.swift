@@ -148,7 +148,6 @@ extension CubeModel {
                 cubies[ci].facelets[fi].props.append(
                     Prop(kind: .portal, subRow: 1, subCol: 1, facing: .e, state: 13, transition: .push))
                 styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e, fieldStyle: 3))
-                cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
                 cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .e, state: 3))
                 sealedPortalCubies.insert(ci)     // dark until the slab has turned
             } else {
@@ -219,7 +218,6 @@ extension CubeModel {
         cubies[ci].facelets[fi].props.append(
             Prop(kind: .portal, subRow: 1, subCol: 1, facing: .e, state: 13, transition: .push))
         styledPortals.append(StyledPortal(ci: ci, fi: fi, facing: .e, fieldStyle: 3))
-        cubies[ci].facelets[fi].props.append(Prop(kind: .portalRing, subRow: 1, subCol: 1))
         cubies[ci].facelets[fi].props.append(Prop(kind: .portalField, subRow: 1, subCol: 1, facing: .e, state: 3))
         undersideHatch = (.negativeX, c, n - 2)
         markTopologyChanged()

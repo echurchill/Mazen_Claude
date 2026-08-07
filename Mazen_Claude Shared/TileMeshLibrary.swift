@@ -209,7 +209,7 @@ class TileMeshLibrary {
         propMeshes[PropKind.portalLamp.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalLampStart, indexCount: allIndices.count - portalLampStart)
 
         let portalFieldStart = allIndices.count
-        Self.addPortalField(to: &allVerts, indices: &allIndices, ws: ws)
+        Self.addPortalDisc(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.portalField.rawValue] = TileMesh(vertexOffset: 0, indexOffset: portalFieldStart, indexCount: allIndices.count - portalFieldStart)
 
         let portalRingStart = allIndices.count
@@ -861,80 +861,132 @@ class TileMeshLibrary {
     /// A portal marker (M11.2) — a TARDIS-style police box: a tall blue body with a tented (pyramid)
     /// roof, taller than the hedges so it's easy to spot. A separate `portalLamp` prop sits at the
     /// apex and flashes. Interacting (F) or stepping onto its tile switches worlds. Wound CCW-outward.
+    /// The police box — now that every OTHER door is a frameless disc, this one is deliberately an
+    /// object: the dev hub's boxes are a joke the game is in on, and the prologue's red DARSIT doors
+    /// are the same joke wearing a different coat. Eddie asked for more of the real thing, so the
+    /// silhouette earns its reference: corner posts, a stepped roof, the sign band, and windows in
+    /// the top quarter of every face.
+    ///
+    /// One baseColor for the whole prop, so every distinction here is carried by `aoFactor` — posts
+    /// darker than panels, the band lighter, the windows brightest. That is the only shading channel
+    /// a single-colour prop has, and it turns out to be enough for a shape this familiar.
     private static func addPortal(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
-        let bodyTop: Float = 0.40   // top of the box body (above the 0.24 hedges)
-        let roofTop: Float = 0.50   // apex of the tented roof
-        let h: Float = 0.11         // body half-width (squarish police-box footprint)
-        func ring(_ z: Float) -> [SIMD3<Float>] {
-            [SIMD3(-h, -h, z), SIMD3(h, -h, z), SIMD3(h, h, z), SIMD3(-h, h, z)]
+        let bodyTop: Float = 0.40       // top of the box body (above the 0.24 hedges)
+        let bandTop: Float = 0.425      // the POLICE BOX sign band
+        let roof1: Float = 0.445        // first roof slab
+        let roof2: Float = 0.462        // second, narrower slab
+        let roofTop: Float = 0.50       // apex of the tented roof
+        let h: Float = 0.11             // body half-width (squarish police-box footprint)
+        let postW: Float = 0.016        // corner post thickness
+        let proud: Float = 0.004        // how far posts/band/panes stand off the body
+
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ ao: Float) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
         }
-        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
-            let ao = 0.55 + 0.45 * max(0, min(1, (p.z - z0) / roofTop))   // slightly darker toward the base
-            return MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
-        }
-        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>) {
+        func quad(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>, _ ao: Float) {
             let n = normalize(cross(b - a, d - a))
             let base = UInt32(verts.count)
-            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n), vtx(d, n)])
+            verts.append(contentsOf: [vtx(a, n, ao), vtx(b, n, ao), vtx(c, n, ao), vtx(d, n, ao)])
             indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
         }
-        func tri(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>) {
+        func tri(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ ao: Float) {
             let n = normalize(cross(b - a, c - a))
             let base = UInt32(verts.count)
-            verts.append(contentsOf: [vtx(a, n), vtx(b, n), vtx(c, n)])
+            verts.append(contentsOf: [vtx(a, n, ao), vtx(b, n, ao), vtx(c, n, ao)])
             indices.append(contentsOf: [base+0, base+1, base+2])
         }
-        let b = ring(z0), t = ring(bodyTop)
-        for i in 0..<4 { let j = (i + 1) % 4; quad(b[i], b[j], t[j], t[i]) }   // body sides
+        /// A box given by half-extents and a z range — posts, slabs and the band are all boxes.
+        func box(hx: Float, hy: Float, z0 zA: Float, z1 zB: Float, cx: Float = 0, cy: Float = 0, ao: Float) {
+            let p = [SIMD3<Float>(cx-hx, cy-hy, zA), SIMD3(cx+hx, cy-hy, zA),
+                     SIMD3(cx+hx, cy+hy, zA), SIMD3(cx-hx, cy+hy, zA)]
+            let q = p.map { SIMD3($0.x, $0.y, zB) }
+            for i in 0..<4 { let j = (i + 1) % 4; quad(p[i], p[j], q[j], q[i], ao) }
+            quad(q[0], q[1], q[2], q[3], ao * 1.05)     // lid
+        }
+
+        // Body panels, then the four corner posts standing proud of them.
+        box(hx: h, hy: h, z0: z0, z1: bodyTop, ao: 0.62)
+        for sx in [Float(-1), 1] {
+            for sy in [Float(-1), 1] {
+                box(hx: postW, hy: postW, z0: z0, z1: bandTop,
+                    cx: sx * (h - postW + proud), cy: sy * (h - postW + proud), ao: 0.42)
+            }
+        }
+        // The sign band, and the two roof slabs stepping in toward the apex.
+        box(hx: h + proud, hy: h + proud, z0: bodyTop, z1: bandTop, ao: 0.92)
+        box(hx: h + 0.008, hy: h + 0.008, z0: bandTop, z1: roof1, ao: 0.70)
+        box(hx: h - 0.004, hy: h - 0.004, z0: roof1, z1: roof2, ao: 0.60)
+
+        // Windows: four panes in the top quarter of each face, standing just proud so they catch
+        // the light as separate surfaces rather than reading as paint.
+        let winB: Float = 0.30, winT: Float = 0.375
+        for face in 0..<4 {
+            let mid = (winB + winT) * 0.5
+            for (i, uOff) in [Float(-0.052), -0.018, 0.018, 0.052].enumerated() {
+                for (zA, zB) in [(winB, mid - 0.003), (mid + 0.003, winT)] {
+                    let w: Float = 0.014
+                    let ao: Float = 1.0 - Float(i % 2) * 0.06     // faint pane-to-pane variation
+                    switch face {
+                    case 0: box(hx: w, hy: proud, z0: zA, z1: zB, cx: uOff, cy: -(h + proma()), ao: ao)
+                    case 1: box(hx: proud, hy: w, z0: zA, z1: zB, cx:  (h + proma()), cy: uOff, ao: ao)
+                    case 2: box(hx: w, hy: proud, z0: zA, z1: zB, cx: uOff, cy:  (h + proma()), ao: ao)
+                    default: box(hx: proud, hy: w, z0: zA, z1: zB, cx: -(h + proma()), cy: uOff, ao: ao)
+                    }
+                }
+            }
+        }
+
+        // The tented pyramid, from the narrower upper slab.
+        let ht = h - 0.004
+        let t = [SIMD3<Float>(-ht, -ht, roof2), SIMD3(ht, -ht, roof2), SIMD3(ht, ht, roof2), SIMD3(-ht, ht, roof2)]
         let apex = SIMD3<Float>(0, 0, roofTop)
-        for i in 0..<4 { let j = (i + 1) % 4; tri(t[i], t[j], apex) }          // tented pyramid roof
+        for i in 0..<4 { let j = (i + 1) % 4; tri(t[i], t[j], apex, 0.55) }
     }
 
-    /// M20 (Eddie) — a portal's ENERGY VEIL: a vertical, double-sided quad standing in a doorway,
-    /// shaded by the animated portal material (23) which reads `texCoord` (u across, v bottom→top) and
-    /// `frame.time`. Built facing −Y so `Prop.facing` aims it at the player; `state`/styleSeed picks the
-    /// look (shimmer vs starfield). Double-sided so it reads from both approaches without back-face culls.
-    /// The veil quad's proportions, published so the shader can cover-fit a SQUARE capture into it
-    /// without guessing. Kept beside the geometry that defines them, or the two drift.
-    ///
-    /// MEASURED FROM THE ARCH, not guessed (2026-08-06). The old 3.2 m × 4.0 m was a plausible
-    /// "grand doorway" that happened to be 14% WIDER than the hole it fills, so the view spilled
-    /// over the jambs onto the stone (Eddie's second screenshot). Rasterising
-    /// `Ruins Wall_ArchRound_Overgrown.obj` and profiling its aperture by height gives, in model
-    /// units: opening 2.90 wide, straight sides to y≈2.60, crown closing at y≈3.55. At the scale
-    /// the arch is placed (fit-to-0.85 over its 4.004 max dimension, × 0.24 extraScale = 0.05095),
-    /// that is 0.1478 × 0.1809 world units. A little under it here so the veil sits INSIDE the
-    /// stone rather than kissing its edge — the model is deliberately ragged, and the opening
-    /// wanders by a few centimetres up its own height.
-    static let portalFieldHalfWidth: Float = 0.0720   // ~2.72 m across (opening ~2.79 m)
-    static let portalFieldHeight: Float = 0.1780      // ~3.36 m tall  (crown  ~3.42 m)
-    /// Where the straight jambs give way to the round arch, as a fraction of the height — measured
-    /// at 2.60/3.55 of the model. The shader's aperture mask uses it so the veil's own silhouette
-    /// follows the stone instead of approximating it.
-    static let portalFieldSpringline: Float = 0.73
-    static var portalFieldAspect: Float { (2 * portalFieldHalfWidth) / portalFieldHeight }
+    /// How far a window pane stands off the body. Named rather than inlined because it appears eight
+    /// times and a mismatch shows up as z-fighting rather than as a wrong number.
+    private static func proma() -> Float { 0.002 }
 
-    private static func addPortalField(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
-        let z0 = ws.floorY
-        // Eddie: portals are ≤ 4 m tall. 1 m ≈ 0.0529 world units (eyeHeight 0.09u ≈ 1.7 m), so 4 m ≈
-        // 0.212u; width ~2.6 m for a grand-doorway proportion. (Arch fill re-shapes this via its mask.)
-        let hW = portalFieldHalfWidth  // ~3.2 m
-        let hgt = portalFieldHeight    // ~4 m
-        let bl = SIMD3<Float>(-hW, 0, z0), br = SIMD3<Float>(hW, 0, z0)
-        let tr = SIMD3<Float>(hW, 0, z0 + hgt), tl = SIMD3<Float>(-hW, 0, z0 + hgt)
-        func v(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ u: Float, _ w: Float) -> MazeVertexSwift {
-            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(u, w), aoFactor: 1.0)
+    /// THE PORTAL DISC. Every door in the game is now the same object: a vertical circle showing
+    /// what is on the other side, ringed by a wormhole swirl, and attached to nothing.
+    ///
+    /// Eddie's reasoning (2026-08-06) is better than the arches were: these openings are projections
+    /// the Builders make, so *"why would there be stonework?"* A masonry arch is a human idea about
+    /// doors — and so is up and down, which makes Scene 2→3→4 "descending" our metaphor rather than
+    /// theirs. A circular aperture attached to no architecture says "something was opened here"
+    /// without claiming anyone built a wall around it.
+    ///
+    /// Sunk 10% of its diameter below the floor so it reads as planted rather than hovering: the job
+    /// the glowing ground ring used to do, done by the shape itself.
+    static let portalDiscRadius: Float = 0.09        // ~3.4 m across
+    static let portalDiscSink: Float = 0.2           // × radius = 10% of the diameter, below the floor
+
+    private static func addPortalDisc(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
+        let r = portalDiscRadius
+        let cz = ws.floorY - portalDiscSink * r + r   // centre, so the bottom sits under the ground
+        let seg = 64
+        // texCoord spans the disc's BOUNDING SQUARE, so the shader reads radius as
+        // `length(uv - 0.5) * 2`, and a square capture maps 1:1 — a circle is the one shape whose
+        // bounding box needs no cover-fit at all. (The rectangular veil needed one, and I got the
+        // axis backwards; the geometry choice deletes the question.)
+        func v(_ x: Float, _ z: Float, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            MazeVertexSwift(position: SIMD3(x, 0, z), normal: n,
+                            texCoord: SIMD2(0.5 + x / (2 * r), 0.5 + (z - cz) / (2 * r)), aoFactor: 1.0)
         }
-        func face(_ n: SIMD3<Float>, _ flip: Bool) {
-            let base = UInt32(verts.count)
-            verts.append(contentsOf: [v(bl, n, flip ? 1 : 0, 0), v(br, n, flip ? 0 : 1, 0),
-                                      v(tr, n, flip ? 0 : 1, 1), v(tl, n, flip ? 1 : 0, 1)])
-            if flip { indices.append(contentsOf: [base+0, base+2, base+1, base+0, base+3, base+2]) }
-            else    { indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3]) }
+        for (n, flip) in [(SIMD3<Float>(0, -1, 0), false), (SIMD3<Float>(0, 1, 0), true)] {
+            let centre = UInt32(verts.count)
+            verts.append(v(0, cz, n))
+            for i in 0...seg {
+                let a = Float(i) / Float(seg) * 2 * .pi
+                verts.append(v(cos(a) * r, cz + sin(a) * r, n))
+            }
+            for i in 0..<seg {
+                let a = centre + 1 + UInt32(i), b = centre + 2 + UInt32(i)
+                if flip { indices.append(contentsOf: [centre, b, a]) }
+                else    { indices.append(contentsOf: [centre, a, b]) }
+            }
         }
-        face(SIMD3(0, -1, 0), false)   // front (faces −Y toward the player)
-        face(SIMD3(0,  1, 0), true)    // back
     }
 
     /// M20 (Eddie) — a wooden SIGNPOST naming a portal: a square post + a square board whose FRONT

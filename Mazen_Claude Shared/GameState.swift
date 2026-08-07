@@ -990,10 +990,10 @@ class GameState {
         var veil = Prop(kind: .portalField, subRow: 1, subCol: 1, facing: player.facing.opposite, state: 2)
         veil.alignAnim = 1                       // opacity; ticked to 0, then removed
         veil.anim = 1
-        var ring = Prop(kind: .portalRing, subRow: 1, subCol: 1)
-        ring.anim = 1
+        // No ring: the disc grounds itself now. `anim = 1` still MARKS this as the arrival
+        // doorway's own, so the cleanup below cannot sweep the scene's real exit portal — that bug
+        // was caught in review once and the marker is the only thing preventing it.
         cubeModel.cubies[ci].facelets[fi].props.append(veil)
-        cubeModel.cubies[ci].facelets[fi].props.append(ring)
         arrivalDoorwayTile = (ci, fi)
         arrivalDoorwayClosing = 1
         cubeModel.markTopologyChanged()

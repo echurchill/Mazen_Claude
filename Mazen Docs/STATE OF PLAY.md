@@ -504,6 +504,29 @@ Small and unblocking, good filler while something compiles: Scene 1's wall-absor
 and reflecting vessel (1E), Scene 2's post-rotation silence beat (2H), Scene 3's authored dead ends
 (3H) and nebula parallax (3L), Scene 4's second vessel marking and 4B shape-as-meaning.
 
+### Portals became what they are, not what a door looks like (2026-08-06)
+Eddie: *"Given these are 4d projections that the Builders are creating for us, why would there be
+stonework? Even the concept of down/up (scene 2 to 3 to 4) doesn't even make sense — up/down would
+likely be foreign to the Builders."* Right on both counts, and it retired a lot of code.
+
+**Every portal in the game is now one object:** a vertical circular opening ~3.4 m across, sunk 10%
+of its diameter into the floor so it reads as planted, showing the captured view of where it leads
+with parallax, ringed by an animated wormhole swirl over the outer 10%. Nothing frames it. Gone: the
+Ruins arch, the Dungeons columns, the two elevator curtains, the starfield-in-an-arch, the blue and
+pink veils, and the glowing ground ring — the disc grounds itself.
+
+A circle also deleted a bug class. The rectangle needed a cover-fit to map a square capture into a
+non-square opening, and I got the axis backwards; a circle's bounding box is square, so the question
+no longer exists.
+
+**The police box stays, and got MORE detail** — corner posts, stepped roof, sign band, sixteen
+windows. Now that every other door is frameless, the hub's boxes read as a deliberate joke rather
+than as one door style among many. Every distinction is carried by `aoFactor`, the only shading
+channel a single-colour prop has.
+
+*Open:* the disc is 3.4 m because that matched the old arch opening; Eddie will judge the size in
+place now that it is everywhere.
+
 ### The asset packs join the repo — the slice that loads, not the ballast (2026-08-05)
 Six packs, 515 MB, lived outside git pending an LFS decision, which meant a fresh clone compiled,
 passed all 249,949 checks, and then came up with no galleries, an unplanted garden and a bare

@@ -682,80 +682,57 @@ fragment float4 fragmentShader(
         float2 uv = in.texCoord;
         float tt = frame.time;
         float3 tint = in.color.rgb;
-        if ((in.styleSeed & 0xFFu) == 5u) {
-            // A CAPTURED VIEW — what is actually on the other side of this door, photographed from
-            // the arrival point by the in-game capture (see `PortalViews`). Style 5; the array slice
-            // rides the high bits.
+        {
+            // THE PORTAL. One shape for every door in the game: a circular opening onto the place it
+            // leads, ringed by a wormhole swirl, attached to no architecture at all — see
+            // `TileMeshLibrary.addPortalDisc` for why the stonework went.
             //
-            // PARALLAX is what makes it a window instead of a poster. A flat image pinned in an arch
-            // betrays itself the instant the player strafes: the scene beyond should shift against
-            // the frame, and it does not. So the sample point is pushed by the view direction in the
-            // portal's own tangent frame — look from the left and you see a little further right,
-            // exactly as a real opening behaves. It is a cheat: there is no depth here, so the whole
-            // image shifts as one plane rather than near things moving more than far ones, and
-            // pressing your face to the glass will not hold up. At approach distance it reads.
+            // `styleSeed` low byte is 5 when a captured VIEW exists; the slice rides the high bits.
+            // Without one the swirl simply fills the disc, so a route nobody has photographed is a
+            // wormhole rather than a hole in the world.
             uint slice = (in.styleSeed >> 8) & 0xFFFFu;
+            bool hasView = (in.styleSeed & 0xFFu) == 5u;
+
+            float2 d2 = uv - 0.5;
+            float rad = length(d2) * 2.0;              // 0 centre … 1 rim
+            if (rad > 1.0) discard_fragment();
+            float ang = atan2(d2.y, d2.x);
+
+            // ── the view, with parallax ───────────────────────────────────────
             float3 toEye = normalize(frame.cameraPosition - in.worldPosition);
-            // The veil quad's own axes, from the interpolated normal: `right` across it, `up` along
-            // it. Derived rather than passed so this needs no new vertex attribute.
             float3 n = normalize(in.worldNormal);
-            // The quad's own tangent is already carried for the curved-world TBN; reuse it rather
-            // than inventing an axis, so the parallax shifts along the door and not across it.
             float3 right = normalize(in.worldTangent - n * dot(n, in.worldTangent));
             float3 up = cross(n, right);
-            // How far off-axis the eye is, in the plane of the door. Clamped so a steep glance
-            // cannot drag the image off its own edges.
             float2 off = float2(dot(toEye, right), dot(toEye, up));
-            const float depth = 0.16;                  // apparent distance behind the plane
-            // MINUS, not plus (Eddie: "I think the effect is backward"). He is right, and the reason
-            // is worth stating: standing to the LEFT of a real window you see more of what lies to
-            // the RIGHT inside the room, because your line of sight enters the opening and continues
-            // rightward. `toEye` points from the surface back at the camera, so from the left it
-            // points left — and adding it walked the sample the wrong way, closing off exactly the
-            // side that should have opened up.
-            float2 puv = uv - off * depth;
-            // COVER-FIT: the capture is square, the opening is not (~3.2 m × 4 m). Sampling 1:1
-            // squashed it. `discoveryAmount` carries the quad's width/height; crop the long axis
-            // rather than squeezing it, which is what a window does.
-            float a = in.discoveryAmount > 0.001 ? in.discoveryAmount : 1.0;
-            // Crop the axis the OPENING is short of, not the other one. Undistorted means the
-            // sampled region's aspect equals the quad's: su/sv == width/height. The opening is
-            // taller than wide (a ≈ 0.81), so su = a and sv = 1 — a tall slice of a square picture.
-            // Getting this backwards squeezes the content horizontally by a², which is what made the
-            // view look "much narrower than the arch's opening" while the veil itself fitted fine.
-            float2 fit = float2(a < 1.0 ? a : 1.0, a > 1.0 ? 1.0 / a : 1.0);
-            puv = 0.5 + (puv - 0.5) * fit;
-            puv = clamp(puv, 0.001, 0.999);
-            // Sampled with the SAME orientation the capture was written in: v runs bottom→top here,
-            // top→bottom in the image.
-            float3 view = portalViewTex.sample(texSampler, float2(puv.x, 1.0 - puv.y), slice).rgb;
+            const float depth = 0.16;
+            // MINUS: standing left of a window you see more of the room's RIGHT side, because your
+            // line of sight enters the opening and continues rightward (Eddie caught this inverted).
+            float2 puv = clamp(uv - off * depth, 0.001, 0.999);
+            float3 view = hasView
+                ? portalViewTex.sample(texSampler, float2(puv.x, 1.0 - puv.y), slice).rgb
+                : float3(0.0);
 
-            // The aperture: an arch, not a rectangle — a rounded top over straight sides, so it can
-            // sit inside the stone arch the scene already builds without a seam.
-            // THE APERTURE, WIDENED. It was inset 6% per side with a soft 6% feather, which left a
-            // visible gap of stone-lit background between the view and the jambs (Eddie's green
-            // arrows). The veil quad is already sized to reach the arch, so the mask has no business
-            // shrinking it: feather just enough to avoid a hard sawtooth edge, and no more.
-            float2 c = float2(uv.x - 0.5, uv.y);
-            float sideMask = smoothstep(0.5, 0.484, abs(c.x));
-            // The springline of the arch we actually use, measured off the model — see
-            // `TileMeshLibrary.portalFieldSpringline`. Kept in step by hand: a shader cannot read a
-            // Swift constant, so if that number moves, this one has to move with it.
-            float archY = 0.73;                        // where the straight sides give way to the curve
-            float shape = sideMask;
-            if (uv.y > archY) {
-                float2 d = float2(c.x / 0.5, (uv.y - archY) / (1.0 - archY));
-                shape *= smoothstep(1.0, 0.93, length(d));
-            }
-            shape *= smoothstep(0.0, 0.03, uv.y);      // hide the very bottom edge in the floor
-            if (shape < 0.02) discard_fragment();
+            // ── the wormhole rim: the outer 10% ───────────────────────────────
+            // Differential rotation — the swirl twists harder toward the rim and scrolls inward —
+            // so the edge reads as something being DRAWN THROUGH rather than a painted border.
+            const float rimStart = 0.90;
+            float rimT = smoothstep(rimStart, 1.0, rad);        // 0 at the view, 1 at the edge
+            float twist = (1.0 - rad) * 6.0 - tt * 1.1;
+            float swirl = 0.5 + 0.5 * sin(ang * 3.0 + twist * 2.0);
+            float fib = fbm(float2(ang * 1.6 + tt * 0.15, rad * 5.0 - tt * 0.7), 3);
+            float energy = pow(swirl, 1.6) * (0.45 + 0.9 * fib);
+            float3 rimCol = tint * (0.35 + 1.6 * energy) + float3(0.62, 0.78, 1.0) * pow(energy, 3.0) * 0.8;
 
-            // The surface of the threshold: a faint moving sheen so it is plainly a portal and not a
-            // hole, plus the rim the other styles already wear, so the family still reads as one.
-            float sheen = 0.04 * fbm(float2(uv.x * 3.0, uv.y * 3.0 - tt * 0.08), 3);
-            float rim = smoothstep(0.28, 0.0, shape) * shape;
-            color = view * (0.94 + sheen) + float3(0.62, 0.78, 1.0) * rim * 1.1;
-            lighting = float3(1.0);                    // emissive: a view is its own light
+            // The two meet in the last tenth: the view does not stop at a line, it is drawn into the
+            // swirl. Without the fade the rim reads as a frame, which is the thing we just removed.
+            float3 body = hasView ? view : tint * (0.10 + 0.5 * energy);
+            color = mix(body, rimCol, rimT);
+            // A hair of the swirl over the whole face keeps the surface alive — it is a threshold,
+            // not a photograph hung in the air.
+            color += tint * energy * 0.05 * (1.0 - rimT);
+            lighting = float3(1.0);                    // emissive: an opening is its own light
+        }
+        if (false) {
         } else if (in.styleSeed >= 3u) {
             // FLAT STREAKS — the ELEVATOR portal (outer world ↔ temple): a rectangular energy curtain
             // wedged between two columns. Streaks flow DOWN (style 3, the surface world descending to
