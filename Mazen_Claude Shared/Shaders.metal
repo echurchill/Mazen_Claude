@@ -718,7 +718,12 @@ fragment float4 fragmentShader(
             // squashed it. `discoveryAmount` carries the quad's width/height; crop the long axis
             // rather than squeezing it, which is what a window does.
             float a = in.discoveryAmount > 0.001 ? in.discoveryAmount : 1.0;
-            float2 fit = float2(a > 1.0 ? 1.0 / a : 1.0, a < 1.0 ? a : 1.0);
+            // Crop the axis the OPENING is short of, not the other one. Undistorted means the
+            // sampled region's aspect equals the quad's: su/sv == width/height. The opening is
+            // taller than wide (a ≈ 0.81), so su = a and sv = 1 — a tall slice of a square picture.
+            // Getting this backwards squeezes the content horizontally by a², which is what made the
+            // view look "much narrower than the arch's opening" while the veil itself fitted fine.
+            float2 fit = float2(a < 1.0 ? a : 1.0, a > 1.0 ? 1.0 / a : 1.0);
             puv = 0.5 + (puv - 0.5) * fit;
             puv = clamp(puv, 0.001, 0.999);
             // Sampled with the SAME orientation the capture was written in: v runs bottom→top here,

@@ -655,9 +655,18 @@ final class SceneBuilder {
                             }
                             else if prop.kind == .portalField && prop.alignAnim > 0 { discovery = prop.alignAnim }
                             else { discovery = 1.0 }
+                            // THE VEIL DOES NOT INFLATE. Every other tile-mesh prop has its vertices
+                            // pushed onto the curved shell by the shader, which is right for things
+                            // that grow out of the ground — and wrong for a flat pane standing in a
+                            // stone arch. On Scene 1 (roundness 1.0) a 3.4 m tall quad bowed backward
+                            // while the arch, a RIGID imported asset, stayed flat: the view ended up
+                            // "planted behind the arch and leaning away from it" (Eddie). Rigid, like
+                            // the frame it fills — its anchor still rides the curve, its surface does
+                            // not bend.
+                            let propRoundness: Float = prop.kind == .portalField ? 0 : roundness
                             let inst = InstanceDataSwift(modelMatrix: pm, baseColor: color,
                                 materialID: materialID, tileID: 0, discoveryAmount: discovery, styleSeed: propStyleSeed,
-                                spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief,
+                                spinMatrix: spin, roundness: propRoundness, invHalfExtent: invHalf, reliefAmplitude: relief,
                                 heightScale: heightScale, heightPivot: heightPivot)
                             mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
                         }
