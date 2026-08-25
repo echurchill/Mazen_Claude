@@ -101,3 +101,31 @@ actually have when you step through, with a parallax shift so they read as windo
 posters. A door with no capture keeps its procedural vortex.
 
 Captures need the **Debug** configuration (Release is sandboxed and cannot write into the repo).
+
+---
+
+## Gamepad (macOS and iPadOS, 2026-08-07)
+
+Any MFi / Xbox / PlayStation controller. Same file, same mapping, both platforms — `GCController` is
+one API and this game's whole input surface is about eight calls.
+
+| control | does |
+|---|---|
+| **Left stick / D-pad** ↑↓ | walk forward / back (held, chains hops like `W`/`S`) |
+| **Left stick / D-pad** ←→ | turn, in discrete 45° steps with a repeat while held |
+| **Right stick** | first-person look; orbit rotation in orbit mode |
+| **A** | interact (`F`) |
+| **Y** | toggle first-person / orbit |
+| **L1 / R1** | twist the slice counter-clockwise / clockwise (`Q` / `E`) |
+
+**Why the shoulders for the twist:** it is the world moving, not the player reaching for something
+in front of them — and L/R reads as "that way round". It also gives the iPad two real buttons for
+the one verb touch cannot teach. That is a stopgap, not the answer: Scene 4 still wants a walk-up
+control the way Scene 5's rotators work.
+
+**Two numbers to tune by feel:** `turnRepeat` (0.22 s between steps while the stick is held) and
+`lookRate` (2.6 rad/s at full deflection). Both in `GamepadInput.swift`.
+
+*macOS Release is sandboxed, so a wireless pad needs `com.apple.security.device.bluetooth` — set via
+`ENABLE_RESOURCE_ACCESS_BLUETOOTH`. Without it the controller is never seen at all, and the
+`[gamepad] active:` line at boot is how you know it was.*

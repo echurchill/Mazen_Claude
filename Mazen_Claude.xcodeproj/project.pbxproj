@@ -237,7 +237,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -e\nDEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$DEST\"\n# THE MANIFEST IS GIT for the model packs and portal views — cached AND untracked-but-not-\n# ignored, so a capture taken thirty seconds ago ships without being committed first, while\n# the .gitignore curation still decides what counts as an asset.\nif git -C \"$SRCROOT\" rev-parse --git-dir >/dev/null 2>&1; then\n  git -C \"$SRCROOT\" ls-files -z --cached --others --exclude-standard Mazen_Models PortalViews | rsync -a --from0 --files-from=- \"$SRCROOT/\" \"$DEST/\"\nelse\n  rsync -a --exclude=.rgba-cache/ --exclude=*_Normal.png --exclude=*.blend* --exclude=*.fbx \\\n        --exclude=*.gltf --exclude=*.glb --exclude=*.zip --exclude=.DS_Store \\\n        \"$SRCROOT/Mazen_Models\" \"$SRCROOT/PortalViews\" \"$DEST/\"\nfi\n# Skyboxes: ONLY the composites are ever opened; the rest of that folder is the source halves\n# they were made from. --delete is safe here because it is scoped to this one subfolder, and\n# it is what stops a bundle keeping files the build no longer ships.\nrsync -a --delete --include=*Composite.png --exclude=* \"$SRCROOT/Skyboxes/\" \"$DEST/Skyboxes/\"\n";
-
 		};
 		2CAA00022FE1C1F500059268 /* Bundle models + skyboxes */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -285,6 +284,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Mazen_Claude iOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Mazen;
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
@@ -321,6 +321,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Mazen_Claude iOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Mazen;
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
@@ -395,6 +396,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = DXK68VKUGB;
 				ENABLE_APP_SANDBOX = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;

@@ -420,6 +420,9 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     let sceneBuilder = SceneBuilder()
+    /// A controller, if one is attached — polled per frame, silent when there is none. See
+    /// `GamepadInput`; it is the only input path that works identically on both platforms.
+    let gamepad = GamepadInput()
 
     @MainActor
     init?(metalKitView: MTKView) {
@@ -1086,6 +1089,9 @@ class Renderer: NSObject, MTKViewDelegate {
 
         benchHeartbeatFrames += 1
         let tUpdate0 = CACurrentMediaTime()
+        // Input BEFORE the tick: a turn or an interact pressed this frame should be acted on in this
+        // frame's update, not held over to the next one.
+        gamepad.poll(gameState, dt: Double(dt))
         gameState.update(deltaTime: dt)
         let tUpdate1 = CACurrentMediaTime()
 
