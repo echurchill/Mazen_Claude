@@ -57,10 +57,23 @@ enum ResourcePaths {
 
     /// One line at boot saying where the art came from, because "no props" and "props from the
     /// wrong place" look identical on screen.
+    /// Shout if a root is not actually there. On macOS the source-tree fallback almost always saves
+    /// us, so this is quiet in practice; on a device there IS no fallback — `#filePath` names a Mac
+    /// that is not present — and every loader would come up empty in the way that reads as authored
+    /// emptiness rather than as breakage. That failure has already cost an evening once.
+    static func verify() {
+        for (label, path) in [("models", models), ("skyboxes", skyboxes), ("portal views", portalViews)]
+        where !FileManager.default.fileExists(atPath: path) {
+            NSLog("[ResourcePaths] *** MISSING %@: %@ — every loader below will come up empty. On a device this means the copy build phase did not run.",
+                  label.uppercased(), path)
+        }
+    }
+
     static func log() {
         let bundled = Bundle.main.resourceURL.map { models.hasPrefix($0.path) } ?? false
         NSLog("[ResourcePaths] models: %@ (%@)", models, bundled ? "bundled" : "source tree")
         NSLog("[ResourcePaths] portal views read: %@", portalViews)
         NSLog("[ResourcePaths] portal views WRITE: %@", portalViewsWritable)
+        verify()
     }
 }

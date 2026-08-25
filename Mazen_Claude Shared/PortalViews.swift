@@ -108,8 +108,17 @@ enum PortalViews {
     // MARK: - Write
 
     /// Write one capture, centre-cropped square, as a PNG named for its route.
+    ///
+    /// macOS ONLY, and deliberately so: the write target is the SOURCE TREE (see
+    /// `ResourcePaths.portalViewsWritable`), which does not exist on a device — an iPad would spend
+    /// the work and then log a failure it can do nothing about. Capturing is an authoring act
+    /// performed where the repo is.
     @discardableResult
     static func write(bgraPixels: [UInt8], width: Int, height: Int, name: String) -> URL? {
+#if !os(macOS)
+        NSLog("[PortalViews] capture ignored: there is no repo to write to on this platform")
+        return nil
+#else
         // The frame arrives as BGRA (the drawable's format); swizzle to RGBA for CoreGraphics.
         var rgba = [UInt8](repeating: 255, count: width * height * 4)
         for i in stride(from: 0, to: width * height * 4, by: 4) {
@@ -145,5 +154,6 @@ enum PortalViews {
         }
         NSLog("[PortalViews] captured %@", url.path)
         return url
+#endif
     }
 }

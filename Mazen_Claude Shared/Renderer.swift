@@ -272,6 +272,29 @@ class Renderer: NSObject, MTKViewDelegate {
     var debugSkyboxIndex = 0
     /// Skyboxes addressable by file basename, so a world can name its own sky (GameState.skyboxName).
     var skyboxesByName: [String: MTLTexture] = [:]
+    /// Names already looked up and not found, so a world naming a sky that is not in the bundle asks
+    /// the filesystem once rather than every frame.
+    private var missingSkyboxNames: Set<String> = []
+
+    /// A named sky, loaded on FIRST USE. macOS fills this eagerly for the cycling key; iOS does not,
+    /// so a world that names its own sky (`GameState.skyboxName`) would otherwise silently fall back
+    /// to the default one on device — a difference nobody would notice until they compared screens.
+    /// Loading here keeps both platforms showing the same sky, and pins only what is asked for.
+    func skybox(named name: String) -> MTLTexture? {
+        if let t = skyboxesByName[name] { return t }
+        guard !missingSkyboxNames.contains(name) else { return nil }
+        let url = URL(fileURLWithPath: "\(ResourcePaths.skyboxes)/\(name).png")
+        guard let t = TextureLoader.loadTextureFromFile(url: url, device: device, srgb: true) else {
+            NSLog("[skybox] a world asked for '%@' and it is not in the bundle", name)
+            missingSkyboxNames.insert(name)
+            return nil
+        }
+        t.label = "Skybox \(name)"
+        skyboxesByName[name] = t
+        makeResident(t, in: residencySet)
+        residencySet.commit()
+        return t
+    }
     func cycleDebugSkybox() {
         guard debugSkyboxes.count > 1 else { return }
         // Only move the override index — `skyboxTexture` stays the pristine default so that
@@ -285,7 +308,7 @@ class Renderer: NSObject, MTKViewDelegate {
         if debugSkyboxIndex != 0, debugSkyboxes.indices.contains(debugSkyboxIndex) {
             return debugSkyboxes[debugSkyboxIndex]
         }
-        if let name = gameState.skyboxName, let tex = skyboxesByName[name] { return tex }
+        if let name = gameState.skyboxName, let tex = skybox(named: name) { return tex }
         return skyboxTexture
     }
     var shadowMapTexture: MTLTexture!
@@ -486,7 +509,11 @@ class Renderer: NSObject, MTKViewDelegate {
             names: ["hedge_nor", "gravel_nor", "stone_nor", "palestone_nor"], srgb: false)
         ResourcePaths.log()
         self.skyboxTexture = TextureLoader.loadTexture2D(device: device, name: "skybox", srgb: true)
-        // DEBUG (Eddie): preload the composite skyboxes so 'L' can cycle them in place. Dev-only path.
+        // EAGER ONLY ON macOS. The composites exist for the `L` cycling key, which no iPad has, and
+        // they are not free: each one decodes to a full-resolution GPU texture pinned for the life of
+        // the process. iOS loads a sky the first time a world actually asks for it by name
+        // (`skybox(named:)`), which in practice is one of the five.
+#if os(macOS)
         if let sb = self.skyboxTexture { self.debugSkyboxes = [sb]; self.debugSkyboxNames = ["default"] }
         let skyDir = ResourcePaths.skyboxes
         for f in (((try? FileManager.default.contentsOfDirectory(atPath: skyDir)) ?? [])
@@ -498,6 +525,7 @@ class Renderer: NSObject, MTKViewDelegate {
             }
         }
         if verboseDebugLog { NSLog("[skybox] %d cyclable (press L)", self.debugSkyboxes.count) }
+#endif
         // LeafSets + misc_greenery asset folders were removed (Eddie) — leave these arrays nil so the
         // foliage materials fall back gracefully. Repoint here if new card assets land.
         self.leafArray = nil
