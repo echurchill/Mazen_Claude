@@ -29,6 +29,7 @@ final class TeachingPrompts {
         case begin          // attract: any input starts the game
         case walk           // dismissed by actually moving
         case look           // dismissed by actually looking around
+        case use            // dismissed by actually using something
     }
 
     /// The strip is rendered at the DRAWABLE's own width, so a glyph is drawn at the size it is
@@ -46,6 +47,7 @@ final class TeachingPrompts {
     init(enabled: Bool = true) {
         current = enabled ? .begin : nil
         taughtLook = !enabled
+        taughtUse = !enabled
     }
     private(set) var opacity: Float = 0
     /// Set when the text changes, so the Renderer knows to re-render the strip.
@@ -73,6 +75,7 @@ final class TeachingPrompts {
         case .begin: return "press anything to begin"
         case .walk:  return padAttached ? "left stick to walk" : "W and S to walk"
         case .look:  return padAttached ? "right stick to look around" : "move the mouse to look around"
+        case .use:   return padAttached ? "A to use it" : "F to use it"
         case nil:    return ""
         }
     }
@@ -107,12 +110,29 @@ final class TeachingPrompts {
                 current = nil
             }
 
+        case .use:
+            if gs.hasInteracted { current = nil }
+
         case nil:
             // Out of the opening room and never told about looking? Say it once, here.
             if !taughtLook, spawn != nil, movedFromSpawn(gs) >= 3 {
                 taughtLook = true
                 current = .look
                 lookAnchor = (gs.camera.lookYaw, gs.camera.lookPitch)
+                break
+            }
+            // STANDING ON SOMETHING, AND NOBODY HAS EVER SAID HOW TO PRESS IT. Interact is the verb
+            // with the most dependents — ten prop kinds — and the only one a player cannot guess.
+            //
+            // Held back until the player has come THROUGH a portal, which is Scene 2 by definition
+            // (`lastArrivalOrigin` is nil in the world you boot into). That is deliberate rather
+            // than incidental: Scene 1 is for moving and looking, and its vessels are scenery that
+            // rewards curiosity — they should not be the game's first instruction. Scene 2 is where
+            // something first REQUIRES pressing. No scene names in the rule; just "not the first
+            // world you were put in".
+            if !taughtUse, !gs.hasInteracted, gs.lastArrivalOrigin != nil, gs.hasInteractableHere {
+                taughtUse = true
+                current = .use
             }
         }
 
@@ -122,6 +142,7 @@ final class TeachingPrompts {
     }
 
     private var taughtLook = false
+    private var taughtUse = false
 
     /// Chebyshev distance from where the player started, in tiles. Crude on purpose: it does not
     /// need to know what a "room" is, only that the player has got somewhere.

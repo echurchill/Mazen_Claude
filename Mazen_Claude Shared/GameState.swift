@@ -1523,6 +1523,11 @@ class GameState {
 
     /// What F (and, on iOS, a tap) acts on. Shared with `hasInteractableHere` so the touch path
     /// cannot drift from the keyboard one.
+    /// Has the player ever successfully used anything? Only set when a handler actually DID
+    /// something — pressing F at thin air teaches nothing, so it must not dismiss the prompt that
+    /// is trying to teach the key.
+    private(set) var hasInteracted = false
+
     static let interactableKinds: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap,
                                                    .plinth, .dial, .chest, .alignmentCylinder,
                                                    .channelBasin, .latch]
@@ -1704,6 +1709,7 @@ class GameState {
             let where_ = sliceCentre(axis: 0, index: cubeModel.cubies[ci].position.x >= 0 ? Int(cubeModel.cubies[ci].position.x) : 0)
             pendingAudioCues.append(engaged ? .switchDisengaged(at: where_) : .switchEngaged(at: where_))
             refreshSwitchLock()
+            hasInteracted = true
             return
         }
         let handlers: [(Int, Int) -> Bool] = [
@@ -1718,7 +1724,7 @@ class GameState {
         handle_doorPlinth,
         handle_chest,
         ]
-        for h in handlers where h(ci, fi) { return }
+        for h in handlers where h(ci, fi) { hasInteracted = true; return }
     }
 
     /// Scene 6D: the ordered latches — rebuff teaches

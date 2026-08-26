@@ -148,3 +148,22 @@ Scene 4 needs regardless of input, since that scene's whole job is to teach the 
 
 Not the final answer: the walk-up rotator props (Scene 5's pattern) are still what the scenes want.
 This is the cheap version that works for keyboard, controller and touch at once.
+
+## Teaching prompts (2026-08-07)
+
+Title-card text, low and centred, in the game's own voice rather than dressed as part of the world.
+Each one **stays until the player does the thing** — no timers, nobody stuck — and the wording
+follows whatever is in their hands, switching if they put the keyboard down and pick up a pad.
+
+| moment | says | goes away when |
+|---|---|---|
+| attract | *press anything to begin* | any key, button, stick or tap |
+| Scene 1, on landing | *left stick to walk* / *W and S to walk* | they actually move |
+| Scene 1, out of the clearing | *right stick to look around* / *move the mouse…* | they actually look |
+| Scene 2, on the first thing worth pressing | *A to use it* / *F to use it* | they actually use something |
+
+The last is armed only once the player has come **through a portal**, which is Scene 2 by
+definition — Scene 1's vessels are scenery that rewards curiosity, not the game's first instruction.
+Nothing teaches portals: walking through a door teaches itself.
+
+Benchmarks skip prompts; `MAZEN_PROMPTS=1` forces them on.
