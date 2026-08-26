@@ -97,6 +97,8 @@ class GameViewController: UIViewController {
         }
     }
 
+    /// TO BE WITHHELD IN SCENES 1–3 once the orbital plinth exists — same note as the macOS Space
+    /// key: the orbit view gives away that a world is a cube. See Open Questions & Future Work.
     @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
         guard let gs = renderer?.gameState else { return }
         gs.camera.mode = gs.camera.mode == .orbit ? .firstPerson : .orbit

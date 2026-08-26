@@ -49,6 +49,26 @@ per-prop in the asset pass); Set-flattened per-prop membership tests; reused fog
 - **Garden first-entry hitch**: built once ever (registry-cached), but that one build lands mid-fade;
   could pre-build at app load like the moon.
 
+## The orbit view must be WITHHELD in Scenes 1–3 (noted 2026-08-07, deferred on purpose)
+
+Space gives a god camera everywhere, including inside an inverted interior where "orbit" is
+meaningless. Two reasons it has to go, and they compound:
+
+1. **It spoils the reveal.** The prologue's whole arc is the slow discovery that a world is a cube
+   you can turn. One press of Space in Scene 1 gives that away in the first thirty seconds — the
+   same reason the sun and moon stopped being cubes (2026-08-07).
+2. **It defuses the scenes.** Scene 2 is "there is more world than you can see" and Scene 3 is "no
+   privileged floor". Both are much weaker if the player can simply zoom out and look at the shape
+   of the problem.
+
+**The plan:** the orbit view becomes a PLACE — the orbital plinth (Eddie's term) — arriving around
+Scene 4, when turning the world is the verb. Reaching it then pays off the attract screen the player
+saw before they ever landed. Scenes 1–3 simply do not have it.
+
+**Deliberately not done yet:** it stays available while we are prototyping, because being able to
+look at any world from outside is worth more to us than the reveal is right now. Gate it when the
+plinth exists. The toggle sites carry a comment pointing here.
+
 ## Rendering / assets
 
 - **MegaKit custom shaders (Eddie, 2026-07-17).** The Stylized Nature MegaKit ships with *custom shaders* (in its `Engine Projects` / Unity+Unreal material graphs) that "might prove interesting." We currently use only the pack's diffuse atlases through our ModelIO path — the shaders aren't wired in and our pipeline can't consume Unity/Unreal material graphs directly. **Worth a look:** are any of the effects (e.g. wind sway on foliage, stylized rock/path shading) reproducible as a Metal material in our shader (`Shaders.metal`)? Could give the nature dressing motion/life beyond the flat/atlas look.

@@ -214,7 +214,11 @@ class GameViewController: NSViewController {
             gs.player.tryTurnLeft()
         case 124, 2:  // Right arrow, D
             gs.player.tryTurnRight()
-        case 49:      // Space — toggle camera mode
+        case 49:      // Space — toggle camera mode.
+                      // TO BE WITHHELD IN SCENES 1–3 once the orbital plinth exists: a god camera
+                      // gives away that a world is a cube, which is the prologue's whole reveal.
+                      // Kept for now because prototyping needs it. See
+                      // `Mazen Docs/Open Questions & Future Work.md`.
             gs.camera.mode = gs.camera.mode == .orbit ? .firstPerson : .orbit
             setPointerLock(gs.camera.mode == .firstPerson)
         case 12:      // Q — rotate face clockwise;  Shift+Q — replay the scene's scripted turn (debug)
