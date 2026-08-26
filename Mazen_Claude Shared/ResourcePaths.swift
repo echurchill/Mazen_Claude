@@ -73,7 +73,11 @@ enum ResourcePaths {
         let bundled = Bundle.main.resourceURL.map { models.hasPrefix($0.path) } ?? false
         NSLog("[ResourcePaths] models: %@ (%@)", models, bundled ? "bundled" : "source tree")
         NSLog("[ResourcePaths] portal views read: %@", portalViews)
+#if os(macOS)
+        // Only meaningful where there is a repo: on a device this printed a path to a Mac that is
+        // not there, which reads like a misconfiguration and is not one.
         NSLog("[ResourcePaths] portal views WRITE: %@", portalViewsWritable)
+#endif
         verify()
     }
 }

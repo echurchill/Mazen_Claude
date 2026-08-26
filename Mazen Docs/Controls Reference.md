@@ -129,3 +129,17 @@ control the way Scene 5's rotators work.
 *macOS Release is sandboxed, so a wireless pad needs `com.apple.security.device.bluetooth` — set via
 `ENABLE_RESOURCE_ACCESS_BLUETOOTH`. Without it the controller is never seen at all, and the
 `[gamepad] active:` line at boot is how you know it was.*
+
+## The turnable slab (experimental, 2026-08-07)
+
+Wherever the player *can* twist (`twistEnabled` — the prologue withholds it until Scene 4), the floor
+of the slab a twist would turn **breathes**: a slow brighten-and-cool, about one cycle every four
+seconds, suppressed while a twist is already running.
+
+It exists because `startSliceRotation` turns the slice under your feet and nothing ever said which
+one that was. On a keyboard you learn it; with a controller on a couch you cannot (Eddie's first iPad
+run). This makes the verb a place you are standing rather than a key you know — and it is the cue
+Scene 4 needs regardless of input, since that scene's whole job is to teach the twist.
+
+Not the final answer: the walk-up rotator props (Scene 5's pattern) are still what the scenes want.
+This is the cheap version that works for keyboard, controller and touch at once.

@@ -150,6 +150,22 @@ final class SceneBuilder {
         // Fold the offset into the spin so every tile/wall/prop/player-marker matrix (all built as
         // `spin * …`) is pushed out together — one injection point for the whole world.
         let spin = worldOffset * gameState.worldSpinMatrix()   // M9.5-3 idle cube spin (+ M11 world offset)
+
+        // WHICH SLAB WOULD TURN. `startSliceRotation` picks the slice under the player's feet, and
+        // nothing has ever shown which one that is: with a keyboard you learn it, with a controller
+        // on a couch you cannot (Eddie, first iPad run). So the floor of that slab breathes while the
+        // twist is available — the verb becomes a place you are standing rather than a key you know.
+        //
+        // Only when the player could actually use it: `twistEnabled` is the prologue's gate (the
+        // twist is withheld until Scene 4), and a slab already in motion needs no invitation.
+        var twistSliceCubies: Set<Int> = []
+        var twistGlow: Float = 0
+        if gameState.twistEnabled, !gameState.sliceRotation.isActive {
+            let (ax, ix) = model.sliceAxisAndIndex(for: gameState.player.face)
+            twistSliceCubies = Set(model.cubieIndicesInSlice(axis: ax, index: ix))
+            // Slow — a held breath, not a blink. Anything faster reads as an alarm.
+            twistGlow = 0.5 + 0.5 * sinf(gameState.time * 1.5)
+        }
         let capacity = buf.length / MemoryLayout<InstanceDataSwift>.stride
         let ptr = buf.contents().bindMemory(to: InstanceDataSwift.self, capacity: capacity)
 
@@ -246,7 +262,8 @@ final class SceneBuilder {
                                      roundness: roundness, invHalf: invHalf, relief: relief,
                                      naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed,
                                      metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib,
-                                     passable: model.passableOpenings(face: face, row: row, col: col))
+                                     passable: model.passableOpenings(face: face, row: row, col: col),
+                                     twistGlow: twistSliceCubies.contains(ci) ? twistGlow : 0)
                         let fogInst = InstanceDataSwift(
                             modelMatrix: matrix,
                             baseColor: faceColor * 0.9,
@@ -266,7 +283,8 @@ final class SceneBuilder {
                                          roundness: roundness, invHalf: invHalf, relief: relief,
                                          naturalDressing: model.naturalDressing, suppressHedge: model.wallStyle == .dressed,
                                      metal: model.wallStyle == .metal, tileMeshLib: tileMeshLib,
-                                     passable: model.passableOpenings(face: face, row: row, col: col))
+                                     passable: model.passableOpenings(face: face, row: row, col: col),
+                                     twistGlow: twistSliceCubies.contains(ci) ? twistGlow : 0)
                         case .grass, .water, .regolith, .plating, .paleStone:
                             // M19: a full-tile ground quad, no walls. Grass (14) / water (15) /
                             // regolith (16) share the fieldFloor mesh, so they batch into one draw.
@@ -1230,13 +1248,18 @@ final class SceneBuilder {
     private func emitMazeTile(_ facelet: MazeFacelet, restM: float4x4, spin: float4x4,
                               roundness: Float, invHalf: Float, relief: Float, naturalDressing: Bool,
                               suppressHedge: Bool, metal: Bool = false, tileMeshLib: TileMeshLibrary,
-                              passable: DirectionMask? = nil) {
+                              passable: DirectionMask? = nil, twistGlow: Float = 0) {
         // A wall is drawn wherever EITHER side of the seam refuses, so what stops you is what you
         // can see. Passing the resolved mask in (rather than reading the tile's own openings) is
         // what keeps drawing and walking from ever disagreeing — which is all an "invisible wall"
         // has ever been.
         let openings = passable ?? facelet.mazeTile.openings
-        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
+        // The floor of the turnable slab breathes. Brightened AND cooled: brightness alone reads as
+        // a patch of sun, and this has to say "held, waiting" rather than "lit". Applied to the floor
+        // only — the walls ride the same slab, but lighting those too washes the whole view.
+        let pathColor = twistGlow > 0
+            ? SIMD4<Float>(0.72 + 0.10 * twistGlow, 0.62 + 0.14 * twistGlow, 0.45 + 0.30 * twistGlow, 1.0)
+            : SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
         let uvT = facelet.mazeTile.uvTurns
         let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)
         if naturalDressing {
