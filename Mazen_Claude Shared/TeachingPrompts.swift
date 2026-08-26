@@ -31,9 +31,12 @@ final class TeachingPrompts {
         case look           // dismissed by actually looking around
     }
 
-    /// The strip the shader samples. 8:1, transparent, text centred — a short word simply occupies
-    /// less of the card.
-    static let textureWidth = 1024, textureHeight = 128
+    /// The strip is rendered at the DRAWABLE's own width, so a glyph is drawn at the size it is
+    /// displayed. The first version was a fixed 1024 stretched across the screen and looked like a
+    /// VIC-20 (Eddie): magnified type is mush, and Ultra Light at wide tracking is the least
+    /// survivable kind. Capped so a very wide display cannot allocate something silly.
+    static let maxTextureWidth = 4096
+    static let aspect: CGFloat = 8
 
     private(set) var current: Moment?
 
@@ -133,8 +136,9 @@ final class TeachingPrompts {
 
     /// Draw the current text into an RGBA texture. A light, wide-tracked face with a soft dark
     /// shadow so it stays legible over a bright sky or a dark ruin without a panel behind it.
-    func makeTexture(device: MTLDevice, padAttached: Bool) -> MTLTexture? {
-        let w = Self.textureWidth, h = Self.textureHeight
+    func makeTexture(device: MTLDevice, padAttached: Bool, drawableWidth: Int) -> MTLTexture? {
+        let w = max(512, min(Self.maxTextureWidth, drawableWidth))
+        let h = Int(CGFloat(w) / Self.aspect)
         let s = text(padAttached: padAttached)
         guard !s.isEmpty else { return nil }
 
@@ -144,13 +148,17 @@ final class TeachingPrompts {
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         ctx.setShouldAntialias(true)
 
-        let font = CTFontCreateWithName("Avenir Next Ultra Light" as CFString, 62, nil)
+        // MEDIUM, not ultra light. A hairline face over a bright sky at a distance is unreadable
+        // before it is elegant; this is a line someone has to act on. Tracking eased off with it —
+        // the two together were what fell apart.
+        let size = CGFloat(h) * 0.40
+        let font = CTFontCreateWithName("Avenir Next Medium" as CFString, size, nil)
         // CoreText's own keys rather than AppKit/UIKit's: this file compiles for both platforms and
         // `NSAttributedString.Key.font` is defined by whichever UI framework happens to be imported.
         let attrs: [CFString: Any] = [
             kCTFontAttributeName: font,
             kCTForegroundColorAttributeName: CGColor(red: 1, green: 1, blue: 1, alpha: 0.96),
-            kCTKernAttributeName: 6.0,
+            kCTKernAttributeName: Double(size * 0.045),
         ]
         let line = CTLineCreateWithAttributedString(
             CFAttributedStringCreate(nil, s as CFString, attrs as CFDictionary)!)
@@ -159,8 +167,8 @@ final class TeachingPrompts {
         let y = (CGFloat(h) - bounds.height) / 2 - bounds.origin.y
 
         // The shadow is what lets one colour of text work over both a noon sky and a night ruin.
-        ctx.setShadow(offset: .zero, blur: 12,
-                      color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.85))
+        ctx.setShadow(offset: .zero, blur: size * 0.28,
+                      color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.9))
         ctx.textPosition = CGPoint(x: x, y: y)
         CTLineDraw(line, ctx)
 

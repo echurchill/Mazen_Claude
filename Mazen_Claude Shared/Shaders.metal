@@ -99,7 +99,11 @@ fragment float4 promptFragmentShader(
     texture2d<float> promptTex [[texture(TextureIndexPrompt)]]
 ) {
     constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
-    const float halfH = 0.055, halfW = halfH * 8.0;
+    // Half-extents come from the CPU so the strip is drawn at exactly its own pixel size. Hard-coding
+    // them magnified a 1024-wide texture across a Retina drawable — about 3x — which is why the first
+    // version looked like a home computer from 1981 (Eddie). Type does not survive upscaling; thin,
+    // wide-tracked type least of all.
+    const float halfW = frame.promptHalfW, halfH = frame.promptHalfH;
     const float centreY = -0.74;                  // low, clear of the horizon and of the player
     float2 d = float2(in.clipCoord.x, in.clipCoord.y - centreY);
     if (abs(d.x) > halfW || abs(d.y) > halfH) discard_fragment();

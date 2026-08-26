@@ -159,12 +159,20 @@ class Renderer: NSObject, MTKViewDelegate {
     private func updateTeachingPrompts(dt: Float) {
         let pad = gamepad.connectedName != nil
         prompts.update(gameState, padAttached: pad, anyInput: anyInputThisFrame(), dt: dt)
-        if prompts.textDirty {
+        // Re-render when the words change OR when the drawable resizes: the strip is rendered at the
+        // display's own pixel width, so a window resize is a change of resolution, not just of layout.
+        let dw = Int(lastDrawableSize.width), dh = Int(lastDrawableSize.height)
+        if prompts.textDirty || dw != promptBuiltForWidth, dw > 0 {
             prompts.clearDirty()
-            promptTexture = prompts.makeTexture(device: device, padAttached: pad)
+            promptBuiltForWidth = dw
+            promptTexture = prompts.makeTexture(device: device, padAttached: pad, drawableWidth: dw)
             if let t = promptTexture {
                 makeResident(t, in: residencySet)
                 residencySet.commit()
+                // 1:1 mapping: a clip half-extent of texWidth/drawableWidth is exactly the texture's
+                // own pixels. Anything else magnifies or minifies the letterforms.
+                promptHalfW = Float(t.width) / Float(dw)
+                promptHalfH = Float(t.height) / Float(max(1, dh))
             }
         }
     }
@@ -457,6 +465,11 @@ class Renderer: NSObject, MTKViewDelegate {
     /// set" and aborts the draw. Same shape of mistake as writing a value to a channel nobody reads,
     /// except this one is fatal rather than invisible.
     var promptPlaceholder: MTLTexture!
+    var promptBuiltForWidth = 0
+    var promptHalfW: Float = 0.44
+    var promptHalfH: Float = 0.055
+    /// The drawable's pixel size, kept because the prompt strip is rendered to match it.
+    var lastDrawableSize = CGSize(width: 0, height: 0)
     /// Set by the platform input handlers (a key, a click, a tap) and consumed once per frame.
     var sawInput = false
     var promptPipelineState: MTLRenderPipelineState!
@@ -975,6 +988,8 @@ class Renderer: NSObject, MTKViewDelegate {
             eclipseFactor: eclipse,
             fadeAmount: transitionPhase == .none ? 0 : transitionT,
             promptOpacity: prompts.opacity,
+            promptHalfW: promptHalfW,
+            promptHalfH: promptHalfH,
             plainShading: debugPlainShading ? 1 : 0,
             fogNear: fogNear,
             fogFar: fogFar,
@@ -1141,6 +1156,9 @@ class Renderer: NSObject, MTKViewDelegate {
         }
 
         benchHeartbeatFrames += 1
+        // Read it here rather than trusting `drawableSizeWillChange` to have fired: on the very first
+        // frame it may not have, and a prompt built for a zero-width drawable is a prompt nobody sees.
+        lastDrawableSize = view.drawableSize
         let tUpdate0 = CACurrentMediaTime()
         // Input BEFORE the tick: a turn or an interact pressed this frame should be acted on in this
         // frame's update, not held over to the next one.
@@ -1553,6 +1571,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         aspect = Float(size.width) / Float(size.height)
+        lastDrawableSize = size
 #if !targetEnvironment(simulator)
         // MTKView is about to rebuild its MSAA/depth textures and the drawable pool at the new size.
         // Flag the cached residency registrations as stale so the next frame re-registers the new
