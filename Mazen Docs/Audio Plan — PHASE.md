@@ -200,3 +200,29 @@ System Settings, which is a thing to discover mid-demo with an audience.
 actively wrong for a loop, and nothing in the type system says so. `registerTone(… sustain: true,
 looping: true)` compiled, sounded fine in isolation for eight seconds, and only revealed itself on
 the ninth.
+
+---
+
+## The iPad drowned PHASE's command pipe (2026-08-07)
+
+Hundreds of these, on device only:
+
+    DspVoiceManager23.cpp:1777  Unable to write message bundle (296 bytes) to pipe
+                                (available bytes 0); no space!
+
+**Every transform assignment is a message to PHASE's DSP**, down a pipe of fixed size, and
+`updateEmitters` set one per emitter per frame. Nothing was ever skipped, either: the world's idle
+spin moves every emitter every frame, so "only update what moved" would have changed nothing even if
+we had been checking.
+
+**Why the Mac was fine and the iPad was not, and it is a dull reason:** 120 Hz ProMotion. Same code,
+double the message rate. The Mac was never correct — it was under the limit.
+
+**Fixed by sending at ~24 Hz**, and then only for emitters that have moved more than ~5 cm since
+their last send. PHASE interpolates between updates, and nobody can localise a 3 cm correction
+arriving a fiftieth of a second late. A newly created emitter still gets its position immediately —
+the throttle applies to updates, never to a first placement.
+
+**Worth remembering as a class:** anything sent per-frame to another process or thread has a rate,
+not just a cost, and a frame rate is not a rate anyone chose. The bench measures our CPU; it says
+nothing about how fast someone else can drain what we send them.

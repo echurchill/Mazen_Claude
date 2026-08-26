@@ -363,8 +363,29 @@ final class AudioEngine {
     /// direction. PHASE offers no per-event gain here, and distance is what the spatial mixer already
     /// understands; more walls really does mean less energy arriving. It is an ATTENUATION model, not
     /// a filter — a muffled sound gets quieter but not duller. Honest about what it is.
-    func updateEmitters(_ emitters: [AudioEmitter], worldSpin: float4x4) {
+    /// EVERY transform assignment is a message to PHASE's DSP, down a pipe with a fixed size. Setting
+    /// one per emitter per frame overflowed it on the iPad — hundreds of
+    ///
+    ///     DspVoiceManager23.cpp:1777 Unable to write message bundle … no space!
+    ///
+    /// and the world's idle spin means every emitter moves every frame, so nothing was ever skipped.
+    /// It survived on the Mac and drowned on the iPad for a dull reason: 120 Hz ProMotion doubles the
+    /// message rate. The Mac was not correct, only under the limit.
+    ///
+    /// Sound does not need 120 Hz of positional update — PHASE interpolates, and a listener cannot
+    /// hear a 3 cm correction arriving a fiftieth of a second late. So positions go out at ~24 Hz,
+    /// and only for emitters that have actually MOVED since the last send.
+    private var emitterSendAccumulator: Double = 0
+    private var lastSentPosition: [Int: SIMD3<Float>] = [:]
+    private static let emitterSendInterval: Double = 1.0 / 24.0
+    /// ~5 cm in world metres. Below this nobody can localise the difference.
+    private static let emitterMoveEpsilon: Float = 0.05
+
+    func updateEmitters(_ emitters: [AudioEmitter], worldSpin: float4x4, dt: Double = 1.0 / 60.0) {
         guard ready, let sm = spatialMixer else { return }
+        emitterSendAccumulator += dt
+        let sendPositions = emitterSendAccumulator >= Self.emitterSendInterval
+        if sendPositions { emitterSendAccumulator = 0 }
         var seen = Set<Int>()
         for e in emitters {
             seen.insert(e.id)
@@ -376,7 +397,15 @@ final class AudioEngine {
                 world = listenerPosition + away * (1 + 2.0 * e.occlusion)
             }
             if let live = emitterEvents[e.id] {
-                live.source.transform = Self.transform(at: world)
+                // A NEW emitter always gets its position; an existing one only on a send tick, and
+                // only if it has moved enough to hear.
+                if sendPositions {
+                    let last = lastSentPosition[e.id]
+                    if last == nil || simd_distance(last!, world) > Self.emitterMoveEpsilon {
+                        live.source.transform = Self.transform(at: world)
+                        lastSentPosition[e.id] = world
+                    }
+                }
                 continue
             }
             do {
@@ -396,6 +425,7 @@ final class AudioEngine {
                 let event = try PHASESoundEvent(engine: engine, assetIdentifier: id, mixerParameters: mixerParams)
                 event.start()
                 emitterEvents[e.id] = (event, src)
+                lastSentPosition[e.id] = world
             } catch {
                 reportOnce("emitter", error)
             }
@@ -404,6 +434,7 @@ final class AudioEngine {
             live.event.stopAndInvalidate()
             live.source.parent?.removeChild(live.source)
             emitterEvents.removeValue(forKey: id)
+            lastSentPosition.removeValue(forKey: id)
         }
     }
 

@@ -918,7 +918,8 @@ class Renderer: NSObject, MTKViewDelegate {
         // and reconciled here. Spun into the same frame the listener lives in, exactly like the
         // one-shot cues: the world's idle rotation has already caused two bugs by being folded in
         // at different points in different systems, so it is folded in HERE for everything audible.
-        audio?.updateEmitters(gameState.activeEmitters, worldSpin: gameState.worldSpinMatrix())
+        audio?.updateEmitters(gameState.activeEmitters, worldSpin: gameState.worldSpinMatrix(),
+                              dt: Double(gameState.frameTimeMs) / 1000.0)
         // Scene 1's two layers. Birds only in a world that HAS an outdoors and no lock — the opening
         // — and they fall silent within two tiles of the arch, which is the only warning the scene
         // gives that the corridor ahead is different. The undertone starts once the player has moved
