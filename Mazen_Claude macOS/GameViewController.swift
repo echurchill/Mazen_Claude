@@ -199,6 +199,11 @@ class GameViewController: NSViewController {
     override func keyDown(with event: NSEvent) {
         guard let renderer = renderer else { return }
         let gs = renderer.gameState
+        // "press anything to begin" means anything — including a key that otherwise does nothing.
+        renderer.sawInput = true
+        // …and while it is waiting, that is ALL a key does. No walking into a world you have not
+        // been dropped into yet.
+        if renderer.prompts.waitingToBegin { return }
 
         switch event.keyCode {
         case 126, 13: // Up arrow, W — hold to walk forward (chained in GameState.update)

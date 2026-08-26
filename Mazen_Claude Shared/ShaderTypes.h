@@ -32,6 +32,7 @@ typedef NS_ENUM(EnumBackingType, TextureIndex)
     TextureIndexLabel        = 9,   // M20: rendered text sign-board array (RGBA) for portal signposts
     TextureIndexDendrite     = 10,  // Scene 5: the surveyor's filigree (RG: intensity + growth distance)
     TextureIndexPortalView   = 11,  // captured "what is through this door" views, one slice per route
+    TextureIndexPrompt       = 12,  // teaching text, rendered to a wide RGBA strip (see TeachingPrompts)
 };
 
 typedef struct
@@ -49,6 +50,7 @@ typedef struct
     float moonIntensity;         // base strength of the moon's fill light
     float eclipseFactor;         // M9-7: 0 normally, →1 as the moon covers the sun
     float fadeAmount;            // M11.2b: 0 clear → 1 black, for the world-transition fade
+    float promptOpacity;         // teaching text: 0 none … 1 fully shown
     float plainShading;          // debug: 1 = flat matte Lambert (no texture/normal-map/fog), to read geometry (M14)
     // R2.11: size-derived fog + camera-mode blend, computed CPU-side per frame. The old in-shader
     // constants (smoothstep(4,14) fog, smoothstep(3,5) orbit gate) assumed the size-5 world and

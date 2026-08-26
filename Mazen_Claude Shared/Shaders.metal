@@ -87,6 +87,27 @@ fragment float4 fadeFragmentShader(
     return float4(0.0, 0.0, 0.0, frame.fadeAmount);
 }
 
+// TEACHING TEXT. The only non-diegetic words in the game, so they are deliberately NOT dressed as
+// an artifact of the world: this is the game speaking to the player, and pretending otherwise reads
+// as neither. A wide transparent strip, drawn low and centred, over everything.
+//
+// The strip's own aspect is baked in (the texture is 8:1), so the quad is sized from that rather
+// than measured per string — a short word simply occupies less of a transparent card.
+fragment float4 promptFragmentShader(
+    SkyVertexOut in [[stage_in]],
+    const device FrameUniforms& frame [[buffer(BufferIndexFrameUniforms)]],
+    texture2d<float> promptTex [[texture(TextureIndexPrompt)]]
+) {
+    constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    const float halfH = 0.055, halfW = halfH * 8.0;
+    const float centreY = -0.74;                  // low, clear of the horizon and of the player
+    float2 d = float2(in.clipCoord.x, in.clipCoord.y - centreY);
+    if (abs(d.x) > halfW || abs(d.y) > halfH) discard_fragment();
+    float2 uv = float2(d.x / halfW, -d.y / halfH) * 0.5 + 0.5;
+    float4 t = promptTex.sample(s, uv);
+    return float4(t.rgb, t.a * frame.promptOpacity);
+}
+
 // Triangular-PDF screen-space dither — breaks up 8-bit framebuffer banding on the smooth sky
 // gradient without an HDR target. Applied per fragment (output resolution), so texture
 // magnification can't average it away the way it does dither baked into the skybox image.

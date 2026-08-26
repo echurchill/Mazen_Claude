@@ -41,6 +41,8 @@ final class GamepadInput {
     private var wasPressed: [String: Bool] = [:]
 
     private(set) var connectedName: String?
+    /// Anything at all touched this frame — for "press anything to begin", which has to mean it.
+    private(set) var sawAnyInput = false
 
     init() {
         NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
@@ -65,7 +67,8 @@ final class GamepadInput {
     }
 
     /// Drive one frame of input. Safe to call with no controller attached — it does nothing.
-    func poll(_ gs: GameState, dt: Double) {
+    func poll(_ gs: GameState, dt: Double, acceptsGameInput: Bool = true) {
+        sawAnyInput = false
         guard let pad = GCController.current?.extendedGamepad else {
             // A disconnected controller must not leave the player walking forever.
             if connectedName != nil {
@@ -87,6 +90,8 @@ final class GamepadInput {
         connectedName = GCController.current?.vendorName ?? "controller"
 
         // ── movement: left stick or d-pad, whichever is further from rest ──────────────
+        // (Read even when the game is not accepting input: the attract screen is listening for
+        //  ANY of this, and only stops it from reaching the player.)
         let stickX = dead(pad.leftThumbstick.xAxis.value)
         let stickY = dead(pad.leftThumbstick.yAxis.value)
         let padX: Float = pad.dpad.right.isPressed ? 1 : (pad.dpad.left.isPressed ? -1 : 0)
@@ -105,6 +110,15 @@ final class GamepadInput {
         // So the pad only speaks when it has something to say. It takes ownership while a stick or
         // d-pad is pushed, clears the flags ONCE on release, and then keeps its hands off. Two input
         // paths, one piece of state: whoever moved last wins, and neither silences the other.
+        let lookX = dead(pad.rightThumbstick.xAxis.value)
+        let lookY = dead(pad.rightThumbstick.yAxis.value)
+        // Anything at all: a stick off centre, a d-pad, or any of the buttons we read.
+        sawAnyInput = moveX != 0 || moveY != 0 || lookX != 0 || lookY != 0
+            || pad.buttonA.isPressed || pad.buttonB.isPressed || pad.buttonX.isPressed
+            || pad.buttonY.isPressed || pad.leftShoulder.isPressed || pad.rightShoulder.isPressed
+            || (pad.buttonMenu.isPressed)
+
+        guard acceptsGameInput else { return }
         let padForward = moveY > 0.5, padBack = moveY < -0.5
         if padForward || padBack || padOwnsMovement {
             gs.forwardHeld = padForward
@@ -122,8 +136,6 @@ final class GamepadInput {
         }
 
         // ── look: right stick ─────────────────────────────────────────────────────────
-        let lookX = dead(pad.rightThumbstick.xAxis.value)
-        let lookY = dead(pad.rightThumbstick.yAxis.value)
         if gs.camera.mode == .firstPerson {
             gs.camera.lookYaw -= lookX * lookRate * Float(dt)
             gs.camera.lookPitch = max(-1.4, min(1.4, gs.camera.lookPitch + lookY * lookRate * Float(dt)))

@@ -76,6 +76,25 @@ enum PipelineFactory {
         return try! compiler.makeRenderPipelineState(descriptor: fadePipeDesc)
     }
 
+    /// Teaching-text overlay: same fullscreen triangle as the fade, blended, no depth.
+    static func makePromptPipeline(compiler: MTL4Compiler, library: MTLLibrary,
+                                   sampleCount: Int, colorFormat: MTLPixelFormat) -> MTLRenderPipelineState {
+        let vert = MTL4LibraryFunctionDescriptor(); vert.library = library; vert.name = "skyVertexShader"
+        let frag = MTL4LibraryFunctionDescriptor(); frag.library = library; frag.name = "promptFragmentShader"
+        let d = MTL4RenderPipelineDescriptor()
+        d.label = "PromptPipeline"
+        d.rasterSampleCount = sampleCount
+        d.vertexFunctionDescriptor = vert
+        d.fragmentFunctionDescriptor = frag
+        d.colorAttachments[0].pixelFormat = colorFormat
+        d.colorAttachments[0].blendingState = .enabled
+        d.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        d.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        d.colorAttachments[0].sourceAlphaBlendFactor = .sourceAlpha
+        d.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        return try! compiler.makeRenderPipelineState(descriptor: d)
+    }
+
     /// Shadow pipeline (depth-only, no fragment).
     static func makeShadowPipeline(compiler: MTL4Compiler, library: MTLLibrary) -> MTLRenderPipelineState {
         let shadowVertDesc = MTL4LibraryFunctionDescriptor()

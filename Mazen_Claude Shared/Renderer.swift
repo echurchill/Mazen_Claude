@@ -154,6 +154,28 @@ class Renderer: NSObject, MTKViewDelegate {
         if added { residencySet.commit() }
     }
 
+    /// Advance the teaching text and re-render its strip when the words change. The texture is
+    /// rebuilt only on a change — three times in a playthrough, not once a frame.
+    private func updateTeachingPrompts(dt: Float) {
+        let pad = gamepad.connectedName != nil
+        prompts.update(gameState, padAttached: pad, anyInput: anyInputThisFrame(), dt: dt)
+        if prompts.textDirty {
+            prompts.clearDirty()
+            promptTexture = prompts.makeTexture(device: device, padAttached: pad)
+            if let t = promptTexture {
+                makeResident(t, in: residencySet)
+                residencySet.commit()
+            }
+        }
+    }
+
+    /// "Press anything" has to mean anything: a key, a mouse button, any pad button, any stick.
+    /// Keyboard and touch set `sawInput` from their own handlers; the pad is polled here.
+    func anyInputThisFrame() -> Bool {
+        if sawInput { sawInput = false; return true }
+        return gamepad.sawAnyInput
+    }
+
     /// Drop the attachment registrations so the next frame re-registers whatever MTKView has just
     /// built. Removes them individually rather than clearing the set — the residency set also holds
     /// every mesh, texture and uniform buffer in the game, none of which is going anywhere.
@@ -423,6 +445,21 @@ class Renderer: NSObject, MTKViewDelegate {
     /// A controller, if one is attached — polled per frame, silent when there is none. See
     /// `GamepadInput`; it is the only input path that works identically on both platforms.
     let gamepad = GamepadInput()
+    /// The game's first words — see `TeachingPrompts`. Holds the attract screen until any input.
+    let prompts = TeachingPrompts(
+        enabled: ProcessInfo.processInfo.environment["MAZEN_BENCH"] == nil
+              || ProcessInfo.processInfo.environment["MAZEN_PROMPTS"] != nil)
+    var promptTexture: MTLTexture?
+    /// A 1×1 transparent 2D texture for the frames with no words on screen.
+    ///
+    /// NOT `placeholderArray`: that is a texture2d_ARRAY, and `promptFragmentShader` declares a plain
+    /// `texture2d`. Binding the wrong TYPE does not bind at all — Metal reports the slot as "never
+    /// set" and aborts the draw. Same shape of mistake as writing a value to a channel nobody reads,
+    /// except this one is fatal rather than invisible.
+    var promptPlaceholder: MTLTexture!
+    /// Set by the platform input handlers (a key, a click, a tap) and consumed once per frame.
+    var sawInput = false
+    var promptPipelineState: MTLRenderPipelineState!
     private let inputSelfTest = ProcessInfo.processInfo.environment["MAZEN_INPUT_SELFTEST"] != nil
 
     @MainActor
@@ -444,9 +481,10 @@ class Renderer: NSObject, MTKViewDelegate {
         // array at index 10 asserted against the old value of 10 the moment a frame was encoded —
         // on Eddie's machine, because the overnight validation boot could not run against a locked
         // display. 12 leaves one spare slot before the next of these.
-        // COUNT, not index (this bit has bitten once already): binding index 11 needs 12, and the
-        // portal-view array at 11 is the last one, so 12 is exactly right — no slack.
-        argDesc.maxTextureBindCount = 12   // …+8 caustics, +9 labels, +10 dendrites (surveyor)
+        // COUNT, not index (this bit has bitten once already): the prompt strip binds at 12, so the
+        // count must be 13. There is deliberately no slack — the next texture added must raise it
+        // again, and a too-small count is a hard Metal validation failure rather than a silent one.
+        argDesc.maxTextureBindCount = 13   // …+8 caustics, +9 labels, +10 dendrites (surveyor)
         argDesc.maxSamplerStateBindCount = 1
         self.fragmentArgTable = try! device.makeArgumentTable(descriptor: argDesc)
 
@@ -468,6 +506,19 @@ class Renderer: NSObject, MTKViewDelegate {
                                                               sampleCount: sampleCount, colorFormat: colorFormat)
         self.skyPipelineState = PipelineFactory.makeSkyPipeline(compiler: compiler, library: library,
                                                                 sampleCount: sampleCount, colorFormat: colorFormat)
+        let ppDesc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm_srgb,
+                                                             width: 1, height: 1, mipmapped: false)
+        ppDesc.usage = .shaderRead
+        ppDesc.storageMode = .shared
+        self.promptPlaceholder = device.makeTexture(descriptor: ppDesc)
+        self.promptPlaceholder.label = "PromptPlaceholder"
+        var clear: UInt32 = 0
+        self.promptPlaceholder.replace(region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0,
+                                       withBytes: &clear, bytesPerRow: 4)
+
+        self.promptPipelineState = PipelineFactory.makePromptPipeline(
+            compiler: compiler, library: library,
+            sampleCount: metalKitView.sampleCount, colorFormat: metalKitView.colorPixelFormat)
         self.fadePipelineState = PipelineFactory.makeFadePipeline(compiler: compiler, library: library,
                                                                   sampleCount: sampleCount, colorFormat: colorFormat)
         self.shadowPipelineState = PipelineFactory.makeShadowPipeline(compiler: compiler, library: library)
@@ -923,6 +974,7 @@ class Renderer: NSObject, MTKViewDelegate {
             moonIntensity: interior ? 0 : 0.30,
             eclipseFactor: eclipse,
             fadeAmount: transitionPhase == .none ? 0 : transitionT,
+            promptOpacity: prompts.opacity,
             plainShading: debugPlainShading ? 1 : 0,
             fogNear: fogNear,
             fogFar: fogFar,
@@ -1092,7 +1144,16 @@ class Renderer: NSObject, MTKViewDelegate {
         let tUpdate0 = CACurrentMediaTime()
         // Input BEFORE the tick: a turn or an interact pressed this frame should be acted on in this
         // frame's update, not held over to the next one.
-        gamepad.poll(gameState, dt: Double(dt))
+        // THE ATTRACT SCREEN HOLDS THE GAME. The pad is still polled — "press anything" has to hear
+        // it — but nothing it says reaches the player until the game has begun.
+        gamepad.poll(gameState, dt: Double(dt), acceptsGameInput: !prompts.waitingToBegin)
+        updateTeachingPrompts(dt: dt)
+        if prompts.waitingToBegin {
+            gameState.camera.mode = .orbit          // the world, seen whole, before you are in it
+        } else if prompts.justBegan {
+            prompts.justBegan = false
+            gameState.camera.mode = .firstPerson    // and now you are standing in it
+        }
         // MAZEN_INPUT_SELFTEST=1 — does a keyboard hold survive a gamepad poll? Two input paths write
         // `forwardHeld`, and when the pad wrote it unconditionally a merely-PAIRED controller killed
         // W/S entirely. The failure is invisible in code review and obvious in one line here.
@@ -1279,6 +1340,10 @@ class Renderer: NSObject, MTKViewDelegate {
         bindTexture(treeSpriteArray ?? placeholderArray, fragmentArgTable, TextureIndex.treeSprite.rawValue)
         bindTexture(causticArray ?? placeholderArray, fragmentArgTable, TextureIndex.caustic.rawValue)
         bindTexture(portalViewArray ?? placeholderArray, fragmentArgTable, TextureIndex.portalView.rawValue)
+        // The teaching strip. Bound EVERY frame even when there is nothing to say: the prompt
+        // pipeline declares the slot, and Metal 4 aborts the draw if it was never set — a texture
+        // slot is a promise made by the shader, not by whether the draw felt like using it.
+        bindTexture(promptTexture ?? promptPlaceholder, fragmentArgTable, TextureIndex.prompt.rawValue)
         bindTexture(labelArray ?? placeholderArray, fragmentArgTable, TextureIndex.label.rawValue)
         bindTexture(dendriteArray ?? placeholderArray, fragmentArgTable, TextureIndex.dendrite.rawValue)
         bindTexture(shadowMapTexture, fragmentArgTable, TextureIndex.shadowMap.rawValue)
@@ -1395,6 +1460,14 @@ class Renderer: NSObject, MTKViewDelegate {
                 baseVertex: 0,
                 baseInstance: dc.instanceOffset
             )
+        }
+
+        // The teaching text, over the world and under the fade.
+        if prompts.opacity > 0.001, promptTexture != nil {
+            encoder.setRenderPipelineState(promptPipelineState)
+            encoder.setDepthStencilState(depthStateAlways)
+            encoder.setCullMode(.none)
+            encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 3)
         }
 
         // M11.2b: world-transition fade — a fullscreen black quad blended over everything, alpha
