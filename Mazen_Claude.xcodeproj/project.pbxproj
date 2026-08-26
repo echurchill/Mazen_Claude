@@ -15,7 +15,6 @@
 		2C9382222FE1C1F500059268 /* Exceptions for "Mazen_Claude Shared" folder in "Mazen_Claude iOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Assets.xcassets,
 			);
 			target = 2C9381FF2FE1C1F500059268 /* Mazen_Claude iOS */;
 		};
@@ -29,7 +28,6 @@
 		2C9382282FE1C1F500059268 /* Exceptions for "Mazen_Claude Shared" folder in "Mazen_Claude macOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Assets.xcassets,
 			);
 			target = 2C9382102FE1C1F500059268 /* Mazen_Claude macOS */;
 		};
