@@ -14,7 +14,7 @@ class TileMeshLibrary {
     let fogLayers: [TileMesh]
     let playerMarker: TileMesh
     let frameMesh: TileMesh
-    let celestialCube: TileMesh   // unit cube for the M9 sun/moon bodies
+    let celestialCube: TileMesh   // unit SPHERE for the M9 sun/moon bodies (was a cube — it spoiled the reveal)
     let fieldFloor: TileMesh      // M19: a full-tile tessellated ground quad (grass/water — no path split)
     let orbMesh: TileMesh         // Scene 3: the suspended heart at the chamber's centre
     let beamMesh: TileMesh        // Scene 3: one obelisk-to-orb beam, a unit length along +Z
@@ -309,9 +309,17 @@ class TileMeshLibrary {
         Self.addFieldFloor(to: &allVerts, indices: &allIndices, ws: ws, normalisedUV: true)
         bandFloor = TileMesh(vertexOffset: 0, indexOffset: bandStart, indexCount: allIndices.count - bandStart)
 
-        // Celestial bodies (M9): a unit cube, drawn at the sun/moon positions.
+        // Celestial bodies (M9): a unit SPHERE, drawn at the sun/moon positions.
+        //
+        // They were cubes, which was a lovely joke and a spoiler (Eddie, 2026-08-07): the whole
+        // prologue is the slow revelation that a world is a cube you can turn, and a cube hanging in
+        // Scene 1's sky gives it away in the first thirty seconds. Suns and moons are round here —
+        // it is the GROUND that turns out not to be.
+        //
+        // Nothing else changes: material 13 already lights the moon with `dot(normal, lightDir)`, so
+        // a sphere yields real phases rather than the cube's faceted approximation of them.
         let cubeStart = allIndices.count
-        Self.addUnitCube(to: &allVerts, indices: &allIndices)
+        Self.addOrb(to: &allVerts, indices: &allIndices)
         celestialCube = TileMesh(vertexOffset: 0, indexOffset: cubeStart, indexCount: allIndices.count - cubeStart)
 
         vertexBuffer = device.makeBuffer(
@@ -581,29 +589,6 @@ class TileMeshLibrary {
 
     // MARK: - Celestial (M9)
 
-    /// A unit cube centred at the origin (±0.5), 6 faces wound CCW-outward with true face
-    /// normals. Scaled + positioned per-instance to render the sun and moon.
-    private static func addUnitCube(to verts: inout [MazeVertexSwift], indices: inout [UInt32]) {
-        let h: Float = 0.5
-        let p = [
-            SIMD3<Float>(-h, -h, -h), SIMD3(h, -h, -h), SIMD3(h, h, -h), SIMD3(-h, h, -h),  // 0..3 back (z=−h)
-            SIMD3<Float>(-h, -h,  h), SIMD3(h, -h,  h), SIMD3(h, h,  h), SIMD3(-h, h,  h),   // 4..7 front (z=+h)
-        ]
-        func quad(_ a: Int, _ b: Int, _ c: Int, _ d: Int) {
-            let n = normalize(cross(p[b] - p[a], p[d] - p[a]))
-            let base = UInt32(verts.count)
-            for i in [a, b, c, d] {
-                verts.append(MazeVertexSwift(position: p[i], normal: n, texCoord: SIMD2(0, 0), aoFactor: 1.0))
-            }
-            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
-        }
-        quad(4, 5, 6, 7)  // +Z
-        quad(0, 3, 2, 1)  // −Z
-        quad(1, 2, 6, 5)  // +X
-        quad(0, 4, 7, 3)  // −X
-        quad(3, 7, 6, 2)  // +Y
-        quad(0, 1, 5, 4)  // −Y
-    }
 
     // MARK: - Props (M10 Phase G)
 
