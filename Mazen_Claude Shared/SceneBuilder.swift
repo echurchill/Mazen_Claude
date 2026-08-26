@@ -1254,12 +1254,16 @@ final class SceneBuilder {
         // what keeps drawing and walking from ever disagreeing — which is all an "invisible wall"
         // has ever been.
         let openings = passable ?? facelet.mazeTile.openings
-        // The floor of the turnable slab breathes. Brightened AND cooled: brightness alone reads as
-        // a patch of sun, and this has to say "held, waiting" rather than "lit". Applied to the floor
-        // only — the walls ride the same slab, but lighting those too washes the whole view.
-        let pathColor = twistGlow > 0
-            ? SIMD4<Float>(0.72 + 0.10 * twistGlow, 0.62 + 0.14 * twistGlow, 0.45 + 0.30 * twistGlow, 1.0)
-            : SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
+        // THE GLOW TRAVELS IN `discoveryAmount`, not in baseColor. Tinting baseColor did nothing at
+        // all: material 1 samples moss/gravel/stone from the texture array and never reads
+        // `in.color` — so the breathing was written to a channel the shader ignores, and Eddie saw
+        // exactly nothing. `discoveryAmount` IS free here (material 1 reads only localPosition,
+        // styleSeed, texCoord and worldTangent), so it carries the pulse.
+        //
+        // Which means every OTHER material-1 instance has to pass 0 deliberately, or the walls and
+        // posts of every world glow permanently. That is the cost of reusing a field: it stops being
+        // free the moment two things mean different things by it.
+        let pathColor = SIMD4<Float>(0.72, 0.62, 0.45, 1.0)
         let uvT = facelet.mazeTile.uvTurns
         let key = (openings.rawValue & 0x0F) | (UInt8(((uvT % 4) + 4) % 4) << 4)
         if naturalDressing {
@@ -1274,7 +1278,7 @@ final class SceneBuilder {
         } else {
             // Floor: inflated per-vertex (rest matrix + roundness + relief).
             let floorInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-                materialID: metal ? 32 : 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                materialID: metal ? 32 : 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: twistGlow,
                 styleSeed: facelet.mazeTile.styleSeed,
                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
             mazeFloorTiles[key, default: []].append(TileEntry(instance: floorInst, mesh: tileMeshLib.floorMesh(for: openings, uvTurns: uvT)))
@@ -1295,7 +1299,7 @@ final class SceneBuilder {
             // (walls are the foliage props placed by stampGardenWalls; nothing to emit here)
         } else if let wm = tileMeshLib.wallMesh(configKey: cfg) {
             let wallInst = InstanceDataSwift(modelMatrix: restM, baseColor: pathColor,
-                materialID: metal ? 32 : 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 1.0,
+                materialID: metal ? 32 : 1, tileID: UInt32(facelet.id.rawValue), discoveryAmount: 0,
                 styleSeed: facelet.mazeTile.styleSeed,
                 spinMatrix: spin, roundness: roundness, invHalfExtent: invHalf, reliefAmplitude: relief)
             mazeWallTiles[cfg, default: []].append(TileEntry(instance: wallInst, mesh: wm))
@@ -1325,7 +1329,7 @@ final class SceneBuilder {
             baseColor: pathColor,
             materialID: 1,
             tileID: 0,
-            discoveryAmount: 1.0,
+            discoveryAmount: 0,          // the debug single tile is not a turnable slab
             styleSeed: 42
         )
 

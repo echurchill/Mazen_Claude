@@ -509,6 +509,17 @@ fragment float4 fragmentShader(
             texColor *= 0.85 + 0.15 * (1.0 - smoothstep(0.7, 1.0, edgeDark));
         }
 
+        // THE TURNABLE SLAB BREATHES (2026-08-07). `discoveryAmount` carries the pulse for this
+        // material — it is otherwise unread here, whereas `in.color` genuinely is unread, which is
+        // why tinting baseColor on the first attempt produced exactly nothing on screen.
+        //
+        // Brightened AND cooled: brightness alone reads as a patch of sunlight, and this has to say
+        // "held, waiting". Floors only — every other material-1 instance passes 0 deliberately.
+        if (in.discoveryAmount > 0.001) {
+            float g = clamp(in.discoveryAmount, 0.0, 1.0);
+            texColor = texColor * (1.0 + 0.30 * g) + float3(0.05, 0.09, 0.20) * g;
+        }
+
         color = texColor;
     } else if (in.materialID == 4 || in.materialID == 5) {
         // Volumetric fog layers — each layer is semi-transparent
