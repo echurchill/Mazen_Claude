@@ -126,6 +126,11 @@ control the way Scene 5's rotators work.
 **Two numbers to tune by feel:** `turnRepeat` (0.22 s between steps while the stick is held) and
 `lookRate` (2.6 rad/s at full deflection). Both in `GamepadInput.swift`.
 
+*Keyboard and pad share `forwardHeld`/`backwardHeld`. The pad only writes them while a stick or
+d-pad is actually pushed, and clears them once on release — otherwise a controller merely PAIRED,
+sitting untouched on a desk, sets them false every frame and W/S stop working entirely. That was a
+real regression; `MAZEN_INPUT_SELFTEST=1` now checks it at boot and says REGRESSION out loud.*
+
 *macOS Release is sandboxed, so a wireless pad needs `com.apple.security.device.bluetooth` — set via
 `ENABLE_RESOURCE_ACCESS_BLUETOOTH`. Without it the controller is never seen at all, and the
 `[gamepad] active:` line at boot is how you know it was.*

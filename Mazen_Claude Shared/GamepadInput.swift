@@ -32,6 +32,9 @@ final class GamepadInput {
     private let lookRate: Float = 2.6
     private let orbitRate: Float = 1.8
 
+    /// True while a stick or d-pad is actually pushed. See the movement block: without it, a paired
+    /// but untouched controller silently overrides the keyboard every frame.
+    private var padOwnsMovement = false
     private var turnArmed = true
     private var turnCooldown: Double = 0
     /// Edge-triggered buttons: the value last frame, so a hold fires once.
@@ -65,7 +68,12 @@ final class GamepadInput {
     func poll(_ gs: GameState, dt: Double) {
         guard let pad = GCController.current?.extendedGamepad else {
             // A disconnected controller must not leave the player walking forever.
-            if connectedName != nil { gs.forwardHeld = false; gs.backwardHeld = false; connectedName = nil }
+            if connectedName != nil {
+                // Clear only if the PAD was the one holding them — a controller going to sleep must
+                // not stop a player who is walking with the keyboard.
+                if padOwnsMovement { gs.forwardHeld = false; gs.backwardHeld = false; padOwnsMovement = false }
+                connectedName = nil
+            }
             return
         }
         if connectedName == nil {
@@ -87,9 +95,22 @@ final class GamepadInput {
         let moveY = abs(padY) > abs(stickY) ? padY : stickY
 
         // Held, not tapped: `update` chains hops for as long as the flag is set, exactly as the
-        // keyboard's W/S do.
-        gs.forwardHeld = moveY > 0.5
-        gs.backwardHeld = moveY < -0.5
+        // keyboard's W/S do — which is precisely the problem, because BOTH write the same two flags.
+        //
+        // Writing them unconditionally every frame killed W/S outright (Eddie): the key sets
+        // `forwardHeld = true`, and the next frame this poll — stick at rest, with a controller
+        // merely PAIRED, not touched — sets it straight back to false. The keyboard never got a
+        // single frame of movement.
+        //
+        // So the pad only speaks when it has something to say. It takes ownership while a stick or
+        // d-pad is pushed, clears the flags ONCE on release, and then keeps its hands off. Two input
+        // paths, one piece of state: whoever moved last wins, and neither silences the other.
+        let padForward = moveY > 0.5, padBack = moveY < -0.5
+        if padForward || padBack || padOwnsMovement {
+            gs.forwardHeld = padForward
+            gs.backwardHeld = padBack
+            padOwnsMovement = padForward || padBack
+        }
 
         // ── turning: discrete, with hysteresis and a repeat ────────────────────────────
         turnCooldown = max(0, turnCooldown - dt)

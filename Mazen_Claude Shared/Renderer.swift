@@ -423,6 +423,7 @@ class Renderer: NSObject, MTKViewDelegate {
     /// A controller, if one is attached — polled per frame, silent when there is none. See
     /// `GamepadInput`; it is the only input path that works identically on both platforms.
     let gamepad = GamepadInput()
+    private let inputSelfTest = ProcessInfo.processInfo.environment["MAZEN_INPUT_SELFTEST"] != nil
 
     @MainActor
     init?(metalKitView: MTKView) {
@@ -1092,6 +1093,18 @@ class Renderer: NSObject, MTKViewDelegate {
         // Input BEFORE the tick: a turn or an interact pressed this frame should be acted on in this
         // frame's update, not held over to the next one.
         gamepad.poll(gameState, dt: Double(dt))
+        // MAZEN_INPUT_SELFTEST=1 — does a keyboard hold survive a gamepad poll? Two input paths write
+        // `forwardHeld`, and when the pad wrote it unconditionally a merely-PAIRED controller killed
+        // W/S entirely. The failure is invisible in code review and obvious in one line here.
+        if inputSelfTest, frameIndex == 60 {
+            let before = gameState.forwardHeld
+            gameState.forwardHeld = true
+            gamepad.poll(gameState, dt: 1.0 / 60.0)
+            NSLog("[input selftest] keyboard hold survives a gamepad poll: %@  (controller: %@)",
+                  gameState.forwardHeld ? "YES" : "NO — REGRESSION",
+                  gamepad.connectedName ?? "none attached; test is vacuous")
+            gameState.forwardHeld = before
+        }
         gameState.update(deltaTime: dt)
         let tUpdate1 = CACurrentMediaTime()
 
