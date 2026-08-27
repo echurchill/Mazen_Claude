@@ -1687,8 +1687,15 @@ class Renderer: NSObject, MTKViewDelegate {
         // reasoned about. Feeds the same capture path the portal-view key uses.
         if let shot = benchShot, frameIndex >= shot.atFrame {
             benchShot = nil
+            // THE DRAWABLE MUST BE READABLE BEFORE IT CAN BE COPIED OUT OF — `armPortalCapture`
+            // has always done this and the shutter went round the side of it, setting the name
+            // directly. A framebufferOnly source is an illegal copy: Metal validation says so
+            // outright, and without validation it silently hands back garbage tiles. That is where
+            // the magenta blocks in my captures came from — my own instrument, one morning old,
+            // not the renderer.
+            view.framebufferOnly = false
             portalCaptureName = shot.name
-            portalCaptureSettle = 1
+            portalCaptureSettle = 2      // a frame for the flag to take effect on a fresh drawable
             NSLog("BENCH shutter at frame %d", frameIndex)
         }
 #endif
