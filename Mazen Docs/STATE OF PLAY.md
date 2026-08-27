@@ -117,9 +117,18 @@ the model exists to explain was the moment it used to leave.
   came from (*"everytime I jump to the portal world, I am inside a tardis"*). `spawnLocation` is
   explicit now.
 
-**Not chased, and worth a look:** the portal hub has red and blue blocky shapes floating well above
-the plaza, at the same positions as the boxes. They are not the lamps (those came down with the
-roof) and they predate today's scaling. Unidentified.
+**The floating shapes were the boxes' own door panels**, and Eddie named them from the photograph
+after I had reported them as unidentified. Scaling the box's frame CONSTANTS was the obvious fix and
+the wrong one: there are a dozen more below them — panels, panes, sign band, door furniture — so the
+box shrank and its front stayed hanging at the old roofline. The scale is now applied to every
+VERTEX the builder emits, once, as a uniform scale about (0, 0, floor): normals stay correct and
+nothing authored later can be left behind. Same for the lamp. (The red one is the DARSIT — Inspector
+Spacetime's box, from *Community*.)
+
+**Prop sizes are now checkable, and one is still wrong:** the signposts stand **3.3 m** to the top of
+a board **2.1 m square** — half again taller than the corrected 2.17 m box, with a board the size of
+its whole front. They are readable from across the plaza, which is what they were sized for, and the
+plaza is enormous because a tile is 19.5 m. Trade-off for Eddie.
 
 **Open for Eddie:** the model is awake the instant Scene 5 begins — spawn is one tile from the `+Z`
 plinth and `worldModelRange` is 3 — so the reveal never plays and the second `SceneBuilder.build`

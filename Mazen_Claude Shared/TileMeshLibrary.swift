@@ -870,16 +870,15 @@ class TileMeshLibrary {
         // from the floor, multiplied, and put back. Widths take the same factor, which lands the
         // footprint at ~1.9 m square against a real box's 1.37 m — near enough, and a door narrower
         // than a single 1.3 m pace would be hard to read at all.
-        let k = Self.policeBoxScale(ws: ws)
-        func up(_ v: Float) -> Float { z0 + (v - z0) * k }
-        let bodyTop: Float = up(0.40)   // top of the box body
-        let bandTop: Float = up(0.425)  // the POLICE BOX sign band
-        let roof1: Float = up(0.445)    // first roof slab
-        let roof2: Float = up(0.462)    // second, narrower slab
-        let roofTop: Float = up(0.50)   // apex of the tented roof
-        let h: Float = 0.11 * k         // body half-width (squarish police-box footprint)
-        let postW: Float = 0.016 * k    // corner post thickness
-        let proud: Float = 0.004 * k    // how far posts/band/panes stand off the body
+        let vertexStart = verts.count   // everything below is rescaled as one at the end
+        let bodyTop: Float = 0.40       // top of the box body
+        let bandTop: Float = 0.425      // the POLICE BOX sign band
+        let roof1: Float = 0.445        // first roof slab
+        let roof2: Float = 0.462        // second, narrower slab
+        let roofTop: Float = 0.50       // apex of the tented roof
+        let h: Float = 0.11             // body half-width (squarish police-box footprint)
+        let postW: Float = 0.016        // corner post thickness
+        let proud: Float = 0.004        // how far posts/band/panes stand off the body
 
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ ao: Float) -> MazeVertexSwift {
             MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
@@ -942,6 +941,28 @@ class TileMeshLibrary {
         let t = [SIMD3<Float>(-ht, -ht, roof2), SIMD3(ht, -ht, roof2), SIMD3(ht, ht, roof2), SIMD3(-ht, ht, roof2)]
         let apex = SIMD3<Float>(0, 0, roofTop)
         for i in 0..<4 { let j = (i + 1) % 4; tri(t[i], t[j], apex, 0.55) }
+
+        // ── LIFE SIZE, APPLIED TO THE GEOMETRY RATHER THAN TO THE NUMBERS ──────────────
+        //
+        // 2.17 m to the apex, Eddie's figure for a real police box. The shape above was authored by
+        // eye against the hedges and nothing ever checked it against a person: a facelet is ~19.5 m
+        // (`WorldScale.metre`), so an apex at 0.50 stood 9.7 m — four and a half times life size.
+        //
+        // Scaling the CONSTANTS was the obvious fix and the wrong one. There are a dozen more of
+        // them below the frame — panels, panes, the sign band, the door furniture — and I scaled the
+        // first eight and missed the rest, so the box shrank and its door panels stayed hanging in
+        // the sky at the old roofline. Eddie recognised them from a photograph; I had reported them
+        // as unidentified.
+        //
+        // So the scale is applied here, once, to every vertex this function emitted. A uniform
+        // scale about (0, 0, floor) leaves the normals correct, and nothing authored above — now or
+        // later — can be left behind.
+        let k = Self.policeBoxScale(ws: ws)
+        for i in vertexStart..<verts.count {
+            var v = verts[i]
+            v.position = SIMD3(v.position.x * k, v.position.y * k, z0 + (v.position.z - z0) * k)
+            verts[i] = v
+        }
     }
 
     /// How far a window pane stands off the body. Named rather than inlined because it appears eight
@@ -1340,10 +1361,8 @@ class TileMeshLibrary {
     }
 
     private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
-        // Rides the roof, so it takes the roof's scaling (see `policeBoxScale`).
-        let k = Self.policeBoxScale(ws: ws), z0 = ws.floorY
-        func up(_ v: Float) -> Float { z0 + (v - z0) * k }
-        let base: Float = up(0.50), top: Float = up(0.56), h: Float = 0.028 * k
+        let lampVertexStart = verts.count   // rescaled with the roof it stands on, at the end
+        let base: Float = 0.50, top: Float = 0.56, h: Float = 0.028
         func ring(_ z: Float) -> [SIMD3<Float>] {
             [SIMD3(-h, -h, z), SIMD3(h, -h, z), SIMD3(h, h, z), SIMD3(-h, h, z)]
         }
@@ -1359,6 +1378,15 @@ class TileMeshLibrary {
         let lb = ring(base), lt = ring(top)
         for i in 0..<4 { let j = (i + 1) % 4; quad(lb[i], lb[j], lt[j], lt[i]) }   // sides
         quad(lt[0], lt[1], lt[2], lt[3])                                          // top cap
+
+        // Rides the roof, so it takes the roof's scaling — see `addPortal`. Applied to the vertices
+        // for the same reason: it cannot then be missed.
+        let k = Self.policeBoxScale(ws: ws), z0 = ws.floorY
+        for i in lampVertexStart..<verts.count {
+            var v = verts[i]
+            v.position = SIMD3(v.position.x * k, v.position.y * k, z0 + (v.position.z - z0) * k)
+            verts[i] = v
+        }
     }
 
     /// A chest — a simple box (4 sides + top) sitting on the floor. The open/closed look is
