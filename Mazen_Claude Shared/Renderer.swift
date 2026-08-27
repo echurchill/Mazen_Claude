@@ -321,8 +321,13 @@ class Renderer: NSObject, MTKViewDelegate {
         }
         t.label = "Skybox \(name)"
         skyboxesByName[name] = t
+        // The residency set only exists off-simulator (see the guard around its declaration) — the
+        // simulator renderer is a separate branch entirely. This lazy loader sits outside that guard
+        // because BOTH branches call it, so the pinning has to be guarded here instead.
+#if !targetEnvironment(simulator)
         makeResident(t, in: residencySet)
         residencySet.commit()
+#endif
         return t
     }
     func cycleDebugSkybox() {
@@ -868,7 +873,8 @@ class Renderer: NSObject, MTKViewDelegate {
             let mres = sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib,
                                           instanceBuffer: modelInstanceBuffers[currentBufferIndex],
                                           worldOffset: modelOffset,
-                                          includeCelestials: false, includeMoon: false)
+                                          includeCelestials: false, includeMoon: false,
+                                          legibility: 3)
             modelOpaqueDrawCalls = mres.opaque
         }
 

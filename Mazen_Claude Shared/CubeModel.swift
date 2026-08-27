@@ -2068,7 +2068,13 @@ class CubeModel {
     var faceRotators = false
     /// PROTOTYPE — where the world-model plinth stands, if this world stamped one. The GameState
     /// copies it out so the wake/sleep check does not have to search the cube every frame.
-    var worldModelPlinthAt: (face: CubeFace, row: Int, col: Int)? = nil
+    /// The world-model plinth's facelet ID — an IDENTITY, not a location.
+    ///
+    /// This held `(face, row, col)` for exactly one evening. A twist moves facelets between grid
+    /// slots, so the coordinates named a slot the plinth had been rotated out of, and the miniature
+    /// appeared across the world from the pedestal that owns it (Eddie, 2026-08-27). The rule was
+    /// already written twenty lines above `locate(faceletID:)`; this is what following it looks like.
+    var worldModelPlinthFacelet: Int? = nil
 
     /// Where the orb put the way out, once it has chosen. nil until the sixth obelisk connects.
     /// (Declared here rather than beside its creators — extensions cannot hold stored properties.)

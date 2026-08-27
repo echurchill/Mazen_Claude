@@ -145,7 +145,8 @@ final class SceneBuilder {
 
     func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer,
                worldOffset: float4x4 = matrix_identity_float4x4, includeCelestials: Bool = true,
-               includeMoon: Bool = true, sunOverride: SIMD3<Float>? = nil) -> SceneDrawData {
+               includeMoon: Bool = true, sunOverride: SIMD3<Float>? = nil,
+               legibility: Float = 1) -> SceneDrawData {
         let model = gameState.cubeModel
         // Fold the offset into the spin so every tile/wall/prop/player-marker matrix (all built as
         // `spin * …`) is pushed out together — one injection point for the whole world.
@@ -880,6 +881,19 @@ final class SceneBuilder {
             }
         }
 
+        // `legibility` FATTENS THE GROOVE FOR A WORLD DRAWN SMALL — packed into `styleSeed`'s high
+        // bits in hundredths, above the four-bit channel mask. (`tileID` was the obvious carrier and
+        // is not one: it never reaches the fragment stage. `styleSeed` does, and materials 23 and 36
+        // already ride their extra facts in its high bits.)
+        //
+        // The channels are to scale, and to scale is the wrong answer for the plinth's miniature.
+        // At ~1/120 a facelet is about 17 px, so a groove 12% of a tile wide comes out at 2 px with a
+        // sub-pixel core — and since the shader DISCARDS everything outside the halo, what little
+        // survives is speckle lost in the stone's own noise. The world Eddie summoned had no visible
+        // puzzle on it at all, which is the one thing a world in your hands is for.
+        //
+        // So the miniature is a DIAGRAM: the routing reads, the proportions do not. Only this mark
+        // is exaggerated — the stone, the walls and the props stay honestly tiny.
         // SCENE 5's CHANNELS — "shallow physical grooves bound to facelets", drawn from the tile's own
         // channel mask, and lit only where the current actually reaches. A groove that stops against
         // a blank tile is the scene's central image: "thin dark cracks where channels have been
@@ -910,7 +924,7 @@ final class SceneBuilder {
                             modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
                             materialID: 33, tileID: 0,
                             discoveryAmount: depths[facelet.id.rawValue].map { Float($0) + 1 } ?? 0,
-                            styleSeed: mask,
+                            styleSeed: mask | (UInt32(legibility * 100) << 8),
                             spinMatrix: spin, roundness: model.roundness,
                             invHalfExtent: 1.0 / model.worldScale.faceDistance,
                             reliefAmplitude: model.reliefAmplitude)

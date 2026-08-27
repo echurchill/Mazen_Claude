@@ -191,7 +191,7 @@ extension CubeModel {
                     guard f.props.isEmpty, f.mazeTile.channels.isEmpty else { continue }
                     cubies[ci].facelets[fi].props.append(
                         Prop(kind: .worldModel, subRow: 1, subCol: 1, facing: .s, state: 5))
-                    worldModelPlinthAt = (CubeFace.positiveZ, r, col)
+                    worldModelPlinthFacelet = f.id.rawValue
                     markTopologyChanged()
                     return
                 }

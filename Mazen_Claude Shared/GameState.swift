@@ -186,7 +186,6 @@ class GameState {
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws, stamp: stamp)
         skyCounterpart = stamp.skyCounterpart
-        worldModelTile = cubeModel.worldModelPlinthAt
         authoredSky = stamp.skyCounterpart
         player = PlayerState(size: size, standGrid: ws.standGrid)
         // Stand where the world SAYS you stand. `spawnLocation` was only ever applied on arrival
@@ -245,6 +244,9 @@ class GameState {
     func update(deltaTime: Float) {
         // The model plinth: awake only while used AND stood near. Walking away is the dismissal —
         // no second press, nothing to remember.
+        if let fid = cubeModel.worldModelPlinthFacelet {
+            worldModelTile = cubeModel.locate(faceletID: fid)
+        }
         if let t = worldModelTile {
             let far = t.face != player.face
                 || max(abs(t.row - player.row), abs(t.col - player.col)) > Self.worldModelRange
@@ -1536,8 +1538,14 @@ class GameState {
     /// What F (and, on iOS, a tap) acts on. Shared with `hasInteractableHere` so the touch path
     /// cannot drift from the keyboard one.
     // ── PROTOTYPE: the world-model plinth (Scene 5) ────────────────────────────────────────────
-    /// Where the plinth stands, if this world has one.
-    var worldModelTile: (face: CubeFace, row: Int, col: Int)? = nil
+    /// WHERE THE PLINTH STANDS RIGHT NOW — asked every frame, never remembered.
+    ///
+    /// The plinth rides its facelet through every twist, so its grid coordinates are only true until
+    /// the next one. Cached once at build, the miniature unfolded over the slot the plinth used to
+    /// occupy — metres away across the stone, with the pedestal that summoned it left bare.
+    /// `locate` is a scan, so the answer is refreshed once a tick in `update` rather than recomputed
+    /// by every reader.
+    private(set) var worldModelTile: (face: CubeFace, row: Int, col: Int)? = nil
     /// Woken by using it; sleeps again when the player walks away. `worldModelWake` is the animation
     /// between those two states — the model grows out of the plinth rather than appearing.
     /// `MAZEN_MODEL=1` wakes it at boot. A headless run cannot press F, and the whole point of a

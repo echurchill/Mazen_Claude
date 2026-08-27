@@ -1,6 +1,33 @@
 # STATE OF PLAY — read me first
 
-*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-08-01. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
+*A one-page handoff so a fresh session (or a future me) starts with the full picture. Last updated 2026-08-27. If you read nothing else, read this, then the [Design Synthesis](Garden%20of%20Worlds%20—%20Design%20Synthesis.md) and the [Master Roadmap](Master%20Roadmap.md). Unscheduled ideas / open items live in [Open Questions & Future Work](Open%20Questions%20%26%20Future%20Work.md).*
+
+## The world-model plinth — PROTOTYPE, first eyes-on (2026-08-27)
+
+A plinth on Scene 5 that is only a plinth until you use it, then unfolds **the world you are standing
+in** at ~1.4 m across above the pedestal, and folds away when you walk more than three tiles off.
+No new machinery: it is the sky counterpart's build path with a different offset matrix. Awake it
+costs a second `SceneBuilder.build` — scene 5 goes **2.22 ms → 4.56 ms** (Debug) — which is exactly
+the doubling **R2.6** (per-world uniforms) exists to delete. `MAZEN_MODEL=1` wakes it at boot so a
+headless validated run exercises the draw path.
+
+Eddie's first look found two things, both now fixed:
+
+- **The miniature appeared across the world from its plinth after a twist.** The plinth's
+  `(face, row, col)` was cached at stamp time, and a twist moves facelets between grid slots — the
+  coordinates named a tile the plinth had been rotated out of. Now stored as a **facelet ID** and
+  resolved live each tick. `CubeModel.locate` already carried the rule in a comment
+  (*"live rather than remembered… has to ask again rather than cache"*); the fix is what obeying it
+  looks like. Guarded by `testTheWorldModelFollowsItsPlinthThroughATwist`, mutation-tested.
+- **The channels — the actual puzzle — were invisible on it.** They were drawn, and to scale: at
+  ~1/164 a facelet is ~20 px, so a groove 12% of a tile wide lands at ~2 px with a sub-pixel core,
+  and material 33 `discard`s everything outside the halo, so what survived was speckle lost in the
+  stone's noise. **The miniature is a diagram, not a scale model**: a `legibility` factor (packed
+  into `styleSeed`'s high bits, above the channel mask) fattens the groove ×3 for this build only.
+  The world you stand on is untouched.
+
+Still open for Eddie's eyes: whether ×3 is the right fatness, and whether the model floats at the
+right height above the pedestal.
 
 ## The 60-second catch-up
 

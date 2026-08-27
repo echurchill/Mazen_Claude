@@ -1713,6 +1713,58 @@ extension CoordinateMathTests {
         check(m.sealedPortalCubies.isEmpty, "Scene 4's portal is present and lit, just unreachable")
     }
 
+    /// THE MINIATURE MUST STAY ON ITS PEDESTAL THROUGH A TWIST.
+    ///
+    /// The world-model plinth rides its facelet like every other prop, so its grid coordinates are
+    /// only true until the next turn. Cached at build time they named a slot the plinth had been
+    /// rotated out of, and the miniature unfolded metres away across the stone with the pedestal
+    /// that summoned it left bare (Eddie, 2026-08-27 — twist first, then press F).
+    ///
+    /// The check is the invariant rather than a particular pair of coordinates: wherever the plinth
+    /// prop actually IS after a turn is where `worldModelTile` must point.
+    static func testTheWorldModelFollowsItsPlinthThroughATwist() {
+        let gs = prologueWorld("scene-5")
+        let m = gs.cubeModel
+        guard m.worldModelPlinthFacelet != nil else {
+            check(false, "scene 5 should stamp a world-model plinth"); return
+        }
+
+        /// Where the prop is, found by looking rather than by remembering.
+        func plinthBySearch() -> (face: CubeFace, row: Int, col: Int)? {
+            for face in CubeFace.allCases {
+                for r in 0..<gs.cubeModel.size {
+                    for c in 0..<gs.cubeModel.size {
+                        guard let (ci, fi) = gs.cubeModel.faceletAt(face: face, row: r, col: c)
+                        else { continue }
+                        if gs.cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .worldModel }) {
+                            return (face, r, c)
+                        }
+                    }
+                }
+            }
+            return nil
+        }
+
+        gs.update(deltaTime: 1.0 / 60.0)
+        guard let before = plinthBySearch(), let tileBefore = gs.worldModelTile else {
+            check(false, "the plinth and its tile must both resolve before any turn"); return
+        }
+        check(tileBefore == before,
+              "before a turn the model sits on the plinth (\(tileBefore) vs \(before))")
+
+        // Take a turn, and let it run to completion so the facelets have actually moved.
+        gs.twistEnabled = true
+        gs.startSliceRotation(clockwise: true)
+        for _ in 0..<600 where gs.sliceRotation.isActive { gs.update(deltaTime: 1.0 / 60.0) }
+        gs.update(deltaTime: 1.0 / 60.0)
+
+        guard let after = plinthBySearch(), let tileAfter = gs.worldModelTile else {
+            check(false, "the plinth and its tile must both still resolve after a turn"); return
+        }
+        check(tileAfter == after,
+              "after a turn the model must follow the plinth (\(tileAfter) vs \(after))")
+    }
+
     /// Scene 2's lock must actually gate the turn. Before the fourth switch the bond straddles the
     /// twistable slab, so the world refuses to move and the rotation control cannot be raised; after
     /// it, the turn is legal. Without this the control is available from the first frame and the
