@@ -107,7 +107,7 @@ struct CoordinateMathTests {
         testEveryDoorKnowsWhatItIsCalled()
         testTheUndersideIsDressedWithoutChangingIt()
         testAScriptedTurnWaitsRatherThanVanishing()
-        testSceneFiveCanBeSolvedByItsRotatorsAlone()
+        testSceneFiveCanBeSolvedByItsModelPlinthsAlone()
         testSceneFiveFixturesAndCompletion()
         testSceneSixLatchesHatchAndRouteKeyedPortal()
         testTheSurveyorBuildsOnlyFromLiveCurrent()

@@ -924,10 +924,10 @@ extension CoordinateMathTests {
     /// stands on. The test that matters is not that they exist but that they are ENOUGH: the scene
     /// must be completable by walking up to controls and pressing them, with the keyboard verb never
     /// used. If it is not, the touch player is stuck in a world they can see the answer to.
-    static func testSceneFiveCanBeSolvedByItsRotatorsAlone() {
+    static func testSceneFiveCanBeSolvedByItsModelPlinthsAlone() {
         let gs = prologueWorld("scene-5")
         let m = gs.cubeModel
-        check(m.faceRotators, "Scene 5 should carry its rotators")
+        check(m.worldModelPlinths, "Scene 5 should carry its world-model plinths")
 
         // One per face, and never on the circuit or on top of something else.
         var perFace: [CubeFace: Int] = [:]
@@ -936,33 +936,35 @@ extension CoordinateMathTests {
                 for c in 0..<m.size {
                     guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
                     let f = m.cubies[ci].facelets[fi]
-                    guard f.props.contains(where: { $0.kind == .alignmentCylinder }) else { continue }
+                    guard f.props.contains(where: { $0.kind == .worldModel }) else { continue }
                     perFace[face, default: 0] += 1
-                    check(f.mazeTile.channels.isEmpty, "a rotator stands on a channel at \(face) r\(r) c\(c)")
+                    check(f.mazeTile.channels.isEmpty, "a plinth stands on a channel at \(face) r\(r) c\(c)")
                     check(!f.props.contains { $0.kind == .channelBowl || $0.kind == .layeredVessel || $0.kind == .channelBasin },
-                          "a rotator shares a tile with a fixture at \(face)")
+                          "a plinth shares a tile with a fixture at \(face)")
                 }
             }
         }
         for face in CubeFace.allCases {
-            check(perFace[face] == 1, "\(face) should carry exactly one rotator, has \(perFace[face] ?? 0)")
+            check(perFace[face] == 1, "\(face) should carry exactly one plinth, has \(perFace[face] ?? 0)")
         }
 
-        /// Walk to the rotator currently on `face` and press it, then let the turn finish.
+        /// Walk to the plinth currently on `face` and press it ONCE, then let the turn finish.
+        /// One press must mean one turn: the model wakes because you approached it, so there is no
+        /// raise-then-act press to spend first (Eddie has rejected that shape before).
         func press(_ face: CubeFace) {
             for r in 0..<m.size {
                 for c in 0..<m.size {
                     guard let (ci, fi) = m.faceletAt(face: face, row: r, col: c) else { continue }
-                    guard m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .alignmentCylinder })
+                    guard m.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .worldModel })
                     else { continue }
                     stand(gs, face, r, c)
-                    check(gs.hasInteractableHere, "a tap on the rotator's tile should reach it")
+                    check(gs.hasInteractableHere, "a tap on the plinth's tile should reach it")
                     gs.interact()
                     for _ in 0..<180 { gs.update(deltaTime: 1.0 / 60.0) }
                     return
                 }
             }
-            check(false, "no rotator found on \(face)")
+            check(false, "no plinth found on \(face)")
         }
 
         // The scramble was three quarter-turns: (0,0) twice and (2,0) once — which are the outer
@@ -972,9 +974,9 @@ extension CoordinateMathTests {
         press(.negativeZ)
         press(.negativeX)
         press(.negativeX)
-        check(gs.liveCircuit, "the six rotators should be able to complete the circuit without Q/E")
+        check(gs.liveCircuit, "the six model plinths should complete the circuit without Q/E")
         gs.update(deltaTime: 1.0 / 60.0)
-        check(m.chosenExit != nil, "completing it by rotator should still create the way out")
+        check(m.chosenExit != nil, "completing it by plinth should still create the way out")
     }
 
     /// The order-independence itself, as its own test, because it is the property that broke: Eddie
@@ -1725,20 +1727,19 @@ extension CoordinateMathTests {
     static func testTheWorldModelFollowsItsPlinthThroughATwist() {
         let gs = prologueWorld("scene-5")
         let m = gs.cubeModel
-        guard m.worldModelPlinthFacelet != nil else {
-            check(false, "scene 5 should stamp a world-model plinth"); return
+        guard m.worldModelPlinths else {
+            check(false, "scene 5 should stamp world-model plinths"); return
         }
 
-        /// Where the prop is, found by looking rather than by remembering.
+        /// The plinth on the face the player is standing on, found by looking rather than by
+        /// remembering — that is the one the model belongs to.
         func plinthBySearch() -> (face: CubeFace, row: Int, col: Int)? {
-            for face in CubeFace.allCases {
-                for r in 0..<gs.cubeModel.size {
-                    for c in 0..<gs.cubeModel.size {
-                        guard let (ci, fi) = gs.cubeModel.faceletAt(face: face, row: r, col: c)
-                        else { continue }
-                        if gs.cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .worldModel }) {
-                            return (face, r, c)
-                        }
+            let f = gs.player.face
+            for r in 0..<gs.cubeModel.size {
+                for c in 0..<gs.cubeModel.size {
+                    guard let (ci, fi) = gs.cubeModel.faceletAt(face: f, row: r, col: c) else { continue }
+                    if gs.cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .worldModel }) {
+                        return (f, r, c)
                     }
                 }
             }

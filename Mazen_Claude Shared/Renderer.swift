@@ -789,6 +789,14 @@ class Renderer: NSObject, MTKViewDelegate {
             }
             NSLog("BENCH world=%@", bench)
 #if DEBUG
+            // THE DRAWABLE MUST BE READABLE BEFORE IT CAN BE COPIED OUT OF, and from the FIRST
+            // frame — `armPortalCapture` has always cleared this and the shutter went round the
+            // side of it. A framebufferOnly source is an illegal copy: Metal validation says so
+            // outright, and without validation it hands back garbage tiles, which is where the
+            // magenta blocks in my captures came from. Clearing it at shutter time was still too
+            // late: the drawables already in flight kept the old flag, and the photograph came out
+            // torn. Set it once, up front, for the whole bench.
+            if ProcessInfo.processInfo.environment["MAZEN_SHOT"] != nil { metalKitView.framebufferOnly = false }
             if let shot = ProcessInfo.processInfo.environment["MAZEN_SHOT"] {
                 benchShot = (name: shot,
                              atFrame: Int(ProcessInfo.processInfo.environment["MAZEN_SHOT_FRAME"] ?? "") ?? 90)
@@ -871,8 +879,25 @@ class Renderer: NSObject, MTKViewDelegate {
         modelOpaqueDrawCalls = []
         if gameState.worldModelWake > 0.01, let t = gameState.worldModelTile {
             let ws = gameState.worldScale
-            let base = gameState.cubeModel.inflatedPlacement(face: t.face, row: t.row, col: t.col,
+            var base = gameState.cubeModel.inflatedPlacement(face: t.face, row: t.row, col: t.col,
                                                              localX: 0, localY: 0)
+            // RIDE THE TURN WITH THE PLINTH.
+            //
+            // `inflatedPlacement` is a REST placement, so mid-twist it names where the plinth will
+            // be when the slab stops, not where it is now. The pedestal swung away and the model
+            // stayed behind, then snapped across when the turn finalised — Eddie: "a strange fly
+            // away and back of the mini-world while it is up. Cool but not useful."
+            //
+            // Now that F at this plinth IS the twist, that is not a curiosity any more: the one
+            // moment the model exists to explain is the moment it used to leave. Same correction
+            // SceneBuilder applies to every prop on a turning slab — the live animation matrix,
+            // when this plinth's cubie is one of the ones moving.
+            let sr = gameState.sliceRotation
+            if sr.isActive,
+               let (pci, _) = gameState.cubeModel.faceletAt(face: t.face, row: t.row, col: t.col),
+               sr.affectedCubies.contains(pci) {
+                base = sr.currentMatrix * base
+            }
             let up = SIMD3<Float>(base.columns.2.x, base.columns.2.y, base.columns.2.z)
             // ~1.4 m across, floating a little above head height over the stone: big enough to read a
             // channel, small enough to take in at once. Grown by the wake so it unfolds from the
@@ -1683,19 +1708,24 @@ class Renderer: NSObject, MTKViewDelegate {
         }
 
 #if DEBUG
+        // MAZEN_TWIST=<frame> fires the turn the model plinth fires, so a headless run can be
+        // photographed mid-twist — the one moment the model exists to explain, and the one that
+        // used to throw it across the room.
+        if let tw = ProcessInfo.processInfo.environment["MAZEN_TWIST"], let at = Int(tw),
+           frameIndex == at, !gameState.sliceRotation.isActive {
+            let (axis, index) = gameState.cubeModel.sliceAxisAndIndex(for: gameState.player.face)
+            gameState.startScriptedSliceRotation(axis: axis, index: index, clockwise: true)
+            NSLog("BENCH twist fired at frame %d", frameIndex)
+        }
+#endif
+
+#if DEBUG
         // The bench's shutter: photograph one frame so a headless run can be LOOKED at rather than
         // reasoned about. Feeds the same capture path the portal-view key uses.
         if let shot = benchShot, frameIndex >= shot.atFrame {
             benchShot = nil
-            // THE DRAWABLE MUST BE READABLE BEFORE IT CAN BE COPIED OUT OF — `armPortalCapture`
-            // has always done this and the shutter went round the side of it, setting the name
-            // directly. A framebufferOnly source is an illegal copy: Metal validation says so
-            // outright, and without validation it silently hands back garbage tiles. That is where
-            // the magenta blocks in my captures came from — my own instrument, one morning old,
-            // not the renderer.
-            view.framebufferOnly = false
             portalCaptureName = shot.name
-            portalCaptureSettle = 2      // a frame for the flag to take effect on a fresh drawable
+            portalCaptureSettle = 1
             NSLog("BENCH shutter at frame %d", frameIndex)
         }
 #endif

@@ -244,13 +244,34 @@ class GameState {
     func update(deltaTime: Float) {
         // The model plinth: awake only while used AND stood near. Walking away is the dismissal —
         // no second press, nothing to remember.
-        if let fid = cubeModel.worldModelPlinthFacelet {
-            worldModelTile = cubeModel.locate(faceletID: fid)
+        // THE MODEL WAKES BECAUSE YOU WALKED UP TO IT, not because you pressed something.
+        //
+        // It used to take a press to wake and another to act, which is the shape Eddie has already
+        // rejected once: "one F raises, second F rotates the rotator, third F makes the slice move".
+        // Now that the plinth IS the rotator, one press must mean one turn — so approaching does the
+        // waking, and F is only ever the verb. Walking away is still the dismissal.
+        //
+        // Found by looking, never remembered: whichever plinth is on the face under your feet, at
+        // the coordinates it occupies THIS tick (see `CubeModel.worldModelPlinths`).
+        if cubeModel.worldModelPlinths {
+            var nearest: (tile: (face: CubeFace, row: Int, col: Int), d: Int)? = nil
+            for r in 0..<cubeModel.size {
+                for c in 0..<cubeModel.size {
+                    guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: r, col: c),
+                          cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .worldModel })
+                    else { continue }
+                    let d = max(abs(r - player.row), abs(c - player.col))
+                    if nearest == nil || d < nearest!.d { nearest = ((player.face, r, c), d) }
+                }
+            }
+            if let n = nearest {
+                worldModelTile = n.tile
+                if !worldModelForcedAwake { worldModelAwake = n.d <= Self.worldModelRange }
+            } else if !worldModelForcedAwake {
+                worldModelAwake = false
+            }
         }
-        if let t = worldModelTile {
-            let far = t.face != player.face
-                || max(abs(t.row - player.row), abs(t.col - player.col)) > Self.worldModelRange
-            if far { worldModelAwake = false }
+        if worldModelTile != nil {
             let target: Float = worldModelAwake ? 1 : 0
             let rate: Float = target > worldModelWake ? 1.4 : 2.2   // grows slowly, folds away quickly
             worldModelWake += max(-rate * deltaTime, min(rate * deltaTime, target - worldModelWake))
@@ -1552,6 +1573,8 @@ class GameState {
     /// validated boot is to exercise the path the player will hit — an untested draw path is how
     /// yesterday's fuchsia and the prompt crash both reached Eddie before they reached me.
     var worldModelAwake = ProcessInfo.processInfo.environment["MAZEN_MODEL"] != nil
+    /// `MAZEN_MODEL` pins it open, so a headless run exercises the draw path with nobody to walk up.
+    private let worldModelForcedAwake = ProcessInfo.processInfo.environment["MAZEN_MODEL"] != nil
     private(set) var worldModelWake: Float = 0
     /// Tiles. Far enough that you can step back and look at the model, close enough that leaving
     /// obviously ends it.
@@ -1935,7 +1958,24 @@ class GameState {
     private func handle_worldModel(_ ci: Int, _ fi: Int) -> Bool {
         guard cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .worldModel })
         else { return false }
-        worldModelAwake.toggle()
+        // ONE PRESS, ONE TURN — THE FACE IT IS SHOWING YOU.
+        //
+        // The seam already marks exactly the slab that turns: `sliceAxisAndIndex(for:)` takes only
+        // the face, so every twist in this game is a face-layer turn, and the model outlines a
+        // face. Nothing had to be invented to connect them — the control just needed a referent you
+        // could see. This replaces the six rotators, which did the same thing with nothing to look
+        // at (see `stampSceneFive`).
+        //
+        // Scripted rather than `startSliceRotation`: same slow, deliberate sweep the rotator used,
+        // and it survives being pressed while still walking (`pendingScriptedTwist`).
+        //
+        // Waking is done by approaching (see `update`), so there is no raise-then-act press to
+        // spend before the world moves.
+        // Ignored, not queued, while the world is already moving — a control pressed repeatedly
+        // while reading a route must not bank up turns the player has forgotten asking for.
+        guard !sliceRotation.isActive, !player.isMoving, !player.isTurning else { return true }
+        let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
+        startScriptedSliceRotation(axis: axis, index: index, clockwise: true)
         return true
     }
 

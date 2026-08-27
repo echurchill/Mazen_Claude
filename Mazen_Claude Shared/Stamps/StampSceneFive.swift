@@ -159,8 +159,16 @@ extension CubeModel {
         // AFTER the scramble, deliberately: the rotators are placed on the world as the player
         // finds it, so "off the channels" is true of the world they will actually walk. Stamped
         // before, the scramble would carry them onto whatever tiles it liked.
-        stampFaceRotators()
-        stampWorldModelPlinth()
+        // THE SIX ROTATORS ARE GONE — the world-model plinth is the rotator now (Eddie,
+        // 2026-08-27). They failed for one reason: standing on the slab you are turning, "the slice
+        // I am on moves but it still doesn't really do anything other than the light/shadow
+        // changing on the surface I am on". You ride the turn, so nothing moves relative to you.
+        //
+        // The model fixes exactly that. Its seam marks the face F turns — the same slab, since
+        // `sliceAxisAndIndex(for:)` takes only the face — and when that face turns you watch it
+        // spin like a dial against the rest of the little world, in your hands, while it happens to
+        // you. One control instead of two, and the diegetic walk-up the twist has always wanted.
+        stampWorldModelPlinths()
 
         spawnLocation = (face: .positiveZ, row: c + 1, col: c, facing: .n)
     }
@@ -177,26 +185,36 @@ extension CubeModel {
     /// Scene 5 is the right place to try it: its channels run ACROSS faces, and a cross-face routing
     /// puzzle is exactly what cannot be held in the head from ground level. If the idea works
     /// anywhere it works here — and if it does not work here it probably does not work.
-    func stampWorldModelPlinth() {
+    /// ONE PER FACE, exactly where the six rotators stood.
+    ///
+    /// Scene 5 has to be completable by walking up to controls and pressing them, with the keyboard
+    /// verb never used — otherwise a touch player is stuck in a world whose answer they can see
+    /// (`testSceneFiveCanBeSolvedByItsModelPlinthsAlone`). Each plinth turns the face it stands on,
+    /// so six of them are what makes the circuit reachable, and dropping to one would have quietly
+    /// made the scene unsolvable without Q/E. The test caught that; I had not thought of it.
+    func stampWorldModelPlinths() {
         let n = size, c = n / 2
-        // Searched rather than placed: the middle of `+Z` is the source, and the rotator has already
-        // taken the nearest free tile to it.
-        for radius in 1..<n {
-            for dr in -radius...radius {
-                for dc in -radius...radius where abs(dr) == radius || abs(dc) == radius {
-                    let r = c + dr, col = c + dc
-                    guard r >= 0, r < n, col >= 0, col < n,
-                          let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+        worldModelPlinths = true
+        for face in CubeFace.allCases {
+            var best: (r: Int, col: Int, d: Int)? = nil
+            for r in 0..<n {
+                for col in 0..<n {
+                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
                     let f = cubies[ci].facelets[fi]
                     guard f.props.isEmpty, f.mazeTile.channels.isEmpty else { continue }
-                    cubies[ci].facelets[fi].props.append(
-                        Prop(kind: .worldModel, subRow: 1, subCol: 1, facing: .s, state: 5))
-                    worldModelPlinthFacelet = f.id.rawValue
-                    markTopologyChanged()
-                    return
+                    // Manhattan distance from the middle: nearest free tile wins, ties by row then
+                    // column so the six controls land in the same place every run.
+                    let d = abs(r - c) + abs(col - c)
+                    if best == nil || d < best!.d { best = (r, col, d) }
                 }
             }
+            guard let spot = best, let (ci, fi) = faceletAt(face: face, row: spot.r, col: spot.col)
+            else { continue }
+            cubies[ci].facelets[fi].props.append(Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .n))
+            cubies[ci].facelets[fi].props.append(
+                Prop(kind: .worldModel, subRow: 1, subCol: 1, facing: .s, state: 5))
         }
+        markTopologyChanged()
     }
 
     func stampFaceRotators() {

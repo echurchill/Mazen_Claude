@@ -48,6 +48,37 @@ Warm on purpose: the current is blue-white, and a selection sharing its colour w
 the puzzle rather than as a control over it. First pass came out dashed and was widened to a
 continuous line.
 
+**THE MODEL PLINTH IS NOW THE ROTATOR, and the six face rotators are retired** (Eddie's call,
+2026-08-27). They failed for one reason — standing on the slab you turn, *"the slice I am on moves
+but it still doesn't really do anything other than the light/shadow changing"* — and the model fixes
+exactly that: you ride the turn, so nothing moves relative to you, but in the miniature the face
+spins like a dial against the rest of the little world.
+
+Three things fell out of building it that were not in the plan:
+
+- **The seam already marked the right thing.** `sliceAxisAndIndex(for:)` takes only the FACE, so
+  every twist in this game is a face-layer turn (a Rubik's F-move) and the seam outlines a face.
+  Nothing had to be invented to connect the control to its referent.
+- **Six plinths, not one.** `testSceneFiveCanBeSolvedByItsRotatorsAlone` exists because the scene
+  must be completable by walking up to controls, *"with the keyboard verb never used"* — otherwise a
+  touch player is stuck in a world whose answer they can see. Each plinth turns the face it stands
+  on, so one plinth would have quietly made Scene 5 unsolvable without Q/E. The test caught it; I
+  had not thought of it. Renamed `…ByItsModelPlinthsAlone` and mutation-tested.
+- **It wakes on APPROACH, not on a press.** A wake-press plus an act-press is the shape Eddie has
+  already rejected once (*"one F raises, second F rotates the rotator, third F makes the slice
+  move"*). Now that the plinth is the rotator, one press must mean one turn.
+
+Also fixed: the model rides the turning slab with its plinth. `inflatedPlacement` is a REST
+placement, so mid-twist it named where the plinth would END UP; the pedestal swung away and the
+model snapped after it ("a strange fly away and back"). Now that F here IS the twist, the one moment
+the model exists to explain was the moment it used to leave.
+
+**Open for Eddie:** the model is awake the instant Scene 5 begins — spawn is one tile from the `+Z`
+plinth and `worldModelRange` is 3 — so the reveal never plays and the second `SceneBuilder.build`
+is always paid (R2.6's case, again). Tighten the range, move the spawn, or accept it. And **Q/E
+still turn the world from anywhere**, which makes the plinth optional rather than the control; the
+diegetic-controls thread wants that withdrawn in these scenes, but that is a bigger call than today's.
+
 Next on it (Eddie, 2026-08-27): **how you interact with it** — "if we can make this
 change and figure out how to interact with it then I think this is a wonderful visualization and
 control mechanism". Also noted: pressing Q/E while the model is up makes it fly away and return —
