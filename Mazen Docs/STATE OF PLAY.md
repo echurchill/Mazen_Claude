@@ -19,15 +19,22 @@ Eddie's first look found two things, both now fixed:
   resolved live each tick. `CubeModel.locate` already carried the rule in a comment
   (*"live rather than remembered… has to ask again rather than cache"*); the fix is what obeying it
   looks like. Guarded by `testTheWorldModelFollowsItsPlinthThroughATwist`, mutation-tested.
-- **The channels — the actual puzzle — were invisible on it.** They were drawn, and to scale: at
-  ~1/164 a facelet is ~20 px, so a groove 12% of a tile wide lands at ~2 px with a sub-pixel core,
-  and material 33 `discard`s everything outside the halo, so what survived was speckle lost in the
-  stone's noise. **The miniature is a diagram, not a scale model**: a `legibility` factor (packed
-  into `styleSeed`'s high bits, above the channel mask) fattens the groove ×3 for this build only.
-  The world you stand on is untouched.
+- **The channels — the actual puzzle — were invisible on it, and the world had its back turned.**
+  Two wrong theories died first. The grooves were not missing: both builds emit all 22 channel
+  tiles. They were not too thin either — I widened them ×3 on a sub-pixel argument, and Eddie killed
+  it with one observation: *in orbit, at the same size on screen, they read fine*. The width change
+  was reverted. What the measurement actually said is that the model presented `+Y` at 0.89 toward
+  the eye while the channel cross lay on `+Z` at **0.04** — dead edge-on, wrapped round the
+  silhouette and foreshortened to nothing. The miniature had no orientation of its own; it inherited
+  the world's idle spin and showed whatever that left facing outward. It now **turns to present the
+  face the player is standing on** (`WorldModelPlinth.presenting`, tested and mutation-tested), which
+  is also why orbit worked and the plinth did not: in orbit you fly round to the face you want, and a
+  thing on a pedestal has to offer that face itself. A `DEBUG` bench line prints which face it is
+  showing, because a model with its back turned is a plain stone ball rather than an error.
 
-Still open for Eddie's eyes: whether ×3 is the right fatness, and whether the model floats at the
-right height above the pedestal.
+Still open for Eddie's eyes: whether always presenting your own face is right, or whether the model
+should hold a fixed orientation you walk around; and whether it floats at the right height above the
+pedestal.
 
 ## The 60-second catch-up
 

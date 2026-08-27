@@ -92,6 +92,7 @@ struct CoordinateMathTests {
         testSceneFiveIsSolvableAndCanBeMadeWorse()
         testSceneFiveVesselsMirrorLocalTruthNotProgress()
         testTheWorldModelFollowsItsPlinthThroughATwist()
+        testTheWorldModelTurnsItsFaceToTheViewer()
         testAPrologueWorldIsTheSamePlaceHoweverYouReachIt()
         testTheInteriorStaysSolvedBetweenVisits()
         testAWorldCanNameADifferentDoorPerRoute()

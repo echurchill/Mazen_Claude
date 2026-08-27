@@ -890,7 +890,7 @@ fragment float4 fragmentShader(
         // to a route you cannot see.
         float2 uv = in.texCoord;
         const float2 mid = float2(0.5, 0.5);
-        uint links = in.styleSeed & 0xFu;
+        uint links = in.styleSeed;
         float d = 1e9;
         if (links & 1u) d = min(d, segmentDistance(uv, mid, float2(0.5, 0.0)));
         if (links & 2u) d = min(d, segmentDistance(uv, mid, float2(1.0, 0.5)));
@@ -900,14 +900,10 @@ fragment float4 fragmentShader(
         // road, not a groove — and its lit core alone was as wide as the obelisk beside it is tall
         // is wrong for "veins". 0.062 puts the groove at ~2.3 m overall, about the width of a
         // receiver's base, which is the relation the two objects should have.
-        // `styleSeed`'s high bits carry the legibility factor in hundredths (see SceneBuilder): 1.0
-        // for the world you stand on, higher for the plinth's miniature, where a to-scale groove is
-        // 2 px wide and therefore not there at all.
-        float widen = max(1.0, float(in.styleSeed >> 8) * 0.01);
-        const float haloW = 0.062 * widen;
+        const float haloW = 0.062;
         if (d > haloW) discard_fragment();
-        float core = smoothstep(0.024 * widen, 0.006 * widen, d);
-        float halo = smoothstep(haloW, 0.028 * widen, d);
+        float core = smoothstep(0.024, 0.006, d);
+        float halo = smoothstep(haloW, 0.028, d);
         float live = clamp(in.discoveryAmount, 0.0, 1.0);
         // The current MOVES along the groove — keyed to world position so it flows across tiles
         // rather than restarting in each, and only when the channel is actually fed.

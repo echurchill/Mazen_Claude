@@ -403,6 +403,9 @@ class Renderer: NSObject, MTKViewDelegate {
     var modelOpaqueDrawCalls: [DrawCall] = []
     var modelAssetDrawCmds: [AssetDrawCmd] = []
     var modelOffset = matrix_identity_float4x4
+#if DEBUG
+    static var facingShots = 0
+#endif
     /// Resolved ONCE per frame, before the asset pass, because the asset pass and the maze build both
     /// need the same answer and the asset pass runs first.
     var frameCounterpart: (world: GameState, offset: float4x4)? = nil
@@ -867,15 +870,48 @@ class Renderer: NSObject, MTKViewDelegate {
             let want = 0.70 * metres * gameState.worldModelWake
             let scale = max(0.0001, want / max(0.0001, radius))
             let centre = base.position + up * (ws.floorY + 1.5 * metres)
-            modelOffset = gameState.worldSpinMatrix()
-                * float4x4.translation(centre.x, centre.y, centre.z)
-                * float4x4.scale(scale)
+            // TURN IT TO FACE THE PLAYER — see `WorldModelPlinth`.
+            //
+            // Three frames meet here, which is what made getting it wrong easy. `centre` and the
+            // face normal come out of the model in CUBE space; the eye is in WORLD space; and
+            // `build` multiplies whatever offset it is handed by the world's own spin, so the
+            // geometry is spun once INSIDE the offset and the whole placement is spun again
+            // OUTSIDE it. The presentation rotation sits between the two, so it takes an
+            // already-spun face normal and an eye direction wound back out of world space.
+            let spun = gameState.worldSpinMatrix()
+            let unspin = simd_inverse(spun)
+            let faceRest = gameState.cubeModel.restMatrix(face: gameState.player.face,
+                                                          row: gameState.cubeModel.size / 2,
+                                                          col: gameState.cubeModel.size / 2)
+            let faceN4 = spun * SIMD4<Float>(faceRest.columns.2.x, faceRest.columns.2.y,
+                                             faceRest.columns.2.z, 0)
+            let faceN = simd_normalize(SIMD3(faceN4.x, faceN4.y, faceN4.z))
+            let cw4 = spun * SIMD4<Float>(centre.x, centre.y, centre.z, 1)
+            let centreWorld = SIMD3(cw4.x, cw4.y, cw4.z)
+            let eyeP = gameState.framePose(aspect: aspect).position
+            let te4 = unspin * SIMD4<Float>(simd_normalize(eyeP - centreWorld), 0)
+            let toEye = simd_normalize(SIMD3(te4.x, te4.y, te4.z))
+            let present = WorldModelPlinth.presenting(faceNormal: faceN, toEye: toEye)
+            modelOffset = spun * float4x4.translation(centre.x, centre.y, centre.z)
+                * float4x4.scale(scale) * present
             let mres = sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib,
                                           instanceBuffer: modelInstanceBuffers[currentBufferIndex],
                                           worldOffset: modelOffset,
-                                          includeCelestials: false, includeMoon: false,
-                                          legibility: 3)
+                                          includeCelestials: false, includeMoon: false)
             modelOpaqueDrawCalls = mres.opaque
+#if DEBUG
+            // The failure this fixes is SILENT — a model with its back turned is a plain stone ball,
+            // not an error. One line per bench run says which way it is facing.
+            if ProcessInfo.processInfo.environment["MAZEN_MODEL"] != nil, Self.facingShots < 1 {
+                Self.facingShots += 1
+                let n4 = modelOffset * spun * SIMD4<Float>(faceRest.columns.2.x, faceRest.columns.2.y,
+                                                          faceRest.columns.2.z, 0)
+                let n = SIMD3(n4.x, n4.y, n4.z)
+                let toE = simd_normalize(eyeP - centreWorld)
+                NSLog("[model] presenting %@ (the player's own face) at %.2f toward the eye — 1.00 is dead-on",
+                      String(describing: gameState.player.face), simd_dot(simd_normalize(n), toE))
+            }
+#endif
         }
 
         counterpartOpaqueDrawCalls = []

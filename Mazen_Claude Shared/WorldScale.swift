@@ -141,3 +141,35 @@ enum PortalDisc {
     /// Highest point, measured from the floor — what a beam should aim at.
     static func topAboveFloor(floorY: Float) -> Float { centre(floorY: floorY) + radius - floorY }
 }
+
+/// THE WORLD-MODEL PLINTH'S PRESENTATION ANGLE.
+///
+/// The miniature summoned by Scene 5's plinth first shipped with no orientation of its own: it
+/// simply inherited the world's idle spin, and so presented whichever face that happened to point
+/// at the player. Eddie got `+Y` while every channel in the scene lay on `+Z` — the puzzle was
+/// wrapped around the silhouette rim, foreshortened to nothing, and the model read as a blank
+/// stone ball. Nothing was missing and nothing was too small; the world had its back turned.
+///
+/// So the model TURNS TO SHOW YOU WHAT YOU ARE STANDING ON. That is also why it is legible in
+/// orbit and was not here: orbit lets you fly round to the face you want, and a thing on a pedestal
+/// has to offer that face itself.
+enum WorldModelPlinth {
+
+    /// The rotation that turns `faceNormal` to point along `toEye`. Both must be unit length.
+    ///
+    /// The minimal rotation between two vectors — no roll is chosen beyond what the pairing forces,
+    /// which keeps the model from tumbling as the player walks around it.
+    static func presenting(faceNormal a: SIMD3<Float>, toEye b: SIMD3<Float>) -> float4x4 {
+        let axis = simd_cross(a, b)
+        let s = simd_length(axis)
+        let c = simd_dot(a, b)
+        // Already pointing the right way — or exactly the wrong way, where the axis is degenerate
+        // and any perpendicular will do.
+        guard s > 1e-5 else {
+            if c > 0 { return matrix_identity_float4x4 }
+            let perp: SIMD3<Float> = abs(a.x) < 0.9 ? SIMD3(1, 0, 0) : SIMD3(0, 1, 0)
+            return float4x4.rotation(radians: .pi, axis: simd_normalize(simd_cross(a, perp)))
+        }
+        return float4x4.rotation(radians: atan2(s, c), axis: axis / s)
+    }
+}

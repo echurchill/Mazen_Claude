@@ -924,3 +924,42 @@ extension CoordinateMathTests {
     }
 
 }
+
+extension CoordinateMathTests {
+    /// THE MODEL ON THE PLINTH MUST TURN ITS FACE TO YOU.
+    ///
+    /// The miniature first shipped inheriting the world's idle spin and nothing else, so it showed
+    /// whichever face that happened to leave pointing at the player. Eddie got `+Y` while every
+    /// channel in Scene 5 lay on `+Z`: the puzzle was wrapped around the silhouette rim, squashed to
+    /// nothing, and the model read as a featureless stone ball. Two wrong theories died before the
+    /// measurement — the grooves were neither missing nor too thin, the world had its back turned.
+    ///
+    /// The rotation is the whole fix, so it is what gets checked: over a sweep of directions, it
+    /// must bring the face normal round to the eye, including the two degenerate pairings (already
+    /// facing, exactly reversed) where the axis of rotation collapses.
+    static func testTheWorldModelTurnsItsFaceToTheViewer() {
+        func unit(_ i: Int, _ j: Int) -> SIMD3<Float> {
+            let t = Float(i) * 0.7, p = Float(j) * 0.41
+            return simd_normalize(SIMD3(cos(t) * cos(p), sin(t) * cos(p), sin(p) + 0.001))
+        }
+        // The six face normals, plus a spread of arbitrary directions.
+        var dirs: [SIMD3<Float>] = [SIMD3(1,0,0), SIMD3(-1,0,0), SIMD3(0,1,0),
+                                    SIMD3(0,-1,0), SIMD3(0,0,1), SIMD3(0,0,-1)]
+        for i in 0..<9 { for j in 0..<7 { dirs.append(unit(i, j)) } }
+
+        for a in dirs {
+            for b in dirs {
+                let r = WorldModelPlinth.presenting(faceNormal: a, toEye: b)
+                let m = r * SIMD4<Float>(a.x, a.y, a.z, 0)
+                let got = simd_normalize(SIMD3(m.x, m.y, m.z))
+                check(simd_dot(got, b) > 0.9999,
+                      "presenting must bring \(a) round to \(b), landed \(got)")
+            }
+            // And the antiparallel case explicitly, since that is where the axis degenerates.
+            let r = WorldModelPlinth.presenting(faceNormal: a, toEye: -a)
+            let m = r * SIMD4<Float>(a.x, a.y, a.z, 0)
+            check(simd_dot(simd_normalize(SIMD3(m.x, m.y, m.z)), -a) > 0.9999,
+                  "a face pointing exactly away must still be brought round")
+        }
+    }
+}
