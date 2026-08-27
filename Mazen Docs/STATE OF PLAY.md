@@ -125,10 +125,18 @@ VERTEX the builder emits, once, as a uniform scale about (0, 0, floor): normals 
 nothing authored later can be left behind. Same for the lamp. (The red one is the DARSIT — Inspector
 Spacetime's box, from *Community*.)
 
-**Prop sizes are now checkable, and one is still wrong:** the signposts stand **3.3 m** to the top of
-a board **2.1 m square** — half again taller than the corrected 2.17 m box, with a board the size of
-its whole front. They are readable from across the plaza, which is what they were sized for, and the
-plaza is enormous because a tile is 19.5 m. Trade-off for Eddie.
+**The signs came down and the plaza came in** (Eddie's call). They stood **3.3 m** to the top of a
+board **2.1 m square** — half again taller than the corrected box — because they were sized to be
+read from across a plaza whose far corner is ~98 m out. Now **2.2 m**, scaled uniformly (the board
+carries rendered text, so squashing its aspect would squash the words) and applied to the vertices,
+the way the police box should have been. The portal grid moved from odd offsets to consecutive ones,
+which brings the whole thing inside ~58 m: a sign you can reach beats a billboard you can read from a
+hundred metres.
+
+**`WorldScale.metre` is the lesson here.** Every one of these — the 9.7 m police box, the floating
+door panels, the 3.3 m signs — existed because nothing in the engine could be measured against a
+person. Props were authored by eye against each other and drifted together. Anything new with a
+real-world counterpart should be authored in metres now.
 
 **Open for Eddie:** the model is awake the instant Scene 5 begins — spawn is one tile from the `+Z`
 plinth and `worldModelRange` is 3 — so the reveal never plays and the second `SceneBuilder.build`

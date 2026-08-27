@@ -324,8 +324,15 @@ class CubeModel {
         // come from — "everytime I jump to the portal world, I am inside a tardis" (Eddie). Saying
         // it explicitly costs one line.
         spawnLocation = (face: .positiveZ, row: c, col: c, facing: .n)
-        let gridRows = [c - 5, c - 3, c - 1]
-        let gridCols = [c - 5, c - 3, c - 1, c + 1, c + 3, c + 5]
+        // TIGHTENED, now the signs are human-sized (Eddie, 2026-08-27). A tile is ~19.5 m
+        // (`WorldScale.metre`), so odd offsets put the far corner of the grid about 98 m out and
+        // the columns ±98 m wide — a plaza you crossed by reading billboards. Consecutive offsets
+        // bring the whole thing inside ~58 m, which is a walk rather than a hike, and the sign only
+        // has to be legible from a row away.
+        //
+        // The centre row and column stay clear — that is where the player stands (`spawnLocation`).
+        let gridRows = [c - 3, c - 2, c - 1]
+        let gridCols = [c - 3, c - 2, c - 1, c + 1, c + 2, c + 3]
         for (slot, idx) in hubDestinations.enumerated() {
             let gr = gridRows[slot / gridCols.count], gc = gridCols[slot % gridCols.count]
             guard let (ci, fi) = faceletAt(face: .positiveZ, row: gr, col: gc) else { continue }

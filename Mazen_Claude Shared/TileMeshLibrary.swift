@@ -1016,6 +1016,7 @@ class TileMeshLibrary {
     /// [0,1] → material 24 samples the label array by `state`). Every other face flags wood (u = −1).
     private static func addSignpost(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
+        let signVertexStart = verts.count   // rescaled as one at the end — see below
         let ph: Float = 0.012                 // post half-thickness
         let boardBot = z0 + 0.06              // board sits at the top of the post
         let bw: Float = 0.055, bt: Float = 0.008, boardTop = boardBot + 0.11   // ~square board
@@ -1050,6 +1051,27 @@ class TileMeshLibrary {
             v(SIMD3( bw, y1, boardTop), n, 0, 0),   // +X → u=0, top
         ])
         indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
+
+        // ── HUMAN SIZE ────────────────────────────────────────────────────────────────
+        //
+        // These stood 3.3 m to the top of a board 2.1 m square — half again taller than a real
+        // police box, with a board about the size of the box's whole front. Nobody had noticed
+        // because nothing in the engine could be measured until `WorldScale.metre` existed; the
+        // sign and the box had only ever been sized against each other.
+        //
+        // Scaled UNIFORMLY and as vertices, for two reasons. The board carries rendered text from
+        // `labelArray`, so squashing its aspect would squash the words; and scaling constants is
+        // exactly how the police box shrank while its door panels stayed in the sky.
+        //
+        // The plaza was pulled in to match (`stampPortalHub`) — a smaller sign you can reach is
+        // worth more than a billboard you can read from a hundred metres.
+        let signTop: Float = 2.2 * WorldScale.metre
+        let k = signTop / (boardTop - z0)
+        for i in signVertexStart..<verts.count {
+            var v = verts[i]
+            v.position = SIMD3(v.position.x * k, v.position.y * k, z0 + (v.position.z - z0) * k)
+            verts[i] = v
+        }
     }
 
 
