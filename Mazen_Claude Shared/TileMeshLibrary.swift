@@ -1375,11 +1375,16 @@ class TileMeshLibrary {
 
     /// How much the police box (and the lamp that sits on it) shrinks to reach life size.
     ///
+    /// **2.6 m to the apex.** The first pass used Eddie's 217 cm and it read short standing next to
+    /// it, so he asked for 20% more. That lands almost exactly on the real prop's OVERALL height:
+    /// 217 cm is the body and doors, and the tented roof and lamp sit above them. The number was
+    /// right and the thing it measured was not.
+    ///
     /// Shared, because the lamp is a SEPARATE prop: scaling the box alone left every lamp hanging
     /// in the sky at the height the old roof used to be — visible from across the plaza, which is
     /// how it was caught. Anything else that lands on this roof must use this too.
     static func policeBoxScale(ws: WorldScale) -> Float {
-        (2.17 * WorldScale.metre) / (0.50 - ws.floorY)
+        (2.60 * WorldScale.metre) / (0.50 - ws.floorY)
     }
 
     private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {

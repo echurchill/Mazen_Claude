@@ -133,6 +133,11 @@ the way the police box should have been. The portal grid moved from odd offsets 
 which brings the whole thing inside ~58 m: a sign you can reach beats a billboard you can read from a
 hundred metres.
 
+**The boxes are 2.6 m, not 2.17.** 217 cm read short in place, and Eddie asked for 20% more — which
+lands on the real prop's OVERALL height, since 217 cm is the body and doors and the tented roof and
+lamp sit above them. The number was right; the thing it measured was not. One constant, because the
+scale is shared and applied to vertices — the lamp followed on its own.
+
 **`WorldScale.metre` is the lesson here.** Every one of these — the 9.7 m police box, the floating
 door panels, the 3.3 m signs — existed because nothing in the engine could be measured against a
 person. Props were authored by eye against each other and drifted together. Anything new with a
