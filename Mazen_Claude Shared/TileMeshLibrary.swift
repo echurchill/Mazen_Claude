@@ -228,6 +228,10 @@ class TileMeshLibrary {
         let plinthStart = allIndices.count
         Self.addPlinth(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.plinth.rawValue] = TileMesh(vertexOffset: 0, indexOffset: plinthStart, indexCount: allIndices.count - plinthStart)
+        // The world-model plinth (prototype) borrows the same stone. If it earns its place it wants
+        // its own shape — a bowl or a ring to hold the world — but a prototype should not spend an
+        // evening on geometry before anyone has seen whether the idea reads.
+        propMeshes[PropKind.worldModel.rawValue] = TileMesh(vertexOffset: 0, indexOffset: plinthStart, indexCount: allIndices.count - plinthStart)
 
         let alignStart = allIndices.count
         Self.addAlignmentCylinder(to: &allVerts, indices: &allIndices, ws: ws)

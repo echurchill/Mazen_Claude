@@ -186,6 +186,7 @@ class GameState {
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws, stamp: stamp)
         skyCounterpart = stamp.skyCounterpart
+        worldModelTile = cubeModel.worldModelPlinthAt
         authoredSky = stamp.skyCounterpart
         player = PlayerState(size: size, standGrid: ws.standGrid)
         // Stand where the world SAYS you stand. `spawnLocation` was only ever applied on arrival
@@ -242,6 +243,17 @@ class GameState {
     // MARK: - Update
 
     func update(deltaTime: Float) {
+        // The model plinth: awake only while used AND stood near. Walking away is the dismissal —
+        // no second press, nothing to remember.
+        if let t = worldModelTile {
+            let far = t.face != player.face
+                || max(abs(t.row - player.row), abs(t.col - player.col)) > Self.worldModelRange
+            if far { worldModelAwake = false }
+            let target: Float = worldModelAwake ? 1 : 0
+            let rate: Float = target > worldModelWake ? 1.4 : 2.2   // grows slowly, folds away quickly
+            worldModelWake += max(-rate * deltaTime, min(rate * deltaTime, target - worldModelWake))
+        }
+
         time += deltaTime * timeScale
         // A turn the world owes from a control already pressed — fired the moment the player is
         // settled enough to watch it, rather than being lost because they were mid-stride.
@@ -1523,12 +1535,24 @@ class GameState {
 
     /// What F (and, on iOS, a tap) acts on. Shared with `hasInteractableHere` so the touch path
     /// cannot drift from the keyboard one.
+    // ── PROTOTYPE: the world-model plinth (Scene 5) ────────────────────────────────────────────
+    /// Where the plinth stands, if this world has one.
+    var worldModelTile: (face: CubeFace, row: Int, col: Int)? = nil
+    /// Woken by using it; sleeps again when the player walks away. `worldModelWake` is the animation
+    /// between those two states — the model grows out of the plinth rather than appearing.
+    var worldModelAwake = false
+    private(set) var worldModelWake: Float = 0
+    /// Tiles. Far enough that you can step back and look at the model, close enough that leaving
+    /// obviously ends it.
+    static let worldModelRange = 3
+
     /// Has the player ever successfully used anything? Only set when a handler actually DID
     /// something — pressing F at thin air teaches nothing, so it must not dismiss the prompt that
     /// is trying to teach the key.
     private(set) var hasInteracted = false
 
     static let interactableKinds: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap,
+                                                   .worldModel,
                                                    .plinth, .dial, .chest, .alignmentCylinder,
                                                    .channelBasin, .latch]
 
@@ -1549,7 +1573,7 @@ class GameState {
     /// the one place their precedence exists; and `interactionOrder` mirrors it as data so a test
     /// can pin the sequence. Add a handler = add a line HERE, deliberately, not wherever a new
     /// `if` happens to land.
-    static let interactionOrder = ["latch", "basin", "faceRotator", "vessel", "anchor", "obeliskRebuff", "scene3Plinth", "cornerSwitch", "doorPlinth", "chest"]
+    static let interactionOrder = ["latch", "basin", "faceRotator", "vessel", "anchor", "obeliskRebuff", "worldModel", "scene3Plinth", "cornerSwitch", "doorPlinth", "chest"]
 
     func interact() {
         guard let (ci, fi) = cubeModel.faceletAt(face: player.face, row: player.row, col: player.col) else { return }
@@ -1719,6 +1743,7 @@ class GameState {
         handle_vessel,
         handle_anchor,
         handle_obeliskRebuff,
+        handle_worldModel,
         handle_scene3Plinth,
         handle_cornerSwitch,
         handle_doorPlinth,
@@ -1895,6 +1920,14 @@ class GameState {
     }
 
     /// Scene 3: a plinth wakes its obelisk, by symbol
+    /// PROTOTYPE — the world-model plinth: using it wakes the miniature above it.
+    private func handle_worldModel(_ ci: Int, _ fi: Int) -> Bool {
+        guard cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .worldModel })
+        else { return false }
+        worldModelAwake.toggle()
+        return true
+    }
+
     private func handle_scene3Plinth(_ ci: Int, _ fi: Int) -> Bool {
         if cubeModel.symbolPairedPlinths,
            let capIdx = cubeModel.cubies[ci].facelets[fi].props.firstIndex(where: { $0.kind == .switchCap }) {

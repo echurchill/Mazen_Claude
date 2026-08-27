@@ -160,6 +160,7 @@ extension CubeModel {
         // finds it, so "off the channels" is true of the world they will actually walk. Stamped
         // before, the scramble would carry them onto whatever tiles it liked.
         stampFaceRotators()
+        stampWorldModelPlinth()
 
         spawnLocation = (face: .positiveZ, row: c + 1, col: c, facing: .n)
     }
@@ -170,6 +171,34 @@ extension CubeModel {
     /// anything already standing there (the source, the receivers, the junction vessels). Searched
     /// outward from the face centre rather than placed at it, because the centre of `+Z` IS the
     /// source: the natural spot is taken on exactly the face the player arrives on.
+    /// PROTOTYPE — one world-model plinth, on the face the player arrives on, a few tiles from the
+    /// spawn so it is met early but is not the first thing underfoot.
+    ///
+    /// Scene 5 is the right place to try it: its channels run ACROSS faces, and a cross-face routing
+    /// puzzle is exactly what cannot be held in the head from ground level. If the idea works
+    /// anywhere it works here — and if it does not work here it probably does not work.
+    func stampWorldModelPlinth() {
+        let n = size, c = n / 2
+        // Searched rather than placed: the middle of `+Z` is the source, and the rotator has already
+        // taken the nearest free tile to it.
+        for radius in 1..<n {
+            for dr in -radius...radius {
+                for dc in -radius...radius where abs(dr) == radius || abs(dc) == radius {
+                    let r = c + dr, col = c + dc
+                    guard r >= 0, r < n, col >= 0, col < n,
+                          let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: col) else { continue }
+                    let f = cubies[ci].facelets[fi]
+                    guard f.props.isEmpty, f.mazeTile.channels.isEmpty else { continue }
+                    cubies[ci].facelets[fi].props.append(
+                        Prop(kind: .worldModel, subRow: 1, subCol: 1, facing: .s, state: 5))
+                    worldModelPlinthAt = (CubeFace.positiveZ, r, col)
+                    markTopologyChanged()
+                    return
+                }
+            }
+        }
+    }
+
     func stampFaceRotators() {
         let n = size, c = n / 2
         faceRotators = true

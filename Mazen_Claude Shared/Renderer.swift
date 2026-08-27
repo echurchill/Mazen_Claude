@@ -386,6 +386,18 @@ class Renderer: NSObject, MTKViewDelegate {
     /// `Mazen Docs/Sky Worlds — Dressing the Counterpart.md`.
     var counterpartAssetDrawCmds: [AssetDrawCmd] = []
     var counterpartAssetInstanceBuffers: [MTLBuffer] = []
+    /// PROTOTYPE — the world in miniature above its plinth. Its own buffers rather than the sky's,
+    /// because Scene 5 has BOTH: a counterpart overhead and, when the plinth is woken, the world you
+    /// are standing in, small, in front of you. Sharing would make one blink out to show the other —
+    /// the kind of artefact that gets mistaken for the idea failing.
+    ///
+    /// After R2.6 this needs no separate BUILD at all: the offset becomes a per-draw uniform and the
+    /// model is the same instances drawn a second time. These buffers are the prototype's price.
+    var modelInstanceBuffers: [MTLBuffer] = []
+    var modelAssetInstanceBuffers: [MTLBuffer] = []
+    var modelOpaqueDrawCalls: [DrawCall] = []
+    var modelAssetDrawCmds: [AssetDrawCmd] = []
+    var modelOffset = matrix_identity_float4x4
     /// Resolved ONCE per frame, before the asset pass, because the asset pass and the maze build both
     /// need the same answer and the asset pass runs first.
     var frameCounterpart: (world: GameState, offset: float4x4)? = nil
@@ -669,9 +681,19 @@ class Renderer: NSObject, MTKViewDelegate {
         }
         self.counterpartAssetInstanceBuffers = cpAssetBufs
 
+        var modelBufs: [MTLBuffer] = []
+        var modelAssetBufs: [MTLBuffer] = []
+        for _ in 0..<maxBuffersInFlight {
+            modelBufs.append(device.makeBuffer(length: instanceSize, options: .storageModeShared)!)
+            modelAssetBufs.append(device.makeBuffer(length: MemoryLayout<InstanceDataSwift>.stride * 32768,
+                                                    options: .storageModeShared)!)
+        }
+        self.modelInstanceBuffers = modelBufs
+        self.modelAssetInstanceBuffers = modelAssetBufs
+
         // Residency set
         let resDesc = MTLResidencySetDescriptor()
-        resDesc.initialCapacity = 11 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count + cpAssetBufs.count
+        resDesc.initialCapacity = 11 + frameBufs.count + instBufs.count + counterpartBufs.count + assetBufs.count + cpAssetBufs.count + modelBufs.count + modelAssetBufs.count
             + loadedProps.count * 3 + loadedProps.reduce(0) { $0 + $1.submeshMaterials.count }
         let rs = try! device.makeResidencySet(descriptor: resDesc)
         var initResident = Set<ObjectIdentifier>()
@@ -700,6 +722,8 @@ class Renderer: NSObject, MTKViewDelegate {
         for buf in instBufs { rs.addAllocation(buf) }
         for buf in counterpartBufs { rs.addAllocation(buf) }
         for buf in cpAssetBufs { rs.addAllocation(buf) }
+        for buf in modelBufs { rs.addAllocation(buf) }
+        for buf in modelAssetBufs { rs.addAllocation(buf) }
         for p in loadedProps {
             rs.addAllocation(p.mesh.vertexBuffer); rs.addAllocation(p.mesh.indexBuffer)
             if let d = p.diffuse { Self.makeResident(d, in: rs, recording: &initResident) }
@@ -816,6 +840,33 @@ class Renderer: NSObject, MTKViewDelegate {
 
         // Render the counterpart's real current state (every twist baked in) into its own instance
         // buffer, pushed out by the orbital offset. No celestials (it shouldn't carry its own sky).
+        // PROTOTYPE — THE WORLD ON THE PLINTH. The same world the player stands in, built a second
+        // time at a hand's scale above the pedestal. No new machinery: this is the sky counterpart's
+        // path with a different offset matrix.
+        modelOpaqueDrawCalls = []
+        if gameState.worldModelWake > 0.01, let t = gameState.worldModelTile {
+            let ws = gameState.worldScale
+            let base = gameState.cubeModel.inflatedPlacement(face: t.face, row: t.row, col: t.col,
+                                                             localX: 0, localY: 0)
+            let up = SIMD3<Float>(base.columns.2.x, base.columns.2.y, base.columns.2.z)
+            // ~1.4 m across, floating a little above head height over the stone: big enough to read a
+            // channel, small enough to take in at once. Grown by the wake so it unfolds from the
+            // plinth rather than appearing.
+            let metres: Float = 0.0529
+            let radius = ws.faceDistance * 1.732
+            let want = 0.70 * metres * gameState.worldModelWake
+            let scale = max(0.0001, want / max(0.0001, radius))
+            let centre = base.position + up * (ws.floorY + 1.5 * metres)
+            modelOffset = gameState.worldSpinMatrix()
+                * float4x4.translation(centre.x, centre.y, centre.z)
+                * float4x4.scale(scale)
+            let mres = sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib,
+                                          instanceBuffer: modelInstanceBuffers[currentBufferIndex],
+                                          worldOffset: modelOffset,
+                                          includeCelestials: false, includeMoon: false)
+            modelOpaqueDrawCalls = mres.opaque
+        }
+
         counterpartOpaqueDrawCalls = []
         // Off-screen sky worlds cost NOTHING. This build ran unconditionally — 1.66 ms a frame
         // (Debug) rebuilding a world nobody could see, because the sky is behind you most of the
@@ -1479,6 +1530,36 @@ class Renderer: NSObject, MTKViewDelegate {
                 baseVertex: 0,
                 baseInstance: dc.instanceOffset
             )
+        }
+
+        // PROTOTYPE — the model on the plinth: same meshes, its own instance buffers, in the opaque
+        // pass so it is a real object standing in the room at real depth.
+        if !modelOpaqueDrawCalls.isEmpty {
+            vertexArgTable.setAddress(modelInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            fragmentArgTable.setAddress(modelInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            for dc in modelOpaqueDrawCalls {
+                encoder.drawIndexedPrimitives(
+                    primitiveType: .triangle, indexCount: dc.indexCount, indexType: .uint32,
+                    indexBuffer: idxBufBase + UInt64(dc.indexOffset * MemoryLayout<UInt32>.stride),
+                    indexBufferLength: idxBufLen - dc.indexOffset * MemoryLayout<UInt32>.stride,
+                    instanceCount: dc.instanceCount, baseVertex: 0, baseInstance: dc.instanceOffset)
+            }
+            if !modelAssetDrawCmds.isEmpty, !ablate.contains("assets") {
+                vertexArgTable.setAddress(modelAssetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+                fragmentArgTable.setAddress(modelAssetInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+                for cmd in modelAssetDrawCmds {
+                    vertexArgTable.setAddress(cmd.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+                    if let d = cmd.diffuse { fragmentArgTable.setTexture(d.gpuResourceID, index: TextureIndex.assetDiffuse.rawValue) }
+                    encoder.drawIndexedPrimitives(
+                        primitiveType: .triangle, indexCount: cmd.indexCount, indexType: .uint32,
+                        indexBuffer: cmd.indexBuffer.gpuAddress + UInt64(cmd.indexOffset * MemoryLayout<UInt32>.stride),
+                        indexBufferLength: cmd.indexBuffer.length - cmd.indexOffset * MemoryLayout<UInt32>.stride,
+                        instanceCount: cmd.instanceCount, baseVertex: 0, baseInstance: cmd.instanceIndex)
+                }
+                vertexArgTable.setAddress(tileMeshLib.vertexBuffer.gpuAddress, index: BufferIndex.vertices.rawValue)
+            }
+            vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            fragmentArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
         }
 
         // The teaching text, over the world and under the fade.

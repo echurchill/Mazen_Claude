@@ -2066,6 +2066,9 @@ class CubeModel {
     /// not available on a touch screen (Eddie), and a control you can walk up to and press is also
     /// simply a better fit for a world whose whole subject is turning things into alignment.
     var faceRotators = false
+    /// PROTOTYPE — where the world-model plinth stands, if this world stamped one. The GameState
+    /// copies it out so the wake/sleep check does not have to search the cube every frame.
+    var worldModelPlinthAt: (face: CubeFace, row: Int, col: Int)? = nil
 
     /// Where the orb put the way out, once it has chosen. nil until the sixth obelisk connects.
     /// (Declared here rather than beside its creators — extensions cannot hold stored properties.)

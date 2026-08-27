@@ -382,6 +382,9 @@ enum PropKind: UInt8 {
     case channelBasin    // Scene 5C: the SOURCE — a low basin in three nested mineral rings. F fires the diagnostic pulse.
     case channelBowl     // Scene 5D: a RECEIVER — a raised bowl embedded in its junction; anim = fed 0.55 / locked 1.0
     case latch           // Scene 6D: an under-platform latch; `state` = its ordinal in the physical order, anim = engaged
+    case worldModel      // PROTOTYPE (Scene 5): a plinth that shows the world in miniature above it.
+                         // Asleep until used, and asleep again once you walk away — from a distance
+                         // it is only a plinth. The orbital view as a PLACE rather than a key.
     case surveyor        // Scene 5: the roaming Builder machine — walks live channel runs, grows filigree. Inert to F.        // Scene 2: a mote shaken loose from a wall joint by a twist. `anim` = life left,
                          // 1 → 0, which both LOWERS it (heightScale about the floor) and fades it out.
                          // Non-solid and short-lived; the world's only particle so far.
@@ -396,7 +399,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .signpost, .dustMote, .surveyor: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .worldModel, .signpost, .dustMote, .surveyor: return false
         default: return true
         }
     }

@@ -600,7 +600,7 @@ extension CoordinateMathTests {
     /// or this fails by name.
     static func testInteractionOrderIsTheContract() {
         check(GameState.interactionOrder == ["latch", "basin", "faceRotator", "vessel", "anchor",
-                                            "obeliskRebuff", "scene3Plinth", "cornerSwitch",
+                                            "obeliskRebuff", "worldModel", "scene3Plinth", "cornerSwitch",
                                             "doorPlinth", "chest"],
               "interact()'s precedence changed: \(GameState.interactionOrder)")
     }

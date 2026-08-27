@@ -548,6 +548,14 @@ final class SceneBuilder {
                                     materialID = 12                     // emissive: visible from afar
                                 }
                             }
+                            if prop.kind == .worldModel {
+                                // Same stone as a Builder plinth, wearing the SWIRL — the mark the
+                                // portals use for "a way through". Brightens as it wakes.
+                                materialID = 21
+                                propStyleSeed = 5
+                                let w = gameState.worldModelWake
+                                color = SIMD4(1 + 0.5 * w, 1 + 0.5 * w, 1 + 0.6 * w, 1)
+                            }
                             if prop.kind == .plinth {
                                 // M16.6: the Builder plinth — material 21 reads stone/resin vs glyph
                                 // from the mesh's UV flag; `state` selects the caustic symbol slice.
