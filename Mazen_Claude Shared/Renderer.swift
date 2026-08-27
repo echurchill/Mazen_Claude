@@ -927,7 +927,8 @@ class Renderer: NSObject, MTKViewDelegate {
             let mres = sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib,
                                           instanceBuffer: modelInstanceBuffers[currentBufferIndex],
                                           worldOffset: modelOffset,
-                                          includeCelestials: false, includeMoon: false)
+                                          includeCelestials: false, includeMoon: false,
+                                          seamFace: gameState.player.face)
             modelOpaqueDrawCalls = mres.opaque
 #if DEBUG
             // The failure this fixes is SILENT — a model with its back turned is a plain stone ball,

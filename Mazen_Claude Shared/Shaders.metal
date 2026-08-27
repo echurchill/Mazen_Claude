@@ -879,6 +879,34 @@ fragment float4 fragmentShader(
             color = mix(color, float3(0.55, 0.86, 1.00), line * frame.worldBloom * 0.45);
             lighting += line * frame.worldBloom * 0.3;
         }
+    } else if (in.materialID == 38) {
+        // THE PRESENTED FACE'S SEAM (see SceneBuilder). A line along the tile's OUTWARD edges —
+        // the same four-bit mask the channels carry, read as edges rather than as spokes from the
+        // centre. On a rounded world the six faces melt into one sphere, so this is the only thing
+        // that says where the face you are about to turn begins and ends.
+        //
+        // Warm on purpose: the current is blue-white, and a selection that shares its colour reads
+        // as part of the puzzle rather than as a control laid over it.
+        float2 uv = in.texCoord;
+        uint edges = in.styleSeed & 0xFu;
+        float d = 1e9;
+        if (edges & 1u) d = min(d, segmentDistance(uv, float2(0.0, 0.0), float2(1.0, 0.0)));
+        if (edges & 2u) d = min(d, segmentDistance(uv, float2(1.0, 0.0), float2(1.0, 1.0)));
+        if (edges & 4u) d = min(d, segmentDistance(uv, float2(0.0, 1.0), float2(1.0, 1.0)));
+        if (edges & 8u) d = min(d, segmentDistance(uv, float2(0.0, 0.0), float2(0.0, 1.0)));
+        // Wide enough to be a CONTINUOUS line at the miniature's size. The first pass was half
+        // this and came out dashed — a border that breaks up reads as an artefact rather than as a
+        // deliberate edge, which is the opposite of what a control wants to say.
+        const float seamW = 0.10;
+        if (d > seamW) discard_fragment();
+        float core = smoothstep(0.045, 0.010, d);
+        float halo = smoothstep(seamW, 0.048, d);
+        float amount = clamp(in.discoveryAmount, 0.0, 1.0);
+        // "A SLIGHT colorization" — a warm edge that says "this face", not a neon outline.
+        float3 warm = float3(1.00, 0.72, 0.36);
+        color = warm * (core * 0.62 + halo * 0.26) * amount;
+        lighting = mix(skyAmbient * 0.5 + sunColor * 0.5 * halfLambert * shadowFactor,
+                       float3(1.0), 0.7 * amount);
     } else if (in.materialID == 33) {
         // SCENE 5's CHANNELS — "veins carrying liquid light", laid in shallow grooves. Same spine as
         // a bond band (centre out to each edge the groove continues through), because they are the

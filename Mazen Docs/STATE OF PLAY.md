@@ -40,8 +40,15 @@ Eddie's first look found two things, both now fixed:
   plinth), and `MAZEN_MODEL_SIZE` scales it. Painting material 33 solid red and photographing it
   took one build to settle what three rounds of argument could not.
 
-Next on it (Eddie, 2026-08-27): a **colour seam around the edge of the presented face**, since the
-model is meant to become a rotator too; and then **how you interact with it** — "if we can make this
+**The presented face now wears a seam** (material 38): a warm amber line along the outer edge of the
+face the model is showing. On a rounded world the six faces melt into one sphere, which is the point
+of the inflation and exactly wrong for a control — you cannot choose a face you cannot find. Border
+tiles only, drawn from the same four-bit mask the channels use, read as edges rather than as spokes.
+Warm on purpose: the current is blue-white, and a selection sharing its colour would read as part of
+the puzzle rather than as a control over it. First pass came out dashed and was widened to a
+continuous line.
+
+Next on it (Eddie, 2026-08-27): **how you interact with it** — "if we can make this
 change and figure out how to interact with it then I think this is a wonderful visualization and
 control mechanism". Also noted: pressing Q/E while the model is up makes it fly away and return —
 the twist moves the plinth's facelet and the model chases it. Cool, not useful.

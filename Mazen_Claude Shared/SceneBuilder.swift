@@ -97,6 +97,8 @@ final class SceneBuilder {
     /// Scene 5's channels — the same spine geometry as a bond band, because they are the same shape:
     /// a groove running from the tile centre out to each edge it continues through.
     private var channelTiles: [TileEntry] = []
+    /// The lit border of ONE face — see `seamFace`. Only the plinth's miniature asks for it.
+    private var seamTiles: [TileEntry] = []
     private var celestialTiles: [TileEntry] = []
     /// Scene 3 — the suspended orb, and one beam per lit obelisk. Separate arrays because each has
     /// its own mesh, and each becomes a single instanced draw.
@@ -145,7 +147,8 @@ final class SceneBuilder {
 
     func build(gameState: GameState, tileMeshLib: TileMeshLibrary, instanceBuffer buf: MTLBuffer,
                worldOffset: float4x4 = matrix_identity_float4x4, includeCelestials: Bool = true,
-               includeMoon: Bool = true, sunOverride: SIMD3<Float>? = nil) -> SceneDrawData {
+               includeMoon: Bool = true, sunOverride: SIMD3<Float>? = nil,
+               seamFace: CubeFace? = nil) -> SceneDrawData {
         let model = gameState.cubeModel
         // Fold the offset into the spin so every tile/wall/prop/player-marker matrix (all built as
         // `spin * …`) is pushed out together — one injection point for the whole world.
@@ -176,6 +179,7 @@ final class SceneBuilder {
         cutFaceTiles.removeAll(keepingCapacity: true)
         bondBandTiles.removeAll(keepingCapacity: true)
         channelTiles.removeAll(keepingCapacity: true)
+        seamTiles.removeAll(keepingCapacity: true)
         celestialTiles.removeAll(keepingCapacity: true)
         orbTiles.removeAll(keepingCapacity: true)
         beamTiles.removeAll(keepingCapacity: true)
@@ -920,6 +924,43 @@ final class SceneBuilder {
             }
         }
 
+        // THE PRESENTED FACE'S SEAM — a line drawn along the outer boundary of one face.
+        //
+        // On a rounded world a face has no edge you can see: the six of them melt into one sphere,
+        // which is the whole point of the inflation and exactly wrong for a control. The miniature
+        // is meant to become a ROTATOR (Eddie, 2026-08-27), and you cannot choose a face you cannot
+        // find. So the model — and only the model — draws the border of the face it is presenting.
+        //
+        // Border tiles only, and only their outward edges: a tile at row 0 lights its north edge, a
+        // corner lights two. The same four-bit mask the channels use, read as edges rather than as
+        // spokes.
+        if let sf = seamFace {
+            let n = model.size
+            for r in 0..<n {
+                for c in 0..<n {
+                    var mask: UInt32 = 0
+                    if r == 0     { mask |= 1 }
+                    if c == n - 1 { mask |= 2 }
+                    if r == n - 1 { mask |= 4 }
+                    if c == 0     { mask |= 8 }
+                    guard mask != 0, let (ci, fi) = model.faceletAt(face: sf, row: r, col: c)
+                    else { continue }
+                    var restM = model.restMatrix(face: sf, row: r, col: c)
+                    if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) { restM = animMat * restM }
+                    _ = fi
+                    let inst = InstanceDataSwift(
+                        modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
+                        materialID: 38, tileID: 0,
+                        discoveryAmount: 1,
+                        styleSeed: mask,
+                        spinMatrix: spin, roundness: model.roundness,
+                        invHalfExtent: 1.0 / model.worldScale.faceDistance,
+                        reliefAmplitude: model.reliefAmplitude)
+                    seamTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.channelFloor))
+                }
+            }
+        }
+
         // CUT FACES — give a turning slab its thickness (see `cutFaceTiles`).
         //
         // A slice is one cubie thick. Its outward side is a real cube face and renders normally; its
@@ -1012,7 +1053,7 @@ final class SceneBuilder {
         // Split, because one long sum of mixed counts + reduces pushed the type-checker past its
         // time budget once channels joined it.
         let extras: Int = frameTiles.count + cutFaceTiles.count + bondBandTiles.count
-                        + orbTiles.count + beamTiles.count + channelTiles.count
+                        + orbTiles.count + beamTiles.count + channelTiles.count + seamTiles.count
         let totalInstances = extras
             + mazeFloorTiles.values.reduce(0) { $0 + $1.count }
             + mazePathFloorTiles.values.reduce(0) { $0 + $1.count }
@@ -1119,7 +1160,7 @@ final class SceneBuilder {
         // Drawing the groove after its own ground is the natural order anyway, and it is now robust
         // at any scale the world is rendered at.
         // Scene 3's orb and beams, and Scene 5's channels — one instanced draw each.
-        for group in [orbTiles, beamTiles, channelTiles] where !group.isEmpty {
+        for group in [orbTiles, beamTiles, channelTiles, seamTiles] where !group.isEmpty {
             let mesh = group[0].mesh
             let startIdx = idx
             for entry in group { ptr[idx] = entry.instance; idx += 1 }
