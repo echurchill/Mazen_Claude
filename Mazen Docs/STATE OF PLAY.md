@@ -73,6 +73,29 @@ placement, so mid-twist it named where the plinth would END UP; the pedestal swu
 model snapped after it ("a strange fly away and back"). Now that F here IS the twist, the one moment
 the model exists to explain was the moment it used to leave.
 
+**After Eddie played the level (2026-08-27, second pass):**
+
+- **It no longer tracks you.** Aiming at the eye every frame guaranteed you never saw a blank side
+  and equally guaranteed you never saw any OTHER side — *"it is hard not seeing everything… I would
+  like to try it again but without the mini-worlds tracking my location, so I can walk around."* The
+  angle is now taken ONCE as it unfolds (so your own face still greets you) and then held: an object
+  in the room, walkable-around, the orbit view without leaving the world. Re-aimed on the next wake.
+- **The seam marks the BAND, not just the face outline.** A face's outline is invariant under a
+  quarter turn — the contents spin inside a border that never moves, which is why the animation read
+  as ambiguous and *"kind of looks like it is inside out at times"*. The part that travels is the
+  slab's side, and it had no marking. Every tile in the turning slab that is not on the presented
+  face now takes a warm wash, so the slab reads as one moving body.
+- **The miniature keeps its back faces culled.** The pass drops culling while a slice turns so the
+  world can be seen from inside the moving slab — a rule about the world you are STANDING IN, and
+  exactly wrong for a model viewed from outside. It turned the miniature inside out for the duration:
+  the *"inner ball… checkerboard right in the middle"* and the *"two unpowered channels at the 10:30
+  and 2:00 positions"* that *"just disappear"* on settling were the far hemisphere showing through
+  the near one. Photographed before and after at the same mid-twist frame; the inner surface is gone.
+- **Birdsong is a property of the world now.** It was gated only on "outdoors and not near the arch",
+  so it followed the player into Scene 5's dead stone ruin. `GameState.hasBirdsong`, true for the
+  clearing / natural / garden-maze stamps only — the same fault the undertone beside it already
+  carries a comment about: a cue with no scene in it becomes room tone.
+
 **Open for Eddie:** the model is awake the instant Scene 5 begins — spawn is one tile from the `+Z`
 plinth and `worldModelRange` is 3 — so the reveal never plays and the second `SceneBuilder.build`
 is always paid (R2.6's case, again). Tighten the range, move the spawn, or accept it. And **Q/E

@@ -936,6 +936,41 @@ final class SceneBuilder {
         // spokes.
         if let sf = seamFace {
             let n = model.size
+            // THE BAND — the sides of the slab that turns, one cubie deep, all the way round.
+            //
+            // The outline alone marks the face, and a face's outline is INVARIANT under the quarter
+            // turn: the contents spin inside a border that never moves, which is why the animation
+            // read as ambiguous and, in Eddie's words, "kind of looks like it is inside out at
+            // times". The part that visibly travels is the slab's side, and it had no marking at
+            // all — "the seam is at the edge instead of at the bottom side that move along with the
+            // face rotation".
+            //
+            // So the band is drawn too: every tile whose cubie belongs to the turning slab but
+            // which is NOT on the presented face. That is the body of the thing that moves, and
+            // marking it is what makes the slab read as a separate object rather than as the
+            // world's surface briefly misbehaving.
+            let (axis, index) = model.sliceAxisAndIndex(for: sf)
+            let slab = Set(model.cubieIndicesInSlice(axis: axis, index: index))
+            for face in CubeFace.allCases where face != sf {
+                for r in 0..<n {
+                    for c in 0..<n {
+                        guard let (ci, fi) = model.faceletAt(face: face, row: r, col: c),
+                              slab.contains(ci) else { continue }
+                        _ = fi
+                        var restM = model.restMatrix(face: face, row: r, col: c)
+                        if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) { restM = animMat * restM }
+                        let inst = InstanceDataSwift(
+                            modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
+                            materialID: 38, tileID: 0,
+                            discoveryAmount: 1,
+                            styleSeed: 16,                    // bit 4 ⇒ fill the tile, not its edges
+                            spinMatrix: spin, roundness: model.roundness,
+                            invHalfExtent: 1.0 / model.worldScale.faceDistance,
+                            reliefAmplitude: model.reliefAmplitude)
+                        seamTiles.append(TileEntry(instance: inst, mesh: tileMeshLib.channelFloor))
+                    }
+                }
+            }
             for r in 0..<n {
                 for c in 0..<n {
                     var mask: UInt32 = 0

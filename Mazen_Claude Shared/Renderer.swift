@@ -408,6 +408,8 @@ class Renderer: NSObject, MTKViewDelegate {
     var modelOpaqueDrawCalls: [DrawCall] = []
     var modelAssetDrawCmds: [AssetDrawCmd] = []
     var modelOffset = matrix_identity_float4x4
+    /// The miniature's presentation angle, taken once as it unfolds and held until it sleeps.
+    var modelPresent: float4x4? = nil
 #if DEBUG
     static var facingShots = 0
 #endif
@@ -877,6 +879,8 @@ class Renderer: NSObject, MTKViewDelegate {
         // time at a hand's scale above the pedestal. No new machinery: this is the sky counterpart's
         // path with a different offset matrix.
         modelOpaqueDrawCalls = []
+        // Folded away: forget the angle, so the next unfolding aims itself afresh.
+        if gameState.worldModelWake <= 0.01 { modelPresent = nil }
         if gameState.worldModelWake > 0.01, let t = gameState.worldModelTile {
             let ws = gameState.worldScale
             var base = gameState.cubeModel.inflatedPlacement(face: t.face, row: t.row, col: t.col,
@@ -946,7 +950,20 @@ class Renderer: NSObject, MTKViewDelegate {
             let eyeP = gameState.framePose(aspect: aspect).position
             let te4 = unspin * SIMD4<Float>(simd_normalize(eyeP - centreWorld), 0)
             let toEye = simd_normalize(SIMD3(te4.x, te4.y, te4.z))
-            let present = WorldModelPlinth.presenting(faceNormal: faceN, toEye: toEye)
+            // HELD, NOT TRACKED. It aimed itself at the eye every frame, which guaranteed you could
+            // never see a blank side — and also guaranteed you could never see any OTHER side.
+            // Eddie, having played the level: "I can see how I could solve it but it is hard not
+            // seeing everything… I would like to try it again but without the mini-worlds tracking
+            // my location, so I can walk around and see the bigger picture."
+            //
+            // So the aim is taken ONCE, as it unfolds — you still get your own face presented, which
+            // is what makes it useful the moment it appears — and then it holds still and is an
+            // object in the room. Walking round it is the orbit view, in your hands, without leaving
+            // the world. Re-aimed next time it wakes.
+            if modelPresent == nil {
+                modelPresent = WorldModelPlinth.presenting(faceNormal: faceN, toEye: toEye)
+            }
+            let present = modelPresent ?? matrix_identity_float4x4
             modelOffset = spun * float4x4.translation(centre.x, centre.y, centre.z)
                 * float4x4.scale(scale) * present
             let mres = sceneBuilder.build(gameState: gameState, tileMeshLib: tileMeshLib,
@@ -1085,7 +1102,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // Builders' voice once. The condition had no scene in it, so the layer played in every
         // outdoor world forever after: the same 49 Hz tone under the garden, the natural world, the
         // galleries, all six scenes. A cue that never stops is not a cue, it is a room tone.
-        audio?.setAmbienceLayers(birds: outdoors && !nearArch,
+        audio?.setAmbienceLayers(birds: outdoors && !nearArch && gameState.hasBirdsong,
                                  underTone: outdoors && gameState.hasMoved
                                             && gameState.name == "scene-1")
         // Phase E — the world's bed. Arrival is SILENT and the bed returns a moment later (Scene 2's
@@ -1638,6 +1655,17 @@ class Renderer: NSObject, MTKViewDelegate {
         // PROTOTYPE — the model on the plinth: same meshes, its own instance buffers, in the opaque
         // pass so it is a real object standing in the room at real depth.
         if !modelOpaqueDrawCalls.isEmpty {
+            // THE MINIATURE KEEPS ITS BACK FACES CULLED, ALWAYS.
+            //
+            // The pass drops culling while a slice turns, so the world can be seen from inside the
+            // moving slab — a rule about the world you are STANDING IN, and exactly wrong for a
+            // model you are looking at from outside. It turned the miniature inside out for the
+            // duration: Eddie saw "an inner ball… the checkerboard right in the middle" and "two
+            // unpowered channels at the 10:30 and 2:00 positions" that "just disappear" once the
+            // turn settles — the far hemisphere and its channels showing through the near one.
+            // Which also explains the turn reading as ambiguous: you were watching two surfaces at
+            // once.
+            encoder.setCullMode(.back)
             vertexArgTable.setAddress(modelInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             fragmentArgTable.setAddress(modelInstanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             for dc in modelOpaqueDrawCalls {
@@ -1663,6 +1691,8 @@ class Renderer: NSObject, MTKViewDelegate {
             }
             vertexArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
             fragmentArgTable.setAddress(instanceBuffers[currentBufferIndex].gpuAddress, index: BufferIndex.instances.rawValue)
+            // Hand the pass back the cull mode it had (see above).
+            encoder.setCullMode(gameState.sliceRotation.isActive ? .none : .back)
         }
 
         // The teaching text, over the world and under the fade.

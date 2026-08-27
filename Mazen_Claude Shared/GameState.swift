@@ -32,6 +32,17 @@ class GameState {
     /// world's own default and nothing can put it back.
     private(set) var authoredSky: String? = nil
 
+    /// DOES THIS WORLD HAVE BIRDS? A property of the place, not of the renderer.
+    ///
+    /// Birdsong was gated only on "outdoors and not near the arch", so it followed the player into
+    /// every open-air world there is — Eddie heard it over Scene 5's dead stone ruin, where the
+    /// script's whole register is silence and dripping light. Exactly the fault the undertone next
+    /// to it already carries a comment about: a cue with no scene in it stops being a cue and
+    /// becomes room tone. Interiors were already excluded; being outdoors was never the question.
+    ///
+    /// Living worlds only. The natural ones will want it, the ruins and galleries must not have it.
+    private(set) var hasBirdsong = false
+
     /// Phase 0 — whether the player may twist a slice here (Q/E). The prologue withholds the verb:
     /// Scenes 1-3 disable it and Scene 4 grants it, which is the moment the game hands the player its
     /// defining action. Default true, so every existing world keeps today's always-on behaviour.
@@ -186,6 +197,10 @@ class GameState {
         worldScale = ws
         cubeModel = CubeModel(worldScale: ws, stamp: stamp)
         skyCounterpart = stamp.skyCounterpart
+        switch stamp {
+        case .homeClearing, .natural, .gardenMaze: hasBirdsong = true
+        default: hasBirdsong = false
+        }
         authoredSky = stamp.skyCounterpart
         player = PlayerState(size: size, standGrid: ws.standGrid)
         // Stand where the world SAYS you stand. `spawnLocation` was only ever applied on arrival
