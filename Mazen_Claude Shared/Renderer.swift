@@ -718,6 +718,11 @@ class Renderer: NSObject, MTKViewDelegate {
         // only exercised when data shows up is a binding whose residency nobody tested.
         if let pv = self.portalViewArray { Self.makeResident(pv, in: rs, recording: &initResident) }
         Self.makeResident(self.shadowMapTexture, in: rs, recording: &initResident)
+        // The prompt's 1x1 placeholder. Missed last night: the line that should have added it aimed
+        // at an anchor an earlier edit had already rewritten, so the replace silently did nothing and
+        // a texture was bound every frame without being resident. The residency guard named it this
+        // morning — which is exactly the failure it was built for, caught before Eddie ran it.
+        Self.makeResident(self.promptPlaceholder, in: rs, recording: &initResident)
         for buf in frameBufs { rs.addAllocation(buf) }
         for buf in instBufs { rs.addAllocation(buf) }
         for buf in counterpartBufs { rs.addAllocation(buf) }

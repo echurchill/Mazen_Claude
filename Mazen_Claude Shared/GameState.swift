@@ -1540,7 +1540,10 @@ class GameState {
     var worldModelTile: (face: CubeFace, row: Int, col: Int)? = nil
     /// Woken by using it; sleeps again when the player walks away. `worldModelWake` is the animation
     /// between those two states — the model grows out of the plinth rather than appearing.
-    var worldModelAwake = false
+    /// `MAZEN_MODEL=1` wakes it at boot. A headless run cannot press F, and the whole point of a
+    /// validated boot is to exercise the path the player will hit — an untested draw path is how
+    /// yesterday's fuchsia and the prompt crash both reached Eddie before they reached me.
+    var worldModelAwake = ProcessInfo.processInfo.environment["MAZEN_MODEL"] != nil
     private(set) var worldModelWake: Float = 0
     /// Tiles. Far enough that you can step back and look at the model, close enough that leaving
     /// obviously ends it.
