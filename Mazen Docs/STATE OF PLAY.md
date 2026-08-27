@@ -19,22 +19,32 @@ Eddie's first look found two things, both now fixed:
   resolved live each tick. `CubeModel.locate` already carried the rule in a comment
   (*"live rather than remembered… has to ask again rather than cache"*); the fix is what obeying it
   looks like. Guarded by `testTheWorldModelFollowsItsPlinthThroughATwist`, mutation-tested.
-- **The channels — the actual puzzle — were invisible on it, and the world had its back turned.**
-  Two wrong theories died first. The grooves were not missing: both builds emit all 22 channel
-  tiles. They were not too thin either — I widened them ×3 on a sub-pixel argument, and Eddie killed
-  it with one observation: *in orbit, at the same size on screen, they read fine*. The width change
-  was reverted. What the measurement actually said is that the model presented `+Y` at 0.89 toward
-  the eye while the channel cross lay on `+Z` at **0.04** — dead edge-on, wrapped round the
-  silhouette and foreshortened to nothing. The miniature had no orientation of its own; it inherited
-  the world's idle spin and showed whatever that left facing outward. It now **turns to present the
-  face the player is standing on** (`WorldModelPlinth.presenting`, tested and mutation-tested), which
-  is also why orbit worked and the plinth did not: in orbit you fly round to the face you want, and a
-  thing on a pedestal has to offer that face itself. A `DEBUG` bench line prints which face it is
-  showing, because a model with its back turned is a plain stone ball rather than an error.
+- **The world had its back turned.** The model inherited the world's idle spin and nothing else, so
+  it presented whichever face that left outward — `+Y` at 0.89 toward the eye while Scene 5's channel
+  cross lay on `+Z` at **0.04**, dead edge-on. It now **turns to present the face the player is
+  standing on** (`WorldModelPlinth.presenting`, tested and mutation-tested). Eddie likes it; whether
+  it should instead hold a fixed orientation you can walk around is still open.
 
-Still open for Eddie's eyes: whether always presenting your own face is right, or whether the model
-should hold a fixed orientation you walk around; and whether it floats at the right height above the
-pedestal.
+- **The channels were drawn before the ground they lie in.** Three theories died first — too thin
+  (wrong: reverted), facing away (a real bug, but not this one), not emitted (wrong: both builds
+  emit all 22 tiles, with byte-identical draw calls). `channelFloor` carries a 0.004 lift in local z
+  so the groove sits proud of the floor, and it was packed BEFORE the floor. At world scale that
+  lift is ~7.6 cm and the depth test settles it cleanly; on the miniature at ~1/164 it becomes
+  **0.024 mm**, the two surfaces quantise into each other, and the ground — drawn second — won. The
+  group is now packed AFTER the field floor, which is the natural order and is scale-robust.
+
+  **The lesson is about method, not depth buffers.** Three wrong answers came from reasoning about
+  the code; the right one came from photographing it. So the bench can now photograph itself:
+  `MAZEN_SHOT=name` writes `PortalViews/name.png` at frame `MAZEN_SHOT_FRAME`, `MAZEN_MODEL=front`
+  parks the miniature in front of the camera (a headless run has no player to walk it to the
+  plinth), and `MAZEN_MODEL_SIZE` scales it. Painting material 33 solid red and photographing it
+  took one build to settle what three rounds of argument could not.
+
+Next on it (Eddie, 2026-08-27): a **colour seam around the edge of the presented face**, since the
+model is meant to become a rotator too; and then **how you interact with it** — "if we can make this
+change and figure out how to interact with it then I think this is a wonderful visualization and
+control mechanism". Also noted: pressing Q/E while the model is up makes it fly away and return —
+the twist moves the plinth's facelet and the model chases it. Cool, not useful.
 
 ## The 60-second catch-up
 

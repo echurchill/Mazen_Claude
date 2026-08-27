@@ -238,6 +238,11 @@ class Renderer: NSObject, MTKViewDelegate {
     /// new world still have caches warming. Counted down only once `transitionPhase == .none`.
     var portalCaptureSettle = 0
     var portalCaptureName: String? = nil
+#if DEBUG
+    /// `MAZEN_SHOT=name` — photograph one bench frame to `PortalViews/name.png`. The bench renders to
+    /// a real drawable, so this is the same capture the portal-view key uses.
+    var benchShot: (name: String, atFrame: Int)? = nil
+#endif
     var portalCaptureTexture: MTLTexture?
     /// A blit is in flight; read it back once the GPU has certainly finished. Counted in frames
     /// rather than waited on, because the frame loop already paces itself and a stall here would
@@ -783,6 +788,13 @@ class Renderer: NSObject, MTKViewDelegate {
                 NSLog("BENCH first-person")
             }
             NSLog("BENCH world=%@", bench)
+#if DEBUG
+            if let shot = ProcessInfo.processInfo.environment["MAZEN_SHOT"] {
+                benchShot = (name: shot,
+                             atFrame: Int(ProcessInfo.processInfo.environment["MAZEN_SHOT_FRAME"] ?? "") ?? 90)
+                NSLog("BENCH shot '%@' at frame %d", shot, benchShot!.atFrame)
+            }
+#endif
         }
 #endif
     }
@@ -867,9 +879,27 @@ class Renderer: NSObject, MTKViewDelegate {
             // plinth rather than appearing.
             let metres: Float = 0.0529
             let radius = ws.faceDistance * 1.732
-            let want = 0.70 * metres * gameState.worldModelWake
+            var wantScale: Float = 0.70
+#if DEBUG
+            if let o = ProcessInfo.processInfo.environment["MAZEN_MODEL_SIZE"], let v = Float(o) { wantScale = v }
+#endif
+            let want = wantScale * metres * gameState.worldModelWake
+
             let scale = max(0.0001, want / max(0.0001, radius))
-            let centre = base.position + up * (ws.floorY + 1.5 * metres)
+            var centre = base.position + up * (ws.floorY + 1.5 * metres)
+#if DEBUG
+            // MAZEN_MODEL=front parks the miniature a metre in front of the camera, wherever that
+            // is. A bench run has no player to walk it up to the plinth, and "photograph the thing
+            // and look at it" beats another round of reasoning about why it cannot be seen.
+            if ProcessInfo.processInfo.environment["MAZEN_MODEL"] == "front" {
+                let pose = gameState.framePose(aspect: aspect)
+                let ahead = pose.position + pose.forward * (3.2 * wantScale * metres)
+                let inv = simd_inverse(gameState.worldSpinMatrix())
+                let c4 = inv * SIMD4<Float>(ahead.x, ahead.y, ahead.z, 1)
+                centre = SIMD3(c4.x, c4.y, c4.z)
+            }
+#endif
+
             // TURN IT TO FACE THE PLAYER — see `WorldModelPlinth`.
             //
             // Three frames meet here, which is what made getting it wrong easy. `centre` and the
@@ -1650,6 +1680,17 @@ class Renderer: NSObject, MTKViewDelegate {
             perfSamples = (0, 0, 0, 0); perfSampleCount = 0
             if benchFramesRemaining > 0 { logBenchSample() }
         }
+
+#if DEBUG
+        // The bench's shutter: photograph one frame so a headless run can be LOOKED at rather than
+        // reasoned about. Feeds the same capture path the portal-view key uses.
+        if let shot = benchShot, frameIndex >= shot.atFrame {
+            benchShot = nil
+            portalCaptureName = shot.name
+            portalCaptureSettle = 1
+            NSLog("BENCH shutter at frame %d", frameIndex)
+        }
+#endif
 
         // ── Portal-view capture ──────────────────────────────────────
         // Copy the finished frame out, once the fade is done and the world has settled. The read is

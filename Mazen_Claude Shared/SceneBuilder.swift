@@ -1053,16 +1053,6 @@ final class SceneBuilder {
                 instanceOffset: startIdx, instanceCount: bondBandTiles.count))
         }
 
-        // Scene 3's orb and beams, and Scene 5's channels — one instanced draw each.
-        for group in [orbTiles, beamTiles, channelTiles] where !group.isEmpty {
-            let mesh = group[0].mesh
-            let startIdx = idx
-            for entry in group { ptr[idx] = entry.instance; idx += 1 }
-            opaqueDrawCalls.append(DrawCall(
-                indexOffset: mesh.indexOffset, indexCount: mesh.indexCount,
-                instanceOffset: startIdx, instanceCount: group.count))
-        }
-
         // Cut faces of the turning slab (mid-twist only)
         if !cutFaceTiles.isEmpty {
             let mesh = cutFaceTiles[0].mesh
@@ -1112,6 +1102,32 @@ final class SceneBuilder {
                 instanceCount: fieldTiles.count
             ))
         }
+
+        // ORDER MATTERS HERE, AND IT IS NOT COSMETIC.
+        //
+        // These three all sit a hair ABOVE the ground they lie in — `channelFloor` carries a 0.004
+        // lift in local z — so they must be drawn AFTER it. They used to be packed before it, and
+        // got away with it at world scale, where 0.004 is about 7.6 cm and the depth test settles
+        // the argument cleanly.
+        //
+        // The plinth's miniature is the same geometry at ~1/164, where that lift becomes 0.024 mm
+        // and the two surfaces quantise into each other: the ground, drawn second, won, and Scene 5's
+        // channels — the entire puzzle — vanished from the model while remaining perfect underfoot.
+        // Three wrong theories died on that one (too thin, facing away, not emitted); the draw calls
+        // were identical in every field, and only the ORDER differed from what they needed.
+        //
+        // Drawing the groove after its own ground is the natural order anyway, and it is now robust
+        // at any scale the world is rendered at.
+        // Scene 3's orb and beams, and Scene 5's channels — one instanced draw each.
+        for group in [orbTiles, beamTiles, channelTiles] where !group.isEmpty {
+            let mesh = group[0].mesh
+            let startIdx = idx
+            for entry in group { ptr[idx] = entry.instance; idx += 1 }
+            opaqueDrawCalls.append(DrawCall(
+                indexOffset: mesh.indexOffset, indexCount: mesh.indexCount,
+                instanceOffset: startIdx, instanceCount: group.count))
+        }
+
 
         // Opaque path-cross floor tiles (paved material) — coplanar with, but disjoint
         // from, the propSpace floor cells, so no depth conflict.
