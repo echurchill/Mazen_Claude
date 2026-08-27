@@ -96,6 +96,31 @@ the model exists to explain was the moment it used to leave.
   clearing / natural / garden-maze stamps only — the same fault the undertone beside it already
   carries a comment about: a cue with no scene in it becomes room tone.
 
+**Third pass (2026-08-27):**
+
+- **One plinth per plinth.** `worldModel` borrows the plinth's own mesh, and the stamp put a
+  `.plinth` beside it — two identical pedestals in the same place, fighting for the depth test.
+  Copied from the rotator's stamp, where the second prop was a cylinder STANDING ON the plinth.
+- **The band is drawn as RAILS, not a wash.** Filling it hid what was written on it: *"it seems to
+  be covering up the channels which makes it hard to create a mental model where the channels are or
+  are not"*. A belt you cannot read through is worse than an unmarked one, because the channels ARE
+  the puzzle. Two long rails still make the slab read as one body.
+- **`WorldScale.metre` now exists**, and it should have all along. Movement is the only thing in the
+  engine with a real size — a pace is ~1.3 m over a 15-wide stand grid — so a facelet is ~19.5 m.
+  Nothing wrote that down, so props were authored by eye against each other. The police box stood
+  **9.7 m** to its apex, four and a half times life size (*"I feel like a midget or an insect next to
+  them"*). Now 2.17 m, Eddie's number, with proportions kept and scaled as one. **The lamp is a
+  separate prop and stayed behind in the sky** on the first attempt — `policeBoxScale` is shared now,
+  and anything else that lands on that roof must use it.
+- **The hub says where you stand.** The centre tile was always kept clear of the portal grid, but
+  nothing declared it, so an arrival falling back on its own route put the player inside the box they
+  came from (*"everytime I jump to the portal world, I am inside a tardis"*). `spawnLocation` is
+  explicit now.
+
+**Not chased, and worth a look:** the portal hub has red and blue blocky shapes floating well above
+the plaza, at the same positions as the boxes. They are not the lamps (those came down with the
+roof) and they predate today's scaling. Unidentified.
+
 **Open for Eddie:** the model is awake the instant Scene 5 begins — spawn is one tile from the `+Z`
 plinth and `worldModelRange` is 3 — so the reveal never plays and the second `SceneBuilder.build`
 is always paid (R2.6's case, again). Tighten the range, move the spawn, or accept it. And **Q/E

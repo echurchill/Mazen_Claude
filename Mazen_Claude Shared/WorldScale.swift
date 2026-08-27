@@ -56,6 +56,15 @@ struct WorldScale {
     /// Per-world on purpose — interiors may want finer (M18 D4).
     /// 15 (≈1.3 m/step at perceptual scale — a natural stride) is the default (Eddie, M18 P3).
     var standGrid: Int = 15
+
+    /// ONE METRE, in a tile's local frame.
+    ///
+    /// Movement is the anchor and the only thing in this engine with a real-world size: `standStep`
+    /// is one pace and M18 fixed a pace at ~1.3 m, so a facelet (1.0 local) is about 19.5 m across.
+    /// That number was never written down, so props were authored by eye against each other and
+    /// drifted — the police box stood 9.7 m to its apex, four and a half times life size, until
+    /// Eddie asked how tall it was ("I feel like a midget or an insect next to them").
+    static let metre: Float = (1.0 / 15.0) / 1.3
     /// Distance between adjacent stand-cell centers, in a tile's local frame.
     var standStep: Float { 2.0 * floorHalfSize / Float(standGrid) }
     /// M14b: how many times to subdivide each floor sub-cell edge, so the floor has enough

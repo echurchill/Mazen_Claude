@@ -858,14 +858,28 @@ class TileMeshLibrary {
     /// a single-colour prop has, and it turns out to be enough for a shape this familiar.
     private static func addPortal(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let z0 = ws.floorY
-        let bodyTop: Float = 0.40       // top of the box body (above the 0.24 hedges)
-        let bandTop: Float = 0.425      // the POLICE BOX sign band
-        let roof1: Float = 0.445        // first roof slab
-        let roof2: Float = 0.462        // second, narrower slab
-        let roofTop: Float = 0.50       // apex of the tented roof
-        let h: Float = 0.11             // body half-width (squarish police-box footprint)
-        let postW: Float = 0.016        // corner post thickness
-        let proud: Float = 0.004        // how far posts/band/panes stand off the body
+        // LIFE SIZE — 2.17 m to the apex, Eddie's number for a real police box.
+        //
+        // These were authored by eye against the hedges and nothing ever checked them against a
+        // person: the apex sat at 0.50 local, and a facelet is ~19.5 m (`WorldScale.metre`), so the
+        // box stood 9.7 m — four and a half times life size. "How tall are these things? I feel
+        // like a midget or an insect next to them. The real tardis is only a little over 2 meters
+        // high (217 cms)."
+        //
+        // The proportions were right, so they are kept and scaled as one: every height is measured
+        // from the floor, multiplied, and put back. Widths take the same factor, which lands the
+        // footprint at ~1.9 m square against a real box's 1.37 m — near enough, and a door narrower
+        // than a single 1.3 m pace would be hard to read at all.
+        let k = Self.policeBoxScale(ws: ws)
+        func up(_ v: Float) -> Float { z0 + (v - z0) * k }
+        let bodyTop: Float = up(0.40)   // top of the box body
+        let bandTop: Float = up(0.425)  // the POLICE BOX sign band
+        let roof1: Float = up(0.445)    // first roof slab
+        let roof2: Float = up(0.462)    // second, narrower slab
+        let roofTop: Float = up(0.50)   // apex of the tented roof
+        let h: Float = 0.11 * k         // body half-width (squarish police-box footprint)
+        let postW: Float = 0.016 * k    // corner post thickness
+        let proud: Float = 0.004 * k    // how far posts/band/panes stand off the body
 
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ ao: Float) -> MazeVertexSwift {
             MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(0, 0), aoFactor: ao)
@@ -1316,8 +1330,20 @@ class TileMeshLibrary {
         }
     }
 
+    /// How much the police box (and the lamp that sits on it) shrinks to reach life size.
+    ///
+    /// Shared, because the lamp is a SEPARATE prop: scaling the box alone left every lamp hanging
+    /// in the sky at the height the old roof used to be — visible from across the plaza, which is
+    /// how it was caught. Anything else that lands on this roof must use this too.
+    static func policeBoxScale(ws: WorldScale) -> Float {
+        (2.17 * WorldScale.metre) / (0.50 - ws.floorY)
+    }
+
     private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
-        let base: Float = 0.50, top: Float = 0.56, h: Float = 0.028
+        // Rides the roof, so it takes the roof's scaling (see `policeBoxScale`).
+        let k = Self.policeBoxScale(ws: ws), z0 = ws.floorY
+        func up(_ v: Float) -> Float { z0 + (v - z0) * k }
+        let base: Float = up(0.50), top: Float = up(0.56), h: Float = 0.028 * k
         func ring(_ z: Float) -> [SIMD3<Float>] {
             [SIMD3(-h, -h, z), SIMD3(h, -h, z), SIMD3(h, h, z), SIMD3(-h, h, z)]
         }

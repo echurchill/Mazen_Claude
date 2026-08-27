@@ -888,16 +888,6 @@ fragment float4 fragmentShader(
         // Warm on purpose: the current is blue-white, and a selection that shares its colour reads
         // as part of the puzzle rather than as a control laid over it.
         float2 uv = in.texCoord;
-        // Bit 4 ⇒ this is a BAND tile (the side of the turning slab): wash the whole tile rather
-        // than lining its edges, so the moving body of the slab reads as one object.
-        if (in.styleSeed & 16u) {
-            float amount = clamp(in.discoveryAmount, 0.0, 1.0);
-            float3 warm = float3(0.86, 0.62, 0.32);
-            float3 stone = float3(0.52, 0.50, 0.47);
-            color = mix(stone, warm, 0.55 * amount);
-            lighting = skyAmbient * 0.55 + sunColor * 0.55 * halfLambert * shadowFactor;
-            return float4(color * lighting, 1.0);
-        }
         uint edges = in.styleSeed & 0xFu;
         float d = 1e9;
         if (edges & 1u) d = min(d, segmentDistance(uv, float2(0.0, 0.0), float2(1.0, 0.0)));

@@ -959,11 +959,26 @@ final class SceneBuilder {
                         _ = fi
                         var restM = model.restMatrix(face: face, row: r, col: c)
                         if let animMat = sliceAnimMatrix, sr.affectedCubies.contains(ci) { restM = animMat * restM }
+                        // RAILS, NOT A WASH. Filling the band hid what was written on it — "it
+                        // seems to be covering up the channels which makes it hard to create a
+                        // mental model where the channels are or are not" (Eddie). A belt you
+                        // cannot read through is worse than an unmarked one, because the channels
+                        // ARE the puzzle. So the band is drawn as its two long rails: the slab
+                        // still reads as one body, and everything on it stays legible.
+                        //
+                        // Which pair of edges are the rails depends on how the slab runs across
+                        // this face. Asking the neighbour is cheaper than reasoning about axes:
+                        // if the tile beside us in `c` is also in the slab, the belt runs along the
+                        // row, so the rails are north and south.
+                        let runsAlongRow =
+                            (c + 1 < n && model.faceletAt(face: face, row: r, col: c + 1).map { slab.contains($0.0) } == true)
+                            || (c > 0 && model.faceletAt(face: face, row: r, col: c - 1).map { slab.contains($0.0) } == true)
+                        let rails: UInt32 = runsAlongRow ? (1 | 4) : (2 | 8)
                         let inst = InstanceDataSwift(
                             modelMatrix: restM, baseColor: SIMD4(1, 1, 1, 1),
                             materialID: 38, tileID: 0,
                             discoveryAmount: 1,
-                            styleSeed: 16,                    // bit 4 ⇒ fill the tile, not its edges
+                            styleSeed: rails,
                             spinMatrix: spin, roundness: model.roundness,
                             invHalfExtent: 1.0 / model.worldScale.faceDistance,
                             reliefAmplitude: model.reliefAmplitude)

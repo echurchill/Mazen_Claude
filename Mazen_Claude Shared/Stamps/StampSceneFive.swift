@@ -210,7 +210,12 @@ extension CubeModel {
             }
             guard let spot = best, let (ci, fi) = faceletAt(face: face, row: spot.r, col: spot.col)
             else { continue }
-            cubies[ci].facelets[fi].props.append(Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .n))
+            // ONE PROP, NOT TWO. `worldModel` borrows the plinth's own mesh
+            // (`TileMeshLibrary`), so stamping a `.plinth` beside it put two identical pedestals in
+            // the same place — coincident faces fighting for the depth test, which is what Eddie
+            // saw and read as "more than one plinth for each plinth". Copied from the rotator's
+            // stamp, where the second prop was a CYLINDER standing on the plinth and the pairing
+            // made sense.
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .worldModel, subRow: 1, subCol: 1, facing: .s, state: 5))
         }

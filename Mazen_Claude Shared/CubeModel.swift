@@ -318,6 +318,12 @@ class CubeModel {
         // Six columns now: the fifth filled with Scene 6, and the Cyberpunk gallery needed a
         // sixteenth. `cHi` is c+5, so the plaza already reaches far enough — no need to grow the
         // region or add a row behind the player, which is what made the grid go wide the last time.
+        // STAND IN THE PLAZA, NOT IN A DOORWAY. The centre tile is deliberately kept clear of the
+        // grid below (rows and columns are all odd offsets from `c`), but nothing SAID so, and an
+        // arrival that fell back on its own route put the player inside whichever box they had
+        // come from — "everytime I jump to the portal world, I am inside a tardis" (Eddie). Saying
+        // it explicitly costs one line.
+        spawnLocation = (face: .positiveZ, row: c, col: c, facing: .n)
         let gridRows = [c - 5, c - 3, c - 1]
         let gridCols = [c - 5, c - 3, c - 1, c + 1, c + 3, c + 5]
         for (slot, idx) in hubDestinations.enumerated() {
