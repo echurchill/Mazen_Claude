@@ -139,11 +139,21 @@ class GameViewController: NSViewController {
             }
             if gs.cubeModel.fullWidthGateways { walls += "  fullWidthGaps" }
         }
+        // WHERE THE PLAYER IS LOOKING, in the SAME units `MAZEN_LOOK` takes — so a heading read off
+        // the HUD can be handed straight back to a headless run and reproduce the view. That is the
+        // whole point of putting it here: a bench has no way to look around, and "the plinth is
+        // about 45 degrees left" is a description, not a number that can be typed in.
+        //
+        // Wrapped to (−180, 180], because a camera spun round a few times reads as 1440° otherwise
+        // and a number you cannot type back in is not worth showing.
+        var lookDegrees = (gs.camera.lookYaw * 180 / .pi).truncatingRemainder(dividingBy: 360)
+        if lookDegrees > 180 { lookDegrees -= 360 } else if lookDegrees <= -180 { lookDegrees += 360 }
+
         let text = String(format: """
             Face: %@  Pos: (%d,%d)  Dir: %@
             Walls: %@
             Here: %@
-            Camera: %@  Cube: %dx%dx%d
+            Camera: %@  Look: %.0f°  Cube: %dx%dx%d
             Frame: %.1f ms  (%.0f fps)
             Twist(G): %@   World(O): %@
             Roundness(-/=): %.1f   Matte(M): %@   Noon(⇧T): %@
@@ -151,7 +161,8 @@ class GameViewController: NSViewController {
             "\(gs.player.face)", gs.player.row, gs.player.col, "\(gs.player.facing)",
             walls,
             here,
-            gs.camera.mode == .orbit ? "orbit" : "FP", gs.cubeModel.size, gs.cubeModel.size, gs.cubeModel.size,
+            gs.camera.mode == .orbit ? "orbit" : "FP", lookDegrees,
+            gs.cubeModel.size, gs.cubeModel.size, gs.cubeModel.size,
             gs.avgFrameTimeMs, fps, pacing, world, gs.cubeModel.roundness,
             (renderer?.debugPlainShading ?? false) ? "ON" : "off",
             (renderer?.sunNoonLock ?? false) ? "ON" : "off")
