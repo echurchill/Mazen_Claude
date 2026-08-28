@@ -72,8 +72,43 @@ and the miniature world is the thing you EARN rather than a second unrelated con
 a progression — first twist as ceremony, mastery as a tool — and it costs one stamp change plus
 whatever ceremony we keep for the rise.
 
-Open either way: whether the rise-from-the-disc ceremony survives, and whether Scene 4 (which is
-supposed to teach the twist) should get the same body a step earlier still.
+### Three shapes for what floats above it (Eddie, 2026-08-28)
+
+All three keep Scene 5's plinth body and the swirl, and rise out of the disc before floating — the
+ceremony survives in every one. What differs is what appears.
+
+1. **A broken/asymmetric cube.** The puzzle drawn literally: a solid with a piece out of true. Says
+   "something is misaligned" in one glance.
+2. **Two counter-facing "C" tubes that turn into one closed square tube.** Abstract. Eddie: *"it
+   kind of looks like a 4-d shape twisting."*
+3. **A bifurcated cube** — split in two halves rather than sliced, so it implies "turn a part of
+   this" without implying a 3×3×3 slice.
+
+**Recommendation: (2), the two C's.** Three reasons, in order of weight.
+
+- **It is the only one with no spoiler cost.** Scene 1's sun and moon were made spheres precisely so
+  nothing hints at the shape of a world, and Scene 5's miniature is a SPHERE because it renders the
+  inflated world honestly. A hard cube in Scene 2 runs the reveal backwards — cube early, ball late.
+  The C's gesture at a square profile without ever being a cube.
+- **It has an unambiguous solved state.** Open loop → closed loop. A control that shows you when you
+  are right is worth more in the scene that first asks you to turn something than a control that
+  merely shows you what you are turning.
+- **It is on-canon rather than a diagram of a game mechanic.** [Builder Glyphs — 4D
+  Shadows](Builder%20Glyphs%20—%204D%20Shadows.md) has slice = word, sweep = sentence, rotation =
+  verb, and the twist as the language's 3D step-down. A shape that reads as a 4D thing twisting IS
+  the Builders' vocabulary. A broken cube is us explaining our own mechanic to the player.
+
+And it escalates properly: **abstract in Scene 2 (align something), literal in Scene 5 (here is your
+world)**. The abstraction is what earns the literal.
+
+**One thing to get right if we build it:** the C's must turn a quarter per press, not snap into
+alignment on activation. A control that solves itself teaches "press to win"; one that turns teaches
+the verb, which is the whole reason Scene 2 exists. If a single press is all the scene needs, that is
+worth checking before choosing this shape.
+
+Open either way: whether Scene 4 (which is supposed to teach the twist) should get the same body a
+step earlier still, and whether the abstract shape can carry Scene 4's job or whether that one wants
+the literal miniature.
 
 ## The orbit view must be WITHHELD in Scenes 1–3 (noted 2026-08-07, deferred on purpose)
 
