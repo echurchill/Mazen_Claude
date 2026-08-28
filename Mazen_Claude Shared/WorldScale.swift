@@ -57,14 +57,21 @@ struct WorldScale {
     /// 15 (≈1.3 m/step at perceptual scale — a natural stride) is the default (Eddie, M18 P3).
     var standGrid: Int = 15
 
-    /// ONE METRE, in a tile's local frame.
+    /// ONE METRE, in a tile's local frame — THE anchor, not a new one.
     ///
-    /// Movement is the anchor and the only thing in this engine with a real-world size: `standStep`
-    /// is one pace and M18 fixed a pace at ~1.3 m, so a facelet (1.0 local) is about 19.5 m across.
-    /// That number was never written down, so props were authored by eye against each other and
-    /// drifted — the police box stood 9.7 m to its apex, four and a half times life size, until
-    /// Eddie asked how tall it was ("I feel like a midget or an insect next to them").
-    static let metre: Float = (1.0 / 15.0) / 1.3
+    /// This is `eyeHeight / 1.7`, which fourteen call sites were already writing out by hand as
+    /// `ws.eyeHeight / 1.7` ("world units per metre"). Naming it is the whole change.
+    ///
+    /// It matters that it is the SAME number. Asked how tall the police box was, I derived a metre
+    /// from movement instead — a pace is ~1.3 m over a 15-wide stand grid — which is a perfectly
+    /// good derivation that lands 3% away from the one already in use. Two constants that disagree
+    /// by 3% is worse than the eyeballing it replaced, because it looks authoritative. The engine
+    /// gets one metre, and this is it.
+    ///
+    /// (What the eyeballing cost, before there was any metre at all: a 9.7 m police box, its door
+    /// panels left hanging in the sky when it was scaled, and 3.3 m signposts — all invisible until
+    /// Eddie stood next to something he knew the real size of.)
+    var metre: Float { eyeHeight / 1.7 }
     /// Distance between adjacent stand-cell centers, in a tile's local frame.
     var standStep: Float { 2.0 * floorHalfSize / Float(standGrid) }
     /// M14b: how many times to subdivide each floor sub-cell edge, so the floor has enough

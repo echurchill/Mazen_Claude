@@ -906,7 +906,7 @@ class Renderer: NSObject, MTKViewDelegate {
             // ~1.4 m across, floating a little above head height over the stone: big enough to read a
             // channel, small enough to take in at once. Grown by the wake so it unfolds from the
             // plinth rather than appearing.
-            let metres: Float = 0.0529
+            let metres: Float = ws.metre
             let radius = ws.faceDistance * 1.732
             var wantScale: Float = 0.70
 #if DEBUG

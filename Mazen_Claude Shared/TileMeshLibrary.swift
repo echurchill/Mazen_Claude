@@ -861,7 +861,7 @@ class TileMeshLibrary {
         // LIFE SIZE — 2.17 m to the apex, Eddie's number for a real police box.
         //
         // These were authored by eye against the hedges and nothing ever checked them against a
-        // person: the apex sat at 0.50 local, and a facelet is ~19.5 m (`WorldScale.metre`), so the
+        // person: the apex sat at 0.50 local, and a facelet is ~19.5 m (`WorldScale.metre` (`ws.metre`)), so the
         // box stood 9.7 m — four and a half times life size. "How tall are these things? I feel
         // like a midget or an insect next to them. The real tardis is only a little over 2 meters
         // high (217 cms)."
@@ -946,7 +946,7 @@ class TileMeshLibrary {
         //
         // 2.17 m to the apex, Eddie's figure for a real police box. The shape above was authored by
         // eye against the hedges and nothing ever checked it against a person: a facelet is ~19.5 m
-        // (`WorldScale.metre`), so an apex at 0.50 stood 9.7 m — four and a half times life size.
+        // (`WorldScale.metre` (`ws.metre`)), so an apex at 0.50 stood 9.7 m — four and a half times life size.
         //
         // Scaling the CONSTANTS was the obvious fix and the wrong one. There are a dozen more of
         // them below the frame — panels, panes, the sign band, the door furniture — and I scaled the
@@ -1056,7 +1056,7 @@ class TileMeshLibrary {
         //
         // These stood 3.3 m to the top of a board 2.1 m square — half again taller than a real
         // police box, with a board about the size of the box's whole front. Nobody had noticed
-        // because nothing in the engine could be measured until `WorldScale.metre` existed; the
+        // because nothing in the engine could be measured until `WorldScale.metre` (`ws.metre`) existed; the
         // sign and the box had only ever been sized against each other.
         //
         // Scaled UNIFORMLY and as vertices, for two reasons. The board carries rendered text from
@@ -1065,7 +1065,7 @@ class TileMeshLibrary {
         //
         // The plaza was pulled in to match (`stampPortalHub`) — a smaller sign you can reach is
         // worth more than a billboard you can read from a hundred metres.
-        let signTop: Float = 2.2 * WorldScale.metre
+        let signTop: Float = 2.2 * ws.metre
         let k = signTop / (boardTop - z0)
         for i in signVertexStart..<verts.count {
             var v = verts[i]
@@ -1384,7 +1384,7 @@ class TileMeshLibrary {
     /// in the sky at the height the old roof used to be — visible from across the plaza, which is
     /// how it was caught. Anything else that lands on this roof must use this too.
     static func policeBoxScale(ws: WorldScale) -> Float {
-        (2.60 * WorldScale.metre) / (0.50 - ws.floorY)
+        (2.60 * ws.metre) / (0.50 - ws.floorY)
     }
 
     private static func addPortalLamp(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
