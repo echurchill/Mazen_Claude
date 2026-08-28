@@ -789,6 +789,13 @@ class Renderer: NSObject, MTKViewDelegate {
                 worldStack[worldStack.count - 1].camera.mode = .firstPerson
                 NSLog("BENCH first-person")
             }
+            // Aim the first-person camera, in degrees. A headless run cannot look around, so
+            // anything off the spawn heading — Scene 5's plinth is to the LEFT of where you start —
+            // could not be photographed at all.
+            if let look = ProcessInfo.processInfo.environment["MAZEN_LOOK"], let d = Float(look) {
+                worldStack[worldStack.count - 1].camera.lookYaw = d * .pi / 180
+                NSLog("BENCH look %.0f°", d)
+            }
             NSLog("BENCH world=%@", bench)
 #if DEBUG
             // THE DRAWABLE MUST BE READABLE BEFORE IT CAN BE COPIED OUT OF, and from the FIRST
