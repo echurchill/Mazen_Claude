@@ -1,5 +1,29 @@
 # Known Issues (living)
 
+## FIXED (2026-08-28): the invisible wall on Scene 1's first steps
+
+Eddie, walking forward straight off the attract screen: *"I hit an invisible wall."* The HUD showed
+him at `(8,5)` sub `(0,0)` heading `nw` — the exact north-west corner cell of a tile whose north and
+west sides were both open.
+
+A corner-to-corner diagonal leaves BOTH axes of the 15×15 stand grid at once, which crosses two tile
+edges and has no single tile to land in, so `startMove` refused it outright: *"step around it"*. But
+an open corner has nothing drawn on it, so the refusal reads as a wall — and it happens in the one
+place the game has just finished teaching the player that forward is a key that works.
+
+It now SLIDES, the same answer this file's sibling bug got (carrying the lateral across a seam into
+a corner a perpendicular wall had claimed): take the diagonal one cardinal at a time, and let the
+next step take the other, so a diagonal crosses a corner as a staircase. Facing is carried through
+unchanged, because a slide that silently turned you would move where "forward" points.
+
+**It was every corner, not a rare one.** The regression sweep sets the player on each corner of each
+tile of a real Scene 1 and walks the diagonal that leaves it, skipping any where both cardinals are
+genuinely blocked. Mutation-tested by restoring the refusal: **308 of 308 stuck.**
+
+The old spec was asserted by the edge-crossing sweep, which used the refusal as a skip guard for
+cases it did not want to verify; that guard now simply skips, which is why the run's check count
+drops by ~1,150.
+
 *Small tracked defects that are understood but deliberately not fixed yet. Not a backlog of
 features — that's the roadmap. This is "things that are wrong and we've decided to live with,
 for now, and why."*

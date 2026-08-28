@@ -411,7 +411,14 @@ extension CoordinateMathTests {
                             let (dr, dc) = travel.subDelta
                             let shifted = (dir == .north || dir == .south) ? sc + dc : sr + dr
                             guard (0..<d).contains(shifted) else {
-                                check(!p.isMoving, "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): corner exit must refuse")
+                                // SPEC CHANGED (2026-08-28): a corner-to-corner diagonal no longer
+                                // refuses — it slides along one cardinal, because refusing meant
+                                // forward did nothing at an open corner and read as an invisible
+                                // wall (Eddie, Scene 1, first steps). What it slides INTO is a
+                                // single-edge crossing, which the rest of this sweep already
+                                // verifies; the slide itself is covered by
+                                // `testDiagonalsDoNotStickOnTileCorners`. Nothing to check here.
+                                _ = p
                                 continue
                             }
                             check(p.isMoving, "size \(n) \(tag) \(face) \(dir) lat \(lat) \(travel): crossing must start")
@@ -961,5 +968,68 @@ extension CoordinateMathTests {
             check(simd_dot(simd_normalize(SIMD3(m.x, m.y, m.z)), -a) > 0.9999,
                   "a face pointing exactly away must still be brought round")
         }
+    }
+}
+
+extension CoordinateMathTests {
+    /// A DIAGONAL WALK MUST NOT STOP DEAD AT A TILE'S CORNER.
+    ///
+    /// Eddie, Scene 1, first steps: *"when I walk forward I hit an invisible wall"* — standing at
+    /// `(8,5)` sub `(0,0)` heading `nw`, with the HUD showing that tile's north and west sides open.
+    /// A corner-to-corner diagonal leaves BOTH axes of the stand grid at once, which crosses two
+    /// edges and has no single tile to land in, so it was refused outright. Nothing is drawn at an
+    /// open corner, so the refusal reads as a wall — and it happens in the one place the game has
+    /// just finished teaching the player to walk.
+    ///
+    /// Swept over every corner of every tile, in both diagonals that leave it, on a real Scene 1:
+    /// wherever the two cardinals are not BOTH genuinely blocked, forward has to produce movement.
+    static func testDiagonalsDoNotStickOnTileCorners() {
+        let gs = GameState(size: 9, name: "scene-1", stamp: .homeClearing)
+        let m = gs.cubeModel
+        let d = gs.worldScale.standGrid
+        var tested = 0, stuck = 0
+
+        // The four corners, and for each the diagonal that leaves the tile through both edges.
+        let corners: [(sub: (Int, Int), heading: Heading8)] = [
+            ((0, 0), .nw), ((0, d - 1), .ne), ((d - 1, 0), .sw), ((d - 1, d - 1), .se),
+        ]
+        for r in 0..<m.size {
+            for c in 0..<m.size {
+                for corner in corners {
+                    gs.player.face = .positiveZ; gs.player.row = r; gs.player.col = c
+                    gs.player.subRow = corner.sub.0; gs.player.subCol = corner.sub.1
+                    gs.player.facing = corner.heading
+                    gs.player.isMoving = false; gs.player.isTurning = false
+                    guard gs.cubeModel.faceletAt(face: .positiveZ, row: r, col: c) != nil else { continue }
+                    // Only meaningful where the player could legally be standing at all.
+                    let tile = m.passableTile(face: .positiveZ, row: r, col: c)
+                    guard tile.isStandable(corner.sub.0, corner.sub.1, grid: d,
+                                           fullWidthGateways: m.fullWidthGateways) else { continue }
+
+                    // Is either half genuinely available? If both cardinals are blocked the corner
+                    // is a real dead end and stopping is correct — this test must not demand
+                    // movement through a wall.
+                    guard let (ha, hb) = corner.heading.cardinalHalves else { continue }
+                    var anyHalfWorks = false
+                    for h in [ha, hb] {
+                        gs.player.subRow = corner.sub.0; gs.player.subCol = corner.sub.1
+                        gs.player.facing = h; gs.player.isMoving = false
+                        gs.player.tryMoveForward(cubeModel: m)
+                        if gs.player.isMoving { anyHalfWorks = true }
+                    }
+                    guard anyHalfWorks else { continue }
+
+                    gs.player.subRow = corner.sub.0; gs.player.subCol = corner.sub.1
+                    gs.player.facing = corner.heading
+                    gs.player.isMoving = false; gs.player.isTurning = false
+                    gs.player.tryMoveForward(cubeModel: m)
+                    tested += 1
+                    if !gs.player.isMoving { stuck += 1 }
+                }
+            }
+        }
+        check(tested > 0, "the sweep should have found corners worth testing")
+        check(stuck == 0,
+              "a diagonal must slide across a tile corner rather than stop dead — \(stuck) of \(tested) stuck")
     }
 }

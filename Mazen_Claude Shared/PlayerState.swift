@@ -118,7 +118,11 @@ struct PlayerState {
     /// straight), including diagonal exits (decomposed as a cardinal crossing with the
     /// lateral shift applied). `arrivalFacing` maps the post-crossing travel heading to the
     /// facing the player ends up with (identity for forward, opposite for backward).
-    private mutating func startMove(travel: Heading8, arrivalFacing: (Heading8) -> Heading8, cubeModel: CubeModel) {
+    /// `facingTravel` is the heading the player's FACING should be derived from, which is not always
+    /// the heading they are travelling: a corner slide moves along one cardinal while still facing
+    /// the diagonal it was asked for. Defaults to `travel`, so every other caller is unaffected.
+    private mutating func startMove(travel: Heading8, arrivalFacing: (Heading8) -> Heading8,
+                                    cubeModel: CubeModel, facingTravel: Heading8? = nil) {
         guard !isMoving && !isTurning else { return }
         guard let (ci, fi) = cubeModel.faceletAt(face: face, row: row, col: col) else { return }
         // The tile as it PASSES, not as it was authored: an opening whose far side refuses is not a
@@ -141,9 +145,28 @@ struct PlayerState {
             return
         }
 
-        // Exiting the tile. Exactly one axis may leave the grid — a corner-to-corner
-        // diagonal (both out) would cross two edges at once; step around it.
+        // Exiting the tile. Exactly one axis may leave the grid: a corner-to-corner diagonal
+        // crosses TWO edges at once and there is no single tile to land in.
         let rowOut = !(0..<d).contains(tr), colOut = !(0..<d).contains(tc)
+        if rowOut && colOut {
+            // THE CORNER SLIDE. This used to "step around it" by refusing outright, which means
+            // forward at a tile's corner did nothing whatsoever — and since the corner is open
+            // ground with nothing drawn there, it reads as an invisible wall. Eddie walked into it
+            // on his first steps in Scene 1, which is the worst possible place for the game to stop
+            // responding to the only key it has taught.
+            //
+            // So take the diagonal one axis at a time, exactly as the seam slide below does: try one
+            // cardinal, and if that is genuinely blocked try the other. The next step takes the
+            // remaining axis, so a diagonal crosses a corner as a staircase and the walk never
+            // stalls. Facing is carried through unchanged — a slide must not silently turn you, or
+            // "forward" would mean somewhere new afterwards.
+            guard let (a, b) = travel.cardinalHalves else { return }
+            startMove(travel: a, arrivalFacing: arrivalFacing, cubeModel: cubeModel, facingTravel: travel)
+            if !isMoving {
+                startMove(travel: b, arrivalFacing: arrivalFacing, cubeModel: cubeModel, facingTravel: travel)
+            }
+            return
+        }
         guard rowOut != colOut else { return }
         let dir: SurfaceDirection = rowOut ? (tr < 0 ? .north : .south)
                                            : (tc < 0 ? .west : .east)
@@ -224,7 +247,8 @@ struct PlayerState {
         // keep forward forward and backward backward.
         let depHeading = Heading8.from(surfaceDirection: dir)
         let arrHeading = Heading8.from(surfaceDirection: arrDir)
-        let turned = Heading8(rawValue: (travel.rawValue + arrHeading.rawValue - depHeading.rawValue + 8) % 8) ?? arrHeading
+        let turned = Heading8(rawValue: ((facingTravel ?? travel).rawValue
+                                        + arrHeading.rawValue - depHeading.rawValue + 8) % 8) ?? arrHeading
         beginMove(toFace: arrFace, toRow: arrRow, toCol: arrCol,
                   toSub: toSub, newFacing: arrivalFacing(turned))
     }

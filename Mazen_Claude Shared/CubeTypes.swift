@@ -144,6 +144,18 @@ enum TileState: Int {
 enum Heading8: Int, CaseIterable {
     case n = 0, ne, e, se, s, sw, w, nw
 
+    /// The two cardinals a diagonal is made of — `nw` ⇒ (`n`, `w`). Nil for a cardinal, which has
+    /// no halves. Used to walk a diagonal as a staircase where it cannot be taken in one step.
+    var cardinalHalves: (Heading8, Heading8)? {
+        switch self {
+        case .ne: return (.n, .e)
+        case .se: return (.s, .e)
+        case .sw: return (.s, .w)
+        case .nw: return (.n, .w)
+        default:  return nil
+        }
+    }
+
     /// Sub-cell step in this direction, as (deltaSubRow, deltaSubCol).
     var subDelta: (dr: Int, dc: Int) {
         switch self {
