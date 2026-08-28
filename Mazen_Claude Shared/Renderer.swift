@@ -922,7 +922,15 @@ class Renderer: NSObject, MTKViewDelegate {
             let want = wantScale * metres * gameState.worldModelWake
 
             let scale = max(0.0001, want / max(0.0001, radius))
-            var centre = base.position + up * (ws.floorY + 1.5 * metres)
+            // HOW HIGH IT FLOATS, in metres above the tile — and `MAZEN_MODEL_H` moves it, which is
+            // how the "off-centre" report was settled: a marker walked up the axis at 1.5, 3 and 6 m
+            // barely moved sideways on screen, which said the LIFT DIRECTION was fine and sent the
+            // search to the base point instead.
+            var liftM: Float = 1.5
+#if DEBUG
+            if let h = ProcessInfo.processInfo.environment["MAZEN_MODEL_H"], let v = Float(h) { liftM = v }
+#endif
+            var centre = base.position + up * (ws.floorY + liftM * metres)
 #if DEBUG
             // MAZEN_MODEL=front parks the miniature a metre in front of the camera, wherever that
             // is. A bench run has no player to walk it up to the plinth, and "photograph the thing

@@ -49,6 +49,38 @@ per-prop in the asset pass); Set-flattened per-prop membership tests; reused fog
 - **Garden first-entry hitch**: built once ever (registry-cached), but that one build lands mid-fade;
   could pre-build at app load like the moon.
 
+## The orb plinth's "off-centre" world — MEASURED, and it is centred (2026-08-28)
+
+Eddie, from four sides and then from four Q-presses standing still: the miniature *"definitely sits
+off to a side"*, flipping between opposite viewpoints. That pattern is the signature of a fixed
+world-space offset, so it was chased as one.
+
+**There is no offset.** Projected through the real camera matrix, the model's centre and the plinth's
+top centre land **0.23 px apart** horizontally — collinear. Everything else checked out on the way:
+CPU and GPU surface normals agree to 0.00°, `faceDistance` equals `halfN` exactly, the tile grid is
+symmetric about the cube origin, and the plinth mesh is symmetric about its own.
+
+**What is actually happening is an oblique silhouette.** The plinth is a truncated pyramid — 1.4 m
+base tapering to a 1.0 m top — seen from an angle, on a curved surface, with its top face splayed by
+the inflation. Its OUTLINE leans toward whichever side face is visible, and the eye reads the outline
+as the centre. Walk to the opposite side and the other face shows, so the apparent lean flips. That
+is exactly the reported symptom, and a straight edge drawn along the plinth's visible sides measures
+the silhouette rather than the axis.
+
+**So the fix, if we want one, is perceptual rather than geometric.** Options, cheapest first:
+
+1. **Leave it.** Nothing is wrong; it is a tapered pedestal doing what tapered pedestals do.
+2. **Let the glowing disc be the anchor.** A circle's projected centre sits far closer to the true
+   axis than a trapezoid's silhouette. Make the swirl read stronger, or seat the world nearer to it,
+   and the eye pairs ball-to-disc instead of ball-to-outline.
+3. **Untaper the plinth into a cylinder.** A straight column's silhouette centre IS its axis from
+   every angle, which removes the illusion outright — but changes a prop used across several scenes.
+
+Method note, because it cost the most: three rounds of static reasoning found nothing, two pixel
+measurements off silhouettes actively misled (one of them mine, and one earlier "diagnostic" could
+only ever return zero), and the answer came from projecting both points through the camera and
+printing the difference. Measure the thing that can disagree.
+
 ## Scene 2's rotator vs Scene 5's orb plinth — one family or two? (Eddie, 2026-08-27)
 
 Eddie, having seen the orb plinth working: *"does world 2's rotator look too different? The image
