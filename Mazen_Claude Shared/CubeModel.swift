@@ -260,7 +260,7 @@ class CubeModel {
             var pr = Prop(kind: item.0, subRow: 1, subCol: 1, facing: .s, state: item.1)
             // Show the alignment cylinder in its finished state (fully risen + square whole), so the
             // gallery reads it as a static form rather than mid-animation.
-            if item.0 == .alignmentCylinder { pr.anim = 1; pr.alignAnim = 1 }
+            if item.0 == .alignmentCylinder || item.0 == .alignmentPipes { pr.anim = 1; pr.alignAnim = 1 }
             cubies[ci].facelets[fi].props.append(pr)
         }
         for (j, group) in groups.enumerated() {   // WenrexaTrees, each group = one intersecting-card tree
@@ -884,7 +884,7 @@ class CubeModel {
 
     private func gardenClearTiles() -> Set<[Int]> {
         var s = Set<[Int]>()
-        let puzzle: Set<PropKind> = [.switchBase, .switchCap, .plinth, .obelisk, .alignmentCylinder]
+        let puzzle: Set<PropKind> = [.switchBase, .switchCap, .plinth, .obelisk, .alignmentCylinder, .alignmentPipes]
         for r in 0..<size {
             for c in 0..<size {
                 guard let (ci, fi) = faceletAt(face: .positiveZ, row: r, col: c) else { continue }
@@ -1255,7 +1255,7 @@ class CubeModel {
     /// facelets through a twist), so the clear zone tracks the puzzle wherever the twist carries it.
     /// The structural wall pieces are still placed on these tiles — only the rocks/bushes are dropped.
     func dressedClearTiles() -> Set<Int> {
-        let puzzle: Set<PropKind> = [.switchBase, .switchCap, .plinth, .obelisk, .alignmentCylinder]
+        let puzzle: Set<PropKind> = [.switchBase, .switchCap, .plinth, .obelisk, .alignmentCylinder, .alignmentPipes]
         var s = Set<Int>()
         // The underside grows nothing: its walls are structure, not hedgerow, so the dressing skips
         // the rocks and bushes there the same way it does around a puzzle piece.
@@ -2088,6 +2088,13 @@ class CubeModel {
     /// the single plinth there used to be.
     var worldModelPlinths = false
 
+    /// Does this world's control plinth wear the PIPES rather than the drum? Scene 2 only, for now.
+    ///
+    /// Scoped to one world on purpose. Eddie asked to fix Scene 2's rotator, and the door-plinth
+    /// flow is shared with the temple and the garden — swapping it everywhere would redress scenes
+    /// nobody has looked at yet. Flipping the rest over is one line each once this one has been seen.
+    var alignmentPipes = false
+
     /// Where the orb put the way out, once it has chosen. nil until the sixth obelisk connects.
     /// (Declared here rather than beside its creators — extensions cannot hold stored properties.)
     var chosenExit: (face: CubeFace, row: Int, col: Int)? = nil
@@ -2538,7 +2545,13 @@ class CubeModel {
             var entries: [(ci: Int, fi: Int)] = []
             for ci in cubies.indices {
                 for fi in cubies[ci].facelets.indices {
-                    if cubies[ci].facelets[fi].props.contains(where: { $0.kind == .switchCap || $0.kind == .alignmentCylinder }) {
+                    // ANY prop whose `anim` is advanced each tick must be listed here. The update
+                    // loop walks THIS CACHE rather than every tile, so a kind missing from it simply
+                    // never animates — Scene 2's pipes rose to nothing, the second press found
+                    // `anim < 1`, and the world never turned. Silent, and three scene tests caught it.
+                    if cubies[ci].facelets[fi].props.contains(where: {
+                        $0.kind == .switchCap || $0.kind == .alignmentCylinder || $0.kind == .alignmentPipes
+                    }) {
                         entries.append((ci, fi))
                     }
                 }

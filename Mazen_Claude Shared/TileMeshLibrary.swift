@@ -18,6 +18,8 @@ class TileMeshLibrary {
     let fieldFloor: TileMesh      // M19: a full-tile tessellated ground quad (grass/water — no path split)
     let orbMesh: TileMesh         // Scene 3: the suspended heart at the chamber's centre
     let beamMesh: TileMesh        // Scene 3: one obelisk-to-orb beam, a unit length along +Z
+    /// The half of Scene 2's pipes that TURNS — see `addAlignmentPipeHalf`.
+    let alignmentPipeTurning: TileMesh
     let channelFloor: TileMesh    // Scene 5: bandFloor, lifted in LOCAL z so it clears the ground on a ROUNDED world
     let bandFloor: TileMesh       // Same quad with NORMALISED [0,1]² UVs — for overlays that reason in tile
                                   // fractions (bond bands). fieldFloor bakes `uvScale` into its UVs for
@@ -236,6 +238,15 @@ class TileMeshLibrary {
         let alignStart = allIndices.count
         Self.addAlignmentCylinder(to: &allVerts, indices: &allIndices, ws: ws)
         propMeshes[PropKind.alignmentCylinder.rawValue] = TileMesh(vertexOffset: 0, indexOffset: alignStart, indexCount: allIndices.count - alignStart)
+
+        // The two C's. The FIXED half is the prop's own mesh; the TURNING half is standalone,
+        // because SceneBuilder emits it as a second instance carrying the quarter turn.
+        let pipeAStart = allIndices.count
+        Self.addAlignmentPipeHalf(to: &allVerts, indices: &allIndices, ws: ws, negative: false)
+        propMeshes[PropKind.alignmentPipes.rawValue] = TileMesh(vertexOffset: 0, indexOffset: pipeAStart, indexCount: allIndices.count - pipeAStart)
+        let pipeBStart = allIndices.count
+        Self.addAlignmentPipeHalf(to: &allVerts, indices: &allIndices, ws: ws, negative: true)
+        alignmentPipeTurning = TileMesh(vertexOffset: 0, indexOffset: pipeBStart, indexCount: allIndices.count - pipeBStart)
 
         let dustStart = allIndices.count
         Self.addDustMote(to: &allVerts, indices: &allIndices, ws: ws)
@@ -1195,6 +1206,86 @@ class TileMeshLibrary {
     ///               by the align value
     ///   0 ≤ u < 2  → the top cap; (u, v) is the swirl glyph UV
     /// v runs 0 at the top → 1 at the base, so the shear can split the square's upper half.
+    /// THE TWO C's — one square tube, cut in half, floating over Scene 2's control plinth.
+    ///
+    /// Cut a square loop at the midpoints of two opposite sides and you get two identical C pieces,
+    /// each a half-side + side + side + half-side, one the other turned through 180°. Counter to
+    /// each other, exactly as Eddie described them, and when they meet they close into a single
+    /// square tube with nothing doubled — which is what makes the solved state unmistakable. A
+    /// control that shows you when you are RIGHT is worth more, in the scene that first asks you to
+    /// turn something, than one that shows you what you are turning.
+    ///
+    /// The loop stands in a VERTICAL plane through the tile's local z axis, and that is the whole
+    /// trick: rotating one half about that same axis swings it out of plane and back, so 0° is
+    /// closed and 90° is open, with the pivot running through the loop's own centre. It also reads
+    /// the way Eddie first saw it — "it kind of looks like a 4-d shape twisting" — which is the
+    /// Builders' own vocabulary (slice = word, rotation = verb) rather than us drawing a diagram of
+    /// our own mechanic for the player.
+    ///
+    /// `half == false` builds the +x half, `true` the −x half. Two meshes, because the two pieces
+    /// have to move independently and one instance matrix cannot do that.
+    /// Half the square's side. SceneBuilder needs it to swing the turning piece about its OUTER
+    /// edge rather than the loop's centre — see the note there.
+    static func alignmentPipeSpan(ws: WorldScale) -> Float { 0.45 * (ws.eyeHeight / 1.7) }
+
+    private static func addAlignmentPipeHalf(to verts: inout [MazeVertexSwift], indices: inout [UInt32],
+                                             ws: WorldScale, negative: Bool) {
+        let mUnit: Float = ws.eyeHeight / 1.7
+        // Floats clear of the plinth, centred a little under eye height so the closed square reads
+        // as an object held up for you to look at rather than something overhead.
+        let zc = ws.floorY + (plinthHeightM + 0.75) * mUnit
+        let sHalf: Float = Self.alignmentPipeSpan(ws: ws)   // half the square's side — a ~90 cm loop
+        let t: Float = 0.055 * mUnit           // tube half-thickness
+        let sx: Float = negative ? -1 : 1
+
+        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
+            MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(-1, -1), aoFactor: 0.95)
+        }
+        /// A square-section bar between two points in the loop's plane (x, z), extruded in y.
+        func bar(_ a: SIMD2<Float>, _ b: SIMD2<Float>) {
+            let d = simd_normalize(b - a)
+            let perp = SIMD2<Float>(-d.y, d.x)
+            // Corners are mitred by extending each bar half a thickness past its ends, so the two
+            // right angles of a C close up instead of showing a notch.
+            let a2 = a - d * t, b2 = b + d * t
+            var ring: [[SIMD3<Float>]] = []
+            for e in [a2, b2] {
+                ring.append([
+                    SIMD3(e.x + perp.x * t, -t, zc + e.y + perp.y * t),
+                    SIMD3(e.x - perp.x * t, -t, zc + e.y - perp.y * t),
+                    SIMD3(e.x - perp.x * t,  t, zc + e.y - perp.y * t),
+                    SIMD3(e.x + perp.x * t,  t, zc + e.y + perp.y * t),
+                ])
+            }
+            let base = UInt32(verts.count)
+            for i in 0..<4 {
+                let j = (i + 1) % 4
+                let p0 = ring[0][i], p1 = ring[0][j], p2 = ring[1][j], p3 = ring[1][i]
+                let n = simd_normalize(simd_cross(p1 - p0, p3 - p0))
+                let k = UInt32(verts.count)
+                verts.append(contentsOf: [vtx(p0, n), vtx(p1, n), vtx(p2, n), vtx(p3, n)])
+                indices.append(contentsOf: [k+0, k+1, k+2, k+0, k+2, k+3])
+            }
+            // Caps, so a cut end reads as a tube rather than a hole.
+            for (r, sgn) in [(ring[0], Float(-1)), (ring[1], Float(1))] {
+                let n = simd_normalize(SIMD3(d.x, 0, d.y)) * sgn
+                let k = UInt32(verts.count)
+                verts.append(contentsOf: [vtx(r[0], n), vtx(r[1], n), vtx(r[2], n), vtx(r[3], n)])
+                if sgn > 0 { indices.append(contentsOf: [k+0, k+1, k+2, k+0, k+2, k+3]) }
+                else { indices.append(contentsOf: [k+0, k+2, k+1, k+0, k+3, k+2]) }
+            }
+            _ = base
+        }
+
+        // Half a square, walked from the top midpoint round to the bottom midpoint: half the top,
+        // the whole side, half the bottom. The other piece is this mirrored in x.
+        let top = SIMD2<Float>(0, sHalf), topOut = SIMD2<Float>(sx * sHalf, sHalf)
+        let botOut = SIMD2<Float>(sx * sHalf, -sHalf), bot = SIMD2<Float>(0, -sHalf)
+        bar(top, topOut)
+        bar(topOut, botOut)
+        bar(botOut, bot)
+    }
+
     private static func addAlignmentCylinder(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
         let mUnit: Float = ws.eyeHeight / 1.7
         let zBase = ws.floorY + plinthHeightM * mUnit   // planted on the plinth top

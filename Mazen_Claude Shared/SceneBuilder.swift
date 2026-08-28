@@ -99,6 +99,9 @@ final class SceneBuilder {
     private var channelTiles: [TileEntry] = []
     /// The lit border of ONE face — see `seamFace`. Only the plinth's miniature asks for it.
     private var seamTiles: [TileEntry] = []
+    /// Scene 2's TURNING pipe half — its own instanced draw, since it carries a different mesh from
+    /// the fixed half it is paired with.
+    private var pipeTurnTiles: [TileEntry] = []
     private var celestialTiles: [TileEntry] = []
     /// Scene 3 — the suspended orb, and one beam per lit obelisk. Separate arrays because each has
     /// its own mesh, and each becomes a single instanced draw.
@@ -180,6 +183,7 @@ final class SceneBuilder {
         bondBandTiles.removeAll(keepingCapacity: true)
         channelTiles.removeAll(keepingCapacity: true)
         seamTiles.removeAll(keepingCapacity: true)
+        pipeTurnTiles.removeAll(keepingCapacity: true)
         celestialTiles.removeAll(keepingCapacity: true)
         orbTiles.removeAll(keepingCapacity: true)
         beamTiles.removeAll(keepingCapacity: true)
@@ -427,9 +431,10 @@ final class SceneBuilder {
                             // in modelMatrix corrupts the curved-world footprint/height split and floated
                             // the flush cap on the garden (Eddie).
                             var heightScale: Float = 1, heightPivot: Float = 0
-                            if prop.kind == .alignmentCylinder || prop.kind == .switchCap || prop.kind == .latch {
+                            if prop.kind == .alignmentCylinder || prop.kind == .alignmentPipes
+                                || prop.kind == .switchCap || prop.kind == .latch {
                                 heightPivot = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
-                                if prop.kind == .alignmentCylinder {
+                                if prop.kind == .alignmentCylinder || prop.kind == .alignmentPipes {
                                     heightScale = max(0.001, prop.anim)                          // rise from the disc
                                 } else {
                                     let flushFrac = TileMeshLibrary.switchCapFlushM / TileMeshLibrary.switchCapOutM
@@ -567,6 +572,13 @@ final class SceneBuilder {
                                 propStyleSeed = UInt32(max(0, prop.state))
                                 color = SIMD4(1, 1, 1, 1)
                             }
+                            if prop.kind == .alignmentPipes {
+                                // Gold once the loop closes — the same gold the bonded structure and
+                                // the aligned dials wear, so "this belongs to the lock" is said in a
+                                // colour the player has already been taught.
+                                color = prop.state == 1 ? SIMD4(0.95, 0.78, 0.20, 1.0)
+                                                        : SIMD4(0.62, 0.64, 0.70, 1.0)
+                            }
                             if prop.kind == .alignmentCylinder {
                                 // M16.6 Phase 2b — material 22: swirl on top (styleSeed) + square wrap;
                                 // the align value rides `discoveryAmount` (set on the instance below).
@@ -702,7 +714,54 @@ final class SceneBuilder {
                                 roundness: isDisc ? 0 : roundness,
                                 invHalfExtent: invHalf, reliefAmplitude: relief,
                                 heightScale: heightScale, heightPivot: heightPivot)
-                            mazePropTiles[prop.kind.rawValue, default: []].append(TileEntry(instance: inst, mesh: mesh))
+                            // THE LOOP FACES THE APPROACH. It is built in the tile's x/z plane and
+                            // the plinth's own `facing` turned it edge-on to the player: the closed
+                            // square showed as a single bar and the open state showed only the half
+                            // that had swung round to face front. A quarter turn puts the flat of it
+                            // toward someone standing at the plinth, which is the only angle from
+                            // which "open" and "closed" are different pictures.
+                            var instPipes = inst
+                            let pmPipes = pm * float4x4.rotation(radians: .pi / 2, axis: SIMD3(0, 0, 1))
+                            if prop.kind == .alignmentPipes { instPipes.modelMatrix = pmPipes }
+                            mazePropTiles[prop.kind.rawValue, default: []].append(
+                                TileEntry(instance: prop.kind == .alignmentPipes ? instPipes : inst, mesh: mesh))
+
+                            // THE OTHER C. Two halves that have to move independently, and one
+                            // instance matrix cannot do that — so the turning half is emitted here
+                            // as a second instance with a quarter turn about the loop's own axis.
+                            //
+                            // The angle is driven by the WORLD'S OWN TURN rather than by a separate
+                            // animation: `state` flips to 1 when the plinth fires the twist, and the
+                            // loop closes exactly as the slice comes round. Scene 2 needs a single
+                            // quarter turn (Eddie), so one press is one 90° — the control completing
+                            // and the world moving are the same event, which is the whole reason to
+                            // prefer this shape over a broken cube that merely depicts the problem.
+                            if prop.kind == .alignmentPipes {
+                                let closing: Float = prop.state == 1
+                                    ? (sr.isActive ? max(0, 1 - sr.progress) : 0)
+                                    : 1
+                                // SWUNG ABOUT ITS OUTER EDGE, not the loop's centre.
+                                //
+                                // Turning it about the centre put the open piece edge-on at x = 0,
+                                // where it lines up with the fixed half's inner ends and COMPLETES a
+                                // narrow rectangle: the unsolved state read as solved, which is the
+                                // one thing this control exists not to do. Hinged at its far edge it
+                                // swings clear instead, leaving an obvious gap where it used to be.
+                                let sp = TileMeshLibrary.alignmentPipeSpan(ws: model.worldScale)
+                                let pmB = pmPipes
+                                    * float4x4.translation(-sp, 0, 0)
+                                    * float4x4.rotation(radians: closing * .pi / 2, axis: SIMD3(0, 0, 1))
+                                    * float4x4.translation(sp, 0, 0)
+                                var instB = inst
+                                instB.modelMatrix = pmB
+                                // Its OWN bucket, not the prop's. `mazePropTiles` draws each bucket
+                                // with `entries[0].mesh` — one instanced draw per kind — so a
+                                // second mesh dropped in beside the first would be drawn WITH the
+                                // first's geometry: two identical halves, no gap, and a puzzle that
+                                // looks solved from the start.
+                                pipeTurnTiles.append(
+                                    TileEntry(instance: instB, mesh: tileMeshLib.alignmentPipeTurning))
+                            }
                         }
                     }
                 }
@@ -1104,6 +1163,7 @@ final class SceneBuilder {
         // time budget once channels joined it.
         let extras: Int = frameTiles.count + cutFaceTiles.count + bondBandTiles.count
                         + orbTiles.count + beamTiles.count + channelTiles.count + seamTiles.count
+                        + pipeTurnTiles.count
         let totalInstances = extras
             + mazeFloorTiles.values.reduce(0) { $0 + $1.count }
             + mazePathFloorTiles.values.reduce(0) { $0 + $1.count }
@@ -1210,7 +1270,7 @@ final class SceneBuilder {
         // Drawing the groove after its own ground is the natural order anyway, and it is now robust
         // at any scale the world is rendered at.
         // Scene 3's orb and beams, and Scene 5's channels — one instanced draw each.
-        for group in [orbTiles, beamTiles, channelTiles, seamTiles] where !group.isEmpty {
+        for group in [orbTiles, beamTiles, channelTiles, seamTiles, pipeTurnTiles] where !group.isEmpty {
             let mesh = group[0].mesh
             let startIdx = idx
             for entry in group { ptr[idx] = entry.instance; idx += 1 }

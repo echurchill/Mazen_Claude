@@ -792,6 +792,39 @@ class Renderer: NSObject, MTKViewDelegate {
             // Aim the first-person camera, in degrees. A headless run cannot look around, so
             // anything off the spawn heading — Scene 5's plinth is to the LEFT of where you start —
             // could not be photographed at all.
+            // MAZEN_STAND=row,col puts the player on a tile. A bench spawns where the world says
+            // and cannot walk, so anything more than a few tiles off the spawn could not be
+            // photographed at all — which is the third time that has cost a round trip today.
+            if let st = ProcessInfo.processInfo.environment["MAZEN_STAND"] {
+                let parts = st.split(separator: ",").compactMap { Int($0) }
+                if parts.count >= 2 {
+                    let gs = worldStack[worldStack.count - 1]
+                    gs.player.row = parts[0]; gs.player.col = parts[1]
+                    // Optional sub-cell. A tile is ~19.5 m, so "one tile away" is far too far to
+                    // judge a 90 cm object — standing on the prop's OWN tile, a few paces to one
+                    // side, is the only way to see it at the size the player will.
+                    gs.player.subRow = parts.count > 2 ? parts[2] : gs.player.standCenter
+                    gs.player.subCol = parts.count > 3 ? parts[3] : gs.player.standCenter
+                    gs.player.isMoving = false; gs.player.isTurning = false
+                    NSLog("BENCH stand (%d,%d)", parts[0], parts[1])
+                }
+            }
+            // MAZEN_PIPES raises Scene 2's control without the four switches and without a hand to
+            // press F, so the pipes can be photographed. `state` is honoured: 0 leaves them open,
+            // 1 shows them closed.
+            if let pipes = ProcessInfo.processInfo.environment["MAZEN_PIPES"] {
+                let gs = worldStack[worldStack.count - 1]
+                gs.debugMakeDoorReady()
+                if let pp = gs.cubeModel.progressPlinth,
+                   let plinth = gs.cubeModel.cubies[pp.ci].facelets[pp.fi].props.first(where: { $0.kind == .plinth }) {
+                    var rot = Prop(kind: gs.rotatorKind, subRow: plinth.subRow, subCol: plinth.subCol,
+                                   facing: plinth.facing, state: pipes == "closed" ? 1 : 0)
+                    rot.anim = 1
+                    gs.cubeModel.cubies[pp.ci].facelets[pp.fi].props.append(rot)
+                    gs.cubeModel.markTopologyChanged()
+                    NSLog("BENCH pipes raised (%@)", pipes)
+                }
+            }
             if let look = ProcessInfo.processInfo.environment["MAZEN_LOOK"], let d = Float(look) {
                 worldStack[worldStack.count - 1].camera.lookYaw = d * .pi / 180
                 NSLog("BENCH look %.0f°", d)

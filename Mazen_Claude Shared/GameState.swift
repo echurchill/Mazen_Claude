@@ -1459,8 +1459,8 @@ class GameState {
                cubeModel.cubies[pp.ci].facelets[pp.fi].props[pi].state != symbol {
                 cubeModel.cubies[pp.ci].facelets[pp.fi].props[pi].state = symbol
             }
-            if opened, cubeModel.cubies[pp.ci].facelets[pp.fi].props.contains(where: { $0.kind == .alignmentCylinder }) {
-                cubeModel.cubies[pp.ci].facelets[pp.fi].props.removeAll { $0.kind == .alignmentCylinder }
+            if opened, cubeModel.cubies[pp.ci].facelets[pp.fi].props.contains(where: { isRotator($0.kind) }) {
+                cubeModel.cubies[pp.ci].facelets[pp.fi].props.removeAll { isRotator($0.kind) }
                 cubeModel.markTopologyChanged()   // PERF: prop removed — location caches re-derive
             }
             return
@@ -1490,7 +1490,7 @@ class GameState {
                     }
                     // Once opened, retract the alignment cylinder (the twist that opened the door).
                     if opened {
-                        cubeModel.cubies[ci].facelets[fi].props.removeAll { $0.kind == .alignmentCylinder }
+                        cubeModel.cubies[ci].facelets[fi].props.removeAll { isRotator($0.kind) }
                         cubeModel.markTopologyChanged()   // PERF: prop removed — location caches re-derive
                     }
                     break
@@ -1519,7 +1519,7 @@ class GameState {
                     cur < target ? min(target, cur + switchRate) : max(target, cur - switchRate)
             }
             for pi in cubeModel.cubies[ci].facelets[fi].props.indices
-            where cubeModel.cubies[ci].facelets[fi].props[pi].kind == .alignmentCylinder {
+            where isRotator(cubeModel.cubies[ci].facelets[fi].props[pi].kind) {
                 cubeModel.cubies[ci].facelets[fi].props[pi].anim =
                     min(1, cubeModel.cubies[ci].facelets[fi].props[pi].anim + dt * growRate)
                 guard cylinderEngaged, cubeModel.cubies[ci].facelets[fi].props[pi].anim >= 1 else { continue }
@@ -1527,6 +1527,12 @@ class GameState {
                 cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = a
                 if a >= 1 {
                     cylinderEngaged = false
+                    // THE LOOP CLOSES AS THE WORLD TURNS. `state` 1 tells SceneBuilder to drive the
+                    // turning half's quarter turn off the slice's own progress, so the control
+                    // completing and the world moving are one event rather than two animations that
+                    // have to be kept in step. Scene 2 needs exactly one quarter turn (Eddie), which
+                    // is what makes a single press enough.
+                    cubeModel.cubies[ci].facelets[fi].props[pi].state = 1
                     // A scene may name the slab its lock turns (Scene 2 turns the one carrying the
                     // hidden exit); otherwise the distant BACK wall turns, relative to the player.
                     if let s = cubeModel.scriptedTwistSlice {
@@ -1548,7 +1554,7 @@ class GameState {
                 if cubeModel.cubies[cu].facelets[fi].props.contains(where: { $0.kind == .portal && $0.state == 1 }) {
                     cubeModel.sealedPortalCubies.insert(cu)   // re-seal the temple door
                 }
-                cubeModel.cubies[cu].facelets[fi].props.removeAll { $0.kind == .alignmentCylinder }
+                cubeModel.cubies[cu].facelets[fi].props.removeAll { isRotator($0.kind) }
                 for pi in cubeModel.cubies[cu].facelets[fi].props.indices
                 where cubeModel.cubies[cu].facelets[fi].props[pi].kind == .switchCap {
                     cubeModel.cubies[cu].facelets[fi].props[pi].alignAnim = 1   // engage every switch
@@ -1602,7 +1608,7 @@ class GameState {
 
     static let interactableKinds: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap,
                                                    .worldModel,
-                                                   .plinth, .dial, .chest, .alignmentCylinder,
+                                                   .plinth, .dial, .chest, .alignmentCylinder, .alignmentPipes,
                                                    .channelBasin, .latch]
 
     /// Is the player standing on something worth pressing? On iOS a tap means "walk forward", so it
@@ -2111,6 +2117,13 @@ class GameState {
         return false
     }
 
+    /// THE ROTATOR THIS WORLD WEARS — the drum, or Scene 2's pipes.
+    ///
+    /// Both play the same part in the door-plinth sequence (rise on the first press, turn the world
+    /// on the second), so everything downstream asks `isRotator` rather than naming a kind.
+    var rotatorKind: PropKind { cubeModel.alignmentPipes ? .alignmentPipes : .alignmentCylinder }
+    func isRotator(_ k: PropKind) -> Bool { k == .alignmentCylinder || k == .alignmentPipes }
+
     /// M16.6: the door plinth — raise, then turn the world
     private func handle_doorPlinth(_ ci: Int, _ fi: Int) -> Bool {
         // M16.6 (Eddie): F at the READY door plinth (lock undone, door still sealed, no cylinder yet)
@@ -2122,13 +2135,13 @@ class GameState {
             // TWO deliberate presses (Eddie): F #1 RAISES the cylinder (grow only); F #2 — once it's
             // fully risen AND past a short cooldown — TURNS THE WORLD (align + twist). The cooldown
             // stops a stray double-tap of the first press from firing the turn by accident.
-            if let cyl = cubeModel.cubies[ci].facelets[fi].props.first(where: { $0.kind == .alignmentCylinder }) {
+            if let cyl = cubeModel.cubies[ci].facelets[fi].props.first(where: { isRotator($0.kind) }) {
                 if cyl.anim >= 1 && !cylinderEngaged && time - lastCylinderRaiseTime > cylinderEngageCooldown {
                     cylinderEngaged = true
                 }
             } else {
                 cubeModel.cubies[ci].facelets[fi].props.append(
-                    Prop(kind: .alignmentCylinder, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
+                    Prop(kind: rotatorKind, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
                          facing: plinthProp.facing, state: 0))
                 cubeModel.markTopologyChanged()   // PERF: prop added — location caches re-derive
                 lastCylinderRaiseTime = time

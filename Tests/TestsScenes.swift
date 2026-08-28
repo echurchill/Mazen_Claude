@@ -581,7 +581,12 @@ extension CoordinateMathTests {
         guard let plinth = tiles(with: .plinth).first else { check(false, "Scene 2 has no control plinth"); return }
         stand(plinth.face, plinth.r, plinth.c)
         gs.interact()
-        check(!tiles(with: .alignmentCylinder).isEmpty, "the first press should raise the alignment cylinder")
+        // Scene 2 wears the PIPES, not the drum (Eddie, 2026-08-28) — named explicitly, because the
+        // kind is what the animation cache is keyed on and a kind missing from it never animates:
+        // the pipes rose to nothing, the second press found them unfinished, and the world silently
+        // failed to turn. That is what the two checks below caught.
+        check(m.alignmentPipes, "Scene 2's control should wear the pipes")
+        check(!tiles(with: .alignmentPipes).isEmpty, "the first press should raise the pipes")
         for _ in 0..<600 { gs.update(deltaTime: 1.0 / 60.0) }
         gs.interact()
         for _ in 0..<600 { gs.update(deltaTime: 1.0 / 60.0) }

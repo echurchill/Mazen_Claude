@@ -104,6 +104,34 @@ and the miniature world is the thing you EARN rather than a second unrelated con
 a progression — first twist as ceremony, mastery as a tool — and it costs one stamp change plus
 whatever ceremony we keep for the rise.
 
+### BUILT: the pipes (2026-08-28)
+
+Eddie chose the C's and they are in. Two half-square tubes over Scene 2's control plinth: open, the
+fixed half reads as a C with its partner swung a quarter turn out of plane and an obvious gap
+between them; closed, they meet as one gold square tube — the same gold the bonded structure and the
+aligned dials wear, so "this belongs to the lock" is said in a colour already taught.
+
+**The loop closes as the world turns.** Scene 2 needs exactly one quarter turn, so a single press is
+one 90°, and the angle is driven off the slice's own progress rather than a parallel animation —
+the control completing and the world moving are one event. The rise-from-the-disc ceremony is kept.
+
+Two things the build taught, both caught rather than reasoned:
+
+- **The turning half hinges at its OUTER edge, not the loop's centre.** About the centre it goes
+  edge-on at x = 0, lines up with the fixed half's inner ends and COMPLETES a narrow rectangle: the
+  unsolved state read as solved, which is the one thing this control exists not to do.
+- **The loop had to be turned to face the approach.** Built in the tile's x/z plane, the plinth's own
+  `facing` left it edge-on: the closed square showed as a single bar.
+
+And one integration miss the tests caught: `animPropCache` is keyed on prop KIND and the update loop
+walks that cache rather than every tile, so a kind missing from it simply never animates. The pipes
+rose to nothing, the second press found them unfinished, and the world silently failed to turn.
+
+**Still open:** the swung half rests at a full 90°, so it reads edge-on — a bar rather than a second
+C. Resting it nearer 70° would let both halves read as C's, closer to Eddie's sketch, at the cost of
+the quarter turn being literally a quarter. Also scoped deliberately to Scene 2 (`CubeModel.alignmentPipes`):
+the temple and garden still wear the drum, and flipping them over is one line each.
+
 ### Three shapes for what floats above it (Eddie, 2026-08-28)
 
 All three keep Scene 5's plinth body and the swirl, and rise out of the disc before floating — the

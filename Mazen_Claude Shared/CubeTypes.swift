@@ -365,6 +365,14 @@ enum PropKind: UInt8 {
     case alignmentCylinder  // M16.6 Phase 2: grows from the door plinth when unlocked — a drum bearing
                             // the "square" (world) glyph. Engaging it (F) twists the world open (the
                             // waldo). `anim` = grow/align progress 0…1; walk-through (sits on the plinth).
+    case alignmentPipes // Scene 2 (Eddie, 2026-08-28): TWO C-shaped tubes floating over the control
+                        // plinth, cut from one square loop and counter-facing, so a quarter turn of
+                        // one closes them into a single square tube. Replaces the drum: a control
+                        // that shows you when you are RIGHT, not merely what you are turning — and
+                        // abstract, so it hints at the world's shape without spoiling it (a cube
+                        // here would run the reveal backwards, Scene 1's sun and moon being spheres
+                        // for exactly that reason). `state` 0 = open, 1 = closing/closed;
+                        // `anim` = rise out of the plinth 0…1.
     case switchBase   // M16.6 (Eddie): a switch = a disc-less plinth base + a switchCap. Replaces the dial.
     case switchCap    // M16.6: the switch's number cylinder — flush (disengaged) ↔ poking out (engaged).
     case anchor       // Scene 4: a plate embedded in its tile, holding one BOND. Activating it RELEASES that bond — permanently, unlike a switch, which toggles.
@@ -399,7 +407,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .switchCap, .importedFoliage, .portalField, .worldModel, .signpost, .dustMote, .surveyor: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .alignmentPipes, .switchCap, .importedFoliage, .portalField, .worldModel, .signpost, .dustMote, .surveyor: return false
         default: return true
         }
     }
