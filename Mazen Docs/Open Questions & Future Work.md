@@ -49,6 +49,32 @@ per-prop in the asset pass); Set-flattened per-prop membership tests; reused fog
 - **Garden first-entry hitch**: built once ever (registry-cached), but that one build lands mid-fade;
   could pre-build at app load like the moon.
 
+## Scene 2's rotator vs Scene 5's orb plinth — one family or two? (Eddie, 2026-08-27)
+
+Eddie, having seen the orb plinth working: *"does world 2's rotator look too different? The image
+(swirly) is there but the cylinder is really different looking. I wonder if we should rethink it?"*
+Noted for pondering, not scheduled.
+
+**The two objects do different jobs, and the difference may be correct.** Scene 2's rotator is a
+one-off ceremony — solve the four corners, the control RISES out of its disc, you turn the world
+once. Scene 5's is a tool pressed a dozen times while reading a route, so it stands ready and shows
+you the world while you use it. `stampFaceRotators` already carries that reasoning: *"the ceremony
+belongs to a one-off, not to something pressed a dozen times"*.
+
+**But they share the swirl glyph, which claims kinship the bodies then deny.** A shared mark is a
+promise that two things are the same kind of thing. If the cylinder reads as unrelated machinery
+wearing a familiar sticker, the glyph is doing no work — and worse, it teaches that the mark means
+nothing in particular.
+
+**Leading candidate: make Scene 2's rotator the PRECURSOR of the orb plinth.** Same plinth body,
+same glyph, and nothing floating above it yet. Then Scene 5's is visibly the same object grown up,
+and the miniature world is the thing you EARN rather than a second unrelated control. That reads as
+a progression — first twist as ceremony, mastery as a tool — and it costs one stamp change plus
+whatever ceremony we keep for the rise.
+
+Open either way: whether the rise-from-the-disc ceremony survives, and whether Scene 4 (which is
+supposed to teach the twist) should get the same body a step earlier still.
+
 ## The orbit view must be WITHHELD in Scenes 1–3 (noted 2026-08-07, deferred on purpose)
 
 Space gives a god camera everywhere, including inside an inverted interior where "orbit" is
