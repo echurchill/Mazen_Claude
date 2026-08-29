@@ -573,11 +573,14 @@ final class SceneBuilder {
                                 color = SIMD4(1, 1, 1, 1)
                             }
                             if prop.kind == .alignmentPipes {
-                                // Gold once the loop closes — the same gold the bonded structure and
-                                // the aligned dials wear, so "this belongs to the lock" is said in a
-                                // colour the player has already been taught.
-                                color = prop.state == 1 ? SIMD4(0.95, 0.78, 0.20, 1.0)
-                                                        : SIMD4(0.62, 0.64, 0.70, 1.0)
+                                // TWO COLOURS, ALWAYS. Eddie drew them green and purple, and he is
+                                // right: one pale metal made the halves a single ambiguous object,
+                                // so neither which piece moves nor whether they have met was ever
+                                // legible. Held apart by colour, the join is obvious the instant it
+                                // happens — which is the whole job of this control. Kept in both
+                                // states rather than flipping to gold on success: the closing is the
+                                // reward, and a colour change on top of it says the same thing twice.
+                                color = SIMD4(0.29, 0.42, 0.16, 1.0)      // the fixed half — green
                             }
                             if prop.kind == .alignmentCylinder {
                                 // M16.6 Phase 2b — material 22: swirl on top (styleSeed) + square wrap;
@@ -740,20 +743,26 @@ final class SceneBuilder {
                                 let closing: Float = prop.state == 1
                                     ? (sr.isActive ? max(0, 1 - sr.progress) : 0)
                                     : 1
-                                // SWUNG ABOUT ITS OUTER EDGE, not the loop's centre.
+                                // TURNED IN ITS OWN PLANE, about the loop's centre.
                                 //
-                                // Turning it about the centre put the open piece edge-on at x = 0,
-                                // where it lines up with the fixed half's inner ends and COMPLETES a
-                                // narrow rectangle: the unsolved state read as solved, which is the
-                                // one thing this control exists not to do. Hinged at its far edge it
-                                // swings clear instead, leaving an obvious gap where it used to be.
-                                let sp = TileMeshLibrary.alignmentPipeSpan(ws: model.worldScale)
+                                // Swinging it out of plane (about the vertical) left it edge-on when
+                                // open — a bar, not a C — so only one of the two shapes could ever be
+                                // read. Eddie's drawing has BOTH as C's, facing each other and not
+                                // yet joined, which is what a quarter turn about the loop's normal
+                                // gives: the moving half's mouth points somewhere else entirely, and
+                                // you can see exactly what has to happen for them to meet.
+                                //
+                                // The normal is the mesh's local y (the loop is built in x/z), and
+                                // this rotation is applied inside `pmPipes`, so it is that axis —
+                                // not the world's — that the turn is taken about.
+                                let zc = TileMeshLibrary.alignmentPipeCentreZ(ws: model.worldScale)
                                 let pmB = pmPipes
-                                    * float4x4.translation(-sp, 0, 0)
-                                    * float4x4.rotation(radians: closing * .pi / 2, axis: SIMD3(0, 0, 1))
-                                    * float4x4.translation(sp, 0, 0)
+                                    * float4x4.translation(0, 0, zc)
+                                    * float4x4.rotation(radians: closing * .pi / 2, axis: SIMD3(0, 1, 0))
+                                    * float4x4.translation(0, 0, -zc)
                                 var instB = inst
                                 instB.modelMatrix = pmB
+                                instB.baseColor = SIMD4(0.48, 0.16, 0.55, 1.0)   // the turning half — purple
                                 // Its OWN bucket, not the prop's. `mazePropTiles` draws each bucket
                                 // with `entries[0].mesh` — one instanced draw per kind — so a
                                 // second mesh dropped in beside the first would be drawn WITH the

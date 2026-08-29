@@ -1453,8 +1453,16 @@ class GameState {
         // once the way is open.
         if let pp = cubeModel.progressPlinth {
             let opened = !templeDoorStillSealed()
-            let symbol = opened ? TextureLoader.CausticSymbol.portal.rawValue
-                                : (TextureLoader.progressMaskBase + switchMask())
+            // ONCE THE LOCK IS DEALT WITH, THE PLINTH SAYS "TURN ME" — AND KEEPS SAYING IT.
+            //
+            // It read as a map of conditions until the moment it opened, then flipped straight to
+            // the portal glyph. So the one state where it is actually a CONTROL — four switches
+            // done, the pipes floating, waiting for the press that turns the world — was the one
+            // state it never wore the swirl (Eddie). And afterwards the portal glyph claimed a door
+            // that is over there, not here. The swirl is what this plinth is: the thing that turns.
+            let symbol = cubeModel.bondedGroups.isEmpty || opened
+                ? TextureLoader.CausticSymbol.swirl.rawValue
+                : (TextureLoader.progressMaskBase + switchMask())
             if let pi = cubeModel.cubies[pp.ci].facelets[pp.fi].props.firstIndex(where: { $0.kind == .plinth }),
                cubeModel.cubies[pp.ci].facelets[pp.fi].props[pi].state != symbol {
                 cubeModel.cubies[pp.ci].facelets[pp.fi].props[pi].state = symbol

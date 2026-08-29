@@ -1228,14 +1228,21 @@ class TileMeshLibrary {
     /// edge rather than the loop's centre — see the note there.
     static func alignmentPipeSpan(ws: WorldScale) -> Float { 0.45 * (ws.eyeHeight / 1.7) }
 
+    /// Height of the loop's CENTRE above the tile floor. The turn has to be taken about this point:
+    /// the loop floats well clear of the tile origin, so rotating about the origin swung the moving
+    /// half bodily off the plinth and onto the grass beside it.
+    static func alignmentPipeCentreZ(ws: WorldScale) -> Float {
+        ws.floorY + (plinthHeightM + 0.75) * (ws.eyeHeight / 1.7)
+    }
+
     private static func addAlignmentPipeHalf(to verts: inout [MazeVertexSwift], indices: inout [UInt32],
                                              ws: WorldScale, negative: Bool) {
         let mUnit: Float = ws.eyeHeight / 1.7
         // Floats clear of the plinth, centred a little under eye height so the closed square reads
         // as an object held up for you to look at rather than something overhead.
-        let zc = ws.floorY + (plinthHeightM + 0.75) * mUnit
+        let zc = Self.alignmentPipeCentreZ(ws: ws)
         let sHalf: Float = Self.alignmentPipeSpan(ws: ws)   // half the square's side — a ~90 cm loop
-        let t: Float = 0.055 * mUnit           // tube half-thickness
+        let t: Float = 0.085 * mUnit           // tube half-thickness — chunky, as Eddie drew it
         let sx: Float = negative ? -1 : 1
 
         func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>) -> MazeVertexSwift {
