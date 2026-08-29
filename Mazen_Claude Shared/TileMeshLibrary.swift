@@ -1253,12 +1253,16 @@ class TileMeshLibrary {
             MazeVertexSwift(position: p, normal: n, texCoord: SIMD2(-1, -1), aoFactor: 0.95)
         }
         /// A square-section bar between two points in the loop's plane (x, z), extruded in y.
-        func bar(_ a: SIMD2<Float>, _ b: SIMD2<Float>) {
+        ///
+        /// `mitreA`/`mitreB` say whether each END meets a corner of this C. A corner needs the bar
+        /// run half a thickness past the turn or the right angle shows a notch — but a CUT end, where
+        /// this half meets the other, must stop exactly on the line. Mitring those too made each
+        /// half overrun the join by half a thickness, so the closed ring had the two colours
+        /// overlapping instead of meeting (Eddie: "maybe make them both narrower so they just touch").
+        func bar(_ a: SIMD2<Float>, _ b: SIMD2<Float>, mitreA: Bool, mitreB: Bool) {
             let d = simd_normalize(b - a)
             let perp = SIMD2<Float>(-d.y, d.x)
-            // Corners are mitred by extending each bar half a thickness past its ends, so the two
-            // right angles of a C close up instead of showing a notch.
-            let a2 = a - d * t, b2 = b + d * t
+            let a2 = a - d * (mitreA ? t : 0), b2 = b + d * (mitreB ? t : 0)
             var ring: [[SIMD3<Float>]] = []
             for e in [a2, b2] {
                 ring.append([
@@ -1292,9 +1296,11 @@ class TileMeshLibrary {
         // the whole side, half the bottom. The other piece is this mirrored in x.
         let top = SIMD2<Float>(0, sHalf), topOut = SIMD2<Float>(sx * sHalf, sHalf)
         let botOut = SIMD2<Float>(sx * sHalf, -sHalf), bot = SIMD2<Float>(0, -sHalf)
-        bar(top, topOut)
-        bar(topOut, botOut)
-        bar(botOut, bot)
+        // `top` and `bot` are the CUT ends — the midpoints of the square's top and bottom sides,
+        // where this half meets the other. Everything else is a corner.
+        bar(top, topOut, mitreA: false, mitreB: true)
+        bar(topOut, botOut, mitreA: true, mitreB: true)
+        bar(botOut, bot, mitreA: true, mitreB: false)
     }
 
     private static func addAlignmentCylinder(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
