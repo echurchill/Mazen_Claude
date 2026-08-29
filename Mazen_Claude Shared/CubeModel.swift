@@ -2088,12 +2088,9 @@ class CubeModel {
     /// the single plinth there used to be.
     var worldModelPlinths = false
 
-    /// Does this world's control plinth wear the PIPES rather than the drum? Scene 2 only, for now.
-    ///
-    /// Scoped to one world on purpose. Eddie asked to fix Scene 2's rotator, and the door-plinth
-    /// flow is shared with the temple and the garden — swapping it everywhere would redress scenes
-    /// nobody has looked at yet. Flipping the rest over is one line each once this one has been seen.
-    var alignmentPipes = false
+    /// Kept only so Scene 2's test can name the control it expects. Every world's rotator is the
+    /// pipes now — see `GameState.rotatorKind`.
+    var alignmentPipes = true
 
     /// Where the orb put the way out, once it has chosen. nil until the sixth obelisk connects.
     /// (Declared here rather than beside its creators — extensions cannot hold stored properties.)

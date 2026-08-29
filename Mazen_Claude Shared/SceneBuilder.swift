@@ -723,8 +723,12 @@ final class SceneBuilder {
                             // that had swung round to face front. A quarter turn puts the flat of it
                             // toward someone standing at the plinth, which is the only angle from
                             // which "open" and "closed" are different pictures.
+                            // TURNED SO THE MOVING HALF IS NEAREST THE SLICE THAT TURNS (Eddie).
+                            // Half a turn from where it started, which keeps the loop facing the
+                            // approach and swaps the two halves left-for-right, putting the purple
+                            // on the side the world is about to move.
                             var instPipes = inst
-                            let pmPipes = pm * float4x4.rotation(radians: .pi / 2, axis: SIMD3(0, 0, 1))
+                            let pmPipes = pm * float4x4.rotation(radians: -.pi / 2, axis: SIMD3(0, 0, 1))
                             if prop.kind == .alignmentPipes { instPipes.modelMatrix = pmPipes }
                             mazePropTiles[prop.kind.rawValue, default: []].append(
                                 TileEntry(instance: prop.kind == .alignmentPipes ? instPipes : inst, mesh: mesh))
@@ -757,10 +761,18 @@ final class SceneBuilder {
                                 // the two halves; about the vertical it goes edge-on and stops being
                                 // a C at all. This is the one axis that keeps the piece where it
                                 // belongs AND keeps it readable.
+                                // AND IT FALLS THE WAY THE WORLD TURNS. The slice's own direction —
+                                // `clockwise ? -π/2 : π/2`, the same convention `startScriptedSlice-
+                                // Rotation` uses — decides which way the moving half swings down into
+                                // place. Fixed positive, it flipped against the world half the time,
+                                // and a control that closes counter to the thing it is closing reads
+                                // as two unrelated animations rather than one act.
+                                let cw = model.scriptedTwistSlice?.clockwise ?? true
+                                let turnSign: Float = cw ? -1 : 1
                                 let zc = TileMeshLibrary.alignmentPipeCentreZ(ws: model.worldScale)
                                 let pmB = pmPipes
                                     * float4x4.translation(0, 0, zc)
-                                    * float4x4.rotation(radians: closing * .pi / 2, axis: SIMD3(1, 0, 0))
+                                    * float4x4.rotation(radians: turnSign * closing * .pi / 2, axis: SIMD3(1, 0, 0))
                                     * float4x4.translation(0, 0, -zc)
                                 var instB = inst
                                 instB.modelMatrix = pmB

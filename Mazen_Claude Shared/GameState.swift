@@ -2129,7 +2129,10 @@ class GameState {
     ///
     /// Both play the same part in the door-plinth sequence (rise on the first press, turn the world
     /// on the second), so everything downstream asks `isRotator` rather than naming a kind.
-    var rotatorKind: PropKind { cubeModel.alignmentPipes ? .alignmentPipes : .alignmentCylinder }
+    /// THE PIPES, EVERYWHERE (Eddie, 2026-08-29: "replace the drums with the tubes"). The drum is
+    /// retired — nothing spawns one now, and `isRotator` still answers for it only so a world that
+    /// somehow holds one keeps animating rather than freezing half-risen.
+    var rotatorKind: PropKind { .alignmentPipes }
     func isRotator(_ k: PropKind) -> Bool { k == .alignmentCylinder || k == .alignmentPipes }
 
     /// M16.6: the door plinth — raise, then turn the world

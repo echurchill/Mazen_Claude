@@ -116,6 +116,7 @@ one API and this game's whole input surface is about eight calls.
 | **Right stick** | first-person look; orbit rotation in orbit mode |
 | **A** | interact (`F`) |
 | **Y** | toggle first-person / orbit |
+| **Menu** | the portal hub (`` ` ``) — the single entry point to every world |
 | **L1 / R1** | twist the slice counter-clockwise / clockwise (`Q` / `E`) |
 
 **Why the shoulders for the twist:** it is the world moving, not the player reaching for something

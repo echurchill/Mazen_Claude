@@ -1384,6 +1384,11 @@ class Renderer: NSObject, MTKViewDelegate {
         // frame's update, not held over to the next one.
         // THE ATTRACT SCREEN HOLDS THE GAME. The pad is still polled — "press anything" has to hear
         // it — but nothing it says reaches the player until the game has begun.
+        // Bound once, lazily, rather than in init: `beginWorldTransition` is on the Renderer and
+        // capturing self before it exists is not possible.
+        if gamepad.onPortalHub == nil {
+            gamepad.onPortalHub = { [weak self] in self?.beginWorldTransition(destinationID: 9) }
+        }
         gamepad.poll(gameState, dt: Double(dt), acceptsGameInput: !prompts.waitingToBegin)
         updateTeachingPrompts(dt: dt)
         if prompts.waitingToBegin {

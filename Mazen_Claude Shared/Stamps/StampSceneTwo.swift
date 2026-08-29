@@ -101,9 +101,7 @@ extension CubeModel {
             cubies[ci].facelets[fi].props.append(
                 Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .w, state: TextureLoader.progressMaskBase + 0b0111))
             progressPlinth = (ci, fi)
-            // THE PIPES, not the drum (Eddie, 2026-08-28). See `CubeModel.alignmentPipes` and
-            // `TileMeshLibrary.addAlignmentPipeHalf`.
-            alignmentPipes = true
+            // (The pipes are every world's rotator now — see `GameState.rotatorKind`.)
         }
 
         // "The player stands near the southern edge of a broad, irregular clearing… Directly ahead

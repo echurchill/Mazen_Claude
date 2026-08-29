@@ -40,6 +40,16 @@ final class GamepadInput {
     /// Edge-triggered buttons: the value last frame, so a hold fires once.
     private var wasPressed: [String: Bool] = [:]
 
+    /// THE PORTAL HUB, on the MENU button (Eddie, 2026-08-29). The hub is the single entry point to
+    /// every world and it was keyboard-only (`` ` ``), so on an iPad with a controller — the way this
+    /// game is actually being played now — there was no way to reach it at all. Menu was the one
+    /// button already being read for "press anything" and bound to nothing.
+    ///
+    /// A closure rather than a call, because this is the one action a pad can take that is not a
+    /// fact about the player: it changes which world the Renderer is showing, and the Renderer owns
+    /// that.
+    var onPortalHub: (() -> Void)?
+
     private(set) var connectedName: String?
     /// Anything at all touched this frame — for "press anything to begin", which has to mean it.
     private(set) var sawAnyInput = false
@@ -149,6 +159,7 @@ final class GamepadInput {
         // ── buttons ───────────────────────────────────────────────────────────────────
         if pressed("a", pad.buttonA) { gs.interact() }
         if pressed("y", pad.buttonY) { gs.camera.mode = gs.camera.mode == .orbit ? .firstPerson : .orbit }
+        if pressed("menu", pad.buttonMenu) { onPortalHub?() }
         // THE TWIST. Shoulders rather than face buttons because it is the world moving, not the
         // player acting on a thing in front of them — and because L/R reads as "that way round".
         if pressed("l1", pad.leftShoulder)  { gs.startSliceRotation(clockwise: false) }
