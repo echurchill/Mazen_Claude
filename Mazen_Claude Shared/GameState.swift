@@ -173,11 +173,11 @@ class GameState {
     /// M16.6 Phase 2b — true while the door plinth's alignment cylinder is running its ALIGN
     /// animation (engage → the two half-squares pivot together → the world twists). See
     /// `tickAlignmentCylinder`.
-    var cylinderEngaged = false
+    var rotatorEngaged = false
     /// When the alignment cylinder was last RAISED (F #1). The turn (F #2) is refused until this
     /// cooldown has passed, so a stray double-tap of the raise doesn't fire the turn (Eddie).
-    var lastCylinderRaiseTime: Float = -100
-    let cylinderEngageCooldown: Float = 0.5
+    var lastRotatorRaiseTime: Float = -100
+    let rotatorEngageCooldown: Float = 0.5
 
     struct DiscoveryAnim {
         let cubieIndex: Int
@@ -1530,11 +1530,11 @@ class GameState {
             where isRotator(cubeModel.cubies[ci].facelets[fi].props[pi].kind) {
                 cubeModel.cubies[ci].facelets[fi].props[pi].anim =
                     min(1, cubeModel.cubies[ci].facelets[fi].props[pi].anim + dt * growRate)
-                guard cylinderEngaged, cubeModel.cubies[ci].facelets[fi].props[pi].anim >= 1 else { continue }
+                guard rotatorEngaged, cubeModel.cubies[ci].facelets[fi].props[pi].anim >= 1 else { continue }
                 let a = min(1, cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim + dt * alignRate)
                 cubeModel.cubies[ci].facelets[fi].props[pi].alignAnim = a
                 if a >= 1 {
-                    cylinderEngaged = false
+                    rotatorEngaged = false
                     // THE LOOP CLOSES AS THE WORLD TURNS. `state` 1 tells SceneBuilder to drive the
                     // turning half's quarter turn off the slice's own progress, so the control
                     // completing and the world moving are one event rather than two animations that
@@ -1570,7 +1570,7 @@ class GameState {
                 }
             }
         }
-        cylinderEngaged = false
+        rotatorEngaged = false
         cubeModel.bondedGroups.removeAll()   // unlock (bypass the switches)
         cubeModel.markTopologyChanged()      // PERF: cylinder props removed above — caches re-derive
         updateDoorPlinths()                  // ⇒ plinth shows all-filled, ready for F
@@ -1616,7 +1616,7 @@ class GameState {
 
     static let interactableKinds: Set<PropKind> = [.portal, .layeredVessel, .anchor, .switchCap,
                                                    .worldModel,
-                                                   .plinth, .dial, .chest, .alignmentCylinder, .alignmentPipes,
+                                                   .plinth, .dial, .chest, .alignmentPipes,
                                                    .channelBasin, .latch]
 
     /// Is the player standing on something worth pressing? On iOS a tap means "walk forward", so it
@@ -2108,20 +2108,6 @@ class GameState {
             triggerDiagnosticPulse()
             return true
         }
-        // SCENE 5 — a FACE ROTATOR. The slab it turns is the one it stands on: the outer layer of
-        // the face under the player's feet, which is the same slab Q/E would turn from here. So the
-        // control means the same thing wherever it ends up after a turn carries it somewhere new —
-        // it turns the face you are looking at, not a slab it was born remembering.
-        if cubeModel.faceRotators,
-           cubeModel.cubies[ci].facelets[fi].props.contains(where: { $0.kind == .alignmentCylinder }) {
-            // Ignored rather than queued while the world is already moving: a control pressed a
-            // dozen times while reading a route must not bank up turns the player has forgotten
-            // asking for.
-            guard !sliceRotation.isActive, !player.isMoving, !player.isTurning else { return true }
-            let (axis, index) = cubeModel.sliceAxisAndIndex(for: player.face)
-            startScriptedSliceRotation(axis: axis, index: index, clockwise: true)
-            return true
-        }
         return false
     }
 
@@ -2133,7 +2119,7 @@ class GameState {
     /// retired — nothing spawns one now, and `isRotator` still answers for it only so a world that
     /// somehow holds one keeps animating rather than freezing half-risen.
     var rotatorKind: PropKind { .alignmentPipes }
-    func isRotator(_ k: PropKind) -> Bool { k == .alignmentCylinder || k == .alignmentPipes }
+    func isRotator(_ k: PropKind) -> Bool { k == .alignmentPipes }
 
     /// M16.6: the door plinth — raise, then turn the world
     private func handle_doorPlinth(_ ci: Int, _ fi: Int) -> Bool {
@@ -2147,15 +2133,15 @@ class GameState {
             // fully risen AND past a short cooldown — TURNS THE WORLD (align + twist). The cooldown
             // stops a stray double-tap of the first press from firing the turn by accident.
             if let cyl = cubeModel.cubies[ci].facelets[fi].props.first(where: { isRotator($0.kind) }) {
-                if cyl.anim >= 1 && !cylinderEngaged && time - lastCylinderRaiseTime > cylinderEngageCooldown {
-                    cylinderEngaged = true
+                if cyl.anim >= 1 && !rotatorEngaged && time - lastRotatorRaiseTime > rotatorEngageCooldown {
+                    rotatorEngaged = true
                 }
             } else {
                 cubeModel.cubies[ci].facelets[fi].props.append(
                     Prop(kind: rotatorKind, subRow: plinthProp.subRow, subCol: plinthProp.subCol,
                          facing: plinthProp.facing, state: 0))
                 cubeModel.markTopologyChanged()   // PERF: prop added — location caches re-derive
-                lastCylinderRaiseTime = time
+                lastRotatorRaiseTime = time
                 pendingAudioCues.append(.controlRaised(at: nil))   // at the player: they are AT the plinth
             }
             return true

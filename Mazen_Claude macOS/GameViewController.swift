@@ -111,8 +111,8 @@ class GameViewController: NSViewController {
                     case .plinth:
                         let names = ["blank", "one", "two", "three", "four", "swirl", "portal", "square", "3of4 (F to turn)", "4filled (F to turn)"]
                         return "plinth: " + (names.indices.contains(p.state) ? names[p.state] : "state \(p.state)")
-                    case .alignmentCylinder:
-                        return "alignment cylinder (swirl + square — turning the world)"
+                    case .alignmentPipes:
+                        return "rotator pipes (two C-tubes — closing them turns the world)"
                     case .switchCap:
                         return "switch #\(p.state) — \(p.alignAnim > 0.5 ? "engaged (F to disengage)" : "disengaged (F to engage)")"
                     case .switchBase:

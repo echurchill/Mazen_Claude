@@ -186,9 +186,11 @@ extension CubeModel {
         (.plinth, 0), (.plinth, 1), (.plinth, 2), (.plinth, 3),
         (.plinth, 4), (.plinth, 5), (.plinth, 6), (.plinth, 7),
         (.plinth, 8), (.plinth, 9),   // three-of-four (locked) + four-filled (ready)
-        // Phase 2 — the alignment cylinder (the square/world drum). It renders from the plinth-top
-        // height, so pair it with a plinth (next cell) to read it grounded.
-        (.plinth, 7), (.alignmentCylinder, 5),
+        // The rotator — Scene 2's two C-tubes. It renders from the plinth-top height, so pair it
+        // with a plinth (next cell) to read it grounded. Only the FIXED half shows here: the turning
+        // one is a second instance SceneBuilder emits beside the prop, which the gallery's one-prop-
+        // per-cell layout has no way to ask for.
+        (.plinth, 7), (.alignmentPipes, 5),
     ]
 
     /// M20 — WenrexaTrees grouped into single trees rendered as **intersecting billboard cards**

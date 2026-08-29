@@ -235,10 +235,6 @@ class TileMeshLibrary {
         // evening on geometry before anyone has seen whether the idea reads.
         propMeshes[PropKind.worldModel.rawValue] = TileMesh(vertexOffset: 0, indexOffset: plinthStart, indexCount: allIndices.count - plinthStart)
 
-        let alignStart = allIndices.count
-        Self.addAlignmentCylinder(to: &allVerts, indices: &allIndices, ws: ws)
-        propMeshes[PropKind.alignmentCylinder.rawValue] = TileMesh(vertexOffset: 0, indexOffset: alignStart, indexCount: allIndices.count - alignStart)
-
         // The two C's. The FIXED half is the prop's own mesh; the TURNING half is standalone,
         // because SceneBuilder emits it as a second instance carrying the quarter turn.
         // WHICH HALF STANDS STILL. The fixed one is the −x half and the turning one +x, because on
@@ -1128,8 +1124,8 @@ class TileMeshLibrary {
     /// as raised linework. The language's first public appearance — presence, not system (see
     /// `Mazen Docs/Builder Glyphs — 4D Shadows.md`). All linework is double-sided, so winding
     /// never hides a stroke.
-    /// Plinth height in metres — shared by the plinth mesh and the alignment cylinder that sits on
-    /// top of it (so the drum's base is planted exactly on the plinth top, no drift).
+    /// Plinth height in metres — shared by the plinth mesh and by everything that stands on it (the
+    /// rotator pipes, the switch cap), so their bases are planted exactly on the plinth top.
     static let plinthHeightM: Float = 0.9
     /// M16.6 (Eddie) — the switch cap's height when DISENGAGED (a flush disc) and ENGAGED (poking
     /// out). The cap mesh is built at the engaged height; SceneBuilder scales Z between these by the
@@ -1199,11 +1195,6 @@ class TileMeshLibrary {
         for i in 0..<seg { indices.append(contentsOf: [cap, ring[i], ring[(i + 1) % seg]]) }
     }
 
-    /// M16.6 Phase 2b — the alignment cylinder (material 22): a translucent drum standing on the
-    /// plinth top, matching the disc's diameter so it reads as the disc rising. The SWIRL (verb:
-    /// "turn") lights its TOP; the SQUARE (world) WRAPS the front arc as two horizontal halves that
-    /// the shader shears apart when unaligned and heals when aligned ("TURN THE WORLD"). Grows on
-    /// unlock; engaging twists the world open (the waldo).
     ///
     /// UV convention read by material 22 (texCoord):
     ///   u ≥ 2      → the square-wrap band (FULL circumference; u−2 runs 0…1 once around), sheared
@@ -1303,48 +1294,6 @@ class TileMeshLibrary {
         bar(botOut, bot, mitreA: true, mitreB: false)
     }
 
-    private static func addAlignmentCylinder(to verts: inout [MazeVertexSwift], indices: inout [UInt32], ws: WorldScale) {
-        let mUnit: Float = ws.eyeHeight / 1.7
-        let zBase = ws.floorY + plinthHeightM * mUnit   // planted on the plinth top
-        let rD = 0.40 * mUnit                            // == the plinth disc radius, so it reads as the disc rising
-        let hD = 0.70 * mUnit                            // ~0.7 m tall ⇒ its top sits just below the 1.7 m eye
-        let zTop = zBase + hD
-        func vtx(_ p: SIMD3<Float>, _ n: SIMD3<Float>, _ uv: SIMD2<Float>, _ ao: Float) -> MazeVertexSwift {
-            MazeVertexSwift(position: p, normal: n, texCoord: uv, aoFactor: ao)
-        }
-        let seg = 32
-        let front: Float = -.pi / 2                      // −Y, the plaza-approach side
-        // Rim. The square wraps the FULL circumference (Eddie: no plain-metal gap) — u runs 2…3 once
-        // around from the back seam, so it tiles seamlessly. v = 0 at top → 1 at base for the shear.
-        for i in 0..<seg {
-            let phi0 = -.pi + Float(i) / Float(seg) * 2 * .pi
-            let phi1 = -.pi + Float(i + 1) / Float(seg) * 2 * .pi
-            let a0 = front + phi0, a1 = front + phi1
-            let p0 = SIMD2<Float>(cos(a0) * rD, sin(a0) * rD)
-            let p1 = SIMD2<Float>(cos(a1) * rD, sin(a1) * rD)
-            let n = normalize(SIMD3<Float>(cos((a0 + a1) * 0.5), sin((a0 + a1) * 0.5), 0))
-            let u0 = 2.0 + (phi0 + .pi) / (2 * .pi)       // 2…3 around the full circumference
-            let u1 = 2.0 + (phi1 + .pi) / (2 * .pi)
-            let base = UInt32(verts.count)
-            verts.append(contentsOf: [vtx(SIMD3(p0.x, p0.y, zBase), n, SIMD2(u0, 1), 0.9),
-                                      vtx(SIMD3(p1.x, p1.y, zBase), n, SIMD2(u1, 1), 0.9),
-                                      vtx(SIMD3(p1.x, p1.y, zTop), n, SIMD2(u1, 0), 1.0),
-                                      vtx(SIMD3(p0.x, p0.y, zTop), n, SIMD2(u0, 0), 1.0)])
-            indices.append(contentsOf: [base+0, base+1, base+2, base+0, base+2, base+3])
-        }
-        // Top cap — UV [0,1]² over its bounding square (the swirl), like the plinth disc's top.
-        let up = SIMD3<Float>(0, 0, 1)
-        let cap = UInt32(verts.count)
-        verts.append(vtx(SIMD3(0, 0, zTop), up, SIMD2(0.5, 0.5), 1.0))
-        var ring: [UInt32] = []
-        for i in 0..<seg {
-            let a = Float(i) / Float(seg) * 2 * .pi
-            let x = cos(a) * rD, y = sin(a) * rD
-            ring.append(UInt32(verts.count))
-            verts.append(vtx(SIMD3(x, y, zTop), up, SIMD2(x / (2 * rD) + 0.5, 0.5 - y / (2 * rD)), 1.0))
-        }
-        for i in 0..<seg { indices.append(contentsOf: [cap, ring[i], ring[(i + 1) % seg]]) }
-    }
 
     /// M16.6 — the Builder plinth (Eddie's exact spec, 2026-07-16): a grey-metallic tapered block
     /// with a flat translucent disc lying on top, the glyph lit on the disc's upper face. Replaces

@@ -425,16 +425,15 @@ final class SceneBuilder {
                                     * float4x4.translation(localX, localY, 0)
                                     * float4x4.rotation(radians: yaw, axis: SIMD3(0, 0, 1))
                                     * float4x4.scale(treeScale * footprintBoost, treeScale * footprintBoost, treeScale)
-                            // M16.6/M20 — the alignment cylinder (GROW) and switch cap (flush↔out) animate
+                            // M16.6/M20 — the rotator pipes (GROW) and switch cap (flush↔out) animate
                             // their HEIGHT. Pass it as heightScale about the plinth top (applied to the
                             // vertex's local z in the shader), NOT a modelMatrix Z-scale: a non-uniform Z
                             // in modelMatrix corrupts the curved-world footprint/height split and floated
                             // the flush cap on the garden (Eddie).
                             var heightScale: Float = 1, heightPivot: Float = 0
-                            if prop.kind == .alignmentCylinder || prop.kind == .alignmentPipes
-                                || prop.kind == .switchCap || prop.kind == .latch {
+                            if prop.kind == .alignmentPipes || prop.kind == .switchCap || prop.kind == .latch {
                                 heightPivot = model.worldScale.floorY + TileMeshLibrary.plinthHeightM * (model.worldScale.eyeHeight / 1.7)
-                                if prop.kind == .alignmentCylinder || prop.kind == .alignmentPipes {
+                                if prop.kind == .alignmentPipes {
                                     heightScale = max(0.001, prop.anim)                          // rise from the disc
                                 } else {
                                     let flushFrac = TileMeshLibrary.switchCapFlushM / TileMeshLibrary.switchCapOutM
@@ -582,13 +581,6 @@ final class SceneBuilder {
                                 // reward, and a colour change on top of it says the same thing twice.
                                 color = SIMD4(0.29, 0.42, 0.16, 1.0)      // the fixed half — green
                             }
-                            if prop.kind == .alignmentCylinder {
-                                // M16.6 Phase 2b — material 22: swirl on top (styleSeed) + square wrap;
-                                // the align value rides `discoveryAmount` (set on the instance below).
-                                materialID = 22
-                                propStyleSeed = UInt32(TextureLoader.CausticSymbol.swirl.rawValue)
-                                color = SIMD4(1, 1, 1, 1)
-                            }
                             if prop.kind == .switchCap {
                                 // M16.6 (Eddie) — the switch's number cylinder: material 22 (no wrap in
                                 // this mesh), `state` = the number glyph on top. Height (engaged out /
@@ -663,13 +655,11 @@ final class SceneBuilder {
                                     materialID = 12                             // emissive (unlit) → reads as a lamp
                                 }
                             }
-                            // M16.6 Phase 2b: the cylinder rides its align value in discoveryAmount
-                            // (material 22 shears the square-wrap by it); every other prop is fully shown.
-                            // discoveryAmount doubles as the portal-field OPACITY (material 23 screen-door
-                            // dither) for the translucent elevator layers; alignAnim==0 ⇒ fully opaque.
+                            // discoveryAmount doubles as the portal-field OPACITY (material 23
+                            // screen-door dither) for the translucent elevator layers; every other
+                            // prop is fully shown.
                             let discovery: Float
-                            if prop.kind == .alignmentCylinder { discovery = prop.alignAnim }
-                            else if prop.kind == .dustMote { discovery = max(0, min(1, prop.anim)) }
+                            if prop.kind == .dustMote { discovery = max(0, min(1, prop.anim)) }
                             else if prop.kind == .layeredVessel { discovery = max(0, min(1, prop.anim / 3)) }
                             else if prop.kind == .obelisk && prop.anim > 0 { discovery = prop.anim }
                             else if prop.kind == .channelBasin || prop.kind == .channelBowl {

@@ -374,9 +374,6 @@ enum PropKind: UInt8 {
     case treeBillboard // M20: a WenrexaTrees billboard sprite — tree array (material 19); `state` = slice
     case plinth       // M16.6: a Builder plinth — a tapered stone with a caustic glyph lit on its top face.
                       // `state` = TextureLoader.CausticSymbol (0 blank, 1-4 ordinals, 5 swirl, 6 portal).
-    case alignmentCylinder  // M16.6 Phase 2: grows from the door plinth when unlocked — a drum bearing
-                            // the "square" (world) glyph. Engaging it (F) twists the world open (the
-                            // waldo). `anim` = grow/align progress 0…1; walk-through (sits on the plinth).
     case alignmentPipes // Scene 2 (Eddie, 2026-08-28): TWO C-shaped tubes floating over the control
                         // plinth, cut from one square loop and counter-facing, so a quarter turn of
                         // one closes them into a single square tube. Replaces the drum: a control
@@ -419,7 +416,7 @@ enum PropKind: UInt8 {
     /// solid for now; a mesh-bounds-derived footprint is Phase 3 tuning.)
     var isSolid: Bool {
         switch self {
-        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentCylinder, .alignmentPipes, .switchCap, .importedFoliage, .portalField, .worldModel, .signpost, .dustMote, .surveyor: return false
+        case .portal, .portalLamp, .tree, .foliageCard, .greeneryCard, .treeBillboard, .alignmentPipes, .switchCap, .importedFoliage, .portalField, .worldModel, .signpost, .dustMote, .surveyor: return false
         default: return true
         }
     }

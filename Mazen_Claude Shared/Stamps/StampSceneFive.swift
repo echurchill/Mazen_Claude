@@ -222,31 +222,5 @@ extension CubeModel {
         markTopologyChanged()
     }
 
-    func stampFaceRotators() {
-        let n = size, c = n / 2
-        faceRotators = true
-        for face in CubeFace.allCases {
-            var best: (r: Int, col: Int, d: Int)? = nil
-            for r in 0..<n {
-                for col in 0..<n {
-                    guard let (ci, fi) = faceletAt(face: face, row: r, col: col) else { continue }
-                    let f = cubies[ci].facelets[fi]
-                    guard f.props.isEmpty, f.mazeTile.channels.isEmpty else { continue }
-                    // Manhattan distance from the middle: nearest free tile wins, ties by row then
-                    // column so the six controls land in the same place every run.
-                    let d = abs(r - c) + abs(col - c)
-                    if best == nil || d < best!.d { best = (r, col, d) }
-                }
-            }
-            guard let spot = best, let (ci, fi) = faceletAt(face: face, row: spot.r, col: spot.col) else { continue }
-            cubies[ci].facelets[fi].props.append(Prop(kind: .plinth, subRow: 1, subCol: 1, facing: .n))
-            // Already risen: Scene 2's rotator grows out of its disc once, as a reveal. This one is
-            // a tool the player uses over and over, so it stands ready — the ceremony belongs to a
-            // one-off, not to something pressed a dozen times while reading a route.
-            var cyl = Prop(kind: .alignmentCylinder, subRow: 1, subCol: 1, facing: .n, state: 0)
-            cyl.anim = 1
-            cubies[ci].facelets[fi].props.append(cyl)
-        }
-    }
 
 }
