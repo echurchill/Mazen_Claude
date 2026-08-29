@@ -743,22 +743,24 @@ final class SceneBuilder {
                                 let closing: Float = prop.state == 1
                                     ? (sr.isActive ? max(0, 1 - sr.progress) : 0)
                                     : 1
-                                // TURNED IN ITS OWN PLANE, about the loop's centre.
+                                // LAID FLAT, about the loop's own HORIZONTAL axis.
                                 //
-                                // Swinging it out of plane (about the vertical) left it edge-on when
-                                // open — a bar, not a C — so only one of the two shapes could ever be
-                                // read. Eddie's drawing has BOTH as C's, facing each other and not
-                                // yet joined, which is what a quarter turn about the loop's normal
-                                // gives: the moving half's mouth points somewhere else entirely, and
-                                // you can see exactly what has to happen for them to meet.
+                                // Eddie drew it with a side view, which is what settled this after
+                                // two wrong guesses: open, the fixed half stands vertical and the
+                                // moving half lies FLAT — from the side they cross like a plus sign.
+                                // Solved, both stand in the same plane and close into the ring.
                                 //
-                                // The normal is the mesh's local y (the loop is built in x/z), and
-                                // this rotation is applied inside `pmPipes`, so it is that axis —
-                                // not the world's — that the turn is taken about.
+                                // So the turn is about the loop's horizontal in-plane axis (the
+                                // mesh's local x — the loop is built in x/z), NOT its normal. About
+                                // the normal the moving half spins within the plane and leaves its
+                                // own side of the ring, which destroys the left/right identity of
+                                // the two halves; about the vertical it goes edge-on and stops being
+                                // a C at all. This is the one axis that keeps the piece where it
+                                // belongs AND keeps it readable.
                                 let zc = TileMeshLibrary.alignmentPipeCentreZ(ws: model.worldScale)
                                 let pmB = pmPipes
                                     * float4x4.translation(0, 0, zc)
-                                    * float4x4.rotation(radians: closing * .pi / 2, axis: SIMD3(0, 1, 0))
+                                    * float4x4.rotation(radians: closing * .pi / 2, axis: SIMD3(1, 0, 0))
                                     * float4x4.translation(0, 0, -zc)
                                 var instB = inst
                                 instB.modelMatrix = pmB

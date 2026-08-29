@@ -241,11 +241,15 @@ class TileMeshLibrary {
 
         // The two C's. The FIXED half is the prop's own mesh; the TURNING half is standalone,
         // because SceneBuilder emits it as a second instance carrying the quarter turn.
+        // WHICH HALF STANDS STILL. The fixed one is the −x half and the turning one +x, because on
+        // screen that puts the green standing half on the RIGHT and the purple moving half on the
+        // LEFT — the arrangement in Eddie's drawings. Built the other way round they simply swap
+        // sides, which reads as the wrong piece moving.
         let pipeAStart = allIndices.count
-        Self.addAlignmentPipeHalf(to: &allVerts, indices: &allIndices, ws: ws, negative: false)
+        Self.addAlignmentPipeHalf(to: &allVerts, indices: &allIndices, ws: ws, negative: true)
         propMeshes[PropKind.alignmentPipes.rawValue] = TileMesh(vertexOffset: 0, indexOffset: pipeAStart, indexCount: allIndices.count - pipeAStart)
         let pipeBStart = allIndices.count
-        Self.addAlignmentPipeHalf(to: &allVerts, indices: &allIndices, ws: ws, negative: true)
+        Self.addAlignmentPipeHalf(to: &allVerts, indices: &allIndices, ws: ws, negative: false)
         alignmentPipeTurning = TileMesh(vertexOffset: 0, indexOffset: pipeBStart, indexCount: allIndices.count - pipeBStart)
 
         let dustStart = allIndices.count
